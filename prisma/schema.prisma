@@ -1,0 +1,442 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  GERENTE
+  COBRADOR
+  CLIENTE
+}
+
+enum LicenseStatus {
+  ACTIVE
+  SUSPENDED
+  GRACE
+  CANCELLED
+}
+
+enum LoanType {
+  SOLIDARIO
+  INDIVIDUAL
+  AGIL
+}
+
+enum LoanStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  LIQUIDATED
+  REJECTED
+  RESTRUCTURED
+  DEFAULTED
+}
+
+enum ScheduleStatus {
+  PENDING
+  PAID
+  OVERDUE
+  PARTIAL
+  ADVANCE
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RegisterStatus {
+  OPEN
+  CLOSED
+}
+
+enum ScoreEventType {
+  ON_TIME
+  ADVANCE
+  LOAN_COMPLETED
+  LATE_1_7
+  LATE_8_15
+  LATE_16_PLUS
+  DEFAULT
+}
+
+enum DocumentType {
+  INE_FRONT
+  INE_BACK
+  PHOTO
+  CONTRACT
+  PROOF_ADDRESS
+  OTHER
+}
+
+// ─────────────────────────────────────────
+// MODELS
+// ─────────────────────────────────────────
+
+model Company {
+  id        String   @id @default(uuid())
+  nombre    String
+  logoUrl   String?
+  telefono  String?
+  email     String?
+  direccion String?
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  license       License?
+  branches      Branch[]
+  users         User[]
+  clients       Client[]
+  loans         Loan[]
+  tickets       Ticket[]
+  notifications Notification[]
+  settings      CompanySetting[]
+}
+
+model License {
+  id                 String        @id @default(uuid())
+  companyId          String        @unique
+  company            Company       @relation(fields: [companyId], references: [id])
+  claveLicencia      String        @unique
+  estado             LicenseStatus @default(ACTIVE)
+  precioMensual      Decimal       @db.Decimal(10, 2)
+  diaCobro           Int
+  proximoPago        DateTime
+  ultimaVerificacion DateTime      @default(now())
+  notasInternas      String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+}
+
+model Branch {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  nombre    String
+  direccion String?
+  telefono  String?
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  users         User[]
+  clients       Client[]
+  loans         Loan[]
+  loanGroups    LoanGroup[]
+  cashRegisters CashRegister[]
+  tickets       Ticket[]
+}
+
+model User {
+  id           String    @id @default(uuid())
+  companyId    String
+  company      Company   @relation(fields: [companyId], references: [id])
+  branchId     String?
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+  rol          UserRole
+  nombre       String
+  email        String
+  passwordHash String
+  telefono     String?
+  activo       Boolean   @default(true)
+  ultimoAcceso DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  clientsManaged   Client[]         @relation("CobradoresClientes")
+  clientUser       Client?          @relation("ClienteUsuario")
+  payments         Payment[]
+  cashRegisters    CashRegister[]
+  ticketsPrinted   Ticket[]
+  auditLogs        AuditLog[]
+  loansApproved    Loan[]           @relation("ApprovedLoans")
+  loansRejected    Loan[]           @relation("RejectedLoans")
+  loansCobrador    Loan[]           @relation("CobradoresLoans")
+  loanGroups       LoanGroup[]
+  approvalReviewer LoanApproval[]   @relation("ReviewerApprovals")
+  approvalRequest  LoanApproval[]   @relation("RequesterApprovals")
+  uploadedDocs     ClientDocument[]
+  scoreEvents      ScoreEvent[]
+
+  @@unique([companyId, email])
+}
+
+model Client {
+  id                 String    @id @default(uuid())
+  companyId          String
+  company            Company   @relation(fields: [companyId], references: [id])
+  branchId           String
+  branch             Branch    @relation(fields: [branchId], references: [id])
+  cobradorId         String?
+  cobrador           User?     @relation("CobradoresClientes", fields: [cobradorId], references: [id])
+  userId             String?   @unique
+  user               User?     @relation("ClienteUsuario", fields: [userId], references: [id])
+  nombreCompleto     String
+  numIne             String?
+  curp               String?
+  telefono           String?
+  telefonoAlt        String?
+  email              String?
+  domicilio          String?
+  referenciaNombre   String?
+  referenciaTelefono String?
+  fechaNacimiento    DateTime?
+  fotoUrl            String?
+  score              Int       @default(500)
+  activo             Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  documents   ClientDocument[]
+  loans       Loan[]
+  payments    Payment[]
+  scoreEvents ScoreEvent[]
+}
+
+model ClientDocument {
+  id          String       @id @default(uuid())
+  clientId    String
+  client      Client       @relation(fields: [clientId], references: [id])
+  subidoPor   String
+  uploadedBy  User         @relation(fields: [subidoPor], references: [id])
+  tipo        DocumentType
+  archivoUrl  String
+  descripcion String?
+  createdAt   DateTime     @default(now())
+}
+
+model LoanGroup {
+  id         String   @id @default(uuid())
+  branchId   String
+  branch     Branch   @relation(fields: [branchId], references: [id])
+  cobradorId String
+  cobrador   User     @relation(fields: [cobradorId], references: [id])
+  nombre     String
+  activo     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  loans Loan[]
+}
+
+model Loan {
+  id            String     @id @default(uuid())
+  companyId     String
+  company       Company    @relation(fields: [companyId], references: [id])
+  branchId      String
+  branch        Branch     @relation(fields: [branchId], references: [id])
+  cobradorId    String
+  cobrador      User       @relation("CobradoresLoans", fields: [cobradorId], references: [id])
+  clientId      String
+  client        Client     @relation(fields: [clientId], references: [id])
+  loanGroupId   String?
+  loanGroup     LoanGroup? @relation(fields: [loanGroupId], references: [id])
+  tipo          LoanType
+  estado        LoanStatus @default(PENDING_APPROVAL)
+  // Montos
+  capital       Decimal    @db.Decimal(12, 2)
+  comision      Decimal    @db.Decimal(12, 2) @default(0)
+  montoReal     Decimal    @db.Decimal(12, 2)
+  tasaInteres   Decimal    @db.Decimal(6, 4)
+  interes       Decimal    @db.Decimal(12, 2)
+  totalPago     Decimal    @db.Decimal(12, 2)
+  pagoSemanal   Decimal?   @db.Decimal(12, 2)
+  pagoDiario    Decimal?   @db.Decimal(12, 2)
+  // Plazos
+  plazo         Int
+  fechaDesembolso DateTime?
+  // Aprobación
+  aprobadoPorId  String?
+  aprobadoPor    User?     @relation("ApprovedLoans", fields: [aprobadoPorId], references: [id])
+  aprobadoAt     DateTime?
+  rechazadoPorId String?
+  rechazadoPor   User?     @relation("RejectedLoans", fields: [rechazadoPorId], references: [id])
+  razonRechazo   String?
+  notas          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  schedule    PaymentSchedule[]
+  payments    Payment[]
+  approvals   LoanApproval[]
+  scoreEvents ScoreEvent[]
+}
+
+model LoanApproval {
+  id              String         @id @default(uuid())
+  loanId          String
+  loan            Loan           @relation(fields: [loanId], references: [id])
+  solicitadoPorId String
+  solicitadoPor   User           @relation("RequesterApprovals", fields: [solicitadoPorId], references: [id])
+  revisadoPorId   String?
+  revisadoPor     User?          @relation("ReviewerApprovals", fields: [revisadoPorId], references: [id])
+  estado          ApprovalStatus @default(PENDING)
+  notas           String?
+  solicitadoAt    DateTime       @default(now())
+  revisadoAt      DateTime?
+}
+
+model PaymentSchedule {
+  id               String         @id @default(uuid())
+  loanId           String
+  loan             Loan           @relation(fields: [loanId], references: [id])
+  numeroPago       Int
+  fechaVencimiento DateTime
+  montoEsperado    Decimal        @db.Decimal(12, 2)
+  montoPagado      Decimal        @db.Decimal(12, 2) @default(0)
+  estado           ScheduleStatus @default(PENDING)
+  pagadoAt         DateTime?
+  createdAt        DateTime       @default(now())
+
+  payments Payment[]
+
+  @@unique([loanId, numeroPago])
+}
+
+model Payment {
+  id              String           @id @default(uuid())
+  loanId          String
+  loan            Loan             @relation(fields: [loanId], references: [id])
+  scheduleId      String?
+  schedule        PaymentSchedule? @relation(fields: [scheduleId], references: [id])
+  cobradorId      String
+  cobrador        User             @relation(fields: [cobradorId], references: [id])
+  clientId        String
+  client          Client           @relation(fields: [clientId], references: [id])
+  monto           Decimal          @db.Decimal(12, 2)
+  metodoPago      PaymentMethod
+  cambioEntregado Decimal          @db.Decimal(12, 2) @default(0)
+  notas           String?
+  fechaHora       DateTime         @default(now())
+  createdAt       DateTime         @default(now())
+
+  cashBreakdown CashBreakdown[]
+  ticket        Ticket?
+}
+
+model CashBreakdown {
+  id           String  @id @default(uuid())
+  paymentId    String
+  payment      Payment @relation(fields: [paymentId], references: [id])
+  denominacion Int
+  cantidad     Int
+  subtotal     Decimal @db.Decimal(10, 2)
+}
+
+model Ticket {
+  id               String   @id @default(uuid())
+  paymentId        String   @unique
+  payment          Payment  @relation(fields: [paymentId], references: [id])
+  companyId        String
+  company          Company  @relation(fields: [companyId], references: [id])
+  branchId         String
+  branch           Branch   @relation(fields: [branchId], references: [id])
+  numeroTicket     String   @unique
+  impresoPorId     String
+  impresoPor       User     @relation(fields: [impresoPorId], references: [id])
+  esReimpresion    Boolean  @default(false)
+  ticketOriginalId String?
+  ticketOriginal   Ticket?  @relation("TicketReprintOf", fields: [ticketOriginalId], references: [id])
+  reimpresiones    Ticket[] @relation("TicketReprintOf")
+  razonReimpresion String?
+  anulado          Boolean  @default(false)
+  razonAnulacion   String?
+  qrCode           String?
+  impresoAt        DateTime @default(now())
+}
+
+model CashRegister {
+  id              String         @id @default(uuid())
+  cobradorId      String
+  cobrador        User           @relation(fields: [cobradorId], references: [id])
+  branchId        String
+  branch          Branch         @relation(fields: [branchId], references: [id])
+  fecha           DateTime       @db.Date
+  efectivoInicial Decimal        @db.Decimal(12, 2) @default(0)
+  cobrosEsperados Decimal        @db.Decimal(12, 2) @default(0)
+  cobradoEfectivo Decimal        @db.Decimal(12, 2) @default(0)
+  cobradoTarjeta  Decimal        @db.Decimal(12, 2) @default(0)
+  cambioEntregado Decimal        @db.Decimal(12, 2) @default(0)
+  efectivoFinal   Decimal?       @db.Decimal(12, 2)
+  diferencia      Decimal?       @db.Decimal(12, 2)
+  estado          RegisterStatus @default(OPEN)
+  notas           String?
+  cerradoAt       DateTime?
+  cerradoPorId    String?
+  createdAt       DateTime       @default(now())
+
+  @@unique([cobradorId, fecha])
+}
+
+model ScoreEvent {
+  id              String         @id @default(uuid())
+  clientId        String
+  client          Client         @relation(fields: [clientId], references: [id])
+  loanId          String
+  loan            Loan           @relation(fields: [loanId], references: [id])
+  paymentId       String?
+  registradoPorId String
+  registradoPor   User           @relation(fields: [registradoPorId], references: [id])
+  tipoEvento      ScoreEventType
+  diasDiferencia  Int?
+  cambioScore     Int
+  scoreResultado  Int
+  createdAt       DateTime       @default(now())
+}
+
+model CompanySetting {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  branchId    String?
+  clave       String
+  valor       String
+  descripcion String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, branchId, clave])
+}
+
+model AuditLog {
+  id                String   @id @default(uuid())
+  userId            String?
+  user              User?    @relation(fields: [userId], references: [id])
+  accion            String
+  tabla             String
+  registroId        String?
+  valoresAnteriores Json?
+  valoresNuevos     Json?
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  userId    String?
+  clientId  String?
+  loanId    String?
+  tipo      String
+  titulo    String
+  mensaje   String
+  enviadoVia String?
+  enviado   Boolean  @default(false)
+  enviadoAt DateTime?
+  createdAt DateTime @default(now())
+}

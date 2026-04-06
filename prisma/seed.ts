@@ -123,14 +123,14 @@ async function main() {
     {
       rol: 'GERENTE' as const,
       nombre: 'María García López',
-      email: 'gerente@demo.com',
+      email: 'gerente@microkapital.com',
       password: 'Gerente2026!',
       branchId: branch.id,
     },
     {
       rol: 'COBRADOR' as const,
       nombre: 'Miguel Morales Torres',
-      email: 'cobrador@demo.com',
+      email: 'cobrador@microkapital.com',
       password: 'Cobrador2026!',
       branchId: branch.id,
     },
@@ -238,8 +238,8 @@ async function main() {
   console.log('\n🎉 Seed completado exitosamente!\n')
   console.log('Credenciales de acceso:')
   console.log('  Super Admin:  admin@sistema.dev / Admin2026!')
-  console.log('  Gerente:      gerente@demo.com  / Gerente2026!')
-  console.log('  Cobrador:     cobrador@demo.com / Cobrador2026!')
+  console.log('  Gerente:      gerente@microkapital.com  / Gerente2026!')
+  console.log('  Cobrador:     cobrador@microkapital.com / Cobrador2026!')
   console.log('  Portal URL:   /sys-mnt-9x7k/panel (solo super admin)')
 }
 

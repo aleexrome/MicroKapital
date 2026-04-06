@@ -1,20 +1,60 @@
 import { redirect } from 'next/navigation'
-import { signIn } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
+import { encode } from 'next-auth/jwt'
+import { cookies } from 'next/headers'
+
+const SECRET = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? ''
+const COOKIE_NAME = 'authjs.session-token'
 
 async function loginAction(formData: FormData) {
   'use server'
-  const email = (formData.get('email') as string | null) ?? ''
+  const email = (formData.get('email') as string | null)?.trim() ?? ''
   const password = (formData.get('password') as string | null) ?? ''
 
-  try {
-    await signIn('credentials', { email, password, redirectTo: '/dashboard' })
-  } catch (e: unknown) {
-    // redirect() de Next.js lanza un error especial — re-lanzar para que funcione
-    const digest = (e as Record<string, string>)?.digest ?? ''
-    if (digest.startsWith('NEXT_REDIRECT')) throw e
-    // cualquier otro error = credenciales inválidas
-    redirect('/login?error=invalid')
+  if (!email || !password) redirect('/login?error=invalid')
+
+  const user = await prisma.user.findFirst({
+    where: { email, activo: true },
+    include: { company: { include: { license: true } } },
+  })
+  if (!user) redirect('/login?error=invalid')
+
+  const valid = await bcrypt.compare(password, user!.passwordHash)
+  if (!valid) redirect('/login?error=invalid')
+
+  if (user!.rol !== 'SUPER_ADMIN') {
+    const lic = user!.company?.license
+    if (!lic || lic.estado === 'CANCELLED') redirect('/login?error=license')
   }
+
+  // Crear JWT exactamente como NextAuth v5
+  const token = await encode({
+    token: {
+      sub: user!.id,
+      email: user!.email,
+      name: user!.nombre,
+      rol: user!.rol,
+      companyId: user!.companyId,
+      branchId: user!.branchId ?? null,
+    },
+    secret: SECRET,
+    salt: COOKIE_NAME,
+  })
+
+  // Actualizar último acceso
+  prisma.user.update({ where: { id: user!.id }, data: { ultimoAcceso: new Date() } }).catch(() => {})
+
+  const cookieStore = cookies()
+  cookieStore.set(COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 30,
+    path: '/',
+  })
+
+  const dest = user!.rol === 'SUPER_ADMIN' ? '/sys-mnt-9x7k/panel' : '/dashboard'
+  redirect(dest)
 }
 
 export default function LoginPage({
@@ -58,7 +98,6 @@ export default function LoginPage({
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900"
             />
           </div>
-
           <div className="space-y-1">
             <label htmlFor="password" className="block text-sm font-medium text-gray-700">
               Contraseña
@@ -80,7 +119,6 @@ export default function LoginPage({
             Iniciar sesión
           </button>
         </form>
-
         <p className="mt-6 text-center text-xs text-gray-400">
           Sistema de uso exclusivo para personal autorizado
         </p>

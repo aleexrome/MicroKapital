@@ -21,7 +21,8 @@ export async function middleware(req: NextRequest) {
   }
 
   // 2. Obtener sesión desde JWT
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET
+  const token = await getToken({ req, secret, salt: 'authjs.session-token' })
 
   if (!token) {
     const loginUrl = new URL('/login', req.url)

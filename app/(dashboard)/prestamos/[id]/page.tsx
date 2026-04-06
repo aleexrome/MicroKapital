@@ -2,6 +2,7 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
+import { LoanApprovalActions } from '@/components/loans/LoanApprovalActions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,7 +23,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   const session = await getSession()
   if (!session?.user) return null
 
-  const { companyId } = session.user
+  const { companyId, rol } = session.user
 
   const loan = await prisma.loan.findFirst({
     where: { id: params.id, companyId: companyId! },
@@ -50,10 +51,13 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           <Link href="/prestamos"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div className="flex-1">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold">Préstamo {loan.tipo}</h1>
             <ApprovalBadge status={loan.estado as LoanStatus} />
           </div>
+          {loan.estado === 'PENDING_APPROVAL' && rol === 'GERENTE' && (
+            <LoanApprovalActions loanId={loan.id} />
+          )}
           <p className="text-muted-foreground">
             <Link href={`/clientes/${loan.client.id}`} className="hover:underline">
               {loan.client.nombreCompleto}

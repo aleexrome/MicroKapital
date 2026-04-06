@@ -1,68 +1,20 @@
 import { redirect } from 'next/navigation'
-import { prisma } from '@/lib/prisma'
-import bcrypt from 'bcryptjs'
-import { SignJWT } from 'jose'
-import { cookies } from 'next/headers'
+import { signIn } from '@/lib/auth'
 
 async function loginAction(formData: FormData) {
   'use server'
-  const email = formData.get('email') as string
-  const password = formData.get('password') as string
+  const email = (formData.get('email') as string | null) ?? ''
+  const password = (formData.get('password') as string | null) ?? ''
 
-  if (!email || !password) {
-    redirect('/login?error=missing')
+  try {
+    await signIn('credentials', { email, password, redirectTo: '/dashboard' })
+  } catch (e: unknown) {
+    // redirect() de Next.js lanza un error especial — re-lanzar para que funcione
+    const digest = (e as Record<string, string>)?.digest ?? ''
+    if (digest.startsWith('NEXT_REDIRECT')) throw e
+    // cualquier otro error = credenciales inválidas
+    redirect('/login?error=invalid')
   }
-
-  const user = await prisma.user.findFirst({
-    where: { email, activo: true },
-    include: { company: { include: { license: true } } },
-  })
-
-  if (!user) redirect('/login?error=invalid')
-
-  const valid = await bcrypt.compare(password, user!.passwordHash)
-  if (!valid) redirect('/login?error=invalid')
-
-  if (user!.rol !== 'SUPER_ADMIN') {
-    const lic = user!.company?.license
-    if (!lic || lic.estado === 'CANCELLED') redirect('/login?error=license')
-  }
-
-  // Crear JWT compatible con NextAuth v5 (JWE A256CBC-HS512)
-  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? ''
-  const { hkdf } = await import('@panva/hkdf')
-  const encKey = await hkdf('sha256', secret, '', 'Auth.js Generated Encryption Key', 64)
-
-  const { EncryptJWT } = await import('jose')
-  const token = await new EncryptJWT({
-    id: user!.id,
-    email: user!.email,
-    name: user!.nombre,
-    rol: user!.rol,
-    companyId: user!.companyId,
-    branchId: user!.branchId ?? null,
-    sub: user!.id,
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
-  })
-    .setProtectedHeader({ alg: 'dir', enc: 'A256CBC-HS512' })
-    .setIssuedAt()
-    .setExpirationTime('30d')
-    .encrypt(encKey)
-
-  // Actualizar último acceso
-  prisma.user.update({ where: { id: user!.id }, data: { ultimoAcceso: new Date() } }).catch(() => {})
-
-  const cookieStore = cookies()
-  cookieStore.set('authjs.session-token', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 30,
-    path: '/',
-  })
-
-  const dest = user!.rol === 'SUPER_ADMIN' ? '/sys-mnt-9x7k/panel' : '/dashboard'
-  redirect(dest)
 }
 
 export default function LoginPage({
@@ -71,7 +23,7 @@ export default function LoginPage({
   searchParams: { error?: string }
 }) {
   const errorMsg =
-    searchParams.error === 'invalid' || searchParams.error === 'missing'
+    searchParams.error === 'invalid'
       ? 'Credenciales incorrectas. Verifica tu email y contraseña.'
       : searchParams.error === 'license'
       ? 'Tu empresa no tiene licencia activa.'
@@ -82,21 +34,12 @@ export default function LoginPage({
       <div className="flex flex-col p-6 space-y-1 text-center">
         <div className="flex items-center justify-center mb-4">
           <div className="bg-blue-900 rounded-xl p-3">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="white"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
-              <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
-              <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
-              <path d="M10 6h4" /><path d="M10 10h4" /><path d="M10 14h4" /><path d="M10 18h4" />
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"
+              fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/>
+              <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/>
+              <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/>
+              <path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>
             </svg>
           </div>
         </div>
@@ -105,18 +48,13 @@ export default function LoginPage({
       </div>
 
       <div className="px-6 pb-6">
-        <form action={loginAction} method="POST" className="space-y-4">
+        <form action={loginAction} encType="multipart/form-data" className="space-y-4">
           <div className="space-y-1">
             <label htmlFor="email" className="block text-sm font-medium text-gray-700">
               Correo electrónico
             </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="tu@empresa.com"
-              required
-              autoComplete="email"
+            <input id="email" name="email" type="email" placeholder="tu@empresa.com"
+              required autoComplete="email"
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900"
             />
           </div>
@@ -125,13 +63,8 @@ export default function LoginPage({
             <label htmlFor="password" className="block text-sm font-medium text-gray-700">
               Contraseña
             </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              placeholder="••••••••"
-              required
-              autoComplete="current-password"
+            <input id="password" name="password" type="password" placeholder="••••••••"
+              required autoComplete="current-password"
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900"
             />
           </div>
@@ -142,10 +75,8 @@ export default function LoginPage({
             </div>
           )}
 
-          <button
-            type="submit"
-            className="w-full rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-900"
-          >
+          <button type="submit"
+            className="w-full rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-900">
             Iniciar sesión
           </button>
         </form>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -24,6 +25,7 @@ interface TicketRecord {
 
 export default function TicketsPage() {
   const { toast } = useToast()
+  const router = useRouter()
   const [tickets, setTickets] = useState<TicketRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
@@ -43,10 +45,13 @@ export default function TicketsPage() {
     setProcessing(ticketId)
     try {
       const res = await fetch(`/api/tickets/${ticketId}/reprint`, { method: 'POST' })
-      if (!res.ok) throw new Error('Error al reimprimir')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail ?? err.error ?? 'Error al reimprimir')
+      }
       const { data } = await res.json()
-      toast({ title: '🖨️ Reimpresión generada', description: data.numeroTicket })
-      loadTickets()
+      // Navigate to print page with the new reprint ticket ID
+      router.push(`/thermal-print?ticketId=${data.id}`)
     } catch (err) {
       toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' })
     } finally {
@@ -135,6 +140,13 @@ export default function TicketsPage() {
                         </div>
                       ) : (
                         <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => router.push(`/thermal-print?ticketId=${ticket.id}`)}
+                          >
+                            <Printer className="h-3 w-3" /> Imprimir
+                          </Button>
                           <Button
                             size="sm"
                             variant="outline"

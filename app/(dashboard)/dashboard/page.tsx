@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { MetricCard } from '@/components/dashboard/MetricCard'
@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
 export default async function DashboardPage() {
-  const session = await auth()
+  const session = await getSession()
 
   if (!session?.user || session.user.rol === 'COBRADOR') {
     redirect('/cobros/agenda')

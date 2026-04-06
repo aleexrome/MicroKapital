@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,7 @@ export default async function ClientesPage({
 }: {
   searchParams: SearchParams
 }) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) return null
 
   const { rol, companyId, branchId } = session.user

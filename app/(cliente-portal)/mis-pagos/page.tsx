@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDate, formatDateTime } from '@/lib/utils'
 
 export default async function MisPagosPage() {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) redirect('/login')
 
   const { id: userId, companyId } = session.user

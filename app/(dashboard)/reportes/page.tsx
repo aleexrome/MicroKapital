@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,7 +7,7 @@ import { formatMoney } from '@/lib/utils'
 import { DollarSign, Users, TrendingDown, CheckCircle } from 'lucide-react'
 
 export default async function ReportesPage() {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) redirect('/login')
 
   const { rol, companyId } = session.user

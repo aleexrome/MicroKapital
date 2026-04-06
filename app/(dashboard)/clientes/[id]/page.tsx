@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { ScoreBadge } from '@/components/clients/ScoreBadge'
@@ -14,7 +14,7 @@ export default async function ClienteExpedientePage({
 }: {
   params: { id: string }
 }) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) return null
 
   const { companyId, rol, branchId } = session.user

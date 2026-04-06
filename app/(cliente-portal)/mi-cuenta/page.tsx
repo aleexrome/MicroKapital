@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { ScoreBadge } from '@/components/clients/ScoreBadge'
@@ -8,7 +8,7 @@ import { formatMoney, formatDate } from '@/lib/utils'
 import { CreditCard, Calendar } from 'lucide-react'
 
 export default async function MiCuentaPage() {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) redirect('/login')
 
   const { id: userId, companyId } = session.user

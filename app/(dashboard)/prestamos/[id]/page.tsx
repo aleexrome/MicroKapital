@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
@@ -19,7 +19,7 @@ const SCHEDULE_STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'e
 }
 
 export default async function PrestamoDetallePage({ params }: { params: { id: string } }) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) return null
 
   const { companyId } = session.user

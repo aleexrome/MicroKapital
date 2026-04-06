@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { formatMoney, formatDate } from '@/lib/utils'
@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Wallet, TrendingUp, CreditCard, Banknote } from 'lucide-react'
 
 export default async function CajaPage() {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) redirect('/login')
 
   const { companyId } = session.user

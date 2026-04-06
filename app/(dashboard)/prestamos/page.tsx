@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,7 @@ import { Plus, CreditCard } from 'lucide-react'
 import type { LoanStatus } from '@prisma/client'
 
 export default async function PrestamosPage() {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) return null
 
   const { rol, companyId, branchId } = session.user

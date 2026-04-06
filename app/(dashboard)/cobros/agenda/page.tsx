@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { formatMoney, formatDate } from '@/lib/utils'
@@ -8,7 +8,7 @@ import { Calendar, ChevronRight } from 'lucide-react'
 import { esDiaHabil } from '@/lib/business-days'
 
 export default async function AgendaPage() {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) return null
 
   const { companyId, branchId } = session.user

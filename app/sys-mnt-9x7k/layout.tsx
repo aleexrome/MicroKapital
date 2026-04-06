@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Building2, Settings, CreditCard, LayoutDashboard, LogOut, FileText } from 'lucide-react'
@@ -9,7 +9,7 @@ export default async function SuperAdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  const session = await auth()
+  const session = await getSession()
 
   if (!session?.user || session.user.rol !== 'SUPER_ADMIN') {
     redirect('/login')

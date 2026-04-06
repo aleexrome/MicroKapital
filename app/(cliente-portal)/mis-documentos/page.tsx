@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,7 +16,7 @@ const DOC_LABELS: Record<string, string> = {
 }
 
 export default async function MisDocumentosPage() {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) redirect('/login')
 
   const client = await prisma.client.findFirst({

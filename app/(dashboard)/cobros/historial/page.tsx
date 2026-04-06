@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -6,7 +6,7 @@ import { formatMoney, formatDateTime } from '@/lib/utils'
 import { History } from 'lucide-react'
 
 export default async function HistorialCobrosPage() {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) return null
 
   const { companyId } = session.user

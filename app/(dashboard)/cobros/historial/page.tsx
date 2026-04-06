@@ -25,7 +25,7 @@ export default async function HistorialCobrosPage() {
     include: {
       client: { select: { nombreCompleto: true } },
       loan: { select: { tipo: true } },
-      ticket: { select: { numeroTicket: true } },
+      tickets: { where: { esReimpresion: false }, take: 1, select: { numeroTicket: true } },
       schedule: { select: { numeroPago: true } },
     },
   })
@@ -56,8 +56,8 @@ export default async function HistorialCobrosPage() {
                       {p.metodoPago === 'CASH' ? '💵' : '💳'} ·{' '}
                       {formatDateTime(p.fechaHora)}
                     </p>
-                    {p.ticket && (
-                      <p className="text-xs font-mono text-muted-foreground">{p.ticket.numeroTicket}</p>
+                    {p.tickets[0] && (
+                      <p className="text-xs font-mono text-muted-foreground">{p.tickets[0].numeroTicket}</p>
                     )}
                   </div>
                   <span className="font-bold money">{formatMoney(Number(p.monto))}</span>

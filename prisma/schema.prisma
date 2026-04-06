@@ -325,7 +325,7 @@ model Payment {
   createdAt       DateTime         @default(now())
 
   cashBreakdown CashBreakdown[]
-  ticket        Ticket?
+  tickets       Ticket[]
 }
 
 model CashBreakdown {
@@ -339,7 +339,7 @@ model CashBreakdown {
 
 model Ticket {
   id               String   @id @default(uuid())
-  paymentId        String   @unique
+  paymentId        String
   payment          Payment  @relation(fields: [paymentId], references: [id])
   companyId        String
   company          Company  @relation(fields: [companyId], references: [id])

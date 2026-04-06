@@ -34,7 +34,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       payments: {
         orderBy: { fechaHora: 'desc' },
         take: 10,
-        include: { ticket: { select: { numeroTicket: true } } },
+        include: { tickets: { where: { esReimpresion: false }, take: 1, select: { numeroTicket: true } } },
       },
     },
   })

@@ -25,7 +25,7 @@ export default async function MisPagosPage() {
     include: {
       loan: { select: { tipo: true } },
       schedule: { select: { numeroPago: true } },
-      ticket: { select: { numeroTicket: true, qrCode: true } },
+      tickets: { where: { esReimpresion: false }, take: 1, select: { numeroTicket: true, qrCode: true } },
     },
   })
 
@@ -57,9 +57,9 @@ export default async function MisPagosPage() {
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">{formatDateTime(pago.fechaHora)}</p>
                   </div>
-                  {pago.ticket && (
+                  {pago.tickets[0] && (
                     <div className="text-right">
-                      <p className="text-xs font-mono text-muted-foreground">{pago.ticket.numeroTicket}</p>
+                      <p className="text-xs font-mono text-muted-foreground">{pago.tickets[0].numeroTicket}</p>
                       <Badge variant="success" className="text-xs mt-1">Pagado</Badge>
                     </div>
                   )}

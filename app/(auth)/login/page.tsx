@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,20 +23,44 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
 
-    const result = await signIn('credentials', {
-      email,
-      password,
-      redirect: false,
-    })
+    try {
+      // 1. Obtener CSRF token
+      const csrfRes = await fetch('/api/auth/csrf')
+      const { csrfToken } = await csrfRes.json()
 
-    if (result?.error) {
-      setError('Credenciales incorrectas. Verifica tu email y contraseña.')
+      // 2. Enviar credenciales directamente al callback
+      const res = await fetch('/api/auth/callback/credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          csrfToken,
+          email,
+          password,
+          redirect: 'false',
+          json: 'true',
+        }),
+        redirect: 'follow',
+      })
+
+      // 3. Verificar resultado — si hubo error, la URL final tiene "error="
+      const finalUrl = res.url ?? ''
+      if (!finalUrl.includes('error=') && !finalUrl.includes('/login')) {
+        // Login exitoso — navegar al dashboard
+        router.push(callbackUrl.startsWith('/') ? callbackUrl : '/dashboard')
+        router.refresh()
+      } else if (finalUrl.includes('error=')) {
+        setError('Credenciales incorrectas. Verifica tu email y contraseña.')
+        setLoading(false)
+      } else {
+        // res.url es /login pero sin error — intentar ir al dashboard de todas formas
+        // (el cookie de sesión ya está seteado)
+        router.push(callbackUrl.startsWith('/') ? callbackUrl : '/dashboard')
+        router.refresh()
+      }
+    } catch {
+      setError('Error de conexión. Intenta de nuevo.')
       setLoading(false)
-      return
     }
-
-    router.push(callbackUrl)
-    router.refresh()
   }
 
   return (

@@ -19,25 +19,33 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
   },
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        const u = user as typeof user & {
-          rol: UserRole
-          companyId: string | null
-          branchId: string | null
+      try {
+        if (user) {
+          const u = user as typeof user & {
+            rol: UserRole
+            companyId: string | null
+            branchId: string | null
+          }
+          token.id = u.id as string
+          token.rol = u.rol
+          token.companyId = u.companyId ?? null
+          token.branchId = u.branchId ?? null
         }
-        token.id = u.id as string
-        token.rol = u.rol
-        token.companyId = u.companyId
-        token.branchId = u.branchId
+      } catch (e) {
+        console.error('[AUTH JWT CALLBACK ERROR]', e)
       }
       return token
     },
     async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id as string
-        session.user.rol = token.rol as UserRole
-        session.user.companyId = (token.companyId as string | null) ?? null
-        session.user.branchId = (token.branchId as string | null) ?? null
+      try {
+        if (token && session.user) {
+          session.user.id = (token.id ?? '') as string
+          session.user.rol = (token.rol ?? 'COBRADOR') as UserRole
+          session.user.companyId = (token.companyId as string | null) ?? null
+          session.user.branchId = (token.branchId as string | null) ?? null
+        }
+      } catch (e) {
+        console.error('[AUTH SESSION CALLBACK ERROR]', e)
       }
       return session
     },

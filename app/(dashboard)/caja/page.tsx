@@ -29,7 +29,7 @@ export default async function CajaPage() {
     // Si el usuario no tiene sucursal asignada (ej. GERENTE), usar la primera sucursal de la empresa
     let branchId = cobrador.branchId
     if (!branchId) {
-      const branch = await prisma.branch.findFirst({ where: { companyId } })
+      const branch = await prisma.branch.findFirst({ where: { companyId: companyId! } })
       if (!branch) redirect('/dashboard')
       branchId = branch.id
     }

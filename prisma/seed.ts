@@ -125,7 +125,7 @@ async function main() {
       nombre: 'María García López',
       email: 'gerente@demo.com',
       password: 'Gerente2026!',
-      branchId: null,
+      branchId: branch.id,
     },
     {
       rol: 'COBRADOR' as const,

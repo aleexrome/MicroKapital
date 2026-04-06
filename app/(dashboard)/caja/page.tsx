@@ -26,10 +26,18 @@ export default async function CajaPage() {
   })
 
   if (!caja) {
+    // Si el usuario no tiene sucursal asignada (ej. GERENTE), usar la primera sucursal de la empresa
+    let branchId = cobrador.branchId
+    if (!branchId) {
+      const branch = await prisma.branch.findFirst({ where: { companyId } })
+      if (!branch) redirect('/dashboard')
+      branchId = branch.id
+    }
+
     caja = await prisma.cashRegister.create({
       data: {
         cobradorId: cobrador.id,
-        branchId: cobrador.branchId!,
+        branchId,
         fecha: today,
         estado: 'OPEN',
       },

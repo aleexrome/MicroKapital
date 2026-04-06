@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useActionState } from 'react'
+import { loginAction } from '@/app/actions/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,59 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Loader2, Building2 } from 'lucide-react'
 
 export default function LoginPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard'
-
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-
-    try {
-      // 1. Obtener CSRF token
-      const csrfRes = await fetch('/api/auth/csrf')
-      const { csrfToken } = await csrfRes.json()
-
-      // 2. Enviar credenciales directamente al callback
-      const res = await fetch('/api/auth/callback/credentials', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          csrfToken,
-          email,
-          password,
-          redirect: 'false',
-          json: 'true',
-        }),
-        redirect: 'follow',
-      })
-
-      // 3. Verificar resultado — si hubo error, la URL final tiene "error="
-      const finalUrl = res.url ?? ''
-      if (!finalUrl.includes('error=') && !finalUrl.includes('/login')) {
-        // Login exitoso — navegar al dashboard
-        router.push(callbackUrl.startsWith('/') ? callbackUrl : '/dashboard')
-        router.refresh()
-      } else if (finalUrl.includes('error=')) {
-        setError('Credenciales incorrectas. Verifica tu email y contraseña.')
-        setLoading(false)
-      } else {
-        // res.url es /login pero sin error — intentar ir al dashboard de todas formas
-        // (el cookie de sesión ya está seteado)
-        router.push(callbackUrl.startsWith('/') ? callbackUrl : '/dashboard')
-        router.refresh()
-      }
-    } catch {
-      setError('Error de conexión. Intenta de nuevo.')
-      setLoading(false)
-    }
-  }
+  const [state, formAction, pending] = useActionState(loginAction, { error: null })
 
   return (
     <Card className="w-full max-w-md shadow-2xl">
@@ -75,15 +23,14 @@ export default function LoginPage() {
         <CardDescription>Ingresa tus credenciales para acceder al sistema</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form action={formAction} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Correo electrónico</Label>
             <Input
               id="email"
+              name="email"
               type="email"
               placeholder="tu@empresa.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
             />
@@ -92,23 +39,22 @@ export default function LoginPage() {
             <Label htmlFor="password">Contraseña</Label>
             <Input
               id="password"
+              name="password"
               type="password"
               placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="current-password"
             />
           </div>
 
-          {error && (
+          {state?.error && (
             <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
-              {error}
+              {state.error}
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? (
+          <Button type="submit" className="w-full" disabled={pending}>
+            {pending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Ingresando...

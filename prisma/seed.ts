@@ -44,20 +44,20 @@ async function main() {
 
   // ─── Empresa cliente demo ─────────────────────────────────────────────────
   let company = await prisma.company.findFirst({
-    where: { nombre: 'Demo Financiera SA' },
+    where: { nombre: 'MicroKapital Financiera' },
   })
 
   if (!company) {
     company = await prisma.company.create({
       data: {
-        nombre: 'Demo Financiera SA',
+        nombre: 'MicroKapital Financiera',
         telefono: '555-0100',
         email: 'contacto@demofinanciera.com',
         direccion: 'Av. Principal 123, Ciudad de México',
         activa: true,
       },
     })
-    console.log('✅ Empresa creada: Demo Financiera SA')
+    console.log('✅ Empresa creada: MicroKapital Financiera')
   }
 
   // Licencia

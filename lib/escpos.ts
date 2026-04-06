@@ -118,15 +118,33 @@ export function buildTicketBytes(opts: PrintTicketOptions): Uint8Array {
 }
 
 /**
- * Bluetooth service/characteristic UUIDs for common thermal printers.
- * Most cheap 58mm BT printers use the following:
+ * Known UUIDs for common thermal printers — used as optionalServices hint.
+ * The actual write characteristic is auto-detected at runtime.
  */
-export const BT_PRINTER = {
-  SERVICE: '000018f0-0000-1000-8000-00805f9b34fb',
-  CHARACTERISTIC: '00002af1-0000-1000-8000-00805f9b34fb',
-  // Fallback for some printers
-  SERVICE_ALT: 'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-  CHARACTERISTIC_ALT: 'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
+const KNOWN_SERVICES = [
+  '000018f0-0000-1000-8000-00805f9b34fb', // common 58mm printers
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Xprinter / GoojPrt
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455', // some Epson-clone
+  '0000ff00-0000-1000-8000-00805f9b34fb', // generic serial over BLE
+  '0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 / CC41 modules
+]
+
+/**
+ * Find the first writable characteristic across all services on the device.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function findWritableCharacteristic(server: any): Promise<any> {
+  const services = await server.getPrimaryServices()
+  for (const service of services) {
+    const chars = await service.getCharacteristics()
+    for (const char of chars) {
+      const props = char.properties
+      if (props.writeWithoutResponse || props.write) {
+        return char
+      }
+    }
+  }
+  throw new Error('No se encontró una característica de escritura en la impresora. Verifica que sea compatible con BLE.')
 }
 
 export async function printViaBluetooth(data: Uint8Array): Promise<void> {
@@ -135,31 +153,33 @@ export async function printViaBluetooth(data: Uint8Array): Promise<void> {
   if (!bt) throw new Error('Este navegador no soporta Bluetooth. Usa Chrome o Edge.')
 
   const device = await bt.requestDevice({
-    filters: [{ services: [BT_PRINTER.SERVICE] }],
-    optionalServices: [BT_PRINTER.SERVICE, BT_PRINTER.SERVICE_ALT],
-  }).catch(() =>
-    bt.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: [BT_PRINTER.SERVICE, BT_PRINTER.SERVICE_ALT],
-    })
-  )
+    acceptAllDevices: true,
+    optionalServices: KNOWN_SERVICES,
+  })
 
   const server = await device.gatt.connect()
+  const characteristic = await findWritableCharacteristic(server)
 
-  let characteristic
-  try {
-    const service = await server.getPrimaryService(BT_PRINTER.SERVICE)
-    characteristic = await service.getCharacteristic(BT_PRINTER.CHARACTERISTIC)
-  } catch {
-    const service = await server.getPrimaryService(BT_PRINTER.SERVICE_ALT)
-    characteristic = await service.getCharacteristic(BT_PRINTER.CHARACTERISTIC_ALT)
-  }
-
-  // Send in chunks of 512 bytes (BLE MTU limit)
-  const CHUNK = 512
+  // Send in 100-byte chunks with delay (safer for most BLE printers)
+  const CHUNK = 100
   for (let i = 0; i < data.length; i += CHUNK) {
-    await characteristic.writeValueWithoutResponse(data.slice(i, i + CHUNK))
-    await new Promise((r) => setTimeout(r, 50)) // small delay between chunks
+    const chunk = data.slice(i, i + CHUNK)
+    try {
+      if (characteristic.properties.writeWithoutResponse) {
+        await characteristic.writeValueWithoutResponse(chunk)
+      } else {
+        await characteristic.writeValue(chunk)
+      }
+    } catch {
+      // retry once after a short pause
+      await new Promise((r) => setTimeout(r, 200))
+      if (characteristic.properties.writeWithoutResponse) {
+        await characteristic.writeValueWithoutResponse(chunk)
+      } else {
+        await characteristic.writeValue(chunk)
+      }
+    }
+    await new Promise((r) => setTimeout(r, 30))
   }
 
   device.gatt.disconnect()

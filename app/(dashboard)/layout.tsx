@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
-import { Sidebar } from '@/components/dashboard/Sidebar'
+import { DashboardShell } from '@/components/dashboard/DashboardShell'
 import { Toaster } from '@/components/ui/toaster'
 import { checkLicense } from '@/lib/license-check'
 
@@ -57,25 +57,16 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      {/* Sidebar — oculto en móvil por defecto, siempre visible en desktop */}
-      <div className="hidden md:flex md:flex-shrink-0">
-        <Sidebar
-          userRole={rol}
-          userName={session.user.name ?? ''}
-          companyName={companyName}
-          branchName={branchName}
-        />
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
-      </div>
-
+    <>
+      <DashboardShell
+        userRole={rol}
+        userName={session.user.name ?? ''}
+        companyName={companyName}
+        branchName={branchName}
+      >
+        {children}
+      </DashboardShell>
       <Toaster />
-    </div>
+    </>
   )
 }

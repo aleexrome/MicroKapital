@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useFormState, useFormStatus } from 'react-dom'
 import { loginAction } from '@/app/actions/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,8 +8,24 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Building2 } from 'lucide-react'
 
+function SubmitButton() {
+  const { pending } = useFormStatus()
+  return (
+    <Button type="submit" className="w-full" disabled={pending}>
+      {pending ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          Ingresando...
+        </>
+      ) : (
+        'Iniciar sesión'
+      )}
+    </Button>
+  )
+}
+
 export default function LoginPage() {
-  const [state, formAction, pending] = useActionState(loginAction, { error: null })
+  const [state, formAction] = useFormState(loginAction, { error: null })
 
   return (
     <Card className="w-full max-w-md shadow-2xl">
@@ -53,16 +69,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Ingresando...
-              </>
-            ) : (
-              'Iniciar sesión'
-            )}
-          </Button>
+          <SubmitButton />
         </form>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">

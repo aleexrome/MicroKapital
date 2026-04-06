@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { signOut } from 'next-auth/react'
+import { logoutAction } from '@/app/actions/logout'
 import { cn } from '@/lib/utils'
 import { UserRole } from '@prisma/client'
 import {
@@ -95,6 +95,7 @@ interface SidebarProps {
 export function Sidebar({ userRole, userName, companyName, branchName }: SidebarProps) {
   const pathname = usePathname()
 
+
   const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(userRole))
 
   return (
@@ -142,15 +143,15 @@ export function Sidebar({ userRole, userName, companyName, branchName }: Sidebar
             {userRole === 'GERENTE' ? 'Gerente' : userRole === 'COBRADOR' ? 'Cobrador' : userRole}
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start text-primary-200 hover:text-white hover:bg-white/10"
-          onClick={() => signOut({ callbackUrl: '/login' })}
-        >
-          <LogOut className="h-4 w-4" />
-          Cerrar sesión
-        </Button>
+        <form action={logoutAction}>
+          <button
+            type="submit"
+            className="flex w-full items-center gap-2 rounded px-3 py-2 text-sm text-primary-200 hover:text-white hover:bg-white/10"
+          >
+            <LogOut className="h-4 w-4" />
+            Cerrar sesión
+          </button>
+        </form>
       </div>
     </aside>
   )

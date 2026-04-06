@@ -1,113 +1,159 @@
-'use client'
+import { redirect } from 'next/navigation'
+import { prisma } from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
+import { SignJWT } from 'jose'
+import { cookies } from 'next/headers'
 
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Building2 } from 'lucide-react'
+async function loginAction(formData: FormData) {
+  'use server'
+  const email = formData.get('email') as string
+  const password = formData.get('password') as string
 
-export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-
-    try {
-      // 1. Obtener CSRF token
-      const csrfRes = await fetch('/api/auth/csrf')
-      const { csrfToken } = await csrfRes.json()
-
-      // 2. Autenticar
-      const res = await fetch('/api/auth/callback/credentials', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ csrfToken, email, password }),
-        credentials: 'include',
-      })
-
-      // 3. Verificar — status 200 significa que siguió redirects y llegó al final
-      //    Si la URL final contiene 'error=' el login falló
-      const finalUrl = res.url || ''
-      if (finalUrl.includes('error=') || finalUrl.includes('/login')) {
-        setError('Credenciales incorrectas. Verifica tu email y contraseña.')
-        setLoading(false)
-        return
-      }
-
-      // 4. Login exitoso — forzar recarga completa para tomar el cookie de sesión
-      window.location.href = '/dashboard'
-    } catch {
-      setError('Error de conexión. Intenta de nuevo.')
-      setLoading(false)
-    }
+  if (!email || !password) {
+    redirect('/login?error=missing')
   }
 
+  const user = await prisma.user.findFirst({
+    where: { email, activo: true },
+    include: { company: { include: { license: true } } },
+  })
+
+  if (!user) redirect('/login?error=invalid')
+
+  const valid = await bcrypt.compare(password, user!.passwordHash)
+  if (!valid) redirect('/login?error=invalid')
+
+  if (user!.rol !== 'SUPER_ADMIN') {
+    const lic = user!.company?.license
+    if (!lic || lic.estado === 'CANCELLED') redirect('/login?error=license')
+  }
+
+  // Crear JWT compatible con NextAuth v5 (JWE A256CBC-HS512)
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? ''
+  const { hkdf } = await import('@panva/hkdf')
+  const encKey = await hkdf('sha256', secret, '', 'Auth.js Generated Encryption Key', 64)
+
+  const { EncryptJWT } = await import('jose')
+  const token = await new EncryptJWT({
+    id: user!.id,
+    email: user!.email,
+    name: user!.nombre,
+    rol: user!.rol,
+    companyId: user!.companyId,
+    branchId: user!.branchId ?? null,
+    sub: user!.id,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
+  })
+    .setProtectedHeader({ alg: 'dir', enc: 'A256CBC-HS512' })
+    .setIssuedAt()
+    .setExpirationTime('30d')
+    .encrypt(encKey)
+
+  // Actualizar último acceso
+  prisma.user.update({ where: { id: user!.id }, data: { ultimoAcceso: new Date() } }).catch(() => {})
+
+  const cookieStore = cookies()
+  cookieStore.set('authjs.session-token', token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 30,
+    path: '/',
+  })
+
+  const dest = user!.rol === 'SUPER_ADMIN' ? '/sys-mnt-9x7k/panel' : '/dashboard'
+  redirect(dest)
+}
+
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: { error?: string }
+}) {
+  const errorMsg =
+    searchParams.error === 'invalid' || searchParams.error === 'missing'
+      ? 'Credenciales incorrectas. Verifica tu email y contraseña.'
+      : searchParams.error === 'license'
+      ? 'Tu empresa no tiene licencia activa.'
+      : null
+
   return (
-    <Card className="w-full max-w-md shadow-2xl">
-      <CardHeader className="space-y-1 text-center">
+    <div className="w-full max-w-md rounded-lg border bg-white shadow-2xl">
+      <div className="flex flex-col p-6 space-y-1 text-center">
         <div className="flex items-center justify-center mb-4">
-          <div className="bg-primary-700 rounded-xl p-3">
-            <Building2 className="h-8 w-8 text-white" />
+          <div className="bg-blue-900 rounded-xl p-3">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
+              <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+              <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+              <path d="M10 6h4" /><path d="M10 10h4" /><path d="M10 14h4" /><path d="M10 18h4" />
+            </svg>
           </div>
         </div>
-        <CardTitle className="text-2xl font-bold text-primary-700">MicroKapital</CardTitle>
-        <CardDescription>Ingresa tus credenciales para acceder al sistema</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Correo electrónico</Label>
-            <Input
+        <h1 className="text-2xl font-bold text-blue-900">MicroKapital</h1>
+        <p className="text-sm text-gray-500">Ingresa tus credenciales para acceder al sistema</p>
+      </div>
+
+      <div className="px-6 pb-6">
+        <form action={loginAction} method="POST" className="space-y-4">
+          <div className="space-y-1">
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              Correo electrónico
+            </label>
+            <input
               id="email"
+              name="email"
               type="email"
               placeholder="tu@empresa.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Contraseña</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900"
             />
           </div>
 
-          {error && (
+          <div className="space-y-1">
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              Contraseña
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              placeholder="••••••••"
+              required
+              autoComplete="current-password"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900"
+            />
+          </div>
+
+          {errorMsg && (
             <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
-              {error}
+              {errorMsg}
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Ingresando...
-              </>
-            ) : (
-              'Iniciar sesión'
-            )}
-          </Button>
+          <button
+            type="submit"
+            className="w-full rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-900"
+          >
+            Iniciar sesión
+          </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
+        <p className="mt-6 text-center text-xs text-gray-400">
           Sistema de uso exclusivo para personal autorizado
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

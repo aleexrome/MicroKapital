@@ -37,13 +37,13 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/clientes',
-    label: 'Clientes',
+    label: 'Cartera de Clientes',
     icon: <Users className="h-5 w-5" />,
     roles: ['GERENTE', 'COBRADOR'],
   },
   {
     href: '/prestamos',
-    label: 'Préstamos',
+    label: 'Solicitudes',
     icon: <CreditCard className="h-5 w-5" />,
     roles: ['GERENTE', 'COBRADOR'],
   },
@@ -55,19 +55,19 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/cobros/agenda',
-    label: 'Agenda del día',
+    label: 'Pactados del Día',
     icon: <CalendarDays className="h-5 w-5" />,
     roles: ['COBRADOR'],
   },
   {
     href: '/cobros/historial',
-    label: 'Historial de cobros',
+    label: 'Cobranza',
     icon: <History className="h-5 w-5" />,
     roles: ['COBRADOR', 'GERENTE'],
   },
   {
     href: '/caja',
-    label: 'Caja',
+    label: 'Corte del Día',
     icon: <Wallet className="h-5 w-5" />,
     roles: ['COBRADOR', 'GERENTE'],
   },

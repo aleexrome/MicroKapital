@@ -62,7 +62,7 @@ export default async function AgendaPage() {
   return (
     <div className="p-4 space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">Agenda de cobro</h1>
+        <h1 className="text-xl font-bold text-gray-900">Pactados del Día</h1>
         <p className="text-sm text-muted-foreground">
           {formatDate(today, "EEEE d 'de' MMMM")} ·{' '}
           {isHabil ? 'Día hábil' : 'No hábil'}

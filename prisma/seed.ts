@@ -80,23 +80,33 @@ async function main() {
     console.log('✅ Licencia creada: LIC-DEMO-2026-001')
   }
 
-  // Sucursal
-  let branch = await prisma.branch.findFirst({
-    where: { companyId: company.id, nombre: 'Sucursal Centro' },
-  })
+  // Sucursales (4 en total)
+  const sucursalesData = [
+    { nombre: 'San Mateo Atenco', direccion: 'San Mateo Atenco, Estado de México', telefono: '722-100-0001' },
+    { nombre: 'Tenancingo',       direccion: 'Tenancingo de Degollado, Estado de México', telefono: '714-100-0002' },
+    { nombre: 'Toluca',           direccion: 'Toluca de Lerdo, Estado de México', telefono: '722-100-0003' },
+    { nombre: 'Veracruz',         direccion: 'Veracruz, Veracruz', telefono: '229-100-0004' },
+  ]
 
-  if (!branch) {
-    branch = await prisma.branch.create({
-      data: {
-        companyId: company.id,
-        nombre: 'Sucursal Centro',
-        direccion: 'Calle 5 de Mayo 10, Centro',
-        telefono: '555-0101',
-        activa: true,
-      },
-    })
-    console.log('✅ Sucursal creada: Sucursal Centro')
+  const branchMap: Record<string, { id: string; nombre: string }> = {}
+
+  for (const s of sucursalesData) {
+    let b = await prisma.branch.findFirst({ where: { companyId: company.id, nombre: s.nombre } })
+    if (!b) {
+      b = await prisma.branch.create({
+        data: { companyId: company.id, nombre: s.nombre, direccion: s.direccion, telefono: s.telefono, activa: true },
+      })
+      console.log(`✅ Sucursal creada: ${s.nombre}`)
+    }
+    branchMap[s.nombre] = b
   }
+
+  // branch principal para los usuarios de demo (San Mateo Atenco)
+  let branch = branchMap['San Mateo Atenco']
+
+  // Retrocompatibilidad: si existe "Sucursal Centro" en la BD, usarla como branch principal
+  const legacyBranch = await prisma.branch.findFirst({ where: { companyId: company.id, nombre: 'Sucursal Centro' } })
+  if (legacyBranch) branch = legacyBranch
 
   // ─── Configuraciones de tasas ──────────────────────────────────────────────
   // Prisma unique constraint with optional null field — use findFirst + upsert workaround

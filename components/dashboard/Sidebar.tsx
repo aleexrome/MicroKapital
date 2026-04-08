@@ -18,6 +18,7 @@ import {
   LogOut,
   Building2,
   CheckSquare,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -78,10 +79,16 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['COBRADOR', 'GERENTE'],
   },
   {
+    href: '/transferencias',
+    label: 'Transferencias',
+    icon: <ArrowLeftRight className="h-5 w-5" />,
+    roles: ['GERENTE', 'GERENTE_ZONAL'],
+  },
+  {
     href: '/reportes',
     label: 'Reportes',
     icon: <BarChart3 className="h-5 w-5" />,
-    roles: ['GERENTE'],
+    roles: ['GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
 ]
 

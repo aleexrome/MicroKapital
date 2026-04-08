@@ -7,6 +7,7 @@ import { LoanActivateButton } from '@/components/loans/LoanActivateButton'
 import { LoanClientRejectButton } from '@/components/loans/LoanClientRejectButton'
 import { LoanRenewButton } from '@/components/loans/LoanRenewButton'
 import { DocumentChecklist } from '@/components/loans/DocumentChecklist'
+import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
 import { ScheduleDateEditor } from '@/components/loans/ScheduleDateEditor'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -95,7 +96,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           )}
 
           {/* Coordinador / Gerente Zonal: activar crédito ya aprobado o registrar rechazo del cliente */}
-          {puedeActivar && (
+          {puedeActivar && !loan.seguroPendiente && (
             <div className="pt-1 space-y-2">
               <p className="text-sm text-blue-700 font-medium">
                 Crédito aprobado por el Director General. Preséntalo al cliente y actívalo si acepta.
@@ -104,6 +105,13 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 <LoanActivateButton loanId={loan.id} />
                 <LoanClientRejectButton loanId={loan.id} />
               </div>
+            </div>
+          )}
+
+          {/* Gerente: verificar transferencia del seguro y activar */}
+          {loan.seguroPendiente && (rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN') && (
+            <div className="pt-1">
+              <LoanActivateButton loanId={loan.id} seguroPendiente />
             </div>
           )}
 
@@ -167,6 +175,22 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           <div><p className="text-muted-foreground">Cobrador</p><p className="font-semibold">{loan.cobrador.nombre}</p></div>
           {loan.fechaDesembolso && <div><p className="text-muted-foreground">Desembolso</p><p className="font-semibold">{formatDate(loan.fechaDesembolso)}</p></div>}
           {loan.aprobadoPor && <div><p className="text-muted-foreground">Aprobado por</p><p className="font-semibold">{loan.aprobadoPor.nombre}</p></div>}
+          {loan.seguro && Number(loan.seguro) > 0 && (
+            <div>
+              <p className="text-muted-foreground">Seguro de apertura</p>
+              <p className="font-semibold text-indigo-700">
+                {formatMoney(Number(loan.seguro))}
+                {loan.seguroPendiente && <span className="ml-1 text-xs text-amber-600">(por verificar)</span>}
+              </p>
+            </div>
+          )}
+          {loan.avalNombre && (
+            <div>
+              <p className="text-muted-foreground">Aval</p>
+              <p className="font-semibold">{loan.avalNombre}{loan.avalRelacion ? ` (${loan.avalRelacion})` : ''}</p>
+              {loan.avalTelefono && <p className="text-xs text-muted-foreground">{loan.avalTelefono}</p>}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -197,6 +221,13 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         loanId={loan.id}
         tipo={loan.tipo as LoanType}
         savedChecklist={(loan.documentChecklist as ChecklistItem[] | null) ?? null}
+      />
+
+      {/* Archivos PDF del crédito */}
+      <LoanDocumentUpload
+        loanId={loan.id}
+        tipo={loan.tipo as LoanType}
+        readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
       />
 
       {/* Calendario de pagos */}

@@ -187,6 +187,7 @@ model User {
   approvalReviewer  LoanApproval[]   @relation("ReviewerApprovals")
   approvalRequest   LoanApproval[]   @relation("RequesterApprovals")
   uploadedDocs      ClientDocument[]
+  loanDocuments     LoanDocument[]
   scoreEvents       ScoreEvent[]
   transfersVerified Payment[]        @relation("VerifiedTransfers")
 
@@ -289,6 +290,14 @@ model Loan {
   valorGarantia       Decimal? @db.Decimal(12, 2)
   // Checklist de documentos (JSON array of {id, label, checked})
   documentChecklist   Json?
+  // Seguro de apertura
+  seguro              Decimal?       @db.Decimal(12, 2)   // Monto del seguro cobrado
+  seguroMetodoPago    PaymentMethod?                      // CASH | TRANSFER
+  seguroPendiente     Boolean        @default(false)      // Seguro por transferencia pendiente de verificación por gerente
+  // Aval
+  avalNombre          String?
+  avalTelefono        String?
+  avalRelacion        String?        // "CONYUGE", "FAMILIAR", "CONOCIDO", etc.
   // Aprobación
   aprobadoPorId  String?
   aprobadoPor    User?     @relation("ApprovedLoans", fields: [aprobadoPorId], references: [id])
@@ -309,6 +318,19 @@ model Loan {
   payments    Payment[]
   approvals   LoanApproval[]
   scoreEvents ScoreEvent[]
+  documents   LoanDocument[]
+}
+
+model LoanDocument {
+  id          String   @id @default(uuid())
+  loanId      String
+  loan        Loan     @relation(fields: [loanId], references: [id])
+  subidoPor   String
+  uploadedBy  User     @relation(fields: [subidoPor], references: [id])
+  tipo        String   // "SOLICITUD", "INE_FRENTE", "INE_REVERSO", "COMPROBANTE_DOMICILIO", "CONTRATO", "PAGARE", "FOTO", "AVAL_INE", "OTRO"
+  archivoUrl  String
+  descripcion String?
+  createdAt   DateTime @default(now())
 }
 
 model LoanApproval {

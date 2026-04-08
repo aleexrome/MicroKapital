@@ -11,6 +11,8 @@ import {
   CheckSquare,
   Archive,
   TrendingUp,
+  ShieldCheck,
+  Percent,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -63,6 +65,9 @@ export default async function DashboardPage() {
 
   // ── Common KPIs ───────────────────────────────────────────────────────────────
 
+  // First day of current month
+  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+
   const [
     totalClientes,
     prestamosActivos,
@@ -71,6 +76,8 @@ export default async function DashboardPage() {
     pendientesAprobacion,
     capitalActivoAgg,
     liquidadosTotal,
+    segurosAgg,
+    comisionesAgg,
   ] = await Promise.all([
     prisma.client.count({
       where: {
@@ -102,10 +109,26 @@ export default async function DashboardPage() {
       _sum: { capital: true },
     }),
     prisma.loan.count({ where: { ...loanScope, estado: 'LIQUIDATED' } }),
+    // Seguros cobrados este mes (solo directores)
+    isDirector
+      ? prisma.loan.aggregate({
+          where: { ...loanScope, estado: 'ACTIVE', fechaDesembolso: { gte: firstOfMonth } },
+          _sum: { seguro: true },
+        })
+      : Promise.resolve({ _sum: { seguro: null } }),
+    // Comisiones cobradas este mes (solo directores)
+    isDirector
+      ? prisma.loan.aggregate({
+          where: { ...loanScope, estado: 'ACTIVE', fechaDesembolso: { gte: firstOfMonth } },
+          _sum: { comision: true },
+        })
+      : Promise.resolve({ _sum: { comision: null } }),
   ])
 
   const cobradoHoy     = Number(cobradoHoyAgg._sum.monto ?? 0)
   const capitalActivo  = Number(capitalActivoAgg._sum.capital ?? 0)
+  const totalSeguros   = Number((segurosAgg as { _sum: { seguro: unknown } })._sum.seguro ?? 0)
+  const totalComisiones = Number((comisionesAgg as { _sum: { comision: unknown } })._sum.comision ?? 0)
 
   // ── Role-specific extra data ──────────────────────────────────────────────────
 
@@ -196,6 +219,34 @@ export default async function DashboardPage() {
           color="red"
         />
       </div>
+
+      {/* Seguros y comisiones (directors only) */}
+      {isDirector && (
+        <div className="grid grid-cols-2 gap-4">
+          <Card>
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="bg-indigo-100 rounded-lg p-2.5">
+                <ShieldCheck className="h-5 w-5 text-indigo-700" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Seguros cobrados (este mes)</p>
+                <p className="text-xl font-bold text-indigo-700">{formatMoney(totalSeguros)}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="bg-orange-100 rounded-lg p-2.5">
+                <Percent className="h-5 w-5 text-orange-700" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Comisiones de apertura (este mes)</p>
+                <p className="text-xl font-bold text-orange-700">{formatMoney(totalComisiones)}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Secondary KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

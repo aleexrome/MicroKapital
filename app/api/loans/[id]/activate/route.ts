@@ -6,7 +6,9 @@ import { createAuditLog } from '@/lib/audit'
 import { z } from 'zod'
 
 const activateSchema = z.object({
-  fechaDesembolso: z.string().optional(), // ISO date string; si no se pasa, usa hoy
+  fechaDesembolso:  z.string().optional(),
+  seguro:           z.number().optional(),
+  seguroMetodoPago: z.enum(['CASH', 'TRANSFER']).optional(),
 })
 
 export async function POST(
@@ -18,7 +20,6 @@ export async function POST(
 
   const { rol, companyId, id: userId } = session.user
 
-  // Coordinador y Gerente Zonal son quienes activan; también Super Admin
   const rolesPermitidos = ['COORDINADOR', 'COBRADOR', 'GERENTE_ZONAL', 'GERENTE', 'SUPER_ADMIN']
   if (!rolesPermitidos.includes(rol)) {
     return NextResponse.json({ error: 'Sin permisos para activar créditos' }, { status: 403 })
@@ -39,14 +40,45 @@ export async function POST(
     ? new Date(parsed.data.fechaDesembolso)
     : new Date()
 
-  // Generar calendario de pagos según el tipo de crédito
+  const seguroMonto    = parsed.success ? (parsed.data.seguro ?? null) : null
+  const seguroMetodo   = parsed.success ? (parsed.data.seguroMetodoPago ?? null) : null
+
+  // Si el seguro se pagó por transferencia, registrar y esperar verificación del gerente
+  const esperaVerificacion = seguroMonto && seguroMonto > 0 && seguroMetodo === 'TRANSFER'
+
+  if (esperaVerificacion) {
+    // Guardar info del seguro pero mantener el préstamo en APPROVED
+    await prisma.loan.update({
+      where: { id: loan.id },
+      data: {
+        seguro:          seguroMonto,
+        seguroMetodoPago: 'TRANSFER',
+        seguroPendiente:  true,
+        fechaDesembolso,  // guardar la fecha propuesta
+      },
+    })
+
+    createAuditLog({
+      userId,
+      accion: 'REGISTER_SEGURO_TRANSFER',
+      tabla: 'Loan',
+      registroId: loan.id,
+      valoresNuevos: { seguro: seguroMonto, seguroMetodoPago: 'TRANSFER', seguroPendiente: true },
+    })
+
+    return NextResponse.json({
+      seguroPendiente: true,
+      message: 'Seguro registrado. El crédito se activará cuando el gerente verifique la transferencia.',
+    })
+  }
+
+  // Activación normal (seguro en efectivo o sin seguro)
   let fechas: Date[]
   if (loan.tipo === 'AGIL') {
     fechas = generarFechasHabiles(fechaDesembolso, Number(loan.plazo))
   } else if (loan.tipo === 'FIDUCIARIO') {
     fechas = generarFechasQuincenales(fechaDesembolso, Number(loan.plazo))
   } else {
-    // SOLIDARIO e INDIVIDUAL: semanal
     fechas = generarFechasSemanales(fechaDesembolso, Number(loan.plazo))
   }
 
@@ -61,6 +93,11 @@ export async function POST(
       data: {
         estado: 'ACTIVE',
         fechaDesembolso,
+        ...(seguroMonto && seguroMonto > 0 ? {
+          seguro:           seguroMonto,
+          seguroMetodoPago: 'CASH',
+          seguroPendiente:  false,
+        } : {}),
       },
     })
 
@@ -80,7 +117,12 @@ export async function POST(
     accion: 'ACTIVATE_LOAN',
     tabla: 'Loan',
     registroId: loan.id,
-    valoresNuevos: { estado: 'ACTIVE', fechaDesembolso: fechaDesembolso.toISOString() },
+    valoresNuevos: {
+      estado: 'ACTIVE',
+      fechaDesembolso: fechaDesembolso.toISOString(),
+      seguro: seguroMonto,
+      seguroMetodoPago: seguroMonto ? 'CASH' : null,
+    },
   })
 
   return NextResponse.json({ message: 'Crédito activado — calendario de pagos generado' })

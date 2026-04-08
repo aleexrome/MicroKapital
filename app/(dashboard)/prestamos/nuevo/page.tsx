@@ -364,8 +364,9 @@ export default function NuevaSolicitudPage() {
           <div>
             <p className="text-sm font-semibold text-foreground">Documentación requerida</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Una vez enviada la solicitud, podrás subir los documentos del cliente (INE, comprobante de domicilio, fotografía, etc.)
-              directamente desde la pantalla del crédito. El Director General puede solicitar documentos adicionales antes de aprobar.
+              Una vez enviada la solicitud, ve a <strong>Solicitudes → abre esta solicitud</strong> y desplázate hasta
+              la sección <strong>"Documentos del crédito"</strong> para subir los archivos (INE, comprobante de domicilio, fotografía, etc.).
+              El Director General puede solicitar documentos adicionales antes de aprobar.
             </p>
           </div>
         </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { MessageCircle, X, Send, Bot, Loader2, ChevronDown } from 'lucide-react'
+import { X, Send, Bot, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Message {
@@ -118,19 +118,25 @@ export function MiKaChat() {
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-5 right-5 z-50 flex flex-col w-[360px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-4rem)] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+        <div
+          className="fixed bottom-5 right-5 z-50 flex flex-col w-[360px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-4rem)] rounded-2xl shadow-2xl overflow-hidden"
+          style={{ background: '#181727', border: '1px solid #252440' }}
+        >
           {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-3 bg-primary-700 text-white shrink-0">
-            <div className="bg-white/20 rounded-full p-1.5">
-              <Bot className="h-4 w-4" />
+          <div
+            className="flex items-center gap-3 px-4 py-3 shrink-0"
+            style={{ background: '#1E1B3A', borderBottom: '1px solid #252440' }}
+          >
+            <div className="bg-orange-500/20 rounded-full p-1.5">
+              <Bot className="h-4 w-4 text-orange-400" />
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-sm">MiKa</p>
-              <p className="text-xs text-primary-200">Asistente de MicroKapital</p>
+              <p className="font-semibold text-sm text-white">MiKa</p>
+              <p className="text-xs" style={{ color: '#A898FF' }}>Asistente de MicroKapital</p>
             </div>
             <button
               onClick={() => setOpen(false)}
-              className="p-1 rounded-lg hover:bg-white/20 transition-colors"
+              className="p-1 rounded-lg transition-colors text-white/60 hover:text-white hover:bg-white/10"
               aria-label="Cerrar"
             >
               <X className="h-4 w-4" />
@@ -145,21 +151,29 @@ export function MiKaChat() {
                 className={cn('flex gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start')}
               >
                 {msg.role === 'assistant' && (
-                  <div className="shrink-0 w-6 h-6 bg-primary-100 rounded-full flex items-center justify-center mt-0.5">
-                    <Bot className="h-3.5 w-3.5 text-primary-700" />
+                  <div
+                    className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5"
+                    style={{ background: '#252440' }}
+                  >
+                    <Bot className="h-3.5 w-3.5 text-orange-400" />
                   </div>
                 )}
                 <div
                   className={cn(
                     'max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed',
                     msg.role === 'user'
-                      ? 'bg-primary-700 text-white rounded-tr-sm'
-                      : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                      ? 'rounded-tr-sm text-white'
+                      : 'rounded-tl-sm text-white'
                   )}
+                  style={
+                    msg.role === 'user'
+                      ? { background: '#7B6FFF' }
+                      : { background: '#252440', color: '#E6E4F8' }
+                  }
                 >
                   {msg.content
                     ? renderText(msg.content)
-                    : <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+                    : <Loader2 className="h-3.5 w-3.5 animate-spin opacity-50" />}
                 </div>
               </div>
             ))}
@@ -171,7 +185,14 @@ export function MiKaChat() {
                   <button
                     key={s}
                     onClick={() => sendMessage(s)}
-                    className="w-full text-left text-xs px-3 py-2 rounded-xl border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
+                    className="w-full text-left text-xs px-3 py-2 rounded-xl transition-colors"
+                    style={{
+                      border: '1px solid #3D3A6B',
+                      background: '#252440',
+                      color: '#C9BEFF',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = '#2E2A55' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = '#252440' }}
                   >
                     {s}
                   </button>
@@ -179,16 +200,20 @@ export function MiKaChat() {
               </div>
             )}
 
+            {/* Typing dots */}
             {loading && messages[messages.length - 1]?.content === '' && (
               <div className="flex gap-2 justify-start">
-                <div className="shrink-0 w-6 h-6 bg-primary-100 rounded-full flex items-center justify-center">
-                  <Bot className="h-3.5 w-3.5 text-primary-700" />
+                <div
+                  className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center"
+                  style={{ background: '#252440' }}
+                >
+                  <Bot className="h-3.5 w-3.5 text-orange-400" />
                 </div>
-                <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3 py-2">
+                <div className="rounded-2xl rounded-tl-sm px-3 py-2" style={{ background: '#252440' }}>
                   <div className="flex gap-1 items-center h-5">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                    <span className="w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:0ms]" style={{ background: '#7B6FFF' }} />
+                    <span className="w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:150ms]" style={{ background: '#7B6FFF' }} />
+                    <span className="w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:300ms]" style={{ background: '#7B6FFF' }} />
                   </div>
                 </div>
               </div>
@@ -198,7 +223,10 @@ export function MiKaChat() {
           </div>
 
           {/* Input */}
-          <div className="shrink-0 border-t border-gray-100 px-3 py-3 bg-gray-50">
+          <div
+            className="shrink-0 px-3 py-3"
+            style={{ borderTop: '1px solid #252440', background: '#111020' }}
+          >
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
@@ -208,19 +236,27 @@ export function MiKaChat() {
                 placeholder="Escribe tu pregunta..."
                 rows={1}
                 disabled={loading}
-                className="flex-1 resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50 max-h-24 overflow-y-auto"
-                style={{ minHeight: '38px' }}
+                className="flex-1 resize-none rounded-xl px-3 py-2 text-sm focus:outline-none disabled:opacity-50 max-h-24 overflow-y-auto placeholder:text-white/30"
+                style={{
+                  minHeight: '38px',
+                  background: '#252440',
+                  border: '1px solid #3D3A6B',
+                  color: '#E6E4F8',
+                }}
               />
               <button
                 onClick={() => sendMessage(input)}
                 disabled={!input.trim() || loading}
-                className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl bg-primary-700 text-white hover:bg-primary-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: '#7B6FFF' }}
+                onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#6A5EE8' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = '#7B6FFF' }}
                 aria-label="Enviar"
               >
                 <Send className="h-4 w-4" />
               </button>
             </div>
-            <p className="text-[10px] text-gray-400 mt-1.5 text-center">
+            <p className="text-[10px] mt-1.5 text-center" style={{ color: '#5A567A' }}>
               MiKa puede cometer errores. Verifica información importante.
             </p>
           </div>

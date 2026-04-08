@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import type { UserRole } from '@prisma/client'
+import { Prisma, type UserRole } from '@prisma/client'
 
 const ESTADO_LABEL: Record<string, string> = {
   ACTIVE: 'Activo',
@@ -50,8 +50,7 @@ export default async function DashboardPage() {
 
   // ── Scope restrictor ──────────────────────────────────────────────────────────
 
-  type LoanWhere = Parameters<typeof prisma.loan.findMany>[0]['where']
-  const loanScope: LoanWhere = { companyId: companyId! }
+  const loanScope: Prisma.LoanWhereInput = { companyId: companyId! }
 
   if (rol === 'GERENTE_ZONAL') {
     const zoneIds = session.user.zonaBranchIds

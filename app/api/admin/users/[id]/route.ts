@@ -3,10 +3,11 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
 import { z } from 'zod'
+import { UserRole } from '@prisma/client'
 
 const patchSchema = z.object({
   activo: z.boolean().optional(),
-  rol: z.string().optional(),
+  rol: z.nativeEnum(UserRole).optional(),
   nombre: z.string().min(2).optional(),
 })
 

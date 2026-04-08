@@ -7,7 +7,7 @@ import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { Plus, CreditCard } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { LoanStatus } from '@prisma/client'
+import { Prisma, type LoanStatus } from '@prisma/client'
 
 const TABS: { label: string; value: string | null }[] = [
   { label: 'Todos', value: null },
@@ -29,8 +29,7 @@ export default async function PrestamosPage({
 
   const estadoFiltro = searchParams.estado ?? null
 
-  type LoanWhere = Parameters<typeof prisma.loan.findMany>[0]['where']
-  const where: LoanWhere = { companyId: companyId! }
+  const where: Prisma.LoanWhereInput = { companyId: companyId! }
 
   if (estadoFiltro) where.estado = estadoFiltro as LoanStatus
 

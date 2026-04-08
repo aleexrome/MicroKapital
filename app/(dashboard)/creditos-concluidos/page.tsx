@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { CheckCircle, FileText, Filter } from 'lucide-react'
 import Link from 'next/link'
-import type { UserRole } from '@prisma/client'
+import { Prisma, type UserRole } from '@prisma/client'
 
 const TIPO_LABEL: Record<string, string> = {
   SOLIDARIO: 'Solidario',
@@ -32,8 +32,7 @@ export default async function CreditosConcluidos({
 
   // ── Build WHERE depending on role ────────────────────────────────────────────
 
-  type LoanWhere = Parameters<typeof prisma.loan.findMany>[0]['where']
-  const baseWhere: LoanWhere = { companyId: companyId!, estado: 'LIQUIDATED' }
+  const baseWhere: Prisma.LoanWhereInput = { companyId: companyId!, estado: 'LIQUIDATED' }
 
   const isDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
   const isGerente  = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'

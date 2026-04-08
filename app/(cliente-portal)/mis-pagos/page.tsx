@@ -22,7 +22,11 @@ export default async function MisPagosPage() {
   const pagos = await prisma.payment.findMany({
     where: { clientId: client.id },
     orderBy: { fechaHora: 'desc' },
-    include: {
+    select: {
+      id: true,
+      monto: true,
+      metodoPago: true,
+      fechaHora: true,
       loan: { select: { tipo: true } },
       schedule: { select: { numeroPago: true } },
       tickets: { where: { esReimpresion: false }, take: 1, select: { numeroTicket: true, qrCode: true } },

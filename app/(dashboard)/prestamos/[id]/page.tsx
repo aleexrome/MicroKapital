@@ -43,11 +43,6 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       aprobadoPor: { select: { nombre: true } },
       loanOriginal: { select: { id: true } },
       schedule: { orderBy: { numeroPago: 'asc' } },
-      payments: {
-        orderBy: { fechaHora: 'desc' },
-        take: 10,
-        include: { tickets: { where: { esReimpresion: false }, take: 1, select: { numeroTicket: true } } },
-      },
     },
   })
 

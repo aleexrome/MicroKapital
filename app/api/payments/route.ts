@@ -40,7 +40,15 @@ export async function GET(req: NextRequest) {
     },
     orderBy: { fechaHora: 'desc' },
     take: 100,
-    include: {
+    select: {
+      id: true,
+      monto: true,
+      metodoPago: true,
+      fechaHora: true,
+      cambioEntregado: true,
+      notas: true,
+      idTransferencia: true,
+      statusTransferencia: true,
       cobrador: { select: { nombre: true } },
       client: { select: { nombreCompleto: true } },
       loan: { select: { tipo: true } },

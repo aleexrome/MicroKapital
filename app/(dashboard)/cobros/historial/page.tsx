@@ -22,7 +22,11 @@ export default async function HistorialCobrosPage() {
     },
     orderBy: { fechaHora: 'desc' },
     take: 50,
-    include: {
+    select: {
+      id: true,
+      monto: true,
+      metodoPago: true,
+      fechaHora: true,
       client: { select: { nombreCompleto: true } },
       loan: { select: { tipo: true } },
       tickets: { where: { esReimpresion: false }, take: 1, select: { numeroTicket: true } },

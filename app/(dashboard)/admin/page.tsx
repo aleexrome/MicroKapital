@@ -43,7 +43,11 @@ export default async function AdminPage({
         where: { loan: { companyId: companyId! } },
         orderBy: { fechaHora: 'desc' },
         take: 100,
-        include: {
+        select: {
+          id: true,
+          monto: true,
+          metodoPago: true,
+          fechaHora: true,
           client: { select: { nombreCompleto: true } },
           cobrador: { select: { nombre: true } },
           loan: { select: { tipo: true } },

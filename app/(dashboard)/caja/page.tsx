@@ -50,7 +50,11 @@ export default async function CajaPage() {
       cobradorId: cobrador.id,
       fechaHora: { gte: today },
     },
-    include: {
+    select: {
+      id: true,
+      monto: true,
+      metodoPago: true,
+      fechaHora: true,
       client: { select: { nombreCompleto: true } },
       loan: { select: { tipo: true } },
     },

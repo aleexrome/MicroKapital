@@ -70,6 +70,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['COBRADOR', 'COORDINADOR'],
   },
   {
+    href: '/cobros/pactados',
+    label: 'Pactados del Día',
+    icon: <CalendarDays className="h-5 w-5" />,
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE_ZONAL', 'GERENTE'],
+  },
+  {
     href: '/cobros/historial',
     label: 'Cobranza',
     icon: <History className="h-5 w-5" />,

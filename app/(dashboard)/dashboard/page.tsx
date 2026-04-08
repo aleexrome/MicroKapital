@@ -199,79 +199,91 @@ export default async function DashboardPage() {
           value={totalClientes.toLocaleString('es-MX')}
           icon={Users}
           color="blue"
+          href="/clientes"
         />
         <MetricCard
           title="Créditos activos"
           value={prestamosActivos.toLocaleString('es-MX')}
           icon={CreditCard}
           color="purple"
+          href="/prestamos?estado=ACTIVE"
         />
         <MetricCard
           title="Cobrado hoy"
           value={formatMoney(cobradoHoy)}
           icon={DollarSign}
           color="green"
+          href="/cobros/historial"
         />
         <MetricCard
           title="Pagos vencidos"
           value={carteraVencida.toLocaleString('es-MX')}
           icon={AlertTriangle}
           color="red"
+          href="/dashboard/detalle?tipo=pagos_vencidos"
         />
       </div>
 
       {/* Seguros y comisiones (directors only) */}
       {isDirector && (
         <div className="grid grid-cols-2 gap-4">
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="bg-indigo-500/15 rounded-xl p-2.5">
-                <ShieldCheck className="h-5 w-5 text-indigo-400" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Seguros cobrados (este mes)</p>
-                <p className="text-xl font-bold text-indigo-400">{formatMoney(totalSeguros)}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="bg-orange-500/15 rounded-xl p-2.5">
-                <Percent className="h-5 w-5 text-orange-400" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Comisiones de apertura (este mes)</p>
-                <p className="text-xl font-bold text-orange-400">{formatMoney(totalComisiones)}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <Link href="/dashboard/detalle?tipo=seguros_mes" className="block">
+            <Card className="transition-all hover:shadow-md hover:border-border cursor-pointer">
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className="bg-indigo-500/15 rounded-xl p-2.5">
+                  <ShieldCheck className="h-5 w-5 text-indigo-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Seguros cobrados (este mes)</p>
+                  <p className="text-xl font-bold text-indigo-400">{formatMoney(totalSeguros)}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/detalle?tipo=comisiones_mes" className="block">
+            <Card className="transition-all hover:shadow-md hover:border-border cursor-pointer">
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className="bg-orange-500/15 rounded-xl p-2.5">
+                  <Percent className="h-5 w-5 text-orange-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Comisiones de apertura (este mes)</p>
+                  <p className="text-xl font-bold text-orange-400">{formatMoney(totalComisiones)}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       )}
 
       {/* Secondary KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-emerald-500/15 rounded-xl p-2.5">
-              <TrendingUp className="h-5 w-5 text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Capital en cartera</p>
-              <p className="text-xl font-bold text-emerald-400">{formatMoney(capitalActivo)}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-blue-500/15 rounded-xl p-2.5">
-              <Archive className="h-5 w-5 text-blue-400" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Créditos concluidos</p>
-              <p className="text-xl font-bold text-blue-400">{liquidadosTotal.toLocaleString('es-MX')}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/prestamos?estado=ACTIVE" className="block">
+          <Card className="transition-all hover:shadow-md hover:border-border cursor-pointer">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="bg-emerald-500/15 rounded-xl p-2.5">
+                <TrendingUp className="h-5 w-5 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Capital en cartera</p>
+                <p className="text-xl font-bold text-emerald-400">{formatMoney(capitalActivo)}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/creditos-concluidos" className="block">
+          <Card className="transition-all hover:shadow-md hover:border-border cursor-pointer">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="bg-blue-500/15 rounded-xl p-2.5">
+                <Archive className="h-5 w-5 text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Créditos concluidos</p>
+                <p className="text-xl font-bold text-blue-400">{liquidadosTotal.toLocaleString('es-MX')}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
         {isDirector && (
           <Card>
             <CardContent className="p-4 flex items-center justify-between gap-4">
@@ -329,8 +341,12 @@ export default async function DashboardPage() {
                   {branchBreakdown.map((branch) => {
                     const cap = branch.loans.reduce((s, l) => s + Number(l.capital), 0)
                     return (
-                      <tr key={branch.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-2.5 font-medium">{branch.nombre}</td>
+                      <tr key={branch.id} className="hover:bg-muted/30 transition-colors cursor-pointer">
+                        <td className="px-4 py-2.5">
+                          <Link href={`/cartera/${branch.id}`} className="font-medium hover:underline">
+                            {branch.nombre}
+                          </Link>
+                        </td>
                         <td className="px-4 py-2.5 text-right">{branch._count.loans}</td>
                         <td className="px-4 py-2.5 text-right font-semibold">{formatMoney(cap)}</td>
                       </tr>

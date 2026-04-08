@@ -120,7 +120,7 @@ export function MiKaChat() {
       {open && (
         <div
           className="fixed bottom-5 right-5 z-50 flex flex-col w-[360px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-4rem)] rounded-2xl shadow-2xl overflow-hidden"
-          style={{ background: '#181727', border: '1px solid #252440' }}
+          style={{ background: '#181727', border: '2px solid #f97316', boxShadow: '0 0 24px rgba(249,115,22,0.35), 0 8px 32px rgba(0,0,0,0.6)' }}
         >
           {/* Header */}
           <div

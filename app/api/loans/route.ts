@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { calcLoan } from '@/lib/financial-formulas'
 import { generarFechasSemanales, generarFechasHabiles } from '@/lib/business-days'
@@ -36,33 +37,28 @@ export async function GET(req: NextRequest) {
 
   const { rol, companyId, branchId, id: userId } = session.user
 
-  const isCampo = rol === 'COBRADOR' || rol === 'COORDINADOR'
-
-  // COORDINADOR / COBRADOR: solo sus propios préstamos
-  let cobradorIdFilter: string | undefined
-  if (isCampo) {
-    cobradorIdFilter = userId
-  }
-
-  // GERENTE_ZONAL: solo préstamos de sus sucursales asignadas
-  let zonaBranchFilter: string[] | undefined
-  if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = session.user.zonaBranchIds
-    if (zoneIds && zoneIds.length > 0) {
-      zonaBranchFilter = zoneIds
-    }
-  }
-
   const estado = req.nextUrl.searchParams.get('estado')
 
+  const where: Prisma.LoanWhereInput = {
+    companyId: companyId!,
+    ...(estado ? { estado: estado as 'PENDING_APPROVAL' | 'ACTIVE' | 'LIQUIDATED' | 'REJECTED' | 'RESTRUCTURED' | 'DEFAULTED' } : {}),
+  }
+
+  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
+    where.cobradorId = userId
+    if (branchId) where.branchId = branchId
+  } else if (rol === 'GERENTE') {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : null
+    if (branchIds?.length) where.branchId = { in: branchIds }
+  } else if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds?.length) where.branchId = { in: zoneIds }
+  }
+
   const loans = await prisma.loan.findMany({
-    where: {
-      companyId: companyId!,
-      ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(isCampo && branchId ? { branchId } : {}),
-      ...(zonaBranchFilter ? { branchId: { in: zonaBranchFilter } } : {}),
-      ...(estado ? { estado: estado as 'PENDING_APPROVAL' | 'ACTIVE' | 'LIQUIDATED' | 'REJECTED' | 'RESTRUCTURED' | 'DEFAULTED' } : {}),
-    },
+    where,
     orderBy: { createdAt: 'desc' },
     take: 50,
     include: {

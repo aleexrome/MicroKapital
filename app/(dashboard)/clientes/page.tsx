@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ScoreBadge } from '@/components/clients/ScoreBadge'
@@ -21,24 +22,44 @@ export default async function ClientesPage({
   const session = await getSession()
   if (!session?.user) return null
 
-  const { rol, companyId, branchId } = session.user
+  const { rol, companyId, branchId, id: userId } = session.user
 
-  let cobradorIdFilter: string | undefined
+  const where: Prisma.ClientWhereInput = {
+    companyId: companyId!,
+    activo: true,
+  }
+
+  if (searchParams.q) {
+    where.nombreCompleto = { contains: searchParams.q, mode: 'insensitive' }
+  }
+
+  // COBRADOR: solo sus clientes en su sucursal
   if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorIdFilter = cobrador?.id
+    where.cobradorId = userId
+    if (branchId) where.branchId = branchId
+  }
+
+  // GERENTE: clientes de su(s) sucursal(es) + sus propios clientes
+  if (rol === 'GERENTE') {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : null
+    if (branchIds?.length) {
+      where.OR = [
+        { branchId: { in: branchIds } },
+        { cobradorId: userId },
+      ]
+    }
+  }
+
+  // GERENTE_ZONAL: sus sucursales asignadas
+  if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds?.length) where.branchId = { in: zoneIds }
   }
 
   const clientes = await prisma.client.findMany({
-    where: {
-      companyId: companyId!,
-      activo: true,
-      ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
-      ...(searchParams.q ? { nombreCompleto: { contains: searchParams.q, mode: 'insensitive' as const } } : {}),
-    },
+    where,
     orderBy: { createdAt: 'desc' },
     include: {
       cobrador: { select: { nombre: true } },

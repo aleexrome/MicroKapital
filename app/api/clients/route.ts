@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
 
@@ -27,34 +28,34 @@ export async function GET(req: NextRequest) {
 
   const { rol, companyId, branchId, id: userId } = session.user
 
-  // COORDINADOR y COBRADOR: solo ven sus propios clientes
-  const isCampo = rol === 'COBRADOR' || rol === 'COORDINADOR'
-
-  let cobradorIdFilter: string | undefined
-  if (isCampo) {
-    cobradorIdFilter = userId
-  }
-
-  // GERENTE_ZONAL: solo ve clientes de sus sucursales asignadas
-  let zonaBranchFilter: string[] | undefined
-  if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = session.user.zonaBranchIds
-    if (zoneIds && zoneIds.length > 0) {
-      zonaBranchFilter = zoneIds
-    }
-  }
-
   const q = req.nextUrl.searchParams.get('q')
 
+  const where: Prisma.ClientWhereInput = {
+    companyId: companyId!,
+    activo: true,
+    ...(q ? { nombreCompleto: { contains: q, mode: 'insensitive' } } : {}),
+  }
+
+  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
+    where.cobradorId = userId
+    if (branchId) where.branchId = branchId
+  } else if (rol === 'GERENTE') {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : null
+    if (branchIds?.length) {
+      where.OR = [
+        { branchId: { in: branchIds } },
+        { cobradorId: userId },
+      ]
+    }
+  } else if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds?.length) where.branchId = { in: zoneIds }
+  }
+
   const clients = await prisma.client.findMany({
-    where: {
-      companyId: companyId!,
-      activo: true,
-      ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(isCampo && branchId ? { branchId } : {}),
-      ...(zonaBranchFilter ? { branchId: { in: zonaBranchFilter } } : {}),
-      ...(q ? { nombreCompleto: { contains: q, mode: 'insensitive' as const } } : {}),
-    },
+    where,
     orderBy: { createdAt: 'desc' },
     take: 100,
     select: {

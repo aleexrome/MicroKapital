@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { ArrowLeft, Users, CreditCard, CheckCircle2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Users, CreditCard, CheckCircle2, AlertCircle, ClipboardList } from 'lucide-react'
 import type { ScheduleStatus } from '@prisma/client'
 
 const STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'error' | 'info' | 'outline'> = {
@@ -172,10 +172,19 @@ export default async function GrupoCobroPage({ params }: { params: { groupId: st
         </CardContent>
       </Card>
 
-      {/* Instrucción de responsabilidad */}
+      {/* Botón principal: registrar todos los pagos */}
+      {grupo.loans.some((l) => l.schedule[0] && l.schedule[0].estado !== 'PAID') && (
+        <Button asChild size="lg" className="w-full">
+          <Link href={`/cobros/grupo/${params.groupId}/capturar`}>
+            <ClipboardList className="h-5 w-5 mr-2" />
+            Registrar pagos del grupo
+          </Link>
+        </Button>
+      )}
+
       <p className="text-xs text-muted-foreground text-center">
-        En el modelo Solidario, el grupo es colectivamente responsable del pago de todos sus integrantes.
-        Si un miembro no puede pagar, el grupo decide quién cubre el monto.
+        En el modelo Solidario el grupo es colectivamente responsable.
+        Si una integrante no paga, otra puede cubrirla.
       </p>
     </div>
   )

@@ -220,9 +220,10 @@ model Client {
   updatedAt          DateTime  @updatedAt
 
   documents   ClientDocument[]
-  loans       Loan[]
-  payments    Payment[]
-  scoreEvents ScoreEvent[]
+  loans            Loan[]
+  payments         Payment[]
+  scoreEvents      ScoreEvent[]
+  coberturasOtras  Payment[]    @relation("CoberturaGrupal")
 }
 
 model ClientDocument {
@@ -365,6 +366,12 @@ model Payment {
   verificadoPorId     String?
   verificadoPor       User?              @relation("VerifiedTransfers", fields: [verificadoPorId], references: [id])
   verificadoAt        DateTime?
+  // Cobertura solidaria (grupo Solidario)
+  esCoberturaGrupal   Boolean            @default(false)
+  cubridoPorClienteId String?
+  cubridoPor          Client?            @relation("CoberturaGrupal", fields: [cubridoPorClienteId], references: [id])
+  montoPropio         Decimal?           @db.Decimal(12, 2) // su parte individual
+  montoCubierto       Decimal?           @db.Decimal(12, 2) // lo que cubrió de otra
 
   cashBreakdown CashBreakdown[]
   tickets       Ticket[]

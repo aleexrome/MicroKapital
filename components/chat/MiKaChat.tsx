@@ -107,7 +107,8 @@ export function MiKaChat() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 bg-primary-700 hover:bg-primary-800 text-white rounded-full px-4 py-3 shadow-lg transition-all hover:scale-105"
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-white rounded-full px-4 py-3 shadow-lg transition-all hover:scale-105"
+          style={{ boxShadow: '0 4px 20px rgba(249,115,22,0.5)' }}
           aria-label="Abrir MiKa"
         >
           <Bot className="h-5 w-5" />

@@ -29,80 +29,92 @@ export default async function DashboardLayout({
   const isCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
 
   // ── Fetch empresa y sucursal ────────────────────────────────────────────────
-  const [company, branch] = await Promise.all([
-    companyId
-      ? prisma.company.findUnique({ where: { id: companyId }, select: { nombre: true } })
-      : Promise.resolve(null),
-    branchId
-      ? prisma.branch.findUnique({ where: { id: branchId }, select: { nombre: true } })
-      : Promise.resolve(null),
-  ])
+  let company: { nombre: string } | null = null
+  let branch: { nombre: string } | null = null
+  try {
+    ;[company, branch] = await Promise.all([
+      companyId
+        ? prisma.company.findUnique({ where: { id: companyId }, select: { nombre: true } })
+        : Promise.resolve(null),
+      branchId
+        ? prisma.branch.findUnique({ where: { id: branchId }, select: { nombre: true } })
+        : Promise.resolve(null),
+    ])
+  } catch (e) {
+    console.error('[Layout] Error fetching company/branch:', e)
+  }
 
   // ── Fetch árbol de cartera ──────────────────────────────────────────────────
   let treeData: BranchTreeData[] = []
 
-  if (isDirector || isGerente) {
-    // Determinar rango de sucursales visibles
-    let branchIds: string[] | undefined
-    if (rol === 'GERENTE_ZONAL') {
-      const z = session.user.zonaBranchIds
-      branchIds = z && z.length > 0 ? z : undefined
-    } else if (rol === 'GERENTE' && branchId) {
-      branchIds = [branchId]
-    }
+  try {
+    if (isDirector || isGerente) {
+      // Determinar rango de sucursales visibles
+      let branchIds: string[] | undefined
+      if (rol === 'GERENTE_ZONAL') {
+        const z = session.user.zonaBranchIds
+        branchIds = z && z.length > 0 ? z : undefined
+      } else if (rol === 'GERENTE' && branchId) {
+        branchIds = [branchId]
+      }
 
-    const [branches, loanCounts] = await Promise.all([
-      prisma.branch.findMany({
-        where: {
-          companyId: companyId!,
-          activa: true,
-          ...(branchIds ? { id: { in: branchIds } } : {}),
-        },
-        select: { id: true, nombre: true },
-        orderBy: { nombre: 'asc' },
-      }),
-      prisma.loan.groupBy({
-        by: ['branchId', 'tipo'],
-        where: {
-          companyId: companyId!,
-          estado: 'ACTIVE',
-          ...(branchIds ? { branchId: { in: branchIds } } : {}),
-        },
+      const [branches, loanCounts] = await Promise.all([
+        prisma.branch.findMany({
+          where: {
+            companyId: companyId!,
+            activa: true,
+            ...(branchIds ? { id: { in: branchIds } } : {}),
+          },
+          select: { id: true, nombre: true },
+          orderBy: { nombre: 'asc' },
+        }),
+        prisma.loan.groupBy({
+          by: ['branchId', 'tipo'],
+          where: {
+            companyId: companyId!,
+            estado: 'ACTIVE',
+            ...(branchIds ? { branchId: { in: branchIds } } : {}),
+          },
+          _count: { _all: true },
+        }),
+      ])
+
+      // Build map: branchId → tipo → count
+      const countMap = new Map<string, Record<string, number>>()
+      for (const row of loanCounts) {
+        if (!row.branchId) continue
+        if (!countMap.has(row.branchId)) countMap.set(row.branchId, {})
+        countMap.get(row.branchId)![row.tipo] = row._count._all
+      }
+
+      treeData = branches.map((b) => ({
+        id: b.id,
+        nombre: b.nombre,
+        counts: countMap.get(b.id) ?? {},
+      }))
+    } else if (isCoordinador) {
+      // Coordinador/Cobrador: un solo nodo "virtual" con sus propios conteos
+      const loanCounts = await prisma.loan.groupBy({
+        by: ['tipo'],
+        where: { companyId: companyId!, estado: 'ACTIVE', cobradorId: userId },
         _count: { _all: true },
-      }),
-    ])
+      })
 
-    // Build map: branchId → tipo → count
-    const countMap = new Map<string, Record<string, number>>()
-    for (const row of loanCounts) {
-      if (!row.branchId) continue
-      if (!countMap.has(row.branchId)) countMap.set(row.branchId, {})
-      countMap.get(row.branchId)![row.tipo] = row._count._all
+      const counts: Record<string, number> = {}
+      for (const row of loanCounts) counts[row.tipo] = row._count._all
+
+      // Single virtual branch using their own branchId (or 'mine')
+      treeData = [{
+        id: branchId ?? 'mine',
+        nombre: branch?.nombre ?? 'Mi cartera',
+        counts,
+        ownOnly: true,
+      }]
     }
-
-    treeData = branches.map((b) => ({
-      id: b.id,
-      nombre: b.nombre,
-      counts: countMap.get(b.id) ?? {},
-    }))
-  } else if (isCoordinador) {
-    // Coordinador/Cobrador: un solo nodo "virtual" con sus propios conteos
-    const loanCounts = await prisma.loan.groupBy({
-      by: ['tipo'],
-      where: { companyId: companyId!, estado: 'ACTIVE', cobradorId: userId },
-      _count: { _all: true },
-    })
-
-    const counts: Record<string, number> = {}
-    for (const row of loanCounts) counts[row.tipo] = row._count._all
-
-    // Single virtual branch using their own branchId (or 'mine')
-    treeData = [{
-      id: branchId ?? 'mine',
-      nombre: branch?.nombre ?? 'Mi cartera',
-      counts,
-      ownOnly: true, // flag to skip branch-level link
-    }]
+  } catch (e) {
+    console.error('[Layout] Error fetching tree data:', e)
+    // Fail gracefully — app works without tree
+    treeData = []
   }
 
   return (

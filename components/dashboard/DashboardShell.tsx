@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Menu } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import { Sidebar } from './Sidebar'
+import { MiKaChat } from '@/components/chat/MiKaChat'
 import type { BranchTreeData } from '@/types/tree'
 
 interface DashboardShellProps {
@@ -58,6 +59,7 @@ export function DashboardShell({
         </div>
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
+      <MiKaChat />
     </div>
   )
 }

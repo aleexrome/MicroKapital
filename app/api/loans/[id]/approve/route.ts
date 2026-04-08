@@ -18,11 +18,23 @@ export async function POST(
   const { rol, companyId, id: userId } = session.user
 
   if (rol !== 'DIRECTOR_GENERAL' && rol !== 'SUPER_ADMIN') {
-    return NextResponse.json({ error: 'Sin permisos — solo el Director General puede aprobar créditos' }, { status: 403 })
+    return NextResponse.json(
+      { error: 'Sin permisos — solo el Director General puede aprobar créditos' },
+      { status: 403 }
+    )
   }
 
   const loan = await prisma.loan.findFirst({
     where: { id: params.id, companyId: companyId! },
+    include: {
+      loanOriginal: {
+        include: {
+          schedule: {
+            where: { estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] } },
+          },
+        },
+      },
+    },
   })
 
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
@@ -34,9 +46,8 @@ export async function POST(
   const parsed = approveSchema.safeParse(body)
   const notas = parsed.success ? parsed.data.notas : undefined
 
-  // El Director General aprueba → estado APPROVED
-  // El calendario se genera cuando el Coordinador/Gerente activa el crédito
   await prisma.$transaction(async (tx) => {
+    // 1. Aprobar el nuevo crédito
     await tx.loan.update({
       where: { id: loan.id },
       data: {
@@ -55,15 +66,50 @@ export async function POST(
         notas: notas ?? null,
       },
     })
+
+    // 2. Si es una renovación anticipada, liquidar el crédito anterior en este momento
+    if (loan.loanOriginalId && loan.loanOriginal) {
+      const schedulesPendientes = loan.loanOriginal.schedule
+
+      // Marcar los pagos pendientes restantes como PAID (financiados por la empresa)
+      if (schedulesPendientes.length > 0) {
+        await tx.paymentSchedule.updateMany({
+          where: {
+            id: { in: schedulesPendientes.map((s) => s.id) },
+          },
+          data: {
+            estado: 'PAID',
+            pagadoAt: new Date(),
+            montoPagado: schedulesPendientes[0].montoEsperado, // todos tienen el mismo monto
+          },
+        })
+      }
+
+      // Liquidar el crédito anterior
+      await tx.loan.update({
+        where: { id: loan.loanOriginalId },
+        data: { estado: 'LIQUIDATED' },
+      })
+    }
   })
+
+  const esRenovacion = !!loan.loanOriginalId
 
   createAuditLog({
     userId,
     accion: 'APPROVE_LOAN',
     tabla: 'Loan',
     registroId: loan.id,
-    valoresNuevos: { estado: 'APPROVED', aprobadoPorId: userId },
+    valoresNuevos: {
+      estado: 'APPROVED',
+      aprobadoPorId: userId,
+      ...(esRenovacion ? { loanOriginalLiquidado: loan.loanOriginalId } : {}),
+    },
   })
 
-  return NextResponse.json({ message: 'Crédito aprobado — pendiente de activación por el coordinador' })
+  return NextResponse.json({
+    message: esRenovacion
+      ? 'Renovación aprobada — crédito anterior liquidado · Pendiente de activación por el coordinador'
+      : 'Crédito aprobado — pendiente de activación por el coordinador',
+  })
 }

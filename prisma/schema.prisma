@@ -296,6 +296,11 @@ model Loan {
   rechazadoPor   User?     @relation("RejectedLoans", fields: [rechazadoPorId], references: [id])
   razonRechazo   String?
   notas          String?
+  // Renovación anticipada
+  loanOriginalId       String?            // ID del crédito que se está renovando
+  loanOriginal         Loan?              @relation("LoanRenewal", fields: [loanOriginalId], references: [id])
+  loanRenovado         Loan[]             @relation("LoanRenewal")
+  descuentoRenovacion  Decimal?           @db.Decimal(12, 2) // Monto financiado descontado del nuevo crédito
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

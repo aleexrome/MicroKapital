@@ -32,10 +32,10 @@ export async function POST(
 
   const rolesPermitidos = ['COORDINADOR', 'COBRADOR', 'GERENTE_ZONAL', 'GERENTE', 'SUPER_ADMIN']
   if (!rolesPermitidos.includes(rol)) {
-    return NextResponse.json({ error: 'Sin permisos para renovar créditos' }, { status: 403 })
+    return NextResponse.json({ error: 'Sin permisos para solicitar renovaciones' }, { status: 403 })
   }
 
-  // Cargar el crédito original con su calendario
+  // Cargar crédito original con su calendario
   const loanOriginal = await prisma.loan.findFirst({
     where: { id: params.id, companyId: companyId!, estado: 'ACTIVE' },
     include: {
@@ -48,12 +48,25 @@ export async function POST(
     return NextResponse.json({ error: 'Crédito no encontrado o no está activo' }, { status: 404 })
   }
 
+  // Verificar que no tenga ya una renovación pendiente
+  const renovacionExistente = await prisma.loan.findFirst({
+    where: {
+      loanOriginalId: loanOriginal.id,
+      estado: { in: ['PENDING_APPROVAL', 'APPROVED'] },
+    },
+  })
+  if (renovacionExistente) {
+    return NextResponse.json({
+      error: 'Este crédito ya tiene una renovación pendiente de aprobación',
+    }, { status: 400 })
+  }
+
   const regla = RENOVACION_REGLAS[loanOriginal.tipo]
   if (!regla) {
     return NextResponse.json({ error: 'Este tipo de crédito no permite renovación anticipada' }, { status: 400 })
   }
 
-  // Verificar elegibilidad: pagos realizados >= umbral, todos PAID
+  // Verificar elegibilidad: pagos realizados >= umbral
   const pagados = loanOriginal.schedule.filter((s) => s.estado === 'PAID').length
   if (pagados < regla.umbral) {
     return NextResponse.json({
@@ -61,7 +74,7 @@ export async function POST(
     }, { status: 400 })
   }
 
-  // Calcular monto financiado (pagos restantes que cubre la empresa)
+  // Calcular monto financiado (últimos N pagos pendientes que cubre la empresa)
   const montoPorPago =
     loanOriginal.tipo === 'AGIL'       ? Number(loanOriginal.pagoDiario) :
     loanOriginal.tipo === 'FIDUCIARIO' ? Number(loanOriginal.pagoQuincenal) :
@@ -69,7 +82,7 @@ export async function POST(
 
   const montoFinanciado = montoPorPago * regla.financiados
 
-  // Validar el body del nuevo crédito
+  // Validar body del nuevo crédito
   const body = await req.json()
   const parsed = renewSchema.safeParse(body)
   if (!parsed.success) {
@@ -86,38 +99,26 @@ export async function POST(
     tasaInteres = setting ? parseFloat(setting.valor) : 0.30
   }
 
-  const nuevoCiclo = (data.ciclo ?? loanOriginal.ciclo ?? 1)
+  const nuevoCiclo = data.ciclo ?? (loanOriginal.ciclo ?? 1)
 
-  const calc = calcLoan(loanOriginal.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO', data.capital, tasaInteres, {
-    ciclo: nuevoCiclo,
-    tuvoAtraso: data.tuvoAtraso ?? loanOriginal.tuvoAtraso,
-    clienteIrregular: data.clienteIrregular ?? loanOriginal.clienteIrregular,
-    tipoGrupo: (data.tipoGrupo ?? loanOriginal.tipoGrupo ?? undefined) as 'REGULAR' | 'RESCATE' | undefined,
-  })
+  const calc = calcLoan(
+    loanOriginal.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
+    data.capital,
+    tasaInteres,
+    {
+      ciclo: nuevoCiclo,
+      tuvoAtraso: data.tuvoAtraso ?? loanOriginal.tuvoAtraso,
+      clienteIrregular: data.clienteIrregular ?? loanOriginal.clienteIrregular,
+      tipoGrupo: (data.tipoGrupo ?? loanOriginal.tipoGrupo ?? undefined) as 'REGULAR' | 'RESCATE' | undefined,
+    }
+  )
 
   // El monto financiado se descuenta del monto real entregado al cliente
   const montoRealAjustado = Math.max(0, calc.montoReal - montoFinanciado)
 
+  // Crear nuevo crédito en PENDING_APPROVAL
+  // El crédito anterior SIGUE ACTIVO — se liquida cuando el Director General apruebe
   const result = await prisma.$transaction(async (tx) => {
-    // 1. Liquidar el crédito original: marcar pagos pendientes como PAID (financiados)
-    const schedulesPendientes = loanOriginal.schedule.filter(
-      (s) => s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL'
-    )
-
-    for (const sched of schedulesPendientes) {
-      await tx.paymentSchedule.update({
-        where: { id: sched.id },
-        data: { estado: 'PAID', pagadoAt: new Date(), montoPagado: sched.montoEsperado },
-      })
-    }
-
-    // 2. Marcar crédito original como LIQUIDADO
-    await tx.loan.update({
-      where: { id: loanOriginal.id },
-      data: { estado: 'LIQUIDATED' },
-    })
-
-    // 3. Crear el nuevo crédito en PENDING_APPROVAL con el monto ajustado
     const nuevoLoan = await tx.loan.create({
       data: {
         companyId: companyId!,
@@ -128,7 +129,7 @@ export async function POST(
         estado: 'PENDING_APPROVAL',
         capital: calc.capital,
         comision: calc.comision,
-        montoReal: montoRealAjustado,  // ← ajustado por financiamiento
+        montoReal: montoRealAjustado,
         tasaInteres: calc.tasaInteres,
         interes: calc.interes,
         totalPago: calc.totalPago,
@@ -140,17 +141,19 @@ export async function POST(
         tuvoAtraso: data.tuvoAtraso ?? loanOriginal.tuvoAtraso,
         clienteIrregular: data.clienteIrregular ?? loanOriginal.clienteIrregular,
         tipoGrupo: data.tipoGrupo ?? loanOriginal.tipoGrupo ?? null,
-        notas: `Renovación anticipada. Financia $${montoFinanciado.toFixed(2)} del crédito anterior (${regla.financiados} pagos).`,
+        // Vínculo con el crédito anterior
+        loanOriginalId: loanOriginal.id,
+        descuentoRenovacion: montoFinanciado,
+        notas: `Renovación anticipada — financia ${regla.financiados} pagos del crédito anterior ($${montoFinanciado.toFixed(2)})`,
       },
     })
 
-    // 4. Crear registro de aprobación para el nuevo crédito
     await tx.loanApproval.create({
       data: {
         loanId: nuevoLoan.id,
         solicitadoPorId: userId,
         estado: 'PENDING',
-        notas: `Renovación anticipada desde crédito ${loanOriginal.id}`,
+        notas: `Renovación anticipada desde crédito ${loanOriginal.id}. Financia $${montoFinanciado.toFixed(2)}.`,
       },
     })
 
@@ -159,7 +162,7 @@ export async function POST(
 
   createAuditLog({
     userId,
-    accion: 'RENEW_LOAN',
+    accion: 'REQUEST_RENEWAL',
     tabla: 'Loan',
     registroId: result.id,
     valoresNuevos: {
@@ -171,7 +174,7 @@ export async function POST(
   })
 
   return NextResponse.json({
-    message: 'Renovación creada exitosamente',
+    message: 'Renovación solicitada — pendiente de aprobación por el Director General',
     data: {
       nuevoLoanId: result.id,
       montoFinanciado,

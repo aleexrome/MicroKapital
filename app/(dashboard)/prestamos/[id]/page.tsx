@@ -48,6 +48,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       client: { select: { id: true, nombreCompleto: true } },
       cobrador: { select: { nombre: true } },
       aprobadoPor: { select: { nombre: true } },
+      loanOriginal: { select: { id: true } },
       schedule: { orderBy: { numeroPago: 'asc' } },
       payments: {
         orderBy: { fechaHora: 'desc' },
@@ -116,8 +117,32 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       <Card>
         <CardHeader><CardTitle className="text-base">Resumen financiero</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+          {/* Banner de renovación con desglose del descuento */}
+          {loan.loanOriginalId && loan.descuentoRenovacion && (
+            <div className="col-span-2 sm:col-span-3 rounded-lg bg-green-50 border border-green-200 p-3 text-sm space-y-1">
+              <p className="font-semibold text-green-800">Renovación anticipada</p>
+              <div className="text-green-700 space-y-0.5">
+                <p>Capital del nuevo crédito: <span className="font-medium money">{formatMoney(Number(loan.capital))}</span></p>
+                <p>Descuento — pagos financiados por la empresa:
+                  <span className="font-bold text-orange-600 money ml-1">-{formatMoney(Number(loan.descuentoRenovacion))}</span>
+                </p>
+                <p className="font-bold">Monto entregado al cliente:
+                  <span className="money ml-1">{formatMoney(Number(loan.montoReal))}</span>
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Crédito anterior:{' '}
+                <Link href={`/prestamos/${loan.loanOriginalId}`} className="underline">
+                  ver historial
+                </Link>
+              </p>
+            </div>
+          )}
           <div><p className="text-muted-foreground">Capital</p><p className="font-bold money">{formatMoney(Number(loan.capital))}</p></div>
           {Number(loan.comision) > 0 && <div><p className="text-muted-foreground">Comisión</p><p className="font-bold text-orange-600 money">-{formatMoney(Number(loan.comision))}</p></div>}
+          {loan.descuentoRenovacion && Number(loan.descuentoRenovacion) > 0 && (
+            <div><p className="text-muted-foreground">Descuento renovación</p><p className="font-bold text-orange-600 money">-{formatMoney(Number(loan.descuentoRenovacion))}</p></div>
+          )}
           <div><p className="text-muted-foreground">Monto entregado</p><p className="font-bold money">{formatMoney(Number(loan.montoReal))}</p></div>
           <div><p className="text-muted-foreground">Interés</p><p className="font-bold money">{formatMoney(Number(loan.interes))}</p></div>
           <div><p className="text-muted-foreground">Total a pagar</p><p className="font-bold text-primary-700 money">{formatMoney(Number(loan.totalPago))}</p></div>

@@ -8,6 +8,7 @@ declare module 'next-auth' {
       rol: UserRole
       companyId: string | null
       branchId: string | null
+      zonaBranchIds: string[] | null
     }
   }
 }
@@ -18,6 +19,7 @@ declare module 'next-auth/jwt' {
     rol: UserRole
     companyId: string | null
     branchId: string | null
+    zonaBranchIds: string[] | null
   }
 }
 

@@ -14,6 +14,7 @@ export interface SessionUser {
   rol: UserRole
   companyId: string | null
   branchId: string | null
+  zonaBranchIds?: string[] | null
 }
 
 export interface AppSession {
@@ -37,6 +38,7 @@ export async function getSession(): Promise<AppSession | null> {
         rol: decoded.rol as UserRole,
         companyId: (decoded.companyId as string | null) ?? null,
         branchId: (decoded.branchId as string | null) ?? null,
+        zonaBranchIds: (decoded.zonaBranchIds as string[] | null) ?? null,
       },
     }
   } catch {

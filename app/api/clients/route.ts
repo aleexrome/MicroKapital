@@ -25,14 +25,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const { rol, companyId, branchId } = session.user
+  const { rol, companyId, branchId, id: userId } = session.user
+
+  // COORDINADOR y COBRADOR: solo ven sus propios clientes
+  const isCampo = rol === 'COBRADOR' || rol === 'COORDINADOR'
 
   let cobradorIdFilter: string | undefined
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorIdFilter = cobrador?.id
+  if (isCampo) {
+    cobradorIdFilter = userId
+  }
+
+  // GERENTE_ZONAL: solo ve clientes de sus sucursales asignadas
+  let zonaBranchFilter: string[] | undefined
+  if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds && zoneIds.length > 0) {
+      zonaBranchFilter = zoneIds
+    }
   }
 
   const q = req.nextUrl.searchParams.get('q')
@@ -42,7 +51,8 @@ export async function GET(req: NextRequest) {
       companyId: companyId!,
       activo: true,
       ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
+      ...(isCampo && branchId ? { branchId } : {}),
+      ...(zonaBranchFilter ? { branchId: { in: zonaBranchFilter } } : {}),
       ...(q ? { nombreCompleto: { contains: q, mode: 'insensitive' as const } } : {}),
     },
     orderBy: { createdAt: 'desc' },
@@ -91,13 +101,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Sucursal no válida' }, { status: 400 })
   }
 
-  // Si es COBRADOR, asignarse a sí mismo
+  // COORDINADOR y COBRADOR: se asignan a sí mismos como cobrador
   let cobradorId = data.cobradorId
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorId = cobrador?.id
+  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
+    cobradorId = userId
   }
 
   const client = await prisma.client.create({

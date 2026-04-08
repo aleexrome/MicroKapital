@@ -30,54 +30,60 @@ interface NavItem {
   roles: UserRole[]
 }
 
+// Roles con acceso completo de dirección
+const DIRECTORES: UserRole[] = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL']
+// Roles operativos de campo
+const CAMPO: UserRole[] = ['COORDINADOR', 'COBRADOR']
+
 const NAV_ITEMS: NavItem[] = [
   {
     href: '/dashboard',
     label: 'Dashboard',
     icon: <LayoutDashboard className="h-5 w-5" />,
-    roles: ['GERENTE'],
+    roles: ['GERENTE', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE_ZONAL'],
   },
   {
     href: '/clientes',
     label: 'Cartera de Clientes',
     icon: <Users className="h-5 w-5" />,
-    roles: ['GERENTE', 'COBRADOR'],
+    roles: ['GERENTE', 'COBRADOR', 'COORDINADOR', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   {
     href: '/prestamos',
     label: 'Solicitudes',
     icon: <CreditCard className="h-5 w-5" />,
-    roles: ['GERENTE', 'COBRADOR'],
+    roles: ['GERENTE', 'COBRADOR', 'COORDINADOR', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   {
     href: '/prestamos/aprobaciones',
     label: 'Aprobaciones',
     icon: <CheckSquare className="h-5 w-5" />,
-    roles: ['GERENTE'],
+    // EXCLUSIVO del Director General
+    roles: ['DIRECTOR_GENERAL'],
   },
   {
     href: '/cobros/agenda',
     label: 'Pactados del Día',
     icon: <CalendarDays className="h-5 w-5" />,
-    roles: ['COBRADOR'],
+    roles: ['COBRADOR', 'COORDINADOR'],
   },
   {
     href: '/cobros/historial',
     label: 'Cobranza',
     icon: <History className="h-5 w-5" />,
-    roles: ['COBRADOR', 'GERENTE'],
+    roles: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL'],
   },
   {
     href: '/caja',
     label: 'Corte del Día',
     icon: <Wallet className="h-5 w-5" />,
-    roles: ['COBRADOR', 'GERENTE'],
+    roles: ['COBRADOR', 'COORDINADOR', 'GERENTE'],
   },
   {
     href: '/tickets',
     label: 'Tickets',
     icon: <Ticket className="h-5 w-5" />,
-    roles: ['COBRADOR', 'GERENTE'],
+    roles: ['COBRADOR', 'COORDINADOR', 'GERENTE'],
   },
   {
     href: '/transferencias',
@@ -99,6 +105,18 @@ const NAV_ITEMS: NavItem[] = [
   },
 ]
 
+// Etiquetas de rol visibles en el sidebar
+const ROL_ETIQUETAS: Partial<Record<UserRole, string>> = {
+  SUPER_ADMIN:        'Administrador del Sistema',
+  DIRECTOR_GENERAL:   'Director General',
+  DIRECTOR_COMERCIAL: 'Director Comercial',
+  GERENTE_ZONAL:      'Gerente Zonal',
+  COORDINADOR:        'Coordinador de Crédito',
+  GERENTE:            'Gerente',
+  COBRADOR:           'Cobrador',
+  CLIENTE:            'Cliente',
+}
+
 interface SidebarProps {
   userRole: UserRole
   userName: string
@@ -109,7 +127,6 @@ interface SidebarProps {
 
 export function Sidebar({ userRole, userName, companyName, branchName, onNavClick }: SidebarProps) {
   const pathname = usePathname()
-
 
   const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(userRole))
 
@@ -155,8 +172,8 @@ export function Sidebar({ userRole, userName, companyName, branchName, onNavClic
       <div className="border-t border-primary-600 p-4">
         <div className="mb-3">
           <p className="text-sm font-medium text-white truncate">{userName}</p>
-          <p className="text-xs text-primary-200 capitalize">
-            {userRole === 'GERENTE' ? 'Gerente' : userRole === 'COBRADOR' ? 'Cobrador' : userRole}
+          <p className="text-xs text-primary-200">
+            {ROL_ETIQUETAS[userRole] ?? userRole}
           </p>
         </div>
         <form action={logoutAction}>

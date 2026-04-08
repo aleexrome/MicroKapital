@@ -30,16 +30,23 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { rol, companyId, branchId } = session.user
+  const { rol, companyId, branchId, id: userId } = session.user
 
-  const isCoordinator = rol === 'COBRADOR' || rol === 'COORDINADOR'
+  const isCampo = rol === 'COBRADOR' || rol === 'COORDINADOR'
 
+  // COORDINADOR / COBRADOR: solo sus propios préstamos
   let cobradorIdFilter: string | undefined
-  if (isCoordinator) {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorIdFilter = cobrador?.id
+  if (isCampo) {
+    cobradorIdFilter = userId
+  }
+
+  // GERENTE_ZONAL: solo préstamos de sus sucursales asignadas
+  let zonaBranchFilter: string[] | undefined
+  if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds && zoneIds.length > 0) {
+      zonaBranchFilter = zoneIds
+    }
   }
 
   const estado = req.nextUrl.searchParams.get('estado')
@@ -48,7 +55,8 @@ export async function GET(req: NextRequest) {
     where: {
       companyId: companyId!,
       ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(isCoordinator && branchId ? { branchId } : {}),
+      ...(isCampo && branchId ? { branchId } : {}),
+      ...(zonaBranchFilter ? { branchId: { in: zonaBranchFilter } } : {}),
       ...(estado ? { estado: estado as 'PENDING_APPROVAL' | 'ACTIVE' | 'LIQUIDATED' | 'REJECTED' | 'RESTRUCTURED' | 'DEFAULTED' } : {}),
     },
     orderBy: { createdAt: 'desc' },
@@ -101,13 +109,11 @@ export async function POST(req: NextRequest) {
   const targetBranchId = data.branchId ?? branchId ?? client.branchId
   if (!targetBranchId) return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
 
-  const isCoordinator = rol === 'COBRADOR' || rol === 'COORDINADOR'
+  // COORDINADOR y COBRADOR se asignan a sí mismos como cobrador
+  const isCampo = rol === 'COBRADOR' || rol === 'COORDINADOR'
   let cobradorId = data.cobradorId
-  if (isCoordinator) {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorId = cobrador?.id
+  if (isCampo) {
+    cobradorId = userId
   }
   if (!cobradorId) return NextResponse.json({ error: 'Cobrador requerido' }, { status: 400 })
 

@@ -19,8 +19,8 @@ export async function POST(
 
   const { rol, companyId, id: userId } = session.user
 
-  if (rol !== 'GERENTE' && rol !== 'SUPER_ADMIN') {
-    return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
+  if (rol !== 'DIRECTOR_GENERAL' && rol !== 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Sin permisos — solo el Director General puede aprobar créditos' }, { status: 403 })
   }
 
   const loan = await prisma.loan.findFirst({

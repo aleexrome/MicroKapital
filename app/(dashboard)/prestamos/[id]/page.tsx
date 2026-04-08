@@ -57,7 +57,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             <h1 className="text-2xl font-bold">Préstamo {loan.tipo}</h1>
             <ApprovalBadge status={loan.estado as LoanStatus} />
           </div>
-          {loan.estado === 'PENDING_APPROVAL' && (rol === 'GERENTE' || rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') && (
+          {loan.estado === 'PENDING_APPROVAL' && (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') && (
             <LoanApprovalActions loanId={loan.id} />
           )}
           <p className="text-muted-foreground">

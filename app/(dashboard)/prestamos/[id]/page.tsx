@@ -230,11 +230,14 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       />
 
       {/* Archivos PDF del crédito */}
-      <LoanDocumentUpload
-        loanId={loan.id}
-        tipo={loan.tipo as LoanType}
-        readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
-      />
+      <div id="documentos">
+        <LoanDocumentUpload
+          loanId={loan.id}
+          tipo={loan.tipo as LoanType}
+          readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
+          autoOpen
+        />
+      </div>
 
       {/* Calendario de pagos */}
       {loan.schedule.length > 0 && (

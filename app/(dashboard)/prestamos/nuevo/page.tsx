@@ -92,8 +92,8 @@ export default function NuevaSolicitudPage() {
       }
 
       const { data } = await res.json()
-      toast({ title: '✅ Solicitud enviada', description: 'Pendiente de aprobación' })
-      router.push(`/prestamos/${data.id}`)
+      toast({ title: '✅ Solicitud enviada', description: 'Sube los documentos del cliente en la sección de abajo' })
+      router.push(`/prestamos/${data.id}#documentos`)
     } catch (err) {
       toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' })
       setLoading(false)

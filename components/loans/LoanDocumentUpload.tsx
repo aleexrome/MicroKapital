@@ -40,9 +40,10 @@ interface LoanDocumentUploadProps {
   loanId: string
   tipo: LoanType
   readOnly?: boolean
+  autoOpen?: boolean
 }
 
-export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocumentUploadProps) {
+export function LoanDocumentUpload({ loanId, tipo, readOnly = false, autoOpen = false }: LoanDocumentUploadProps) {
   const { toast } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [docs, setDocs] = useState<LoanDocumentItem[]>([])
@@ -59,10 +60,19 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocum
   useEffect(() => {
     fetch(`/api/loans/${loanId}/documents`)
       .then((r) => r.json())
-      .then((data) => setDocs(data.documents ?? []))
+      .then((data) => {
+        setDocs(data.documents ?? [])
+        // Si viene de crear la solicitud (#documentos) y no hay docs, abrir el form
+        if (autoOpen && typeof window !== 'undefined' && window.location.hash === '#documentos') {
+          setShowForm(true)
+          setTimeout(() => {
+            document.getElementById('documentos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }, 100)
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [loanId])
+  }, [loanId, autoOpen])
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault()

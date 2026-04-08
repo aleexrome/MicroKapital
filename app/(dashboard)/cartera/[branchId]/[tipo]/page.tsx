@@ -73,7 +73,7 @@ export default async function CarteraTipoPage({
             capital: true,
             totalPago: true,
             schedule: {
-              where: { estado: { in: ['PENDING', 'OVERDUE'] } },
+              where: { estado: { not: 'PAID' } },
               orderBy: { numeroPago: 'asc' },
               take: 1,
               select: { fechaVencimiento: true, estado: true },
@@ -167,7 +167,7 @@ export default async function CarteraTipoPage({
       client: { select: { id: true, nombreCompleto: true, telefono: true } },
       cobrador: { select: { nombre: true } },
       schedule: {
-        where: { estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] } },
+        where: { estado: { not: 'PAID' } },
         orderBy: { numeroPago: 'asc' },
         take: 1,
       },
@@ -215,7 +215,7 @@ export default async function CarteraTipoPage({
                       {overdue && <Badge variant="error" className="text-xs shrink-0">Vencido</Badge>}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {loan.cobrador.nombre}
+                      {loan.cobrador?.nombre ?? '—'}
                       {loan.client.telefono && ` · ${loan.client.telefono}`}
                       {pago && ` · Pago ${pago.numeroPago} — ${formatDate(pago.fechaVencimiento)}`}
                     </p>

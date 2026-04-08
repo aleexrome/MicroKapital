@@ -49,7 +49,7 @@ export default async function CarteraMiosTipoPage({ params }: { params: { tipo: 
             id: true,
             capital: true,
             schedule: {
-              where: { estado: { in: ['PENDING', 'OVERDUE'] } },
+              where: { estado: { not: 'PAID' } },
               orderBy: { numeroPago: 'asc' },
               take: 1,
               select: { fechaVencimiento: true, estado: true },
@@ -133,7 +133,7 @@ export default async function CarteraMiosTipoPage({ params }: { params: { tipo: 
     include: {
       client: { select: { id: true, nombreCompleto: true, telefono: true } },
       schedule: {
-        where: { estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] } },
+        where: { estado: { not: 'PAID' } },
         orderBy: { numeroPago: 'asc' },
         take: 1,
       },

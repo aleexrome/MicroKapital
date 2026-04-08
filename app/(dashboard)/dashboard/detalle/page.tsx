@@ -68,7 +68,7 @@ export default async function DashboardDetallePage({
       },
     })
 
-    const totalAdeudado = schedules.reduce((s, sc) => s + Number(sc.montoPago), 0)
+    const totalAdeudado = schedules.reduce((s, sc) => s + Number(sc.montoPagado), 0)
 
     return (
       <div className="p-6 space-y-6 max-w-4xl mx-auto">
@@ -118,7 +118,7 @@ export default async function DashboardDetallePage({
                             <span className="text-rose-400 font-medium">{formatDate(sc.fechaVencimiento)}</span>
                             <p className="text-xs text-muted-foreground">{diasVencido}d atrás</p>
                           </td>
-                          <td className="px-4 py-2.5 text-right font-semibold">{formatMoney(Number(sc.montoPago))}</td>
+                          <td className="px-4 py-2.5 text-right font-semibold">{formatMoney(Number(sc.montoPagado))}</td>
                         </tr>
                       )
                     })}

@@ -1,0 +1,155 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/use-toast'
+import { Badge } from '@/components/ui/badge'
+import { Loader2, Pencil, Check, X } from 'lucide-react'
+import { formatMoney } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import type { ScheduleStatus } from '@prisma/client'
+
+const STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'error' | 'info' | 'outline'> = {
+  PAID: 'success',
+  PENDING: 'warning',
+  OVERDUE: 'error',
+  PARTIAL: 'info',
+  ADVANCE: 'success',
+}
+const STATUS_LABEL: Record<ScheduleStatus, string> = {
+  PAID: 'Pagado',
+  PENDING: 'Pendiente',
+  OVERDUE: 'Vencido',
+  PARTIAL: 'Parcial',
+  ADVANCE: 'Adelantado',
+}
+
+function toInputValue(date: string | Date): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+interface ScheduleItem {
+  id: string
+  numeroPago: number
+  fechaVencimiento: Date | string
+  montoEsperado: number
+  estado: ScheduleStatus
+}
+
+interface Props {
+  loanId: string
+  schedule: ScheduleItem[]
+  canCapture: boolean
+  canEditDates: boolean
+}
+
+export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates }: Props) {
+  const router   = useRouter()
+  const { toast } = useToast()
+  const [editingId, setEditingId]   = useState<string | null>(null)
+  const [dateValue, setDateValue]   = useState('')
+  const [saving, setSaving]         = useState(false)
+
+  function startEdit(s: ScheduleItem) {
+    setEditingId(s.id)
+    setDateValue(toInputValue(s.fechaVencimiento))
+  }
+
+  async function saveDate(s: ScheduleItem) {
+    if (!dateValue) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/loans/${loanId}/schedule/${s.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fechaVencimiento: dateValue }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Error')
+      toast({ title: `Pago ${s.numeroPago} — fecha actualizada` })
+      setEditingId(null)
+      router.refresh()
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="divide-y">
+      {schedule.map((s) => {
+        const isEditing = editingId === s.id
+        const editable  = canEditDates && s.estado !== 'PAID' && s.estado !== 'ADVANCE'
+
+        return (
+          <div key={s.id} className="flex items-center gap-2 py-2 text-sm">
+            <span className="text-muted-foreground w-7 shrink-0">{s.numeroPago}.</span>
+
+            {/* Date cell */}
+            {isEditing ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  value={dateValue}
+                  onChange={(e) => setDateValue(e.target.value)}
+                  className="border rounded px-2 py-0.5 text-xs"
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  variant="success"
+                  disabled={saving}
+                  onClick={() => saveDate(s)}
+                >
+                  {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  variant="outline"
+                  disabled={saving}
+                  onClick={() => setEditingId(null)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <span className="w-24 shrink-0 flex items-center gap-1">
+                {formatDate(s.fechaVencimiento)}
+                {editable && (
+                  <button
+                    onClick={() => startEdit(s)}
+                    className="text-muted-foreground hover:text-primary-600 transition-colors"
+                    title="Editar fecha"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+              </span>
+            )}
+
+            <span className="font-medium w-20 shrink-0">{formatMoney(s.montoEsperado)}</span>
+            <Badge variant={STATUS_VARIANT[s.estado]} className="text-xs">
+              {STATUS_LABEL[s.estado]}
+            </Badge>
+
+            {canCapture && (s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL') && (
+              <a
+                href={`/cobros/capturar/${s.id}`}
+                className="ml-auto flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-gray-50 transition-colors shrink-0"
+              >
+                Capturar
+              </a>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}

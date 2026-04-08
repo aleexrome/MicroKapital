@@ -7,21 +7,13 @@ import { LoanActivateButton } from '@/components/loans/LoanActivateButton'
 import { LoanClientRejectButton } from '@/components/loans/LoanClientRejectButton'
 import { LoanRenewButton } from '@/components/loans/LoanRenewButton'
 import { DocumentChecklist } from '@/components/loans/DocumentChecklist'
+import { ScheduleDateEditor } from '@/components/loans/ScheduleDateEditor'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { ArrowLeft, CreditCard } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import type { LoanStatus, LoanType, ScheduleStatus } from '@prisma/client'
-
-const SCHEDULE_STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'error' | 'secondary' | 'info' | 'outline'> = {
-  PENDING: 'warning',
-  PAID: 'success',
-  OVERDUE: 'error',
-  PARTIAL: 'info',
-  ADVANCE: 'success',
-}
 
 // Umbral de pagos para renovación anticipada por producto
 const UMBRAL_RENOVACION: Record<string, number> = {
@@ -78,6 +70,12 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   const puedeActivar =
     loan.estado === 'APPROVED' &&
     (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE' || rol === 'SUPER_ADMIN')
+
+  // Director General puede editar fechas del calendario
+  const puedeEditarFechas = loan.estado === 'ACTIVE' && (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN')
+
+  // Coordinador/Cobrador pueden capturar pagos
+  const puedeCapturar = loan.estado === 'ACTIVE' && (rol === 'COBRADOR' || rol === 'COORDINADOR')
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -212,34 +210,27 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
               <span>Calendario de pagos</span>
-              <span className="text-sm font-normal text-muted-foreground">{pagados}/{loan.schedule.length} pagados</span>
+              <div className="flex items-center gap-2">
+                {puedeEditarFechas && (
+                  <span className="text-xs text-amber-600 font-normal">Haz clic en el lápiz para editar fechas</span>
+                )}
+                <span className="text-sm font-normal text-muted-foreground">{pagados}/{loan.schedule.length} pagados</span>
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="divide-y">
-              {loan.schedule.map((s) => {
-                const capturable = loan.estado === 'ACTIVE' &&
-                  (s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL') &&
-                  (rol === 'COBRADOR' || rol === 'COORDINADOR')
-                return (
-                  <div key={s.id} className="flex items-center gap-2 py-2 text-sm">
-                    <span className="text-muted-foreground w-7 shrink-0">{s.numeroPago}.</span>
-                    <span className="w-24 shrink-0">{formatDate(s.fechaVencimiento)}</span>
-                    <span className="money font-medium w-20 shrink-0">{formatMoney(Number(s.montoEsperado))}</span>
-                    <Badge variant={SCHEDULE_STATUS_VARIANT[s.estado as ScheduleStatus]} className="text-xs">
-                      {s.estado === 'PAID' ? 'Pagado' : s.estado === 'OVERDUE' ? 'Vencido' : s.estado === 'PARTIAL' ? 'Parcial' : 'Pendiente'}
-                    </Badge>
-                    {capturable && (
-                      <Button asChild size="sm" variant="outline" className="ml-auto h-7 text-xs px-2">
-                        <Link href={`/cobros/capturar/${s.id}`}>
-                          <CreditCard className="h-3 w-3 mr-1" />Capturar
-                        </Link>
-                      </Button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            <ScheduleDateEditor
+              loanId={loan.id}
+              schedule={loan.schedule.map((s) => ({
+                id: s.id,
+                numeroPago: s.numeroPago,
+                fechaVencimiento: s.fechaVencimiento,
+                montoEsperado: Number(s.montoEsperado),
+                estado: s.estado as ScheduleStatus,
+              }))}
+              canCapture={puedeCapturar}
+              canEditDates={puedeEditarFechas}
+            />
           </CardContent>
         </Card>
       )}

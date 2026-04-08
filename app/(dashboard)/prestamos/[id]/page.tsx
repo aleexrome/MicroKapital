@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
 import { LoanApprovalActions } from '@/components/loans/LoanApprovalActions'
 import { LoanActivateButton } from '@/components/loans/LoanActivateButton'
+import { LoanClientRejectButton } from '@/components/loans/LoanClientRejectButton'
 import { LoanRenewButton } from '@/components/loans/LoanRenewButton'
 import { DocumentChecklist } from '@/components/loans/DocumentChecklist'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -90,18 +91,26 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             <ApprovalBadge status={loan.estado as LoanStatus} />
           </div>
 
-          {/* Director General: aprobar/rechazar */}
+          {/* Director General: aprobar / contrapropuesta / rechazar */}
           {loan.estado === 'PENDING_APPROVAL' && (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') && (
-            <LoanApprovalActions loanId={loan.id} />
+            <LoanApprovalActions
+              loanId={loan.id}
+              tipo={loan.tipo}
+              capital={Number(loan.capital)}
+              tasaInteres={loan.tasaInteres ? Number(loan.tasaInteres) : undefined}
+            />
           )}
 
-          {/* Coordinador / Gerente Zonal: activar crédito ya aprobado */}
+          {/* Coordinador / Gerente Zonal: activar crédito ya aprobado o registrar rechazo del cliente */}
           {puedeActivar && (
-            <div className="pt-1">
-              <p className="text-sm text-blue-700 font-medium mb-2">
-                ✅ Crédito aprobado por el Director General. Actívalo para iniciar el desembolso.
+            <div className="pt-1 space-y-2">
+              <p className="text-sm text-blue-700 font-medium">
+                Crédito aprobado por el Director General. Preséntalo al cliente y actívalo si acepta.
               </p>
-              <LoanActivateButton loanId={loan.id} />
+              <div className="flex flex-wrap gap-2">
+                <LoanActivateButton loanId={loan.id} />
+                <LoanClientRejectButton loanId={loan.id} />
+              </div>
             </div>
           )}
 

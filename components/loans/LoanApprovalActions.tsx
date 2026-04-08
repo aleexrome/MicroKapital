@@ -4,28 +4,56 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
-import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, Edit2, ChevronDown, ChevronUp } from 'lucide-react'
 
 interface LoanApprovalActionsProps {
   loanId: string
+  tipo: string
+  capital: number
+  tasaInteres?: number
 }
 
-export function LoanApprovalActions({ loanId }: LoanApprovalActionsProps) {
+export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres }: LoanApprovalActionsProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [processing, setProcessing] = useState(false)
   const [showReject, setShowReject] = useState(false)
+  const [showContrapropuesta, setShowContrapropuesta] = useState(false)
   const [razonRechazo, setRazonRechazo] = useState('')
+  const [nuevoCapital, setNuevoCapital] = useState(capital.toString())
+  const [nuevaTasa, setNuevaTasa] = useState(tasaInteres?.toString() ?? '')
 
-  async function handleApprove() {
+  async function handleApprove(conContrapropuesta = false) {
     setProcessing(true)
     try {
-      const res = await fetch(`/api/loans/${loanId}/approve`, { method: 'POST' })
+      const body: Record<string, unknown> = {}
+      if (conContrapropuesta) {
+        const cap = parseFloat(nuevoCapital)
+        if (!cap || cap <= 0) {
+          toast({ title: 'Error', description: 'Ingresa un capital válido', variant: 'destructive' })
+          setProcessing(false)
+          return
+        }
+        body.contrapropuesta = {
+          capital: cap,
+          ...(nuevaTasa ? { tasaInteres: parseFloat(nuevaTasa) } : {}),
+        }
+      }
+
+      const res = await fetch(`/api/loans/${loanId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error ?? 'Error al aprobar')
       }
-      toast({ title: '✅ Préstamo aprobado', description: 'Calendario de pagos generado' })
+      const data = await res.json()
+      toast({
+        title: conContrapropuesta ? '✅ Contrapropuesta enviada' : '✅ Préstamo aprobado',
+        description: data.message,
+      })
       router.refresh()
     } catch (err) {
       toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' })
@@ -58,43 +86,107 @@ export function LoanApprovalActions({ loanId }: LoanApprovalActionsProps) {
     }
   }
 
-  return (
-    <div className="flex flex-col sm:flex-row gap-2 pt-2">
-      {showReject ? (
-        <div className="flex flex-col gap-2 w-full sm:max-w-sm">
-          <input
-            className="border rounded px-3 py-2 text-sm w-full"
-            placeholder="Razón del rechazo..."
-            value={razonRechazo}
-            onChange={(e) => setRazonRechazo(e.target.value)}
-            autoFocus
-          />
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="destructive"
-              disabled={!razonRechazo.trim() || processing}
-              onClick={handleReject}
-            >
-              {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Confirmar rechazo'}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowReject(false)}>Cancelar</Button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <Button size="sm" variant="success" disabled={processing} onClick={handleApprove}>
-            {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle className="h-4 w-4" /> Aprobar</>}
-          </Button>
+  if (showReject) {
+    return (
+      <div className="flex flex-col gap-2 w-full sm:max-w-sm pt-2">
+        <input
+          className="border rounded px-3 py-2 text-sm w-full"
+          placeholder="Razón del rechazo..."
+          value={razonRechazo}
+          onChange={(e) => setRazonRechazo(e.target.value)}
+          autoFocus
+        />
+        <div className="flex gap-2">
           <Button
             size="sm"
-            variant="outline"
-            className="border-red-300 text-red-600 hover:bg-red-50"
-            onClick={() => setShowReject(true)}
+            variant="destructive"
+            disabled={!razonRechazo.trim() || processing}
+            onClick={handleReject}
           >
-            <XCircle className="h-4 w-4" /> Rechazar
+            {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Confirmar rechazo'}
           </Button>
-        </>
+          <Button size="sm" variant="outline" onClick={() => setShowReject(false)}>Cancelar</Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2 pt-2">
+      {/* Botones principales */}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="success" disabled={processing} onClick={() => handleApprove(false)}>
+          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle className="h-4 w-4 mr-1" />Aprobar</>}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-amber-400 text-amber-700 hover:bg-amber-50"
+          onClick={() => setShowContrapropuesta((v) => !v)}
+        >
+          <Edit2 className="h-4 w-4 mr-1" />
+          Contrapropuesta
+          {showContrapropuesta ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-red-300 text-red-600 hover:bg-red-50"
+          onClick={() => setShowReject(true)}
+        >
+          <XCircle className="h-4 w-4 mr-1" />Rechazar
+        </Button>
+      </div>
+
+      {/* Formulario de contrapropuesta */}
+      {showContrapropuesta && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">
+          <p className="font-semibold text-amber-800">Contrapropuesta del Director General</p>
+          <p className="text-xs text-amber-700">
+            Ajusta las condiciones. El crédito se aprobará con los nuevos valores y el coordinador
+            visitará al cliente para presentarle la contrapropuesta.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-amber-700 mb-1">Nuevo capital ($)</label>
+              <input
+                type="number"
+                min={1}
+                step={500}
+                className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
+                value={nuevoCapital}
+                onChange={(e) => setNuevoCapital(e.target.value)}
+              />
+            </div>
+            {tipo === 'FIDUCIARIO' && (
+              <div>
+                <label className="block text-xs text-amber-700 mb-1">Tasa de interés (ej. 0.30)</label>
+                <input
+                  type="number"
+                  min={0.01}
+                  max={1}
+                  step={0.01}
+                  className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
+                  value={nuevaTasa}
+                  onChange={(e) => setNuevaTasa(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button
+              size="sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              disabled={processing}
+              onClick={() => handleApprove(true)}
+            >
+              {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Enviar contrapropuesta'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowContrapropuesta(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { calcLoan } from '@/lib/financial-formulas'
 import { createAuditLog } from '@/lib/audit'
 import { z } from 'zod'
 
 const approveSchema = z.object({
   notas: z.string().optional(),
+  contrapropuesta: z.object({
+    capital: z.number().positive(),
+    tasaInteres: z.number().positive().optional(),
+  }).optional(),
 })
 
 export async function POST(
@@ -45,15 +50,55 @@ export async function POST(
   const body = await req.json().catch(() => ({}))
   const parsed = approveSchema.safeParse(body)
   const notas = parsed.success ? parsed.data.notas : undefined
+  const contrapropuesta = parsed.success ? parsed.data.contrapropuesta : undefined
+
+  // Build updated financial fields if Director makes a counteroffer
+  let loanFieldUpdates: Record<string, unknown> = {}
+  let esContrapropuesta = false
+
+  if (contrapropuesta) {
+    const calc = calcLoan(
+      loan.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
+      contrapropuesta.capital,
+      contrapropuesta.tasaInteres,
+      {
+        ciclo: loan.ciclo ?? 1,
+        tuvoAtraso: loan.tuvoAtraso,
+        clienteIrregular: loan.clienteIrregular,
+        tipoGrupo: (loan.tipoGrupo ?? undefined) as 'REGULAR' | 'RESCATE' | undefined,
+      }
+    )
+
+    // If it was a renewal, adjust montoReal for the financed discount
+    let montoReal = calc.montoReal
+    if (loan.descuentoRenovacion) {
+      montoReal = Math.max(0, calc.montoReal - Number(loan.descuentoRenovacion))
+    }
+
+    loanFieldUpdates = {
+      capital: calc.capital,
+      comision: calc.comision,
+      montoReal,
+      tasaInteres: calc.tasaInteres,
+      interes: calc.interes,
+      totalPago: calc.totalPago,
+      pagoSemanal: calc.pagoSemanal ?? null,
+      pagoDiario: calc.pagoDiario ?? null,
+      pagoQuincenal: calc.pagoQuincenal ?? null,
+      plazo: calc.plazo,
+    }
+    esContrapropuesta = true
+  }
 
   await prisma.$transaction(async (tx) => {
-    // 1. Aprobar el nuevo crédito
+    // 1. Approve the new loan (with optional recalculated fields)
     await tx.loan.update({
       where: { id: loan.id },
       data: {
         estado: 'APPROVED',
         aprobadoPorId: userId,
         aprobadoAt: new Date(),
+        ...loanFieldUpdates,
       },
     })
 
@@ -63,15 +108,14 @@ export async function POST(
         estado: 'APPROVED',
         revisadoPorId: userId,
         revisadoAt: new Date(),
-        notas: notas ?? null,
+        notas: notas ?? (esContrapropuesta ? `Contrapropuesta: capital ajustado a $${contrapropuesta!.capital}` : null),
       },
     })
 
-    // 2. Si es una renovación anticipada, liquidar el crédito anterior en este momento
+    // 2. If this is an early renewal, liquidate the original loan now
     if (loan.loanOriginalId && loan.loanOriginal) {
       const schedulesPendientes = loan.loanOriginal.schedule
 
-      // Marcar los pagos pendientes restantes como PAID (financiados por la empresa)
       if (schedulesPendientes.length > 0) {
         await tx.paymentSchedule.updateMany({
           where: {
@@ -80,12 +124,11 @@ export async function POST(
           data: {
             estado: 'PAID',
             pagadoAt: new Date(),
-            montoPagado: schedulesPendientes[0].montoEsperado, // todos tienen el mismo monto
+            montoPagado: schedulesPendientes[0].montoEsperado,
           },
         })
       }
 
-      // Liquidar el crédito anterior
       await tx.loan.update({
         where: { id: loan.loanOriginalId },
         data: { estado: 'LIQUIDATED' },
@@ -97,19 +140,22 @@ export async function POST(
 
   createAuditLog({
     userId,
-    accion: 'APPROVE_LOAN',
+    accion: esContrapropuesta ? 'COUNTEROFFER_LOAN' : 'APPROVE_LOAN',
     tabla: 'Loan',
     registroId: loan.id,
     valoresNuevos: {
       estado: 'APPROVED',
       aprobadoPorId: userId,
+      ...(esContrapropuesta ? { contrapropuesta } : {}),
       ...(esRenovacion ? { loanOriginalLiquidado: loan.loanOriginalId } : {}),
     },
   })
 
-  return NextResponse.json({
-    message: esRenovacion
-      ? 'Renovación aprobada — crédito anterior liquidado · Pendiente de activación por el coordinador'
-      : 'Crédito aprobado — pendiente de activación por el coordinador',
-  })
+  const message = esContrapropuesta
+    ? 'Contrapropuesta registrada — el coordinador visitará al cliente para presentar las nuevas condiciones'
+    : esRenovacion
+    ? 'Renovación aprobada — crédito anterior liquidado · Pendiente de activación por el coordinador'
+    : 'Crédito aprobado — pendiente de activación por el coordinador'
+
+  return NextResponse.json({ message })
 }

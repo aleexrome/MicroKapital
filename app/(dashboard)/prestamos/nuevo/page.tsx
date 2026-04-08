@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,11 +8,32 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoanCalculator } from '@/components/loans/LoanCalculator'
 import { useToast } from '@/components/ui/use-toast'
-import { ArrowLeft, Loader2, UserCheck, FileText } from 'lucide-react'
+import { ArrowLeft, Loader2, UserCheck, FileText, X, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import type { LoanCalculation } from '@/types'
 
 type LoanTipo = 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO'
+
+interface QueuedDoc { id: string; tipo: string; file: File }
+
+const DOC_LABELS: Record<string, string> = {
+  SOLICITUD:             'Solicitud de crédito',
+  INE_FRENTE:            'INE — frente',
+  INE_REVERSO:           'INE — reverso',
+  COMPROBANTE_DOMICILIO: 'Comprobante de domicilio',
+  CONTRATO:              'Contrato firmado',
+  PAGARE:                'Pagaré',
+  FOTO:                  'Fotografía',
+  AVAL_INE:              'INE del aval',
+  OTRO:                  'Otro',
+}
+
+const DOCS_REQUERIDOS: Record<LoanTipo, string[]> = {
+  SOLIDARIO:  ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO', 'FOTO'],
+  INDIVIDUAL: ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO', 'COMPROBANTE_DOMICILIO', 'FOTO', 'PAGARE', 'AVAL_INE'],
+  AGIL:       ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO'],
+  FIDUCIARIO: ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO', 'COMPROBANTE_DOMICILIO', 'FOTO', 'CONTRATO', 'PAGARE', 'AVAL_INE'],
+}
 
 const TIPO_INFO: Record<LoanTipo, { label: string; plazo: string; desc: string }> = {
   SOLIDARIO:   { label: 'Grupo Solidario',   plazo: '8 semanas',       desc: '$175/$195 por cada mil · mín 4 integrantes' },
@@ -46,8 +67,23 @@ export default function NuevaSolicitudPage() {
   const [avalNombre, setAvalNombre]         = useState('')
   const [avalTelefono, setAvalTelefono]     = useState('')
   const [avalRelacion, setAvalRelacion]     = useState('')
+  // Cola de documentos a subir junto con la solicitud
+  const [queuedDocs, setQueuedDocs]         = useState<QueuedDoc[]>([])
+  const [newDocTipo, setNewDocTipo]          = useState('SOLICITUD')
+  const fileInputRef                         = useRef<HTMLInputElement>(null)
 
   const handleCalc = useCallback((c: LoanCalculation) => setCalc(c), [])
+
+  function handleAddDoc(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setQueuedDocs((prev) => [...prev, { id: crypto.randomUUID(), tipo: newDocTipo, file }])
+    e.target.value = ''
+  }
+
+  function removeDoc(id: string) {
+    setQueuedDocs((prev) => prev.filter((d) => d.id !== id))
+  }
 
   const capitalNum = Number(capital)
 
@@ -92,8 +128,25 @@ export default function NuevaSolicitudPage() {
       }
 
       const { data } = await res.json()
-      toast({ title: '✅ Solicitud enviada', description: 'Sube los documentos del cliente en la sección de abajo' })
-      router.push(`/prestamos/${data.id}#documentos`)
+      const loanId = data.id
+
+      // Subir documentos en cola (si hay)
+      if (queuedDocs.length > 0) {
+        await Promise.all(queuedDocs.map(async (doc) => {
+          const fd = new FormData()
+          fd.append('file', doc.file)
+          fd.append('tipo', doc.tipo)
+          await fetch(`/api/loans/${loanId}/documents`, { method: 'POST', body: fd })
+        }))
+      }
+
+      toast({
+        title: '✅ Solicitud enviada',
+        description: queuedDocs.length > 0
+          ? `${queuedDocs.length} documento(s) subidos correctamente`
+          : 'Pendiente de aprobación',
+      })
+      router.push(`/prestamos/${loanId}`)
     } catch (err) {
       toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' })
       setLoading(false)
@@ -358,18 +411,105 @@ export default function NuevaSolicitudPage() {
           </CardContent>
         </Card>
 
-        {/* Aviso sobre documentos */}
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
-          <FileText className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-foreground">Documentación requerida</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Una vez enviada la solicitud, ve a <strong>Solicitudes → abre esta solicitud</strong> y desplázate hasta
-              la sección <strong>"Documentos del crédito"</strong> para subir los archivos (INE, comprobante de domicilio, fotografía, etc.).
-              El Director General puede solicitar documentos adicionales antes de aprobar.
-            </p>
-          </div>
-        </div>
+        {/* ── Documentos del crédito ──────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Documentos del crédito
+              </span>
+              {queuedDocs.length > 0 && (
+                <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
+                  {queuedDocs.length} listo{queuedDocs.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Documentos requeridos para este tipo */}
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Requeridos para {TIPO_INFO[tipo].label}:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {DOCS_REQUERIDOS[tipo].map((req) => {
+                  const cubierto = queuedDocs.some((d) => d.tipo === req)
+                  return (
+                    <span
+                      key={req}
+                      className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
+                        cubierto
+                          ? 'bg-green-500/15 text-green-400 border border-green-500/30'
+                          : 'bg-muted text-muted-foreground border border-transparent'
+                      }`}
+                    >
+                      {cubierto && <CheckCircle2 className="h-3 w-3" />}
+                      {DOC_LABELS[req]}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Selector de tipo + file picker */}
+            <div className="flex flex-col sm:flex-row gap-2 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-muted-foreground">Tipo de documento</label>
+                <select
+                  value={newDocTipo}
+                  onChange={(e) => setNewDocTipo(e.target.value)}
+                  className="border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {Object.entries(DOC_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1 flex-1">
+                <label className="text-xs text-muted-foreground">Archivo (PDF, JPG, PNG)</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  onChange={handleAddDoc}
+                  className="text-sm file:mr-2 file:text-xs file:border-0 file:rounded file:px-2 file:py-1 file:cursor-pointer"
+                  style={{ background: 'hsl(var(--background))' }}
+                />
+              </div>
+            </div>
+
+            {/* Lista de documentos en cola */}
+            {queuedDocs.length > 0 && (
+              <div className="space-y-1.5">
+                {queuedDocs.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center justify-between rounded-lg px-3 py-2 text-sm"
+                    style={{ background: 'hsl(var(--muted)/0.4)', border: '1px solid hsl(var(--border))' }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span className="font-medium shrink-0">{DOC_LABELS[doc.tipo] ?? doc.tipo}</span>
+                      <span className="text-xs text-muted-foreground truncate">{doc.file.name}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeDoc(doc.id)}
+                      className="ml-2 shrink-0 p-1 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {queuedDocs.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Selecciona el tipo y el archivo para ir agregando los documentos. Se subirán automáticamente al enviar la solicitud.
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         {/* ── Calculadora ─────────────────────────────────────── */}
         {capitalNum > 0 && (

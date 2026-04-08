@@ -149,7 +149,7 @@ export default async function ClienteExpedientePage({
             Préstamos ({client.loans.length})
           </CardTitle>
           <Button asChild size="sm">
-            <Link href={`/prestamos/nuevo?clienteId=${client.id}`}>Nuevo préstamo</Link>
+            <Link href={`/prestamos/nuevo?clienteId=${client.id}&clienteNombre=${encodeURIComponent(client.nombreCompleto)}`}>Nuevo préstamo</Link>
           </Button>
         </CardHeader>
         <CardContent>

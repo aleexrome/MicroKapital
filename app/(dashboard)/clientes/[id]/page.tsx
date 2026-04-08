@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate, formatMoney } from '@/lib/utils'
-import { ArrowLeft, Phone, MapPin, User, CreditCard } from 'lucide-react'
+import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Receipt } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function ClienteExpedientePage({
@@ -38,12 +38,19 @@ export default async function ClienteExpedientePage({
         orderBy: { createdAt: 'desc' },
         include: {
           cobrador: { select: { nombre: true } },
-          schedule: { orderBy: { numeroPago: 'asc' }, take: 3 },
         },
       },
       scoreEvents: {
         orderBy: { createdAt: 'desc' },
         take: 10,
+      },
+      payments: {
+        orderBy: { fechaHora: 'desc' },
+        take: 20,
+        include: {
+          loan: { select: { tipo: true } },
+          schedule: { select: { numeroPago: true } },
+        },
       },
     },
   })
@@ -160,6 +167,42 @@ export default async function ClienteExpedientePage({
                   </Link>
                 )
               })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      {/* Historial de pagos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <History className="h-4 w-4" />
+            Historial de pagos ({client.payments.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {client.payments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin pagos registrados</p>
+          ) : (
+            <div className="space-y-3">
+              {client.payments.map((payment) => (
+                <div key={payment.id} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-3">
+                    <Receipt className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div>
+                      <p className="font-medium">{formatMoney(Number(payment.monto))}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {payment.loan.tipo}{payment.schedule ? ` · Pago #${payment.schedule.numeroPago}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-muted-foreground">{formatDate(payment.fechaHora)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {payment.metodoPago === 'CASH' ? 'Efectivo' : 'Tarjeta'}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>

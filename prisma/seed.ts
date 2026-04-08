@@ -49,21 +49,29 @@ async function main() {
     console.log('✅ Empresa creada: MicroKapital Financiera')
   }
 
-  // Licencia
+  // Licencia — tolerante a claveLicencia duplicada (si ya existía de un run anterior)
   const existingLicense = await prisma.license.findUnique({ where: { companyId: company.id } })
   if (!existingLicense) {
-    await prisma.license.create({
-      data: {
-        companyId: company.id,
-        claveLicencia: 'LIC-MK-2026-001',
-        estado: 'ACTIVE',
-        precioMensual: 2500,
-        diaCobro: 1,
-        proximoPago: addDays(new Date(), 30),
-        notasInternas: 'Licencia producción MicroKapital',
-      },
-    })
-    console.log('✅ Licencia creada')
+    // Generar clave única basada en el ID de la empresa para evitar conflictos
+    const claveLicencia = `LIC-MK-${company.id.slice(0, 8).toUpperCase()}`
+    // Verificar que esa clave no esté tomada por otra empresa
+    const claveExistente = await prisma.license.findUnique({ where: { claveLicencia } })
+    if (!claveExistente) {
+      await prisma.license.create({
+        data: {
+          companyId: company.id,
+          claveLicencia,
+          estado: 'ACTIVE',
+          precioMensual: 2500,
+          diaCobro: 1,
+          proximoPago: addDays(new Date(), 30),
+          notasInternas: 'Licencia producción MicroKapital',
+        },
+      })
+      console.log(`✅ Licencia creada: ${claveLicencia}`)
+    } else {
+      console.log('⚠️  Clave de licencia ya existe, omitiendo...')
+    }
   }
 
   // ─── 4 Sucursales ──────────────────────────────────────────────────────────

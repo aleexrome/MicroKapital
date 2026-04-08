@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   Users,
   CreditCard,
-  ClipboardCheck,
   CalendarDays,
   History,
   Wallet,
@@ -20,6 +19,7 @@ import {
   CheckSquare,
   ArrowLeftRight,
   Archive,
+  Shield,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -102,6 +102,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Reportes',
     icon: <BarChart3 className="h-5 w-5" />,
     roles: ['GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
+  },
+  {
+    href: '/admin',
+    label: 'Administración',
+    icon: <Shield className="h-5 w-5" />,
+    roles: ['SUPER_ADMIN'],
   },
 ]
 

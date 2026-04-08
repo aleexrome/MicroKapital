@@ -278,6 +278,8 @@ model Loan {
   tipoGarantia        String?                    // "MUEBLE" o "INMUEBLE"
   descripcionGarantia String?
   valorGarantia       Decimal? @db.Decimal(12, 2)
+  // Checklist de documentos (JSON array of {id, label, checked})
+  documentChecklist   Json?
   // Aprobación
   aprobadoPorId  String?
   aprobadoPor    User?     @relation("ApprovedLoans", fields: [aprobadoPorId], references: [id])

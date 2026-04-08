@@ -19,6 +19,7 @@ import {
   Building2,
   CheckSquare,
   ArrowLeftRight,
+  Archive,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -83,6 +84,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Transferencias',
     icon: <ArrowLeftRight className="h-5 w-5" />,
     roles: ['GERENTE', 'GERENTE_ZONAL'],
+  },
+  {
+    href: '/creditos-concluidos',
+    label: 'Créditos Concluidos',
+    icon: <Archive className="h-5 w-5" />,
+    roles: ['GERENTE', 'COBRADOR', 'COORDINADOR', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   {
     href: '/reportes',

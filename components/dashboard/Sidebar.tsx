@@ -231,21 +231,35 @@ export function Sidebar({
 
                   return (
                     <div key={branch.id}>
-                      {/* Branch node */}
-                      <button
-                        onClick={() => toggleBranch(branch.id)}
-                        className="flex items-center gap-2 w-full pl-6 pr-3 py-2 rounded-lg text-xs font-medium text-primary-100 hover:bg-white/10 transition-colors"
-                      >
-                        <Building2 className="h-3.5 w-3.5 shrink-0 text-primary-300" />
-                        <span className="flex-1 text-left truncate">{branch.nombre}</span>
-                        <span className="bg-white/10 text-primary-200 rounded-full px-1.5 py-0.5 text-[10px] shrink-0">
-                          {totalActivos}
-                        </span>
-                        {isExpanded
-                          ? <ChevronDown className="h-3 w-3 shrink-0 text-primary-300" />
-                          : <ChevronRight className="h-3 w-3 shrink-0 text-primary-300" />
-                        }
-                      </button>
+                      {/* Branch node: nombre = link, flecha = expand */}
+                      <div className="flex items-center">
+                        <Link
+                          href={branch.ownOnly ? '/cartera/mios' : `/cartera/${branch.id}`}
+                          onClick={onNavClick}
+                          className={cn(
+                            'flex-1 flex items-center gap-2 pl-6 pr-2 py-2 rounded-l-lg text-xs font-medium transition-colors',
+                            isActive(branch.ownOnly ? '/cartera/mios' : `/cartera/${branch.id}`)
+                              ? 'bg-white/20 text-white'
+                              : 'text-primary-100 hover:bg-white/10 hover:text-white'
+                          )}
+                        >
+                          <Building2 className="h-3.5 w-3.5 shrink-0 text-primary-300" />
+                          <span className="flex-1 truncate">{branch.nombre}</span>
+                          <span className="bg-white/10 text-primary-200 rounded-full px-1.5 py-0.5 text-[10px] shrink-0">
+                            {totalActivos}
+                          </span>
+                        </Link>
+                        <button
+                          onClick={() => toggleBranch(branch.id)}
+                          className="pr-3 py-2 text-primary-300 hover:text-white transition-colors"
+                          title={isExpanded ? 'Colapsar' : 'Expandir'}
+                        >
+                          {isExpanded
+                            ? <ChevronDown className="h-3 w-3" />
+                            : <ChevronRight className="h-3 w-3" />
+                          }
+                        </button>
+                      </div>
 
                       {/* Product nodes */}
                       {isExpanded && (

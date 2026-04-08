@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate, formatMoney } from '@/lib/utils'
-import { ArrowLeft, Phone, MapPin, User, CreditCard } from 'lucide-react'
+import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2 } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function ClienteExpedientePage({
@@ -39,6 +39,14 @@ export default async function ClienteExpedientePage({
         include: {
           cobrador: { select: { nombre: true } },
           schedule: { orderBy: { numeroPago: 'asc' }, take: 3 },
+        },
+      },
+      payments: {
+        orderBy: { fechaHora: 'desc' },
+        take: 20,
+        include: {
+          loan: { select: { tipo: true } },
+          schedule: { select: { numeroPago: true } },
         },
       },
       scoreEvents: {
@@ -158,6 +166,53 @@ export default async function ClienteExpedientePage({
                       <Badge variant={st.variant}>{st.label}</Badge>
                     </div>
                   </Link>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Historial de pagos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <History className="h-4 w-4" />
+            Historial de pagos ({client.payments.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {client.payments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin pagos registrados</p>
+          ) : (
+            <div className="space-y-2">
+              {client.payments.map((pago) => {
+                const metodoIcon =
+                  pago.metodoPago === 'CASH' ? <Banknote className="h-3.5 w-3.5 text-muted-foreground" /> :
+                  pago.metodoPago === 'TRANSFER' ? <Building2 className="h-3.5 w-3.5 text-muted-foreground" /> :
+                  <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                const metodoLabel =
+                  pago.metodoPago === 'CASH' ? 'Efectivo' :
+                  pago.metodoPago === 'TRANSFER' ? 'Transferencia' : 'Tarjeta'
+
+                return (
+                  <div key={pago.id} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
+                    <div className="flex items-center gap-3">
+                      {metodoIcon}
+                      <div>
+                        <p className="font-medium text-gray-900">{formatMoney(Number(pago.monto))}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {pago.loan.tipo}
+                          {pago.schedule ? ` · Pago #${pago.schedule.numeroPago}` : ''}
+                          {pago.esCoberturaGrupal ? ' · Cubierta por otra integrante' : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">{formatDate(pago.fechaHora)}</p>
+                      <p className="text-xs text-muted-foreground">{metodoLabel}</p>
+                    </div>
+                  </div>
                 )
               })}
             </div>

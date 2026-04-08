@@ -8,13 +8,22 @@ import { createAuditLog } from '@/lib/audit'
 
 const createLoanSchema = z.object({
   clientId: z.string().uuid(),
-  tipo: z.enum(['SOLIDARIO', 'INDIVIDUAL', 'AGIL']),
+  tipo: z.enum(['SOLIDARIO', 'INDIVIDUAL', 'AGIL', 'FIDUCIARIO']),
   capital: z.number().positive(),
   tasaInteres: z.number().positive().optional(),
   cobradorId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
   loanGroupId: z.string().uuid().optional(),
   notas: z.string().optional(),
+  // Campos de comportamiento
+  ciclo: z.number().int().min(1).optional(),
+  tuvoAtraso: z.boolean().optional(),
+  clienteIrregular: z.boolean().optional(),
+  tipoGrupo: z.enum(['REGULAR', 'RESCATE']).optional(),
+  // Campos FIDUCIARIO
+  tipoGarantia: z.enum(['MUEBLE', 'INMUEBLE']).optional(),
+  descripcionGarantia: z.string().optional(),
+  valorGarantia: z.number().positive().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -23,8 +32,10 @@ export async function GET(req: NextRequest) {
 
   const { rol, companyId, branchId } = session.user
 
+  const isCoordinator = rol === 'COBRADOR' || rol === 'COORDINADOR'
+
   let cobradorIdFilter: string | undefined
-  if (rol === 'COBRADOR') {
+  if (isCoordinator) {
     const cobrador = await prisma.user.findFirst({
       where: { companyId: companyId!, email: session.user.email! },
     })
@@ -37,7 +48,7 @@ export async function GET(req: NextRequest) {
     where: {
       companyId: companyId!,
       ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
+      ...(isCoordinator && branchId ? { branchId } : {}),
       ...(estado ? { estado: estado as 'PENDING_APPROVAL' | 'ACTIVE' | 'LIQUIDATED' | 'REJECTED' | 'RESTRUCTURED' | 'DEFAULTED' } : {}),
     },
     orderBy: { createdAt: 'desc' },
@@ -65,17 +76,21 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Obtener tasa desde settings si no se envía
+  // Para FIDUCIARIO la tasa la define la empresa; para los demás está fija en las fórmulas
   let tasaInteres = data.tasaInteres
-  if (!tasaInteres) {
-    const settingKey = data.tipo === 'SOLIDARIO' ? 'tasa_solidario' : 'tasa_individual'
+  if (!tasaInteres && data.tipo === 'FIDUCIARIO') {
     const setting = await prisma.companySetting.findFirst({
-      where: { companyId: companyId!, clave: settingKey },
+      where: { companyId: companyId!, clave: 'tasa_fiduciario' },
     })
-    tasaInteres = setting ? parseFloat(setting.valor) : (data.tipo === 'SOLIDARIO' ? 0.40 : 0.30)
+    tasaInteres = setting ? parseFloat(setting.valor) : 0.30
   }
 
-  const calc = calcLoan(data.tipo, data.capital, tasaInteres)
+  const calc = calcLoan(data.tipo, data.capital, tasaInteres, {
+    ciclo: data.ciclo,
+    tuvoAtraso: data.tuvoAtraso,
+    clienteIrregular: data.clienteIrregular,
+    tipoGrupo: data.tipoGrupo,
+  })
 
   // Verificar que el cliente pertenezca a la empresa
   const client = await prisma.client.findFirst({
@@ -86,8 +101,9 @@ export async function POST(req: NextRequest) {
   const targetBranchId = data.branchId ?? branchId ?? client.branchId
   if (!targetBranchId) return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
 
+  const isCoordinator = rol === 'COBRADOR' || rol === 'COORDINADOR'
   let cobradorId = data.cobradorId
-  if (rol === 'COBRADOR') {
+  if (isCoordinator) {
     const cobrador = await prisma.user.findFirst({
       where: { companyId: companyId!, email: session.user.email! },
     })
@@ -113,7 +129,15 @@ export async function POST(req: NextRequest) {
         totalPago: calc.totalPago,
         pagoSemanal: calc.pagoSemanal ?? null,
         pagoDiario: calc.pagoDiario ?? null,
+        pagoQuincenal: calc.pagoQuincenal ?? null,
         plazo: calc.plazo,
+        ciclo: data.ciclo ?? 1,
+        tuvoAtraso: data.tuvoAtraso ?? false,
+        clienteIrregular: data.clienteIrregular ?? false,
+        tipoGrupo: data.tipoGrupo ?? null,
+        tipoGarantia: data.tipoGarantia ?? null,
+        descripcionGarantia: data.descripcionGarantia ?? null,
+        valorGarantia: data.valorGarantia ?? null,
         notas: data.notas ?? null,
       },
     })

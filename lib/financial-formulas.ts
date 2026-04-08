@@ -129,11 +129,39 @@ export function calcAgil(capital: number, clienteIrregular = false): LoanCalcula
   }
 }
 
+// ─── FIDUCIARIO ──────────────────────────────────────────────────────────────
+//
+// Plazo: 12 quincenas (pago cada 15 días)
+// Comisión por apertura: 10% sobre el capital
+// Monto mínimo: 40% del valor de la garantía
+// Monto máximo: 50% del valor de la garantía
+// La tasa la define la empresa — se recibe como parámetro
+// Validaciones: titular + 1 aval (2 avales si >$15,000) · edad 18–64
+
+export function calcFiduciario(capital: number, tasaInteres: number): LoanCalculation {
+  const plazo = 12  // 12 quincenas
+  const comision = roundTwo(capital * 0.10)
+  const montoReal = roundTwo(capital - comision)
+  const interes = roundTwo(capital * tasaInteres)
+  const totalPago = roundTwo(capital + interes)
+  const pagoQuincenal = roundTwo(totalPago / plazo)
+
+  return {
+    capital,
+    tasaInteres,
+    comision,
+    montoReal,
+    interes,
+    totalPago,
+    pagoQuincenal,
+    plazo,
+  }
+}
+
 // ─── DISPATCHER ─────────────────────────────────────────────────────────────
 //
-// Parámetros opcionales para retrocompatibilidad:
-//   tasaInteres — ignorado en INDIVIDUAL y ÁGIL (usan tasas fijas)
-//   opciones    — ciclo, tuvoAtraso, clienteIrregular, tipoGrupo
+// opciones — ciclo, tuvoAtraso, clienteIrregular, tipoGrupo
+// tasaInteres — solo aplica en FIDUCIARIO (los demás tienen tasas fijas)
 
 interface CalcOpciones {
   ciclo?: number
@@ -143,9 +171,9 @@ interface CalcOpciones {
 }
 
 export function calcLoan(
-  tipo: 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL',
+  tipo: 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
   capital: number,
-  _tasaInteres?: number,
+  tasaInteres?: number,
   opciones: CalcOpciones = {}
 ): LoanCalculation {
   switch (tipo) {
@@ -155,5 +183,7 @@ export function calcLoan(
       return calcIndividual(capital, opciones.ciclo ?? 1, opciones.tuvoAtraso ?? false)
     case 'AGIL':
       return calcAgil(capital, opciones.clienteIrregular ?? false)
+    case 'FIDUCIARIO':
+      return calcFiduciario(capital, tasaInteres ?? 0.30)
   }
 }

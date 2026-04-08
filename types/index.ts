@@ -32,6 +32,7 @@ export interface LoanCalculation {
   totalPago: number
   pagoSemanal?: number
   pagoDiario?: number
+  pagoQuincenal?: number
   plazo: number
 }
 

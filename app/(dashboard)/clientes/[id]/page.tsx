@@ -44,7 +44,11 @@ export default async function ClienteExpedientePage({
       payments: {
         orderBy: { fechaHora: 'desc' },
         take: 20,
-        include: {
+        select: {
+          id: true,
+          monto: true,
+          metodoPago: true,
+          fechaHora: true,
           loan: { select: { tipo: true } },
           schedule: { select: { numeroPago: true } },
         },
@@ -204,7 +208,6 @@ export default async function ClienteExpedientePage({
                         <p className="text-xs text-muted-foreground">
                           {pago.loan.tipo}
                           {pago.schedule ? ` · Pago #${pago.schedule.numeroPago}` : ''}
-                          {pago.esCoberturaGrupal ? ' · Cubierta por otra integrante' : ''}
                         </p>
                       </div>
                     </div>

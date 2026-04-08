@@ -20,7 +20,7 @@ export default async function AgendaPage() {
   const schedule = await prisma.paymentSchedule.findMany({
     where: {
       loan: { cobradorId, estado: 'ACTIVE' },
-      estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
+      estado: { not: 'PAID' },
       fechaVencimiento: { lte: tomorrow },
     },
     orderBy: [{ estado: 'asc' }, { montoEsperado: 'desc' }],

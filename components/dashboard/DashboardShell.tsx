@@ -29,7 +29,7 @@ export function DashboardShell({
   const sidebarProps = { userRole, userName, companyName, branchName, treeData }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex h-screen overflow-hidden bg-background">
       {/* Sidebar desktop */}
       <div className="hidden md:flex md:flex-shrink-0">
         <Sidebar {...sidebarProps} />
@@ -47,7 +47,7 @@ export function DashboardShell({
 
       {/* Contenido principal */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-primary-700 text-white">
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-primary-700 text-white border-b border-primary-600/50">
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-1 rounded-lg hover:bg-white/10 transition-colors"

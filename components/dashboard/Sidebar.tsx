@@ -183,13 +183,13 @@ export function Sidebar({
   return (
     <aside className="flex h-full flex-col bg-primary-700 text-white w-64 min-w-[256px]">
       {/* Logo / Empresa */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-primary-600">
-        <div className="bg-white/10 rounded-lg p-2">
-          <Building2 className="h-5 w-5 text-white" />
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-primary-600/60">
+        <div className="bg-primary-500/20 rounded-xl p-2.5 ring-1 ring-primary-500/30">
+          <Building2 className="h-5 w-5 text-primary-300" />
         </div>
         <div className="flex-1 overflow-hidden">
-          <p className="text-sm font-semibold truncate">{companyName ?? 'MicroKapital'}</p>
-          {branchName && <p className="text-xs text-primary-200 truncate">{branchName}</p>}
+          <p className="text-sm font-bold truncate text-white">{companyName ?? 'MicroKapital'}</p>
+          {branchName && <p className="text-xs text-primary-300 truncate">{branchName}</p>}
         </div>
       </div>
 
@@ -202,10 +202,10 @@ export function Sidebar({
             href={item.href}
             onClick={onNavClick}
             className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150',
               isActive(item.href)
-                ? 'bg-white/20 text-white'
-                : 'text-primary-200 hover:bg-white/10 hover:text-white'
+                ? 'bg-primary-500 text-white shadow-glow'
+                : 'text-primary-200 hover:bg-white/8 hover:text-white'
             )}
           >
             {item.icon}
@@ -215,10 +215,10 @@ export function Sidebar({
 
         {/* Árbol de Cartera */}
         {showTree && (
-          <div className="pt-3 mt-1 border-t border-primary-600">
+          <div className="pt-3 mt-1 border-t border-primary-600/50">
             <button
               onClick={() => setTreeOpen((v) => !v)}
-              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-primary-200 hover:bg-white/10 hover:text-white transition-colors"
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm font-medium text-primary-200 hover:bg-white/8 hover:text-white transition-all duration-150"
             >
               <Layers className="h-5 w-5" />
               <span className="flex-1 text-left">Árbol de Cartera</span>
@@ -243,10 +243,10 @@ export function Sidebar({
                           href={branch.ownOnly ? '/cartera/mios' : `/cartera/${branch.id}`}
                           onClick={onNavClick}
                           className={cn(
-                            'flex-1 flex items-center gap-2 pl-6 pr-2 py-2 rounded-l-lg text-xs font-medium transition-colors',
+                            'flex-1 flex items-center gap-2 pl-6 pr-2 py-2 rounded-l-xl text-xs font-medium transition-all duration-150',
                             isActive(branch.ownOnly ? '/cartera/mios' : `/cartera/${branch.id}`)
-                              ? 'bg-white/20 text-white'
-                              : 'text-primary-100 hover:bg-white/10 hover:text-white'
+                              ? 'bg-primary-500 text-white'
+                              : 'text-primary-100 hover:bg-white/8 hover:text-white'
                           )}
                         >
                           <Building2 className="h-3.5 w-3.5 shrink-0 text-primary-300" />
@@ -286,10 +286,10 @@ export function Sidebar({
                                 href={href}
                                 onClick={onNavClick}
                                 className={cn(
-                                  'flex items-center gap-2 pl-10 pr-3 py-2 rounded-lg text-[11px] transition-colors',
+                                  'flex items-center gap-2 pl-10 pr-3 py-2 rounded-xl text-[11px] transition-all duration-150',
                                   active
-                                    ? 'bg-white/20 text-white font-semibold'
-                                    : 'text-primary-200 hover:bg-white/10 hover:text-white'
+                                    ? 'bg-primary-500 text-white font-semibold'
+                                    : 'text-primary-200 hover:bg-white/8 hover:text-white'
                                 )}
                               >
                                 <span className="text-primary-300">{TIPO_ICON[tipo]}</span>
@@ -315,15 +315,22 @@ export function Sidebar({
       </nav>
 
       {/* User info + logout */}
-      <div className="border-t border-primary-600 p-4">
-        <div className="mb-3">
-          <p className="text-sm font-medium text-white truncate">{userName}</p>
-          <p className="text-xs text-primary-200">{ROL_ETIQUETAS[userRole] ?? userRole}</p>
+      <div className="border-t border-primary-600/50 p-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="bg-primary-500/20 rounded-xl p-2 ring-1 ring-primary-500/25 shrink-0">
+            <span className="text-primary-300 text-xs font-bold">
+              {userName.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-white truncate">{userName}</p>
+            <p className="text-xs text-primary-300 truncate">{ROL_ETIQUETAS[userRole] ?? userRole}</p>
+          </div>
         </div>
         <form action={logoutAction}>
           <button
             type="submit"
-            className="flex w-full items-center gap-2 rounded px-3 py-2 text-sm text-primary-200 hover:text-white hover:bg-white/10"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-primary-200 hover:text-white hover:bg-white/8 transition-all duration-150"
           >
             <LogOut className="h-4 w-4" />
             Cerrar sesión

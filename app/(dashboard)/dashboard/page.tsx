@@ -225,23 +225,23 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-2 gap-4">
           <Card>
             <CardContent className="p-4 flex items-center gap-4">
-              <div className="bg-indigo-100 rounded-lg p-2.5">
-                <ShieldCheck className="h-5 w-5 text-indigo-700" />
+              <div className="bg-indigo-500/15 rounded-xl p-2.5">
+                <ShieldCheck className="h-5 w-5 text-indigo-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Seguros cobrados (este mes)</p>
-                <p className="text-xl font-bold text-indigo-700">{formatMoney(totalSeguros)}</p>
+                <p className="text-xl font-bold text-indigo-400">{formatMoney(totalSeguros)}</p>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 flex items-center gap-4">
-              <div className="bg-orange-100 rounded-lg p-2.5">
-                <Percent className="h-5 w-5 text-orange-700" />
+              <div className="bg-orange-500/15 rounded-xl p-2.5">
+                <Percent className="h-5 w-5 text-orange-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Comisiones de apertura (este mes)</p>
-                <p className="text-xl font-bold text-orange-700">{formatMoney(totalComisiones)}</p>
+                <p className="text-xl font-bold text-orange-400">{formatMoney(totalComisiones)}</p>
               </div>
             </CardContent>
           </Card>
@@ -252,23 +252,23 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-green-100 rounded-lg p-2.5">
-              <TrendingUp className="h-5 w-5 text-green-700" />
+            <div className="bg-emerald-500/15 rounded-xl p-2.5">
+              <TrendingUp className="h-5 w-5 text-emerald-400" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Capital en cartera</p>
-              <p className="text-xl font-bold text-green-700">{formatMoney(capitalActivo)}</p>
+              <p className="text-xl font-bold text-emerald-400">{formatMoney(capitalActivo)}</p>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-blue-100 rounded-lg p-2.5">
-              <Archive className="h-5 w-5 text-blue-700" />
+            <div className="bg-blue-500/15 rounded-xl p-2.5">
+              <Archive className="h-5 w-5 text-blue-400" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Créditos concluidos</p>
-              <p className="text-xl font-bold text-blue-700">{liquidadosTotal.toLocaleString('es-MX')}</p>
+              <p className="text-xl font-bold text-blue-400">{liquidadosTotal.toLocaleString('es-MX')}</p>
             </div>
           </CardContent>
         </Card>
@@ -276,12 +276,12 @@ export default async function DashboardPage() {
           <Card>
             <CardContent className="p-4 flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="bg-amber-100 rounded-lg p-2.5">
-                  <CheckSquare className="h-5 w-5 text-amber-700" />
+                <div className="bg-amber-500/15 rounded-xl p-2.5">
+                  <CheckSquare className="h-5 w-5 text-amber-400" />
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Pendientes de aprobación</p>
-                  <p className="text-xl font-bold text-amber-700">{(pendientesAprobacion as number).toLocaleString('es-MX')}</p>
+                  <p className="text-xl font-bold text-amber-400">{(pendientesAprobacion as number).toLocaleString('es-MX')}</p>
                 </div>
               </div>
               {(pendientesAprobacion as number) > 0 && (
@@ -295,8 +295,8 @@ export default async function DashboardPage() {
         {!isDirector && (
           <Card>
             <CardContent className="p-4 flex items-center gap-4">
-              <div className="bg-gray-100 rounded-lg p-2.5">
-                <CheckSquare className="h-5 w-5 text-gray-600" />
+              <div className="bg-slate-500/15 rounded-xl p-2.5">
+                <CheckSquare className="h-5 w-5 text-slate-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Eficiencia hoy</p>
@@ -319,7 +319,7 @@ export default async function DashboardPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-gray-50">
+                  <tr className="border-b border-border/60 bg-muted/40">
                     <th className="text-left px-4 py-2 font-medium text-muted-foreground">Sucursal</th>
                     <th className="text-right px-4 py-2 font-medium text-muted-foreground">Créditos activos</th>
                     <th className="text-right px-4 py-2 font-medium text-muted-foreground">Capital activo</th>
@@ -329,7 +329,7 @@ export default async function DashboardPage() {
                   {branchBreakdown.map((branch) => {
                     const cap = branch.loans.reduce((s, l) => s + Number(l.capital), 0)
                     return (
-                      <tr key={branch.id} className="hover:bg-gray-50">
+                      <tr key={branch.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-2.5 font-medium">{branch.nombre}</td>
                         <td className="px-4 py-2.5 text-right">{branch._count.loans}</td>
                         <td className="px-4 py-2.5 text-right font-semibold">{formatMoney(cap)}</td>
@@ -353,7 +353,7 @@ export default async function DashboardPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-gray-50">
+                  <tr className="border-b border-border/60 bg-muted/40">
                     <th className="text-left px-4 py-2 font-medium text-muted-foreground">Coordinador</th>
                     <th className="text-right px-4 py-2 font-medium text-muted-foreground">Créditos activos</th>
                     <th className="text-right px-4 py-2 font-medium text-muted-foreground">Capital activo</th>
@@ -363,7 +363,7 @@ export default async function DashboardPage() {
                   {coordinadorBreakdown.map((coord) => {
                     const cap = coord.loansCobrador.reduce((s, l) => s + Number(l.capital), 0)
                     return (
-                      <tr key={coord.id} className="hover:bg-gray-50">
+                      <tr key={coord.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-2.5 font-medium">{coord.nombre}</td>
                         <td className="px-4 py-2.5 text-right">{coord.loansCobrador.length}</td>
                         <td className="px-4 py-2.5 text-right font-semibold">{formatMoney(cap)}</td>
@@ -388,7 +388,7 @@ export default async function DashboardPage() {
               <Link
                 key={loan.id}
                 href={`/prestamos/${loan.id}`}
-                className="flex items-center justify-between py-2 border-b last:border-0 hover:bg-gray-50 rounded px-1 transition-colors"
+                className="flex items-center justify-between py-2 border-b border-border/50 last:border-0 hover:bg-muted/30 rounded-xl px-2 transition-colors"
               >
                 <div>
                   <p className="text-sm font-medium">{loan.client.nombreCompleto}</p>

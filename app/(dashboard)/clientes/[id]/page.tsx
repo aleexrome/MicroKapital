@@ -5,9 +5,11 @@ import { ScoreBadge } from '@/components/clients/ScoreBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
 import { formatDate, formatMoney } from '@/lib/utils'
-import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2 } from 'lucide-react'
+import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2, FolderOpen, Users } from 'lucide-react'
 import Link from 'next/link'
+import type { LoanType } from '@prisma/client'
 
 export default async function ClienteExpedientePage({
   params,
@@ -39,6 +41,10 @@ export default async function ClienteExpedientePage({
         include: {
           cobrador: { select: { nombre: true } },
           schedule: { orderBy: { numeroPago: 'asc' }, take: 3 },
+          documents: {
+            orderBy: { createdAt: 'desc' },
+            select: { id: true, tipo: true },
+          },
         },
       },
       payments: {
@@ -153,29 +159,68 @@ export default async function ClienteExpedientePage({
             <div className="space-y-3">
               {client.loans.map((loan) => {
                 const st = statusLabel[loan.estado] ?? { label: loan.estado, variant: 'outline' as const }
+                const tieneAval = (loan.tipo === 'INDIVIDUAL' || loan.tipo === 'FIDUCIARIO') && loan.avalNombre
                 return (
-                  <Link
-                    key={loan.id}
-                    href={`/prestamos/${loan.id}`}
-                    className="block border rounded-lg p-4 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{loan.tipo} · {formatMoney(Number(loan.capital))}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Plazo: {loan.plazo} {loan.tipo === 'AGIL' ? 'días' : 'semanas'} ·
-                          {loan.pagoSemanal ? ` $${Number(loan.pagoSemanal).toFixed(2)}/sem` : ` $${Number(loan.pagoDiario).toFixed(2)}/día`}
-                        </p>
+                  <div key={loan.id} className="border rounded-lg overflow-hidden">
+                    <Link
+                      href={`/prestamos/${loan.id}`}
+                      className="block p-4 hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{loan.tipo} · {formatMoney(Number(loan.capital))}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Plazo: {loan.plazo} {loan.tipo === 'AGIL' ? 'días' : loan.tipo === 'FIDUCIARIO' ? 'quincenas' : 'semanas'} ·
+                            {loan.pagoSemanal ? ` ${formatMoney(Number(loan.pagoSemanal))}/sem` : loan.pagoDiario ? ` ${formatMoney(Number(loan.pagoDiario))}/día` : ` ${formatMoney(Number(loan.pagoQuincenal))}/qna`}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {loan.documents.length} doc{loan.documents.length !== 1 ? 's' : ''} · {formatDate(loan.createdAt)}
+                          </p>
+                        </div>
+                        <Badge variant={st.variant}>{st.label}</Badge>
                       </div>
-                      <Badge variant={st.variant}>{st.label}</Badge>
-                    </div>
-                  </Link>
+                    </Link>
+                    {tieneAval && (
+                      <div className="px-4 pb-3 border-t bg-muted/10">
+                        <div className="flex items-center gap-2 mt-2">
+                          <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <div className="text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">{loan.avalNombre}</span>
+                            {loan.avalRelacion ? ` · ${loan.avalRelacion}` : ''}
+                            {loan.avalTelefono ? ` · ${loan.avalTelefono}` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )
               })}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Expediente digital — documentos por crédito */}
+      {client.loans.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-base font-semibold flex items-center gap-2">
+            <FolderOpen className="h-4 w-4" />
+            Expediente digital
+          </h2>
+          {client.loans.map((loan) => (
+            <div key={loan.id} className="space-y-1">
+              <p className="text-xs text-muted-foreground px-1">
+                {loan.tipo} · {formatMoney(Number(loan.capital))} · {formatDate(loan.createdAt)}
+              </p>
+              <LoanDocumentUpload
+                loanId={loan.id}
+                tipo={loan.tipo as LoanType}
+                readOnly={rol === 'DIRECTOR_COMERCIAL'}
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Historial de pagos */}
       <Card>

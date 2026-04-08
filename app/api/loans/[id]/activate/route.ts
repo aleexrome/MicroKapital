@@ -34,6 +34,36 @@ export async function POST(
     return NextResponse.json({ error: 'El crédito debe estar aprobado por el Director General antes de activarse' }, { status: 400 })
   }
 
+  // Si el DG solicitó documentación, verificar que los docs requeridos estén subidos
+  if (loan.requiereDocumentos) {
+    const REQUERIDOS: Record<string, string[]> = {
+      SOLIDARIO:  ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO', 'FOTO'],
+      INDIVIDUAL: ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO', 'COMPROBANTE_DOMICILIO', 'FOTO', 'PAGARE', 'AVAL_INE'],
+      AGIL:       ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO'],
+      FIDUCIARIO: ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO', 'COMPROBANTE_DOMICILIO', 'FOTO', 'CONTRATO', 'PAGARE', 'AVAL_INE'],
+    }
+    const requeridos = REQUERIDOS[loan.tipo] ?? []
+    if (requeridos.length > 0) {
+      const subidos = await prisma.loanDocument.findMany({
+        where: { loanId: loan.id },
+        select: { tipo: true },
+      })
+      const tiposSubidos = new Set(subidos.map((d) => d.tipo))
+      const faltantes = requeridos.filter((t) => !tiposSubidos.has(t))
+      if (faltantes.length > 0) {
+        const TIPO_LABEL: Record<string, string> = {
+          SOLICITUD: 'Solicitud', INE_FRENTE: 'INE frente', INE_REVERSO: 'INE reverso',
+          COMPROBANTE_DOMICILIO: 'Comprobante de domicilio', FOTO: 'Fotografía',
+          CONTRATO: 'Contrato', PAGARE: 'Pagaré', AVAL_INE: 'INE del aval',
+        }
+        const nombres = faltantes.map((f) => TIPO_LABEL[f] ?? f).join(', ')
+        return NextResponse.json({
+          error: `El Director General solicitó documentación antes de activar. Faltan: ${nombres}`,
+        }, { status: 400 })
+      }
+    }
+  }
+
   const body = await req.json().catch(() => ({}))
   const parsed = activateSchema.safeParse(body)
   const fechaDesembolso = parsed.success && parsed.data.fechaDesembolso

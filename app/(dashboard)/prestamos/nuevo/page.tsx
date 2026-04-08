@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoanCalculator } from '@/components/loans/LoanCalculator'
 import { useToast } from '@/components/ui/use-toast'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, UserCheck, FileText } from 'lucide-react'
 import Link from 'next/link'
 import type { LoanCalculation } from '@/types'
 
@@ -42,6 +42,10 @@ export default function NuevaSolicitudPage() {
   const [tipoGarantia, setTipoGarantia]     = useState<'MUEBLE' | 'INMUEBLE'>('INMUEBLE')
   const [descGarantia, setDescGarantia]     = useState('')
   const [valorGarantia, setValorGarantia]   = useState('')
+  // Aval (INDIVIDUAL y FIDUCIARIO)
+  const [avalNombre, setAvalNombre]         = useState('')
+  const [avalTelefono, setAvalTelefono]     = useState('')
+  const [avalRelacion, setAvalRelacion]     = useState('')
 
   const handleCalc = useCallback((c: LoanCalculation) => setCalc(c), [])
 
@@ -65,6 +69,7 @@ export default function NuevaSolicitudPage() {
       } else if (tipo === 'INDIVIDUAL') {
         body.ciclo = ciclo
         body.tuvoAtraso = tuvoAtraso
+        if (avalNombre) { body.avalNombre = avalNombre; body.avalTelefono = avalTelefono || undefined; body.avalRelacion = avalRelacion || undefined }
       } else if (tipo === 'AGIL') {
         body.clienteIrregular = clienteIrregular
       } else if (tipo === 'FIDUCIARIO') {
@@ -72,6 +77,7 @@ export default function NuevaSolicitudPage() {
         body.tipoGarantia = tipoGarantia
         body.descripcionGarantia = descGarantia || undefined
         body.valorGarantia = valorGarantia ? parseFloat(valorGarantia) : undefined
+        if (avalNombre) { body.avalNombre = avalNombre; body.avalTelefono = avalTelefono || undefined; body.avalRelacion = avalRelacion || undefined }
       }
 
       const res = await fetch('/api/loans', {
@@ -308,6 +314,38 @@ export default function NuevaSolicitudPage() {
               </div>
             )}
 
+            {/* Aval — requerido en INDIVIDUAL y FIDUCIARIO */}
+            {(tipo === 'INDIVIDUAL' || tipo === 'FIDUCIARIO') && (
+              <div className="rounded-xl border border-border/60 bg-secondary/30 p-4 space-y-3">
+                <p className="text-sm font-semibold flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-primary" />
+                  Datos del aval
+                  <span className="text-xs font-normal text-muted-foreground">(garantía personal requerida para este producto)</span>
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="avalNombre">Nombre completo *</Label>
+                    <Input id="avalNombre" value={avalNombre} onChange={(e) => setAvalNombre(e.target.value)} placeholder="Nombre del aval" required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="avalTelefono">Teléfono</Label>
+                    <Input id="avalTelefono" value={avalTelefono} onChange={(e) => setAvalTelefono(e.target.value)} placeholder="10 dígitos" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="avalRelacion">Relación con el cliente</Label>
+                    <select id="avalRelacion" value={avalRelacion} onChange={(e) => setAvalRelacion(e.target.value)}
+                      className="w-full h-10 rounded-xl border border-border/60 bg-secondary/60 px-3 text-sm text-foreground">
+                      <option value="">Seleccionar...</option>
+                      <option value="CONYUGE">Cónyuge</option>
+                      <option value="FAMILIAR">Familiar directo</option>
+                      <option value="CONOCIDO">Conocido / Amigo</option>
+                      <option value="OTRO">Otro</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="notas">Notas (opcional)</Label>
               <Input
@@ -319,6 +357,18 @@ export default function NuevaSolicitudPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Aviso sobre documentos */}
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
+          <FileText className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Documentación requerida</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Una vez enviada la solicitud, podrás subir los documentos del cliente (INE, comprobante de domicilio, fotografía, etc.)
+              directamente desde la pantalla del crédito. El Director General puede solicitar documentos adicionales antes de aprobar.
+            </p>
+          </div>
+        </div>
 
         {/* ── Calculadora ─────────────────────────────────────── */}
         {capitalNum > 0 && (

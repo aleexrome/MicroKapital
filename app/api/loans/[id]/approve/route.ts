@@ -7,6 +7,7 @@ import { z } from 'zod'
 
 const approveSchema = z.object({
   notas: z.string().optional(),
+  requiereDocumentos: z.boolean().optional(),
   contrapropuesta: z.object({
     capital: z.number().positive(),
     tasaInteres: z.number().positive().optional(),
@@ -51,6 +52,7 @@ export async function POST(
   const parsed = approveSchema.safeParse(body)
   const notas = parsed.success ? parsed.data.notas : undefined
   const contrapropuesta = parsed.success ? parsed.data.contrapropuesta : undefined
+  const requiereDocumentos = parsed.success ? (parsed.data.requiereDocumentos ?? false) : false
 
   // Build updated financial fields if Director makes a counteroffer
   let loanFieldUpdates: Record<string, unknown> = {}
@@ -98,6 +100,8 @@ export async function POST(
         estado: 'APPROVED',
         aprobadoPorId: userId,
         aprobadoAt: new Date(),
+        notas: notas ?? null,
+        requiereDocumentos,
         ...loanFieldUpdates,
       },
     })

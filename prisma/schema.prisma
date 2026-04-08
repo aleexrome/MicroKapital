@@ -290,6 +290,8 @@ model Loan {
   valorGarantia       Decimal? @db.Decimal(12, 2)
   // Checklist de documentos (JSON array of {id, label, checked})
   documentChecklist   Json?
+  // DG solicita documentación antes de activar
+  requiereDocumentos  Boolean        @default(false)
   // Seguro de apertura
   seguro              Decimal?       @db.Decimal(12, 2)   // Monto del seguro cobrado
   seguroMetodoPago    PaymentMethod?                      // CASH | TRANSFER

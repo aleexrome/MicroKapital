@@ -22,6 +22,8 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres }: Loan
   const [razonRechazo, setRazonRechazo] = useState('')
   const [nuevoCapital, setNuevoCapital] = useState(capital.toString())
   const [nuevaTasa, setNuevaTasa] = useState(tasaInteres?.toString() ?? '')
+  const [notasDG, setNotasDG] = useState('')
+  const [requiereDocumentos, setRequiereDocumentos] = useState(false)
 
   async function handleApprove(conContrapropuesta = false) {
     setProcessing(true)
@@ -39,6 +41,8 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres }: Loan
           ...(nuevaTasa ? { tasaInteres: parseFloat(nuevaTasa) } : {}),
         }
       }
+      if (notasDG) body.notas = notasDG
+      if (requiereDocumentos) body.requiereDocumentos = true
 
       const res = await fetch(`/api/loans/${loanId}/approve`, {
         method: 'POST',
@@ -172,6 +176,30 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres }: Loan
                 />
               </div>
             )}
+          </div>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-amber-700 mb-1">Notas para el coordinador (opcional)</label>
+              <textarea
+                rows={2}
+                className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white resize-none"
+                placeholder="Indicaciones, condiciones especiales..."
+                value={notasDG}
+                onChange={(e) => setNotasDG(e.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={requiereDocumentos}
+                onChange={(e) => setRequiereDocumentos(e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-xs font-semibold text-amber-800">
+                Requiere documentación antes de activar
+                <span className="font-normal text-amber-700 ml-1">(bloquea activación hasta subir los archivos)</span>
+              </span>
+            </label>
           </div>
           <div className="flex gap-2 pt-1">
             <Button

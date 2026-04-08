@@ -24,6 +24,10 @@ const createLoanSchema = z.object({
   tipoGarantia: z.enum(['MUEBLE', 'INMUEBLE']).optional(),
   descripcionGarantia: z.string().optional(),
   valorGarantia: z.number().positive().optional(),
+  // Aval (INDIVIDUAL y FIDUCIARIO)
+  avalNombre: z.string().optional(),
+  avalTelefono: z.string().optional(),
+  avalRelacion: z.string().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -144,6 +148,9 @@ export async function POST(req: NextRequest) {
         tipoGarantia: data.tipoGarantia ?? null,
         descripcionGarantia: data.descripcionGarantia ?? null,
         valorGarantia: data.valorGarantia ?? null,
+        avalNombre: data.avalNombre ?? null,
+        avalTelefono: data.avalTelefono ?? null,
+        avalRelacion: data.avalRelacion ?? null,
         notas: data.notas ?? null,
       },
     })

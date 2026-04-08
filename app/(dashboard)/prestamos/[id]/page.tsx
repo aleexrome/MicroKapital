@@ -101,6 +101,12 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               <p className="text-sm text-blue-700 font-medium">
                 Crédito aprobado por el Director General. Preséntalo al cliente y actívalo si acepta.
               </p>
+              {loan.requiereDocumentos && (
+                <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-300 flex items-start gap-2">
+                  <span className="text-amber-400 font-bold mt-0.5">⚠</span>
+                  <span>El Director General solicitó documentación completa antes de activar. Sube todos los archivos en la sección de documentos de abajo.</span>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 <LoanActivateButton loanId={loan.id} />
                 <LoanClientRejectButton loanId={loan.id} />

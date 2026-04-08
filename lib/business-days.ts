@@ -96,3 +96,11 @@ export function generarFechasSemanales(fechaInicio: Date, cantidad: number): Dat
   }
   return fechas
 }
+
+export function generarFechasQuincenales(fechaInicio: Date, cantidad: number): Date[] {
+  const fechas: Date[] = []
+  for (let i = 1; i <= cantidad; i++) {
+    fechas.push(addDays(fechaInicio, i * 15))
+  }
+  return fechas
+}

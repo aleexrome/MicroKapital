@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
 import { LoanApprovalActions } from '@/components/loans/LoanApprovalActions'
+import { LoanActivateButton } from '@/components/loans/LoanActivateButton'
+import { LoanRenewButton } from '@/components/loans/LoanRenewButton'
 import { DocumentChecklist } from '@/components/loans/DocumentChecklist'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,6 +20,20 @@ const SCHEDULE_STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'e
   OVERDUE: 'error',
   PARTIAL: 'info',
   ADVANCE: 'success',
+}
+
+// Umbral de pagos para renovación anticipada por producto
+const UMBRAL_RENOVACION: Record<string, number> = {
+  SOLIDARIO:  6,
+  INDIVIDUAL: 9,
+  AGIL:       20,
+}
+
+// Pagos que financia la empresa al renovar
+const PAGOS_FINANCIADOS: Record<string, number> = {
+  SOLIDARIO:  2,
+  INDIVIDUAL: 3,
+  AGIL:       4,
 }
 
 export default async function PrestamoDetallePage({ params }: { params: { id: string } }) {
@@ -40,11 +56,26 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       },
     },
   })
+
   type ChecklistItem = { id: string; label: string; checked: boolean }
 
   if (!loan) notFound()
 
   const pagados = loan.schedule.filter((s) => s.estado === 'PAID').length
+
+  // Determinar si aplica renovación anticipada
+  const umbral = UMBRAL_RENOVACION[loan.tipo]
+  const pagosFinanciados = PAGOS_FINANCIADOS[loan.tipo]
+  const puedeRenovar =
+    loan.estado === 'ACTIVE' &&
+    umbral !== undefined &&
+    pagados >= umbral &&
+    (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE')
+
+  // Roles que pueden activar un crédito APPROVED
+  const puedeActivar =
+    loan.estado === 'APPROVED' &&
+    (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE' || rol === 'SUPER_ADMIN')
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -52,14 +83,27 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         <Button asChild variant="ghost" size="icon">
           <Link href="/prestamos"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
-        <div className="flex-1">
+        <div className="flex-1 space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold">Préstamo {loan.tipo}</h1>
             <ApprovalBadge status={loan.estado as LoanStatus} />
           </div>
+
+          {/* Director General: aprobar/rechazar */}
           {loan.estado === 'PENDING_APPROVAL' && (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') && (
             <LoanApprovalActions loanId={loan.id} />
           )}
+
+          {/* Coordinador / Gerente Zonal: activar crédito ya aprobado */}
+          {puedeActivar && (
+            <div className="pt-1">
+              <p className="text-sm text-blue-700 font-medium mb-2">
+                ✅ Crédito aprobado por el Director General. Actívalo para iniciar el desembolso.
+              </p>
+              <LoanActivateButton loanId={loan.id} />
+            </div>
+          )}
+
           <p className="text-muted-foreground">
             <Link href={`/clientes/${loan.client.id}`} className="hover:underline">
               {loan.client.nombreCompleto}
@@ -73,7 +117,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         <CardHeader><CardTitle className="text-base">Resumen financiero</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           <div><p className="text-muted-foreground">Capital</p><p className="font-bold money">{formatMoney(Number(loan.capital))}</p></div>
-          {Number(loan.comision) > 0 && <div><p className="text-muted-foreground">Comisión (17%)</p><p className="font-bold text-orange-600 money">-{formatMoney(Number(loan.comision))}</p></div>}
+          {Number(loan.comision) > 0 && <div><p className="text-muted-foreground">Comisión</p><p className="font-bold text-orange-600 money">-{formatMoney(Number(loan.comision))}</p></div>}
           <div><p className="text-muted-foreground">Monto entregado</p><p className="font-bold money">{formatMoney(Number(loan.montoReal))}</p></div>
           <div><p className="text-muted-foreground">Interés</p><p className="font-bold money">{formatMoney(Number(loan.interes))}</p></div>
           <div><p className="text-muted-foreground">Total a pagar</p><p className="font-bold text-primary-700 money">{formatMoney(Number(loan.totalPago))}</p></div>
@@ -99,6 +143,28 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         </CardContent>
       </Card>
 
+      {/* Renovación anticipada */}
+      {puedeRenovar && pagosFinanciados && (
+        <LoanRenewButton
+          loanId={loan.id}
+          tipo={loan.tipo as LoanType}
+          pagosRealizados={pagados}
+          umbral={umbral}
+          pagosFinanciados={pagosFinanciados}
+          montoFinanciado={
+            loan.tipo === 'AGIL'
+              ? Number(loan.pagoDiario) * pagosFinanciados
+              : loan.tipo === 'FIDUCIARIO'
+              ? Number(loan.pagoQuincenal) * pagosFinanciados
+              : Number(loan.pagoSemanal) * pagosFinanciados
+          }
+          clientId={loan.client.id}
+          clientNombre={loan.client.nombreCompleto}
+          cobradorId={loan.cobradorId}
+          branchId={loan.branchId}
+        />
+      )}
+
       {/* Checklist de documentos */}
       <DocumentChecklist
         loanId={loan.id}
@@ -106,7 +172,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         savedChecklist={(loan.documentChecklist as ChecklistItem[] | null) ?? null}
       />
 
-      {/* Progreso de pagos */}
+      {/* Calendario de pagos */}
       {loan.schedule.length > 0 && (
         <Card>
           <CardHeader>

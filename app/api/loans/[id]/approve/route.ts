@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
-import { generarFechasSemanales, generarFechasHabiles } from '@/lib/business-days'
 import { createAuditLog } from '@/lib/audit'
 import { z } from 'zod'
 
 const approveSchema = z.object({
   notas: z.string().optional(),
-  fechaDesembolso: z.string().optional(),
 })
 
 export async function POST(
@@ -34,23 +32,20 @@ export async function POST(
 
   const body = await req.json().catch(() => ({}))
   const parsed = approveSchema.safeParse(body)
-  const { notas, fechaDesembolso: fechaStr } = parsed.success ? parsed.data : {}
+  const notas = parsed.success ? parsed.data.notas : undefined
 
-  const fechaDesembolso = fechaStr ? new Date(fechaStr) : new Date()
-
+  // El Director General aprueba → estado APPROVED
+  // El calendario se genera cuando el Coordinador/Gerente activa el crédito
   await prisma.$transaction(async (tx) => {
-    // Actualizar préstamo
     await tx.loan.update({
       where: { id: loan.id },
       data: {
-        estado: 'ACTIVE',
+        estado: 'APPROVED',
         aprobadoPorId: userId,
         aprobadoAt: new Date(),
-        fechaDesembolso,
       },
     })
 
-    // Actualizar registro de aprobación
     await tx.loanApproval.updateMany({
       where: { loanId: loan.id, estado: 'PENDING' },
       data: {
@@ -60,28 +55,6 @@ export async function POST(
         notas: notas ?? null,
       },
     })
-
-    // Generar calendario de pagos
-    let fechas: Date[]
-    if (loan.tipo === 'AGIL') {
-      fechas = generarFechasHabiles(fechaDesembolso, 24)
-    } else {
-      fechas = generarFechasSemanales(fechaDesembolso, loan.plazo)
-    }
-
-    const montoPorPago = loan.tipo === 'AGIL'
-      ? Number(loan.pagoDiario)
-      : Number(loan.pagoSemanal)
-
-    const scheduleData = fechas.map((fecha, idx) => ({
-      loanId: loan.id,
-      numeroPago: idx + 1,
-      fechaVencimiento: fecha,
-      montoEsperado: montoPorPago,
-      estado: 'PENDING' as const,
-    }))
-
-    await tx.paymentSchedule.createMany({ data: scheduleData })
   })
 
   createAuditLog({
@@ -89,8 +62,8 @@ export async function POST(
     accion: 'APPROVE_LOAN',
     tabla: 'Loan',
     registroId: loan.id,
-    valoresNuevos: { estado: 'ACTIVE', aprobadoPorId: userId },
+    valoresNuevos: { estado: 'APPROVED', aprobadoPorId: userId },
   })
 
-  return NextResponse.json({ message: 'Préstamo aprobado y calendario generado' })
+  return NextResponse.json({ message: 'Crédito aprobado — pendiente de activación por el coordinador' })
 }

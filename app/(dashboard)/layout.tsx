@@ -51,11 +51,15 @@ export default async function DashboardLayout({
     if (isDirector || isGerente) {
       // Determinar rango de sucursales visibles
       let branchIds: string[] | undefined
-      if (rol === 'GERENTE_ZONAL') {
+      if (isDirector) {
+        branchIds = undefined // ve todo
+      } else if (rol === 'GERENTE_ZONAL' || rol === 'GERENTE') {
         const z = session.user.zonaBranchIds
-        branchIds = z && z.length > 0 ? z : undefined
-      } else if (rol === 'GERENTE' && branchId) {
-        branchIds = [branchId]
+        if (z && z.length > 0) {
+          branchIds = z          // multi-sucursal definidas en zonaBranchIds
+        } else if (branchId) {
+          branchIds = [branchId] // fallback: solo su sucursal asignada
+        }
       }
 
       const [branches, loanCounts] = await Promise.all([

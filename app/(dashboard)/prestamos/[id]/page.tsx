@@ -161,7 +161,27 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           )}
           <div><p className="text-muted-foreground">Monto entregado</p><p className="font-bold money">{formatMoney(Number(loan.montoReal))}</p></div>
           <div><p className="text-muted-foreground">Interés</p><p className="font-bold money">{formatMoney(Number(loan.interes))}</p></div>
+          {/* Interés por período (int_semanal / ga_semanal / pct_diario) */}
+          <div>
+            <p className="text-muted-foreground">
+              {loan.tipo === 'AGIL' ? 'Interés diario' : loan.tipo === 'FIDUCIARIO' ? 'Interés quincenal' : 'Interés semanal'}
+            </p>
+            <p className="font-bold money">{formatMoney(Number(loan.interes) / loan.plazo)}</p>
+          </div>
           <div><p className="text-muted-foreground">Total a pagar</p><p className="font-bold text-primary-700 money">{formatMoney(Number(loan.totalPago))}</p></div>
+          {/* Saldo vigente: suma de pagos pendientes */}
+          {loan.schedule.some((s) => s.estado !== 'PAID') && (
+            <div>
+              <p className="text-muted-foreground">Saldo vigente</p>
+              <p className="font-bold text-blue-700 money">
+                {formatMoney(
+                  loan.schedule
+                    .filter((s) => s.estado !== 'PAID')
+                    .reduce((sum, s) => sum + Number(s.montoEsperado), 0)
+                )}
+              </p>
+            </div>
+          )}
           <div>
             <p className="text-muted-foreground">
               {loan.tipo === 'AGIL' ? 'Pago diario' : loan.tipo === 'FIDUCIARIO' ? 'Pago quincenal' : 'Pago semanal'}
@@ -174,10 +194,24 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 : formatMoney(Number(loan.pagoSemanal))}
             </p>
           </div>
+          {/* Tasa (pago_por_mil / xc_por_mil) */}
+          {Number(loan.tasaInteres) > 0 && (
+            <div>
+              <p className="text-muted-foreground">Tasa</p>
+              <p className="font-semibold">{Number(loan.tasaInteres).toFixed(4)} x/mil</p>
+            </div>
+          )}
           <div>
             <p className="text-muted-foreground">Plazo</p>
             <p className="font-semibold">{loan.plazo} {loan.tipo === 'AGIL' ? 'días hábiles' : loan.tipo === 'FIDUCIARIO' ? 'quincenas' : 'semanas'}</p>
           </div>
+          {/* Día de cobro (hora_pago) */}
+          {loan.diaPago && (
+            <div>
+              <p className="text-muted-foreground">Día de cobro</p>
+              <p className="font-semibold capitalize">{loan.diaPago.toLowerCase()}</p>
+            </div>
+          )}
           <div><p className="text-muted-foreground">Cobrador</p><p className="font-semibold">{loan.cobrador.nombre}</p></div>
           {loan.fechaDesembolso && <div><p className="text-muted-foreground">Desembolso</p><p className="font-semibold">{formatDate(loan.fechaDesembolso)}</p></div>}
           {loan.aprobadoPor && <div><p className="text-muted-foreground">Aprobado por</p><p className="font-semibold">{loan.aprobadoPor.nombre}</p></div>}

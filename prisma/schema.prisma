@@ -133,6 +133,8 @@ model Branch {
   telefono  String?
   activa    Boolean  @default(true)
   createdAt DateTime @default(now())
+  gerenteId String?
+  gerente   User?    @relation("GerenciadoPor", fields: [gerenteId], references: [id])
 
   users         User[]
   clients       Client[]
@@ -158,20 +160,21 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  clientsManaged   Client[]         @relation("CobradoresClientes")
-  clientUser       Client?          @relation("ClienteUsuario")
-  payments         Payment[]
-  cashRegisters    CashRegister[]
-  ticketsPrinted   Ticket[]
-  auditLogs        AuditLog[]
-  loansApproved    Loan[]           @relation("ApprovedLoans")
-  loansRejected    Loan[]           @relation("RejectedLoans")
-  loansCobrador    Loan[]           @relation("CobradoresLoans")
-  loanGroups       LoanGroup[]
-  approvalReviewer LoanApproval[]   @relation("ReviewerApprovals")
-  approvalRequest  LoanApproval[]   @relation("RequesterApprovals")
-  uploadedDocs     ClientDocument[]
-  scoreEvents      ScoreEvent[]
+  clientsManaged        Client[]         @relation("CobradoresClientes")
+  clientUser            Client?          @relation("ClienteUsuario")
+  payments              Payment[]
+  cashRegisters         CashRegister[]
+  ticketsPrinted        Ticket[]
+  auditLogs             AuditLog[]
+  loansApproved         Loan[]           @relation("ApprovedLoans")
+  loansRejected         Loan[]           @relation("RejectedLoans")
+  loansCobrador         Loan[]           @relation("CobradoresLoans")
+  loanGroups            LoanGroup[]
+  approvalReviewer      LoanApproval[]   @relation("ReviewerApprovals")
+  approvalRequest       LoanApproval[]   @relation("RequesterApprovals")
+  uploadedDocs          ClientDocument[]
+  scoreEvents           ScoreEvent[]
+  sucursalesGestionadas Branch[]         @relation("GerenciadoPor")
 
   @@unique([companyId, email])
 }

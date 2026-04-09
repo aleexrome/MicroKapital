@@ -7,31 +7,30 @@ import { Card, CardContent } from '@/components/ui/card'
 import { CalendarCheck, ChevronRight, CheckCircle2, Building2, User } from 'lucide-react'
 import { esDiaHabil } from '@/lib/business-days'
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Type (inferred from query) ──────────────────────────────────────────────
 
-type ScheduleItem = Prisma.PaymentScheduleGetPayload<{
-  include: {
-    loan: {
-      include: {
-        client: { select: { nombreCompleto: true; telefono: true } }
-        cobrador: { select: { nombre: true } }
-        branch: { select: { nombre: true } }
-      }
-    }
-  }
-}>
-
-type CobradorGroup = {
-  cobradorId: string
-  nombre: string
-  items: ScheduleItem[]
+async function querySchedule(
+  where: Prisma.PaymentScheduleWhereInput
+) {
+  return prisma.paymentSchedule.findMany({
+    where,
+    orderBy: [{ montoEsperado: 'desc' }],
+    include: {
+      loan: {
+        include: {
+          client: { select: { nombreCompleto: true, telefono: true } },
+          cobrador: { select: { nombre: true } },
+          branch: { select: { nombre: true } },
+        },
+      },
+    },
+  })
 }
 
-type BranchGroup = {
-  branchId: string
-  nombre: string
-  coordinadores: CobradorGroup[]
-}
+type ScheduleItem = Awaited<ReturnType<typeof querySchedule>>[number]
+
+type CobradorGroup = { cobradorId: string; nombre: string; items: ScheduleItem[] }
+type BranchGroup   = { branchId: string;   nombre: string; coordinadores: CobradorGroup[] }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -39,9 +38,7 @@ function groupByCobrador(items: ScheduleItem[]): CobradorGroup[] {
   const map = new Map<string, CobradorGroup>()
   for (const s of items) {
     const id = s.loan.cobradorId
-    if (!map.has(id)) {
-      map.set(id, { cobradorId: id, nombre: s.loan.cobrador.nombre, items: [] })
-    }
+    if (!map.has(id)) map.set(id, { cobradorId: id, nombre: s.loan.cobrador.nombre, items: [] })
     map.get(id)!.items.push(s)
   }
   return Array.from(map.values())
@@ -56,7 +53,7 @@ function groupByBranch(items: ScheduleItem[]): BranchGroup[] {
   }
   return Array.from(map.entries()).map(([branchId, bItems]) => ({
     branchId,
-    nombre: bItems[0].loan.branch.nombre,
+    nombre: bItems[0]!.loan.branch.nombre,
     coordinadores: groupByCobrador(bItems),
   }))
 }
@@ -67,7 +64,7 @@ export default async function PactadosPage() {
   const session = await getSession()
   if (!session?.user) return null
 
-  const { companyId, branchId, rol, email } = session.user
+  const { companyId, branchId: _branchId, rol, email, id: userId } = session.user
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -75,46 +72,39 @@ export default async function PactadosPage() {
   tomorrow.setDate(tomorrow.getDate() + 1)
 
   const loanFilter: Prisma.LoanWhereInput = { estado: 'ACTIVE' }
+  let isDirector = false
 
   if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: email! },
-    })
-    if (!cobrador) return null
-    loanFilter.cobradorId = cobrador.id
+    const me = await prisma.user.findFirst({ where: { companyId: companyId!, email: email! } })
+    if (!me) return null
+    loanFilter.cobradorId = me.id
   } else if (rol === 'GERENTE') {
-    if (branchId) loanFilter.branchId = branchId
-    else loanFilter.companyId = companyId!
+    // Sucursales que gestiona este gerente (por gerenteId en Branch)
+    const managed = await prisma.branch.findMany({
+      where: { gerenteId: userId },
+      select: { id: true },
+    })
+    if (managed.length > 0) {
+      loanFilter.branchId = { in: managed.map((b) => b.id) }
+    } else {
+      // Director: sin sucursales asignadas → ve toda la empresa
+      loanFilter.companyId = companyId!
+      isDirector = true
+    }
   }
 
-  const schedule = await prisma.paymentSchedule.findMany({
-    where: {
-      loan: loanFilter,
-      fechaVencimiento: { gte: today, lt: tomorrow },
-    },
-    orderBy: [{ montoEsperado: 'desc' }],
-    include: {
-      loan: {
-        include: {
-          client: { select: { nombreCompleto: true, telefono: true } },
-          cobrador: { select: { nombre: true } },
-          branch: { select: { nombre: true } },
-        },
-      },
-    },
+  const schedule = await querySchedule({
+    loan: loanFilter,
+    fechaVencimiento: { gte: today, lt: tomorrow },
   })
 
-  const cobrados = schedule.filter((s) => s.estado === 'PAID')
+  const cobrados  = schedule.filter((s) => s.estado === 'PAID')
   const pendientes = schedule.filter((s) => s.estado !== 'PAID')
-  const avance =
-    schedule.length > 0 ? Math.round((cobrados.length / schedule.length) * 100) : 0
+  const avance = schedule.length > 0 ? Math.round((cobrados.length / schedule.length) * 100) : 0
   const isHabil = esDiaHabil(today)
 
-  const isDirector = rol === 'GERENTE' && !branchId
-  const isGerente = rol === 'GERENTE' && !!branchId
-
-  const byBranch = isDirector ? groupByBranch(schedule) : []
-  const byCobrador = isGerente ? groupByCobrador(schedule) : []
+  const byBranch   = isDirector ? groupByBranch(schedule) : []
+  const byCobrador = (!isDirector && rol === 'GERENTE') ? groupByCobrador(schedule) : []
 
   return (
     <div className="p-4 space-y-5">
@@ -153,7 +143,7 @@ export default async function PactadosPage() {
         </div>
       )}
 
-      {/* COORDINADOR — lista plana propia */}
+      {/* COORDINADOR — lista plana */}
       {rol === 'COBRADOR' && schedule.length > 0 && (
         <div className="space-y-4">
           {pendientes.length > 0 && (
@@ -162,9 +152,7 @@ export default async function PactadosPage() {
                 Pendientes ({pendientes.length})
               </h2>
               <div className="space-y-2">
-                {pendientes.map((s) => (
-                  <PagoCard key={s.id} item={s} />
-                ))}
+                {pendientes.map((s) => <PagoCard key={s.id} item={s} />)}
               </div>
             </section>
           )}
@@ -174,9 +162,7 @@ export default async function PactadosPage() {
                 Cobrados ({cobrados.length})
               </h2>
               <div className="space-y-2">
-                {cobrados.map((s) => (
-                  <PagoCard key={s.id} item={s} paid />
-                ))}
+                {cobrados.map((s) => <PagoCard key={s.id} item={s} paid />)}
               </div>
             </section>
           )}
@@ -184,11 +170,9 @@ export default async function PactadosPage() {
       )}
 
       {/* GERENTE — agrupado por coordinador */}
-      {isGerente && schedule.length > 0 && (
+      {rol === 'GERENTE' && !isDirector && schedule.length > 0 && (
         <div className="space-y-6">
-          {byCobrador.map((group) => (
-            <CobradorSection key={group.cobradorId} group={group} />
-          ))}
+          {byCobrador.map((g) => <CobradorSection key={g.cobradorId} group={g} />)}
         </div>
       )}
 
@@ -197,23 +181,16 @@ export default async function PactadosPage() {
         <div className="space-y-8">
           {byBranch.map((branch) => {
             const total = branch.coordinadores.reduce((n, c) => n + c.items.length, 0)
-            const done = branch.coordinadores.reduce(
-              (n, c) => n + c.items.filter((s) => s.estado === 'PAID').length,
-              0
-            )
+            const done  = branch.coordinadores.reduce((n, c) => n + c.items.filter((s) => s.estado === 'PAID').length, 0)
             return (
               <div key={branch.branchId}>
                 <div className="flex items-center gap-2 pb-1 border-b border-gray-200 mb-3">
                   <Building2 className="h-4 w-4 text-primary-600" />
                   <h2 className="text-base font-bold text-gray-900">{branch.nombre}</h2>
-                  <span className="text-xs text-muted-foreground ml-auto">
-                    {done}/{total} cobrados
-                  </span>
+                  <span className="text-xs text-muted-foreground ml-auto">{done}/{total} cobrados</span>
                 </div>
                 <div className="space-y-5 pl-2">
-                  {branch.coordinadores.map((coord) => (
-                    <CobradorSection key={coord.cobradorId} group={coord} />
-                  ))}
+                  {branch.coordinadores.map((c) => <CobradorSection key={c.cobradorId} group={c} />)}
                 </div>
               </div>
             )
@@ -227,7 +204,7 @@ export default async function PactadosPage() {
 // ─── Components ──────────────────────────────────────────────────────────────
 
 function CobradorSection({ group }: { group: CobradorGroup }) {
-  const cobrados = group.items.filter((s) => s.estado === 'PAID')
+  const cobrados  = group.items.filter((s) => s.estado === 'PAID')
   const pendientes = group.items.filter((s) => s.estado !== 'PAID')
   return (
     <div className="space-y-2">
@@ -239,19 +216,15 @@ function CobradorSection({ group }: { group: CobradorGroup }) {
         </span>
       </div>
       <div className="space-y-2">
-        {pendientes.map((s) => (
-          <PagoCard key={s.id} item={s} />
-        ))}
-        {cobrados.map((s) => (
-          <PagoCard key={s.id} item={s} paid />
-        ))}
+        {pendientes.map((s) => <PagoCard key={s.id} item={s} />)}
+        {cobrados.map((s) => <PagoCard key={s.id} item={s} paid />)}
       </div>
     </div>
   )
 }
 
 function PagoCard({ item, paid = false }: { item: ScheduleItem; paid?: boolean }) {
-  const monto = item.montoEsperado.toNumber()
+  const monto = Number(item.montoEsperado)
 
   if (paid) {
     return (

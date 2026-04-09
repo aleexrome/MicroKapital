@@ -54,11 +54,18 @@ export default async function DashboardLayout({
       if (isDirector) {
         branchIds = undefined // ve todo
       } else if (rol === 'GERENTE_ZONAL' || rol === 'GERENTE') {
-        const z = session.user.zonaBranchIds
-        if (z && z.length > 0) {
-          branchIds = z          // multi-sucursal definidas en zonaBranchIds
+        // Leer zonaBranchIds directo de DB (más confiable que el JWT)
+        const dbUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { zonaBranchIds: true },
+        })
+        const z = Array.isArray(dbUser?.zonaBranchIds) && dbUser.zonaBranchIds.length > 0
+          ? dbUser.zonaBranchIds as string[]
+          : null
+        if (z) {
+          branchIds = z
         } else if (branchId) {
-          branchIds = [branchId] // fallback: solo su sucursal asignada
+          branchIds = [branchId]
         }
       }
 

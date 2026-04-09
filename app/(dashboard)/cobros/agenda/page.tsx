@@ -2,7 +2,6 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Calendar, ChevronRight } from 'lucide-react'
 import { esDiaHabil } from '@/lib/business-days'
@@ -11,32 +10,40 @@ export default async function AgendaPage() {
   const session = await getSession()
   if (!session?.user) return null
 
-  const { companyId, branchId } = session.user
-
-  // Obtener ID del cobrador actual
-  const cobrador = await prisma.user.findFirst({
-    where: { companyId: companyId!, email: session.user.email! },
-  })
-
-  if (!cobrador) return null
+  const { companyId, branchId, rol, email } = session.user
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
 
-  // Agenda: pagos vencidos + de hoy del cobrador
+  // Build loan filter based on role
+  type LoanFilter = {
+    estado: string
+    cobradorId?: string
+    branchId?: string
+    companyId?: string
+  }
+  const loanFilter: LoanFilter = { estado: 'ACTIVE' }
+
+  if (rol === 'COBRADOR') {
+    const cobrador = await prisma.user.findFirst({
+      where: { companyId: companyId!, email: email! },
+    })
+    if (!cobrador) return null
+    loanFilter.cobradorId = cobrador.id
+  } else if (rol === 'GERENTE') {
+    if (branchId) loanFilter.branchId = branchId
+    else loanFilter.companyId = companyId!
+  }
+
+  // Agenda: ONLY payments from previous days (strictly before today)
   const schedule = await prisma.paymentSchedule.findMany({
     where: {
-      loan: {
-        cobradorId: cobrador.id,
-        estado: 'ACTIVE',
-      },
+      loan: loanFilter,
       estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
-      fechaVencimiento: { lte: tomorrow },
+      fechaVencimiento: { lt: today },
     },
     orderBy: [
-      { estado: 'asc' }, // OVERDUE primero alfabéticamente
+      { fechaVencimiento: 'asc' }, // oldest first
       { montoEsperado: 'desc' },
     ],
     include: {
@@ -48,14 +55,6 @@ export default async function AgendaPage() {
     },
   })
 
-  // Separar vencidos vs. de hoy
-  const vencidos = schedule.filter(
-    (s) => s.estado === 'OVERDUE' || s.fechaVencimiento < today
-  )
-  const dehoy = schedule.filter(
-    (s) => s.estado !== 'OVERDUE' && s.fechaVencimiento >= today
-  )
-
   const totalEsperado = schedule.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
   const isHabil = esDiaHabil(today)
 
@@ -64,46 +63,33 @@ export default async function AgendaPage() {
       <div>
         <h1 className="text-xl font-bold text-gray-900">Agenda de cobro</h1>
         <p className="text-sm text-muted-foreground">
+          Pagos vencidos de días anteriores ·{' '}
           {formatDate(today, "EEEE d 'de' MMMM")} ·{' '}
           {isHabil ? 'Día hábil' : 'No hábil'}
         </p>
       </div>
 
-      {/* Resumen del día */}
+      {/* Resumen */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-primary-50 rounded-lg p-3">
-          <p className="text-xs text-primary-600 font-medium">Por cobrar</p>
-          <p className="text-lg font-bold text-primary-800 money">{formatMoney(totalEsperado)}</p>
+        <div className="bg-red-50 rounded-lg p-3">
+          <p className="text-xs text-red-600 font-medium">Por cobrar (vencido)</p>
+          <p className="text-lg font-bold text-red-800 money">{formatMoney(totalEsperado)}</p>
         </div>
         <div className="bg-yellow-50 rounded-lg p-3">
-          <p className="text-xs text-yellow-600 font-medium">Cobros</p>
+          <p className="text-xs text-yellow-600 font-medium">Clientes con deuda</p>
           <p className="text-lg font-bold text-yellow-800">{schedule.length} clientes</p>
         </div>
       </div>
 
-      {/* Vencidos */}
-      {vencidos.length > 0 && (
+      {/* Lista de vencidos */}
+      {schedule.length > 0 && (
         <section>
-          <h2 className="text-sm font-semibold text-red-600 mb-2 flex items-center gap-1">
-            🔴 Vencidos ({vencidos.length})
+          <h2 className="text-sm font-semibold text-red-600 mb-2">
+            Pagos vencidos ({schedule.length})
           </h2>
           <div className="space-y-2">
-            {vencidos.map((s) => (
-              <AgendaItem key={s.id} schedule={s} variant="overdue" />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* De hoy */}
-      {dehoy.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-yellow-600 mb-2 flex items-center gap-1">
-            🟡 Hoy ({dehoy.length})
-          </h2>
-          <div className="space-y-2">
-            {dehoy.map((s) => (
-              <AgendaItem key={s.id} schedule={s} variant="today" />
+            {schedule.map((s) => (
+              <AgendaItem key={s.id} schedule={s} />
             ))}
           </div>
         </section>
@@ -112,7 +98,7 @@ export default async function AgendaPage() {
       {schedule.length === 0 && (
         <div className="text-center py-12">
           <Calendar className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">Sin cobros pendientes para hoy</p>
+          <p className="text-muted-foreground">Sin pagos vencidos pendientes</p>
         </div>
       )}
     </div>
@@ -121,11 +107,11 @@ export default async function AgendaPage() {
 
 function AgendaItem({
   schedule,
-  variant,
 }: {
   schedule: {
     id: string
     numeroPago: number
+    fechaVencimiento: Date
     montoEsperado: number | { toNumber: () => number }
     loan: {
       plazo: number
@@ -133,22 +119,26 @@ function AgendaItem({
       client: { nombreCompleto: string; telefono: string | null }
     }
   }
-  variant: 'overdue' | 'today'
 }) {
-  const monto = typeof schedule.montoEsperado === 'number'
-    ? schedule.montoEsperado
-    : (schedule.montoEsperado as { toNumber: () => number }).toNumber()
+  const monto =
+    typeof schedule.montoEsperado === 'number'
+      ? schedule.montoEsperado
+      : (schedule.montoEsperado as { toNumber: () => number }).toNumber()
 
   return (
     <Link href={`/cobros/capturar/${schedule.id}`}>
-      <Card className={`border-l-4 ${variant === 'overdue' ? 'border-l-red-500' : 'border-l-yellow-400'}`}>
+      <Card className="border-l-4 border-l-red-500">
         <CardContent className="flex items-center justify-between p-4">
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-gray-900 truncate">{schedule.loan.client.nombreCompleto}</p>
+            <p className="font-medium text-gray-900 truncate">
+              {schedule.loan.client.nombreCompleto}
+            </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Pago {schedule.numeroPago} de {schedule.loan.plazo} ·{' '}
-              {schedule.loan.tipo}
+              Pago {schedule.numeroPago} de {schedule.loan.plazo} · {schedule.loan.tipo}
               {schedule.loan.client.telefono && ` · ${schedule.loan.client.telefono}`}
+            </p>
+            <p className="text-xs text-red-500 mt-0.5">
+              Venció el {formatDate(schedule.fechaVencimiento, "d 'de' MMMM")}
             </p>
           </div>
           <div className="flex items-center gap-2 ml-3">

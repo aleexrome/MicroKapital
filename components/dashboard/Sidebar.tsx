@@ -11,6 +11,7 @@ import {
   CreditCard,
   ClipboardCheck,
   CalendarDays,
+  ClipboardList,
   History,
   Wallet,
   Ticket,
@@ -54,10 +55,16 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['GERENTE'],
   },
   {
+    href: '/cobros/pactados',
+    label: 'Pactados del día',
+    icon: <ClipboardList className="h-5 w-5" />,
+    roles: ['GERENTE', 'COBRADOR'],
+  },
+  {
     href: '/cobros/agenda',
-    label: 'Agenda del día',
+    label: 'Agenda',
     icon: <CalendarDays className="h-5 w-5" />,
-    roles: ['COBRADOR'],
+    roles: ['GERENTE', 'COBRADOR'],
   },
   {
     href: '/cobros/historial',

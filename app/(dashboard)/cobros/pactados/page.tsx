@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import Link from 'next/link'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -18,13 +19,7 @@ export default async function PactadosPage() {
   tomorrow.setDate(tomorrow.getDate() + 1)
 
   // Build loan filter based on role
-  type LoanFilter = {
-    estado: string
-    cobradorId?: string
-    branchId?: string
-    companyId?: string
-  }
-  const loanFilter: LoanFilter = { estado: 'ACTIVE' }
+  const loanFilter: Prisma.LoanWhereInput = { estado: 'ACTIVE' }
 
   if (rol === 'COBRADOR') {
     const cobrador = await prisma.user.findFirst({
@@ -80,7 +75,7 @@ export default async function PactadosPage() {
           {cobrados.length > 0 && (
             <p className="text-xs text-green-600 money">
               {formatMoney(
-                cobrados.reduce((sum, s) => sum + Number(s.montoPagado), 0)
+                cobrados.reduce((sum: number, s) => sum + Number(s.montoPagado), 0)
               )}
             </p>
           )}

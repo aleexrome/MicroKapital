@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import Link from 'next/link'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,13 +17,7 @@ export default async function AgendaPage() {
   today.setHours(0, 0, 0, 0)
 
   // Build loan filter based on role
-  type LoanFilter = {
-    estado: string
-    cobradorId?: string
-    branchId?: string
-    companyId?: string
-  }
-  const loanFilter: LoanFilter = { estado: 'ACTIVE' }
+  const loanFilter: Prisma.LoanWhereInput = { estado: 'ACTIVE' }
 
   if (rol === 'COBRADOR') {
     const cobrador = await prisma.user.findFirst({
@@ -55,7 +50,7 @@ export default async function AgendaPage() {
     },
   })
 
-  const totalEsperado = schedule.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
+  const totalEsperado = schedule.reduce((sum: number, s) => sum + Number(s.montoEsperado), 0)
   const isHabil = esDiaHabil(today)
 
   return (

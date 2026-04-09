@@ -94,7 +94,7 @@ export default async function AgendaPage({
       {/* Header + date picker */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Agenda de Cobros</h1>
+          <h1 className="text-xl font-bold text-gray-900">Cobranza</h1>
           <p className="text-sm text-muted-foreground">
             {formatDate(selectedDate, "EEEE d 'de' MMMM")} · {isHabil ? 'Día hábil' : 'No hábil'}
           </p>

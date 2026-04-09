@@ -1,271 +1,376 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
-import { Prisma } from '@prisma/client'
+import { redirect } from 'next/navigation'
+import { formatMoney } from '@/lib/utils'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { CheckCircle2, Clock, AlertCircle, CalendarDays, Building2, UserCheck, XCircle } from 'lucide-react'
 import Link from 'next/link'
-import { formatMoney, formatDate } from '@/lib/utils'
-import { Card, CardContent } from '@/components/ui/card'
-import { CalendarCheck, ChevronRight, CheckCircle2, Building2, User } from 'lucide-react'
-import { esDiaHabil } from '@/lib/business-days'
+import { AgendaDatePicker } from '@/components/cobros/AgendaDatePicker'
 
-// ─── Type (inferred from query) ──────────────────────────────────────────────
+function parseDate(dateStr?: string): Date {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }
+  return new Date(dateStr + 'T00:00:00')
+}
 
-async function querySchedule(
-  where: Prisma.PaymentScheduleWhereInput
-) {
-  return prisma.paymentSchedule.findMany({
-    where,
-    orderBy: [{ montoEsperado: 'desc' }],
-    include: {
+function toYMD(d: Date) {
+  return d.toISOString().split('T')[0]
+}
+
+export default async function PactadosDiaPage({
+  searchParams,
+}: {
+  searchParams: { branchId?: string; fecha?: string }
+}) {
+  const session = await getSession()
+  if (!session?.user) redirect('/login')
+
+  const { rol, companyId, branchId: myBranchId } = session.user
+
+  const isDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
+  const isGerente  = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
+
+  if (!isDirector && !isGerente) redirect('/cobros/agenda')
+
+  // ── Date ────────────────────────────────────────────────────────────────────
+  const selectedDate = parseDate(searchParams.fecha)
+  const nextDay = new Date(selectedDate)
+  nextDay.setDate(nextDay.getDate() + 1)
+  const fechaStr = toYMD(selectedDate)
+  const isToday = fechaStr === toYMD(new Date())
+
+  // ── Branch scope ─────────────────────────────────────────────────────────────
+  let allowedBranchIds: string[] | undefined
+  if (rol === 'GERENTE' && myBranchId) {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : [myBranchId]
+    allowedBranchIds = branchIds
+  } else if (rol === 'GERENTE_ZONAL') {
+    const z = session.user.zonaBranchIds
+    allowedBranchIds = z && z.length > 0 ? z : undefined
+  }
+
+  const selectedBranch = isDirector ? (searchParams.branchId || null) : (myBranchId || null)
+
+  // Fetch branches for filter dropdown (directors only)
+  const branches = isDirector
+    ? await prisma.branch.findMany({
+        where: { companyId: companyId!, activa: true },
+        select: { id: true, nombre: true },
+        orderBy: { nombre: 'asc' },
+      })
+    : []
+
+  // ── Loan scope ───────────────────────────────────────────────────────────────
+  const loanWhere: Record<string, unknown> = {
+    estado: 'ACTIVE',
+    companyId: companyId!,
+  }
+  if (selectedBranch) {
+    loanWhere.branchId = selectedBranch
+  } else if (allowedBranchIds) {
+    loanWhere.branchId = { in: allowedBranchIds }
+  }
+
+  // ── Fetch schedules due on the selected date ──────────────────────────────────
+  const schedules = await prisma.paymentSchedule.findMany({
+    where: {
+      fechaVencimiento: { gte: selectedDate, lt: nextDay },
+      loan: loanWhere,
+    },
+    select: {
+      id: true,
+      numeroPago: true,
+      montoEsperado: true,
+      estado: true,
       loan: {
-        include: {
-          client: { select: { nombreCompleto: true, telefono: true } },
-          cobrador: { select: { nombre: true } },
-          branch: { select: { nombre: true } },
+        select: {
+          id: true,
+          tipo: true,
+          plazo: true,
+          branchId: true,
+          branch: { select: { id: true, nombre: true } },
+          cobradorId: true,
+          cobrador: { select: { id: true, nombre: true } },
+          client: { select: { id: true, nombreCompleto: true, telefono: true } },
+          loanGroup: { select: { id: true, nombre: true } },
         },
       },
+      // Include ALL payments for this schedule (not just those made on selected date)
+      payments: {
+        select: {
+          id: true,
+          monto: true,
+          metodoPago: true,
+          fechaHora: true,
+          cobrador: { select: { nombre: true } },
+        },
+        orderBy: { fechaHora: 'asc' },
+        take: 1,
+      },
     },
+    orderBy: [{ loan: { branch: { nombre: 'asc' } } }, { loan: { cobrador: { nombre: 'asc' } } }],
   })
-}
 
-type ScheduleItem = Awaited<ReturnType<typeof querySchedule>>[number]
+  // ── Group: branchId → cobradorId → schedules ─────────────────────────────────
+  type ScheduleRow = (typeof schedules)[number]
 
-type CobradorGroup = { cobradorId: string; nombre: string; items: ScheduleItem[] }
-type BranchGroup   = { branchId: string;   nombre: string; coordinadores: CobradorGroup[] }
+  const branchMap: Record<string, {
+    branchNombre: string
+    cobradores: Record<string, { cobradorNombre: string; rows: ScheduleRow[] }>
+  }> = {}
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function groupByCobrador(items: ScheduleItem[]): CobradorGroup[] {
-  const map = new Map<string, CobradorGroup>()
-  for (const s of items) {
-    const id = s.loan.cobradorId
-    if (!map.has(id)) map.set(id, { cobradorId: id, nombre: s.loan.cobrador.nombre, items: [] })
-    map.get(id)!.items.push(s)
-  }
-  return Array.from(map.values())
-}
-
-function groupByBranch(items: ScheduleItem[]): BranchGroup[] {
-  const map = new Map<string, ScheduleItem[]>()
-  for (const s of items) {
+  for (const s of schedules) {
     const bId = s.loan.branchId
-    if (!map.has(bId)) map.set(bId, [])
-    map.get(bId)!.push(s)
-  }
-  return Array.from(map.entries()).map(([branchId, bItems]) => ({
-    branchId,
-    nombre: bItems[0]!.loan.branch.nombre,
-    coordinadores: groupByCobrador(bItems),
-  }))
-}
-
-// ─── Page ────────────────────────────────────────────────────────────────────
-
-export default async function PactadosPage() {
-  const session = await getSession()
-  if (!session?.user) return null
-
-  const { companyId, branchId: _branchId, rol, email, id: userId } = session.user
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-
-  const loanFilter: Prisma.LoanWhereInput = { estado: 'ACTIVE' }
-  let isDirector = false
-
-  if (rol === 'COBRADOR') {
-    const me = await prisma.user.findFirst({ where: { companyId: companyId!, email: email! } })
-    if (!me) return null
-    loanFilter.cobradorId = me.id
-  } else if (rol === 'GERENTE') {
-    // Sucursales que gestiona este gerente (por gerenteId en Branch)
-    const managed = await prisma.branch.findMany({
-      where: { gerenteId: userId },
-      select: { id: true },
-    })
-    if (managed.length > 0) {
-      loanFilter.branchId = { in: managed.map((b) => b.id) }
-    } else {
-      // Director: sin sucursales asignadas → ve toda la empresa
-      loanFilter.companyId = companyId!
-      isDirector = true
+    const cId = s.loan.cobradorId
+    if (!branchMap[bId]) {
+      branchMap[bId] = { branchNombre: s.loan.branch.nombre, cobradores: {} }
     }
+    if (!branchMap[bId].cobradores[cId]) {
+      branchMap[bId].cobradores[cId] = { cobradorNombre: s.loan.cobrador.nombre, rows: [] }
+    }
+    branchMap[bId].cobradores[cId].rows.push(s)
   }
 
-  const schedule = await querySchedule({
-    loan: loanFilter,
-    fechaVencimiento: { gte: today, lt: tomorrow },
+  // ── Totals ───────────────────────────────────────────────────────────────────
+  const totalPactados  = schedules.length
+  const cobradosRows   = schedules.filter((s) => s.payments.length > 0)
+  const pendientesRows = schedules.filter((s) => s.payments.length === 0)
+  const montoCobrado   = cobradosRows.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
+  const montoPendiente = pendientesRows.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
+  const avance = totalPactados > 0 ? Math.round((cobradosRows.length / totalPactados) * 100) : 0
+
+  // ── Date label ────────────────────────────────────────────────────────────────
+  const dateLabel = selectedDate.toLocaleDateString('es-MX', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   })
-
-  const cobrados  = schedule.filter((s) => s.estado === 'PAID')
-  const pendientes = schedule.filter((s) => s.estado !== 'PAID')
-  const avance = schedule.length > 0 ? Math.round((cobrados.length / schedule.length) * 100) : 0
-  const isHabil = esDiaHabil(today)
-
-  const byBranch   = isDirector ? groupByBranch(schedule) : []
-  const byCobrador = (!isDirector && rol === 'GERENTE') ? groupByCobrador(schedule) : []
 
   return (
-    <div className="p-4 space-y-5">
+    <div className="p-6 space-y-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Pactados del día</h1>
-        <p className="text-sm text-muted-foreground">
-          {formatDate(today, "EEEE d 'de' MMMM")} · {isHabil ? 'Día hábil' : 'No hábil'}
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <CalendarDays className="h-5 w-5 text-primary-700" />
+            <h1 className="text-2xl font-bold text-gray-900">Agenda de Cobros</h1>
+          </div>
+          <p className="text-muted-foreground text-sm capitalize">{dateLabel}</p>
+        </div>
+        <AgendaDatePicker
+          fecha={fechaStr}
+          baseHref="/cobros/pactados"
+          extraParams={selectedBranch ? { branchId: selectedBranch } : {}}
+        />
       </div>
 
-      {/* Métricas globales */}
+      {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-gray-50 rounded-lg p-3">
-          <p className="text-xs text-gray-500 font-medium">Pactados</p>
-          <p className="text-lg font-bold text-gray-800">{schedule.length}</p>
-        </div>
-        <div className="bg-green-50 rounded-lg p-3">
-          <p className="text-xs text-green-600 font-medium">Cobrados</p>
-          <p className="text-lg font-bold text-green-800">{cobrados.length}</p>
-        </div>
-        <div className="bg-yellow-50 rounded-lg p-3">
-          <p className="text-xs text-yellow-600 font-medium">Pendientes</p>
-          <p className="text-lg font-bold text-yellow-800">{pendientes.length}</p>
-        </div>
-        <div className="bg-blue-50 rounded-lg p-3">
-          <p className="text-xs text-blue-600 font-medium">Avance</p>
-          <p className="text-lg font-bold text-blue-800">{avance}%</p>
-        </div>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Pactados</p>
+            <p className="text-2xl font-bold text-gray-900">{totalPactados}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-green-200">
+          <CardContent className="p-4">
+            <p className="text-xs text-green-600">Cobrados</p>
+            <p className="text-2xl font-bold text-green-700">{cobradosRows.length}</p>
+            <p className="text-xs text-green-600 font-medium">{formatMoney(montoCobrado)}</p>
+          </CardContent>
+        </Card>
+        <Card className={pendientesRows.length > 0 ? 'border-amber-200' : ''}>
+          <CardContent className="p-4">
+            <p className={`text-xs ${pendientesRows.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+              {isToday ? 'Pendientes' : 'Sin cobrar'}
+            </p>
+            <p className={`text-2xl font-bold ${pendientesRows.length > 0 ? 'text-amber-700' : 'text-gray-500'}`}>
+              {pendientesRows.length}
+            </p>
+            {pendientesRows.length > 0 && (
+              <p className="text-xs text-amber-600 font-medium">{formatMoney(montoPendiente)}</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Avance</p>
+            <p className={`text-2xl font-bold ${avance === 100 ? 'text-green-700' : avance >= 80 ? 'text-blue-700' : 'text-gray-900'}`}>
+              {avance}%
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
-      {schedule.length === 0 && (
-        <div className="text-center py-12">
-          <CalendarCheck className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">No hay pagos programados para hoy</p>
+      {/* Branch filter (directors only) */}
+      {isDirector && branches.length > 0 && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-sm text-muted-foreground">Sucursal:</span>
+          <Link
+            href={`/cobros/pactados?fecha=${fechaStr}`}
+            className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+              !selectedBranch
+                ? 'bg-primary-700 text-white border-primary-700'
+                : 'border-gray-300 hover:border-primary-400 text-gray-700'
+            }`}
+          >
+            Todas
+          </Link>
+          {branches.map((b) => (
+            <Link
+              key={b.id}
+              href={`/cobros/pactados?fecha=${fechaStr}&branchId=${b.id}`}
+              className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                selectedBranch === b.id
+                  ? 'bg-primary-700 text-white border-primary-700'
+                  : 'border-gray-300 hover:border-primary-400 text-gray-700'
+              }`}
+            >
+              {b.nombre}
+            </Link>
+          ))}
         </div>
       )}
 
-      {/* COORDINADOR — lista plana */}
-      {rol === 'COBRADOR' && schedule.length > 0 && (
-        <div className="space-y-4">
-          {pendientes.length > 0 && (
-            <section>
-              <h2 className="text-sm font-semibold text-yellow-600 mb-2">
-                Pendientes ({pendientes.length})
-              </h2>
-              <div className="space-y-2">
-                {pendientes.map((s) => <PagoCard key={s.id} item={s} />)}
-              </div>
-            </section>
+      {/* Empty state */}
+      {Object.keys(branchMap).length === 0 && (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <CalendarDays className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p>No hay pagos programados para este día{selectedBranch ? ' en esta sucursal' : ''}.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Branch → Cobrador → Clients */}
+      {Object.entries(branchMap).map(([bId, branch]) => (
+        <div key={bId} className="space-y-3">
+          {/* Branch header */}
+          {(isDirector && !selectedBranch) && (
+            <div className="flex items-center gap-2 pt-2">
+              <Building2 className="h-4 w-4 text-primary-600" />
+              <h2 className="font-semibold text-gray-800">{branch.branchNombre}</h2>
+              <span className="text-xs text-muted-foreground">
+                · {Object.values(branch.cobradores).flatMap((c) => c.rows).length} pactados
+              </span>
+            </div>
           )}
-          {cobrados.length > 0 && (
-            <section>
-              <h2 className="text-sm font-semibold text-green-600 mb-2">
-                Cobrados ({cobrados.length})
-              </h2>
-              <div className="space-y-2">
-                {cobrados.map((s) => <PagoCard key={s.id} item={s} paid />)}
-              </div>
-            </section>
-          )}
-        </div>
-      )}
 
-      {/* GERENTE — agrupado por coordinador */}
-      {rol === 'GERENTE' && !isDirector && schedule.length > 0 && (
-        <div className="space-y-6">
-          {byCobrador.map((g) => <CobradorSection key={g.cobradorId} group={g} />)}
-        </div>
-      )}
+          {/* Cobrador sections */}
+          {Object.entries(branch.cobradores).map(([cId, cobrador]) => {
+            const pagados    = cobrador.rows.filter((r: ScheduleRow) => r.payments.length > 0)
+            const noPagados  = cobrador.rows.filter((r: ScheduleRow) => r.payments.length === 0)
 
-      {/* DIRECTOR — agrupado por sucursal → coordinador */}
-      {isDirector && schedule.length > 0 && (
-        <div className="space-y-8">
-          {byBranch.map((branch) => {
-            const total = branch.coordinadores.reduce((n, c) => n + c.items.length, 0)
-            const done  = branch.coordinadores.reduce((n, c) => n + c.items.filter((s) => s.estado === 'PAID').length, 0)
             return (
-              <div key={branch.branchId}>
-                <div className="flex items-center gap-2 pb-1 border-b border-gray-200 mb-3">
-                  <Building2 className="h-4 w-4 text-primary-600" />
-                  <h2 className="text-base font-bold text-gray-900">{branch.nombre}</h2>
-                  <span className="text-xs text-muted-foreground ml-auto">{done}/{total} cobrados</span>
-                </div>
-                <div className="space-y-5 pl-2">
-                  {branch.coordinadores.map((c) => <CobradorSection key={c.cobradorId} group={c} />)}
-                </div>
-              </div>
+              <Card key={cId}>
+                <CardHeader className="pb-2 pt-4 px-4">
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <UserCheck className="h-4 w-4 text-primary-600" />
+                      <span>{cobrador.cobradorNombre}</span>
+                      {(isDirector || isGerente) && (
+                        <span className="text-xs text-muted-foreground font-normal">
+                          ({branch.branchNombre})
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-normal">
+                      <span className="text-green-600">{pagados.length} cobrados</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className={noPagados.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}>
+                        {noPagados.length} {isToday ? 'pendientes' : 'sin cobrar'}
+                      </span>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4 space-y-1">
+                  {/* Cobrados first */}
+                  {pagados.map((row: ScheduleRow) => {
+                    const pago = row.payments[0]
+                    const pagoDate = new Date(pago.fechaHora)
+                    const pagoFechaStr = toYMD(pagoDate)
+                    const cobroTardio = pagoFechaStr !== fechaStr
+
+                    return (
+                      <div
+                        key={row.id}
+                        className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-green-50"
+                      >
+                        <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <Link
+                            href={`/clientes/${row.loan.client.id}`}
+                            className="font-medium hover:underline truncate block"
+                          >
+                            {row.loan.client.nombreCompleto}
+                          </Link>
+                          <p className="text-xs text-muted-foreground">
+                            {row.loan.tipo} · Pago #{row.numeroPago} de {row.loan.plazo}
+                            {row.loan.client.telefono && ` · ${row.loan.client.telefono}`}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-semibold text-green-700">{formatMoney(Number(pago.monto))}</p>
+                          <p className="text-[10px] text-green-600">
+                            {pago.cobrador.nombre} ·{' '}
+                            {cobroTardio
+                              ? pagoDate.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+                              : pagoDate.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                            {cobroTardio && ' (tarde)'}
+                            {pago.metodoPago === 'CASH' ? ' · 💵' : pago.metodoPago === 'TRANSFER' ? ' · 🏦' : ' · 💳'}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* No cobrados */}
+                  {noPagados.map((row: ScheduleRow) => {
+                    const isOverdue = row.estado === 'OVERDUE'
+
+                    return (
+                      <div
+                        key={row.id}
+                        className={`flex items-center gap-3 py-2 px-3 rounded-lg text-sm ${
+                          !isToday ? 'bg-red-50' : isOverdue ? 'bg-red-50' : 'bg-amber-50'
+                        }`}
+                      >
+                        {!isToday || isOverdue
+                          ? <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+                          : <Clock className="h-4 w-4 text-amber-500 shrink-0" />
+                        }
+                        <div className="flex-1 min-w-0">
+                          <Link
+                            href={`/clientes/${row.loan.client.id}`}
+                            className="font-medium hover:underline truncate block"
+                          >
+                            {row.loan.client.nombreCompleto}
+                          </Link>
+                          <p className="text-xs text-muted-foreground">
+                            {row.loan.tipo} · Pago #{row.numeroPago} de {row.loan.plazo}
+                            {row.loan.client.telefono && ` · ${row.loan.client.telefono}`}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className={`font-semibold ${!isToday ? 'text-red-600' : 'text-amber-700'}`}>
+                            {formatMoney(Number(row.montoEsperado))}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {!isToday ? 'No cobrado' : isOverdue ? 'Vencido' : 'Esperado'}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </CardContent>
+              </Card>
             )
           })}
         </div>
-      )}
+      ))}
     </div>
-  )
-}
-
-// ─── Components ──────────────────────────────────────────────────────────────
-
-function CobradorSection({ group }: { group: CobradorGroup }) {
-  const cobrados  = group.items.filter((s) => s.estado === 'PAID')
-  const pendientes = group.items.filter((s) => s.estado !== 'PAID')
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <User className="h-4 w-4 text-gray-400" />
-        <h3 className="text-sm font-semibold text-gray-700">{group.nombre}</h3>
-        <span className="text-xs text-muted-foreground">
-          {cobrados.length}/{group.items.length} cobrados
-        </span>
-      </div>
-      <div className="space-y-2">
-        {pendientes.map((s) => <PagoCard key={s.id} item={s} />)}
-        {cobrados.map((s) => <PagoCard key={s.id} item={s} paid />)}
-      </div>
-    </div>
-  )
-}
-
-function PagoCard({ item, paid = false }: { item: ScheduleItem; paid?: boolean }) {
-  const monto = Number(item.montoEsperado)
-
-  if (paid) {
-    return (
-      <Card className="border-l-4 border-l-green-400 opacity-75">
-        <CardContent className="flex items-center justify-between p-3">
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-gray-700 truncate text-sm">
-              {item.loan.client.nombreCompleto}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Pago {item.numeroPago} de {item.loan.plazo} · {item.loan.tipo}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 ml-3">
-            <span className="font-bold text-gray-500 text-sm money">{formatMoney(monto)}</span>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <Link href={`/cobros/capturar/${item.id}`}>
-      <Card className="border-l-4 border-l-yellow-400">
-        <CardContent className="flex items-center justify-between p-3">
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-gray-900 truncate text-sm">
-              {item.loan.client.nombreCompleto}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Pago {item.numeroPago} de {item.loan.plazo} · {item.loan.tipo}
-              {item.loan.client.telefono && ` · ${item.loan.client.telefono}`}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 ml-3">
-            <span className="font-bold text-gray-900 text-sm money">{formatMoney(monto)}</span>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
   )
 }

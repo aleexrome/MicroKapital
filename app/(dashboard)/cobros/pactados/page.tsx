@@ -3,19 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { formatMoney } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { CheckCircle2, Clock, AlertCircle, CalendarDays, Building2, UserCheck, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, CalendarDays, Building2, UserCheck, XCircle } from 'lucide-react'
 import Link from 'next/link'
-import { AgendaDatePicker } from '@/components/cobros/AgendaDatePicker'
-
-function parseDate(dateStr?: string): Date {
-  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    const d = new Date()
-    d.setHours(0, 0, 0, 0)
-    return d
-  }
-  return new Date(dateStr + 'T00:00:00')
-}
-
 function toYMD(d: Date) {
   return d.toISOString().split('T')[0]
 }
@@ -23,7 +12,7 @@ function toYMD(d: Date) {
 export default async function PactadosDiaPage({
   searchParams,
 }: {
-  searchParams: { branchId?: string; fecha?: string }
+  searchParams: { branchId?: string }
 }) {
   const session = await getSession()
   if (!session?.user) redirect('/login')
@@ -35,12 +24,13 @@ export default async function PactadosDiaPage({
 
   if (!isDirector && !isGerente) redirect('/cobros/agenda')
 
-  // ── Date ────────────────────────────────────────────────────────────────────
-  const selectedDate = parseDate(searchParams.fecha)
+  // ── Date: always TODAY ───────────────────────────────────────────────────────
+  const selectedDate = new Date()
+  selectedDate.setHours(0, 0, 0, 0)
   const nextDay = new Date(selectedDate)
   nextDay.setDate(nextDay.getDate() + 1)
   const fechaStr = toYMD(selectedDate)
-  const isToday = fechaStr === toYMD(new Date())
+  const isToday = true
 
   // ── Branch scope ─────────────────────────────────────────────────────────────
   let allowedBranchIds: string[] | undefined
@@ -156,15 +146,10 @@ export default async function PactadosDiaPage({
         <div>
           <div className="flex items-center gap-2 mb-1">
             <CalendarDays className="h-5 w-5 text-primary-700" />
-            <h1 className="text-2xl font-bold text-gray-900">Agenda de Cobros</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Pactados del día</h1>
           </div>
           <p className="text-muted-foreground text-sm capitalize">{dateLabel}</p>
         </div>
-        <AgendaDatePicker
-          fecha={fechaStr}
-          baseHref="/cobros/pactados"
-          extraParams={selectedBranch ? { branchId: selectedBranch } : {}}
-        />
       </div>
 
       {/* KPI cards */}
@@ -210,7 +195,7 @@ export default async function PactadosDiaPage({
         <div className="flex flex-wrap gap-2 items-center">
           <span className="text-sm text-muted-foreground">Sucursal:</span>
           <Link
-            href={`/cobros/pactados?fecha=${fechaStr}`}
+            href="/cobros/pactados"
             className={`px-3 py-1 rounded-full text-sm border transition-colors ${
               !selectedBranch
                 ? 'bg-primary-700 text-white border-primary-700'
@@ -222,7 +207,7 @@ export default async function PactadosDiaPage({
           {branches.map((b) => (
             <Link
               key={b.id}
-              href={`/cobros/pactados?fecha=${fechaStr}&branchId=${b.id}`}
+              href={`/cobros/pactados?branchId=${b.id}`}
               className={`px-3 py-1 rounded-full text-sm border transition-colors ${
                 selectedBranch === b.id
                   ? 'bg-primary-700 text-white border-primary-700'

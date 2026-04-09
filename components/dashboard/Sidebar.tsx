@@ -65,13 +65,13 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/cobros/agenda',
-    label: 'Pactados del Día',
+    label: 'Agenda',
     icon: <CalendarDays className="h-5 w-5" />,
     roles: ['COBRADOR', 'COORDINADOR'],
   },
   {
     href: '/cobros/pactados',
-    label: 'Pactados del Día',
+    label: 'Agenda',
     icon: <CalendarDays className="h-5 w-5" />,
     roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE_ZONAL', 'GERENTE'],
   },

@@ -2,48 +2,58 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { formatMoney } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { CheckCircle2, Clock, AlertCircle, Users, CalendarDays, Building2, UserCheck } from 'lucide-react'
+import { CheckCircle2, Clock, AlertCircle, CalendarDays, Building2, UserCheck, XCircle } from 'lucide-react'
 import Link from 'next/link'
+import { AgendaDatePicker } from '@/components/cobros/AgendaDatePicker'
 
-function today() {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d
+function parseDate(dateStr?: string): Date {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }
+  return new Date(dateStr + 'T00:00:00')
 }
-function tomorrow() {
-  const d = today()
-  d.setDate(d.getDate() + 1)
-  return d
+
+function toYMD(d: Date) {
+  return d.toISOString().split('T')[0]
 }
 
 export default async function PactadosDiaPage({
   searchParams,
 }: {
-  searchParams: { branchId?: string }
+  searchParams: { branchId?: string; fecha?: string }
 }) {
   const session = await getSession()
   if (!session?.user) redirect('/login')
 
-  const { rol, companyId, branchId: myBranchId, id: userId } = session.user
+  const { rol, companyId, branchId: myBranchId } = session.user
 
   const isDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
   const isGerente  = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
 
   if (!isDirector && !isGerente) redirect('/cobros/agenda')
 
-  // Determine which branches to show
+  // ── Date ────────────────────────────────────────────────────────────────────
+  const selectedDate = parseDate(searchParams.fecha)
+  const nextDay = new Date(selectedDate)
+  nextDay.setDate(nextDay.getDate() + 1)
+  const fechaStr = toYMD(selectedDate)
+  const isToday = fechaStr === toYMD(new Date())
+
+  // ── Branch scope ─────────────────────────────────────────────────────────────
   let allowedBranchIds: string[] | undefined
   if (rol === 'GERENTE' && myBranchId) {
-    allowedBranchIds = [myBranchId]
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : [myBranchId]
+    allowedBranchIds = branchIds
   } else if (rol === 'GERENTE_ZONAL') {
     const z = session.user.zonaBranchIds
     allowedBranchIds = z && z.length > 0 ? z : undefined
   }
-  // Directors see all branches (allowedBranchIds = undefined)
 
-  // Branch filter from URL param (only directors can switch)
   const selectedBranch = isDirector ? (searchParams.branchId || null) : (myBranchId || null)
 
   // Fetch branches for filter dropdown (directors only)
@@ -55,7 +65,7 @@ export default async function PactadosDiaPage({
       })
     : []
 
-  // Build the loan scope
+  // ── Loan scope ───────────────────────────────────────────────────────────────
   const loanWhere: Record<string, unknown> = {
     estado: 'ACTIVE',
     companyId: companyId!,
@@ -66,10 +76,10 @@ export default async function PactadosDiaPage({
     loanWhere.branchId = { in: allowedBranchIds }
   }
 
-  // Fetch today's scheduled payments
+  // ── Fetch schedules due on the selected date ──────────────────────────────────
   const schedules = await prisma.paymentSchedule.findMany({
     where: {
-      fechaVencimiento: { gte: today(), lt: tomorrow() },
+      fechaVencimiento: { gte: selectedDate, lt: nextDay },
       loan: loanWhere,
     },
     select: {
@@ -81,15 +91,17 @@ export default async function PactadosDiaPage({
         select: {
           id: true,
           tipo: true,
+          plazo: true,
           branchId: true,
           branch: { select: { id: true, nombre: true } },
           cobradorId: true,
           cobrador: { select: { id: true, nombre: true } },
           client: { select: { id: true, nombreCompleto: true, telefono: true } },
+          loanGroup: { select: { id: true, nombre: true } },
         },
       },
+      // Include ALL payments for this schedule (not just those made on selected date)
       payments: {
-        where: { fechaHora: { gte: today() } },
         select: {
           id: true,
           monto: true,
@@ -97,13 +109,14 @@ export default async function PactadosDiaPage({
           fechaHora: true,
           cobrador: { select: { nombre: true } },
         },
+        orderBy: { fechaHora: 'asc' },
         take: 1,
       },
     },
     orderBy: [{ loan: { branch: { nombre: 'asc' } } }, { loan: { cobrador: { nombre: 'asc' } } }],
   })
 
-  // Group: branchId → cobradorId → schedules
+  // ── Group: branchId → cobradorId → schedules ─────────────────────────────────
   type ScheduleRow = (typeof schedules)[number]
 
   const branchMap: Record<string, {
@@ -123,58 +136,70 @@ export default async function PactadosDiaPage({
     branchMap[bId].cobradores[cId].rows.push(s)
   }
 
-  const totalPactados = schedules.length
-  const cobrados = schedules.filter((s) => s.payments.length > 0).length
-  const pendientes = totalPactados - cobrados
-  const montoCobrado = schedules
-    .filter((s) => s.payments.length > 0)
-    .reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
-  const montoPendiente = schedules
-    .filter((s) => s.payments.length === 0)
-    .reduce((sum, s) => sum + Number(s.montoEsperado), 0)
+  // ── Totals ───────────────────────────────────────────────────────────────────
+  const totalPactados  = schedules.length
+  const cobradosRows   = schedules.filter((s) => s.payments.length > 0)
+  const pendientesRows = schedules.filter((s) => s.payments.length === 0)
+  const montoCobrado   = cobradosRows.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
+  const montoPendiente = pendientesRows.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
+  const avance = totalPactados > 0 ? Math.round((cobradosRows.length / totalPactados) * 100) : 0
 
-  const today_label = new Date().toLocaleDateString('es-MX', {
+  // ── Date label ────────────────────────────────────────────────────────────────
+  const dateLabel = selectedDate.toLocaleDateString('es-MX', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   })
 
   return (
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <CalendarDays className="h-5 w-5 text-primary-700" />
-          <h1 className="text-2xl font-bold text-gray-900">Pactados del Día</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <CalendarDays className="h-5 w-5 text-primary-700" />
+            <h1 className="text-2xl font-bold text-gray-900">Agenda de Cobros</h1>
+          </div>
+          <p className="text-muted-foreground text-sm capitalize">{dateLabel}</p>
         </div>
-        <p className="text-muted-foreground text-sm capitalize">{today_label}</p>
+        <AgendaDatePicker
+          fecha={fechaStr}
+          baseHref="/cobros/pactados"
+          extraParams={selectedBranch ? { branchId: selectedBranch } : {}}
+        />
       </div>
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Total pactados</p>
+            <p className="text-xs text-muted-foreground">Pactados</p>
             <p className="text-2xl font-bold text-gray-900">{totalPactados}</p>
           </CardContent>
         </Card>
         <Card className="border-green-200">
           <CardContent className="p-4">
             <p className="text-xs text-green-600">Cobrados</p>
-            <p className="text-2xl font-bold text-green-700">{cobrados}</p>
+            <p className="text-2xl font-bold text-green-700">{cobradosRows.length}</p>
             <p className="text-xs text-green-600 font-medium">{formatMoney(montoCobrado)}</p>
           </CardContent>
         </Card>
-        <Card className="border-amber-200">
+        <Card className={pendientesRows.length > 0 ? 'border-amber-200' : ''}>
           <CardContent className="p-4">
-            <p className="text-xs text-amber-600">Pendientes</p>
-            <p className="text-2xl font-bold text-amber-700">{pendientes}</p>
-            <p className="text-xs text-amber-600 font-medium">{formatMoney(montoPendiente)}</p>
+            <p className={`text-xs ${pendientesRows.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+              {isToday ? 'Pendientes' : 'Sin cobrar'}
+            </p>
+            <p className={`text-2xl font-bold ${pendientesRows.length > 0 ? 'text-amber-700' : 'text-gray-500'}`}>
+              {pendientesRows.length}
+            </p>
+            {pendientesRows.length > 0 && (
+              <p className="text-xs text-amber-600 font-medium">{formatMoney(montoPendiente)}</p>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Avance</p>
-            <p className="text-2xl font-bold text-gray-900">
-              {totalPactados > 0 ? Math.round((cobrados / totalPactados) * 100) : 0}%
+            <p className={`text-2xl font-bold ${avance === 100 ? 'text-green-700' : avance >= 80 ? 'text-blue-700' : 'text-gray-900'}`}>
+              {avance}%
             </p>
           </CardContent>
         </Card>
@@ -185,7 +210,7 @@ export default async function PactadosDiaPage({
         <div className="flex flex-wrap gap-2 items-center">
           <span className="text-sm text-muted-foreground">Sucursal:</span>
           <Link
-            href="/cobros/pactados"
+            href={`/cobros/pactados?fecha=${fechaStr}`}
             className={`px-3 py-1 rounded-full text-sm border transition-colors ${
               !selectedBranch
                 ? 'bg-primary-700 text-white border-primary-700'
@@ -197,7 +222,7 @@ export default async function PactadosDiaPage({
           {branches.map((b) => (
             <Link
               key={b.id}
-              href={`/cobros/pactados?branchId=${b.id}`}
+              href={`/cobros/pactados?fecha=${fechaStr}&branchId=${b.id}`}
               className={`px-3 py-1 rounded-full text-sm border transition-colors ${
                 selectedBranch === b.id
                   ? 'bg-primary-700 text-white border-primary-700'
@@ -215,7 +240,7 @@ export default async function PactadosDiaPage({
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             <CalendarDays className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p>No hay pagos pactados para hoy{selectedBranch ? ' en esta sucursal' : ''}.</p>
+            <p>No hay pagos programados para este día{selectedBranch ? ' en esta sucursal' : ''}.</p>
           </CardContent>
         </Card>
       )}
@@ -223,7 +248,7 @@ export default async function PactadosDiaPage({
       {/* Branch → Cobrador → Clients */}
       {Object.entries(branchMap).map(([bId, branch]) => (
         <div key={bId} className="space-y-3">
-          {/* Branch header (only if director seeing multiple branches) */}
+          {/* Branch header */}
           {(isDirector && !selectedBranch) && (
             <div className="flex items-center gap-2 pt-2">
               <Building2 className="h-4 w-4 text-primary-600" />
@@ -236,8 +261,8 @@ export default async function PactadosDiaPage({
 
           {/* Cobrador sections */}
           {Object.entries(branch.cobradores).map(([cId, cobrador]) => {
-            const pagados = cobrador.rows.filter((r: ScheduleRow) => r.payments.length > 0)
-            const pendientesRows = cobrador.rows.filter((r: ScheduleRow) => r.payments.length === 0)
+            const pagados    = cobrador.rows.filter((r: ScheduleRow) => r.payments.length > 0)
+            const noPagados  = cobrador.rows.filter((r: ScheduleRow) => r.payments.length === 0)
 
             return (
               <Card key={cId}>
@@ -255,33 +280,26 @@ export default async function PactadosDiaPage({
                     <div className="flex items-center gap-2 text-xs font-normal">
                       <span className="text-green-600">{pagados.length} cobrados</span>
                       <span className="text-muted-foreground">·</span>
-                      <span className="text-amber-600">{pendientesRows.length} pendientes</span>
+                      <span className={noPagados.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}>
+                        {noPagados.length} {isToday ? 'pendientes' : 'sin cobrar'}
+                      </span>
                     </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="px-4 pb-4 space-y-1">
-                  {cobrador.rows.map((row: ScheduleRow) => {
+                  {/* Cobrados first */}
+                  {pagados.map((row: ScheduleRow) => {
                     const pago = row.payments[0]
-                    const isPaid = !!pago
-                    const isOverdue = row.estado === 'OVERDUE'
+                    const pagoDate = new Date(pago.fechaHora)
+                    const pagoFechaStr = toYMD(pagoDate)
+                    const cobroTardio = pagoFechaStr !== fechaStr
 
                     return (
                       <div
                         key={row.id}
-                        className={`flex items-center gap-3 py-2 px-3 rounded-lg text-sm ${
-                          isPaid ? 'bg-green-50' : isOverdue ? 'bg-red-50' : 'bg-gray-50'
-                        }`}
+                        className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-green-50"
                       >
-                        {/* Status icon */}
-                        <div className="shrink-0">
-                          {isPaid
-                            ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-                            : isOverdue
-                            ? <AlertCircle className="h-4 w-4 text-red-500" />
-                            : <Clock className="h-4 w-4 text-amber-500" />}
-                        </div>
-
-                        {/* Client info */}
+                        <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <Link
                             href={`/clientes/${row.loan.client.id}`}
@@ -290,25 +308,59 @@ export default async function PactadosDiaPage({
                             {row.loan.client.nombreCompleto}
                           </Link>
                           <p className="text-xs text-muted-foreground">
-                            {row.loan.tipo} · Pago #{row.numeroPago}
+                            {row.loan.tipo} · Pago #{row.numeroPago} de {row.loan.plazo}
                             {row.loan.client.telefono && ` · ${row.loan.client.telefono}`}
                           </p>
                         </div>
-
-                        {/* Amount */}
                         <div className="text-right shrink-0">
-                          <p className={`font-semibold ${isPaid ? 'text-green-700' : 'text-gray-800'}`}>
-                            {formatMoney(isPaid ? Number(pago.monto) : Number(row.montoEsperado))}
+                          <p className="font-semibold text-green-700">{formatMoney(Number(pago.monto))}</p>
+                          <p className="text-[10px] text-green-600">
+                            {pago.cobrador.nombre} ·{' '}
+                            {cobroTardio
+                              ? pagoDate.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+                              : pagoDate.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                            {cobroTardio && ' (tarde)'}
+                            {pago.metodoPago === 'CASH' ? ' · 💵' : pago.metodoPago === 'TRANSFER' ? ' · 🏦' : ' · 💳'}
                           </p>
-                          {isPaid ? (
-                            <p className="text-[10px] text-green-600">
-                              {pago.cobrador.nombre} ·{' '}
-                              {new Date(pago.fechaHora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                              {pago.metodoPago === 'CASH' ? ' · 💵' : pago.metodoPago === 'TRANSFER' ? ' · 🏦' : ' · 💳'}
-                            </p>
-                          ) : (
-                            <p className="text-[10px] text-muted-foreground">Esperado</p>
-                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* No cobrados */}
+                  {noPagados.map((row: ScheduleRow) => {
+                    const isOverdue = row.estado === 'OVERDUE'
+
+                    return (
+                      <div
+                        key={row.id}
+                        className={`flex items-center gap-3 py-2 px-3 rounded-lg text-sm ${
+                          !isToday ? 'bg-red-50' : isOverdue ? 'bg-red-50' : 'bg-amber-50'
+                        }`}
+                      >
+                        {!isToday || isOverdue
+                          ? <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+                          : <Clock className="h-4 w-4 text-amber-500 shrink-0" />
+                        }
+                        <div className="flex-1 min-w-0">
+                          <Link
+                            href={`/clientes/${row.loan.client.id}`}
+                            className="font-medium hover:underline truncate block"
+                          >
+                            {row.loan.client.nombreCompleto}
+                          </Link>
+                          <p className="text-xs text-muted-foreground">
+                            {row.loan.tipo} · Pago #{row.numeroPago} de {row.loan.plazo}
+                            {row.loan.client.telefono && ` · ${row.loan.client.telefono}`}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className={`font-semibold ${!isToday ? 'text-red-600' : 'text-amber-700'}`}>
+                            {formatMoney(Number(row.montoEsperado))}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {!isToday ? 'No cobrado' : isOverdue ? 'Vencido' : 'Esperado'}
+                          </p>
                         </div>
                       </div>
                     )

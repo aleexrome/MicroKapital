@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
@@ -14,15 +14,53 @@ const cashBreakdownSchema = z.object({
 
 const createPaymentSchema = z.object({
   scheduleId: z.string().uuid(),
-  metodoPago: z.enum(['CASH', 'CARD']),
+  metodoPago: z.enum(['CASH', 'CARD', 'TRANSFER']),
   monto: z.number().positive(),
   cambioEntregado: z.number().min(0).default(0),
   notas: z.string().optional(),
   cashBreakdown: z.array(cashBreakdownSchema).optional().default([]),
+  // Transferencia
+  cuentaDestinoId: z.string().uuid().optional(),
+  idTransferencia: z.string().optional(),
 })
 
+export async function GET(req: NextRequest) {
+  const session = await getSession()
+  if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const { companyId } = session.user
+  const metodo = req.nextUrl.searchParams.get('metodo')
+  const status = req.nextUrl.searchParams.get('status')
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      loan: { companyId: companyId! },
+      ...(metodo ? { metodoPago: metodo as 'CASH' | 'CARD' | 'TRANSFER' } : {}),
+      ...(status && metodo === 'TRANSFER' ? { statusTransferencia: status } : {}),
+    },
+    orderBy: { fechaHora: 'desc' },
+    take: 100,
+    select: {
+      id: true,
+      monto: true,
+      metodoPago: true,
+      fechaHora: true,
+      cambioEntregado: true,
+      notas: true,
+      idTransferencia: true,
+      statusTransferencia: true,
+      cobrador: { select: { nombre: true } },
+      client: { select: { nombreCompleto: true } },
+      loan: { select: { tipo: true } },
+      cuentaDestino: { select: { banco: true, titular: true, clabe: true } },
+    },
+  })
+
+  return NextResponse.json({ data: payments })
+}
+
 export async function POST(req: NextRequest) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { companyId, branchId, id: userId } = session.user
@@ -90,6 +128,11 @@ export async function POST(req: NextRequest) {
         cambioEntregado: data.cambioEntregado,
         notas: data.notas ?? null,
         fechaHora: now,
+        ...(data.metodoPago === 'TRANSFER' ? {
+          cuentaDestinoId: data.cuentaDestinoId ?? null,
+          idTransferencia: data.idTransferencia ?? null,
+          statusTransferencia: 'PENDIENTE',
+        } : {}),
       },
     })
 
@@ -161,11 +204,13 @@ export async function POST(req: NextRequest) {
         fecha,
         cobradoEfectivo: data.metodoPago === 'CASH' ? data.monto : 0,
         cobradoTarjeta: data.metodoPago === 'CARD' ? data.monto : 0,
+        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? data.monto : 0,
         cambioEntregado: data.cambioEntregado,
       },
       update: {
         cobradoEfectivo: data.metodoPago === 'CASH' ? { increment: data.monto } : undefined,
         cobradoTarjeta: data.metodoPago === 'CARD' ? { increment: data.monto } : undefined,
+        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? { increment: data.monto } : undefined,
         cambioEntregado: { increment: data.cambioEntregado },
       },
     })

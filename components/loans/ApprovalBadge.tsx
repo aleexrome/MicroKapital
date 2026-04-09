@@ -3,11 +3,12 @@ import type { LoanStatus } from '@prisma/client'
 
 const STATUS_MAP: Record<LoanStatus, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'outline' | 'secondary' }> = {
   PENDING_APPROVAL: { label: 'Pendiente aprobación', variant: 'warning' },
-  ACTIVE: { label: 'Activo', variant: 'success' },
-  LIQUIDATED: { label: 'Liquidado', variant: 'info' },
-  REJECTED: { label: 'Rechazado', variant: 'error' },
-  RESTRUCTURED: { label: 'Reestructurado', variant: 'secondary' },
-  DEFAULTED: { label: 'Incumplido', variant: 'error' },
+  APPROVED:         { label: 'Aprobado — pendiente activar', variant: 'info' },
+  ACTIVE:           { label: 'Activo', variant: 'success' },
+  LIQUIDATED:       { label: 'Liquidado', variant: 'secondary' },
+  REJECTED:         { label: 'Rechazado', variant: 'error' },
+  RESTRUCTURED:     { label: 'Reestructurado', variant: 'secondary' },
+  DEFAULTED:        { label: 'Incumplido', variant: 'error' },
 }
 
 export function ApprovalBadge({ status }: { status: LoanStatus }) {

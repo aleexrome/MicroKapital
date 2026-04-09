@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
 import { createAuditLog } from '@/lib/audit'
@@ -8,7 +8,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { companyId, id: userId } = session.user
@@ -43,19 +43,25 @@ export async function POST(
   const numeroTicket = await generateTicketNumber(branchPrefix, year)
   const qrCode = generateTicketQrData(numeroTicket)
 
-  const reimpresion = await prisma.ticket.create({
-    data: {
-      paymentId: original.paymentId,
-      companyId: original.companyId,
-      branchId: original.branchId,
-      numeroTicket,
-      impresoPorId: cobrador.id,
-      esReimpresion: true,
-      ticketOriginalId: originalId,
-      razonReimpresion: 'Reimpresión solicitada por cobrador',
-      qrCode,
-    },
-  })
+  let reimpresion
+  try {
+    reimpresion = await prisma.ticket.create({
+      data: {
+        paymentId: original.paymentId,
+        companyId: original.companyId,
+        branchId: original.branchId,
+        numeroTicket,
+        impresoPorId: cobrador.id,
+        esReimpresion: true,
+        ticketOriginalId: originalId,
+        razonReimpresion: 'Reimpresión solicitada por cobrador',
+        qrCode,
+      },
+    })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: 'Error al crear reimpresión', detail: msg }, { status: 500 })
+  }
 
   createAuditLog({
     userId,

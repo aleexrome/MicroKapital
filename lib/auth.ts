@@ -25,11 +25,13 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
             rol: UserRole
             companyId: string | null
             branchId: string | null
+            zonaBranchIds: string[] | null
           }
           token.id = u.id as string
           token.rol = u.rol
           token.companyId = u.companyId ?? null
           token.branchId = u.branchId ?? null
+          token.zonaBranchIds = u.zonaBranchIds ?? null
         }
       } catch (e) {
         console.error('[AUTH JWT CALLBACK ERROR]', e)
@@ -43,6 +45,7 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
           session.user.rol = (token.rol ?? 'COBRADOR') as UserRole
           session.user.companyId = (token.companyId as string | null) ?? null
           session.user.branchId = (token.branchId as string | null) ?? null
+          session.user.zonaBranchIds = (token.zonaBranchIds as string[] | null) ?? null
         }
       } catch (e) {
         console.error('[AUTH SESSION CALLBACK ERROR]', e)
@@ -98,6 +101,7 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
           rol: user.rol,
           companyId: user.companyId,
           branchId: user.branchId ?? null,
+          zonaBranchIds: (user.zonaBranchIds as string[] | null) ?? null,
         }
       },
     }),

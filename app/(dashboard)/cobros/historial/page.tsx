@@ -22,10 +22,14 @@ export default async function HistorialCobrosPage() {
     },
     orderBy: { fechaHora: 'desc' },
     take: 50,
-    include: {
+    select: {
+      id: true,
+      monto: true,
+      metodoPago: true,
+      fechaHora: true,
       client: { select: { nombreCompleto: true } },
       loan: { select: { tipo: true } },
-      ticket: { select: { numeroTicket: true } },
+      tickets: { where: { esReimpresion: false }, take: 1, select: { numeroTicket: true } },
       schedule: { select: { numeroPago: true } },
     },
   })
@@ -33,7 +37,7 @@ export default async function HistorialCobrosPage() {
   return (
     <div className="p-6 space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Historial de cobros</h1>
+        <h1 className="text-2xl font-bold">Cobranza</h1>
         <p className="text-muted-foreground">{payments.length} pagos registrados</p>
       </div>
 
@@ -56,8 +60,8 @@ export default async function HistorialCobrosPage() {
                       {p.metodoPago === 'CASH' ? '💵' : '💳'} ·{' '}
                       {formatDateTime(p.fechaHora)}
                     </p>
-                    {p.ticket && (
-                      <p className="text-xs font-mono text-muted-foreground">{p.ticket.numeroTicket}</p>
+                    {p.tickets[0] && (
+                      <p className="text-xs font-mono text-muted-foreground">{p.tickets[0].numeroTicket}</p>
                     )}
                   </div>
                   <span className="font-bold money">{formatMoney(Number(p.monto))}</span>

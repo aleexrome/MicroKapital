@@ -11,7 +11,7 @@ export default async function ReportesPage() {
   if (!session?.user) redirect('/login')
 
   const { rol, companyId } = session.user
-  if (rol !== 'GERENTE' && rol !== 'SUPER_ADMIN') redirect('/dashboard')
+  if (!['GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'].includes(rol)) redirect('/dashboard')
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)

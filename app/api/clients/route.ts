@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
 
@@ -20,31 +21,41 @@ const createClientSchema = z.object({
 })
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const { rol, companyId, branchId } = session.user
-
-  let cobradorIdFilter: string | undefined
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorIdFilter = cobrador?.id
-  }
+  const { rol, companyId, branchId, id: userId } = session.user
 
   const q = req.nextUrl.searchParams.get('q')
 
+  const where: Prisma.ClientWhereInput = {
+    companyId: companyId!,
+    activo: true,
+    ...(q ? { nombreCompleto: { contains: q, mode: 'insensitive' } } : {}),
+  }
+
+  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
+    where.cobradorId = userId
+    if (branchId) where.branchId = branchId
+  } else if (rol === 'GERENTE') {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : null
+    if (branchIds?.length) {
+      where.OR = [
+        { branchId: { in: branchIds } },
+        { cobradorId: userId },
+      ]
+    }
+  } else if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds?.length) where.branchId = { in: zoneIds }
+  }
+
   const clients = await prisma.client.findMany({
-    where: {
-      companyId: companyId!,
-      activo: true,
-      ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
-      ...(q ? { nombreCompleto: { contains: q, mode: 'insensitive' as const } } : {}),
-    },
+    where,
     orderBy: { createdAt: 'desc' },
     take: 100,
     select: {
@@ -61,7 +72,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
@@ -91,13 +102,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Sucursal no válida' }, { status: 400 })
   }
 
-  // Si es COBRADOR, asignarse a sí mismo
+  // COORDINADOR y COBRADOR: se asignan a sí mismos como cobrador
   let cobradorId = data.cobradorId
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorId = cobrador?.id
+  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
+    cobradorId = userId
   }
 
   const client = await prisma.client.create({

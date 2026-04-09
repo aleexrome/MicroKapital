@@ -17,12 +17,11 @@ export default async function PactadosDiaPage({
   const session = await getSession()
   if (!session?.user) redirect('/login')
 
-  const { rol, companyId, branchId: myBranchId } = session.user
+  const { id: userId, rol, companyId, branchId: myBranchId } = session.user
 
-  const isDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
-  const isGerente  = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
-
-  if (!isDirector && !isGerente) redirect('/cobros/agenda')
+  const isDirector    = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
+  const isGerente     = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
+  const isCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
 
   // ── Date: always TODAY ───────────────────────────────────────────────────────
   const selectedDate = new Date()
@@ -60,7 +59,9 @@ export default async function PactadosDiaPage({
     estado: 'ACTIVE',
     companyId: companyId!,
   }
-  if (selectedBranch) {
+  if (isCoordinador) {
+    loanWhere.cobradorId = userId
+  } else if (selectedBranch) {
     loanWhere.branchId = selectedBranch
   } else if (allowedBranchIds) {
     loanWhere.branchId = { in: allowedBranchIds }

@@ -114,14 +114,14 @@ export default async function DashboardPage() {
       ? prisma.loan.aggregate({
           where: { ...loanScope, estado: 'ACTIVE', fechaDesembolso: { gte: firstOfMonth } },
           _sum: { seguro: true },
-        })
+        }).catch(() => ({ _sum: { seguro: null } }))
       : Promise.resolve({ _sum: { seguro: null } }),
     // Comisiones cobradas este mes (solo directores)
     isDirector
       ? prisma.loan.aggregate({
           where: { ...loanScope, estado: 'ACTIVE', fechaDesembolso: { gte: firstOfMonth } },
           _sum: { comision: true },
-        })
+        }).catch(() => ({ _sum: { comision: null } }))
       : Promise.resolve({ _sum: { comision: null } }),
   ])
 
@@ -178,7 +178,11 @@ export default async function DashboardPage() {
     where: loanScope,
     orderBy: { createdAt: 'desc' },
     take: 6,
-    include: {
+    select: {
+      id: true,
+      estado: true,
+      capital: true,
+      createdAt: true,
       client: { select: { nombreCompleto: true } },
       cobrador: { select: { nombre: true } },
     },

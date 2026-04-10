@@ -51,11 +51,22 @@ export default async function DashboardLayout({
     if (isDirector || isGerente) {
       // Determinar rango de sucursales visibles
       let branchIds: string[] | undefined
-      if (rol === 'GERENTE_ZONAL') {
-        const z = session.user.zonaBranchIds
-        branchIds = z && z.length > 0 ? z : undefined
-      } else if (rol === 'GERENTE' && branchId) {
-        branchIds = [branchId]
+      if (isDirector) {
+        branchIds = undefined // ve todo
+      } else if (rol === 'GERENTE_ZONAL' || rol === 'GERENTE') {
+        // Leer zonaBranchIds directo de DB (más confiable que el JWT)
+        const dbUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { zonaBranchIds: true },
+        })
+        const z = Array.isArray(dbUser?.zonaBranchIds) && dbUser.zonaBranchIds.length > 0
+          ? dbUser.zonaBranchIds as string[]
+          : null
+        if (z) {
+          branchIds = z
+        } else if (branchId) {
+          branchIds = [branchId]
+        }
       }
 
       const [branches, loanCounts] = await Promise.all([

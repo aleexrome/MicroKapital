@@ -68,11 +68,7 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
 
         const user = await prisma.user.findFirst({
           where: { email, activo: true },
-          include: {
-            company: {
-              include: { license: true },
-            },
-          },
+          include: { company: { include: { license: true } } },
         })
 
         if (!user) return null
@@ -101,7 +97,7 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
           rol: user.rol,
           companyId: user.companyId,
           branchId: user.branchId ?? null,
-          zonaBranchIds: (user.zonaBranchIds as string[] | null) ?? null,
+          zonaBranchIds: null,
         }
       },
     }),

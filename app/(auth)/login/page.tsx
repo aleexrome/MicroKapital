@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { encode } from 'next-auth/jwt'
 import { cookies } from 'next/headers'
+import { PasswordInput } from './PasswordInput'
 
 const SECRET = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? ''
 const COOKIE_NAME = 'authjs.session-token'
@@ -15,6 +16,7 @@ async function loginAction(formData: FormData) {
   if (!email || !password) redirect('/login?error=invalid')
 
   try {
+    // Usar select explícito para no pedir columnas que pueden no existir en la BD
     const user = await prisma.user.findFirst({
       where: { email, activo: true },
       select: {
@@ -47,12 +49,13 @@ async function loginAction(formData: FormData) {
 
     const token = await encode({
       token: {
-        sub:       user.id,
-        email:     user.email,
-        name:      user.nombre,
-        rol:       user.rol,
-        companyId: user.companyId,
-        branchId:  user.branchId ?? null,
+        sub:           user.id,
+        email:         user.email,
+        name:          user.nombre,
+        rol:           user.rol,
+        companyId:     user.companyId,
+        branchId:      user.branchId ?? null,
+        zonaBranchIds: null,
       },
       secret: SECRET,
       salt:   COOKIE_NAME,
@@ -70,10 +73,10 @@ async function loginAction(formData: FormData) {
 
     const dest = user.rol === 'SUPER_ADMIN' ? '/sys-mnt-9x7k/panel' : '/dashboard'
     redirect(dest)
-  } catch (err: unknown) {
-    // redirect() lanza internamente — hay que re-lanzarlo
-    if (err instanceof Error && err.message === 'NEXT_REDIRECT') throw err
-    console.error('[LOGIN ERROR]', err)
+  } catch (e: unknown) {
+    // Re-throw Next.js redirect errors — they are not real errors
+    if (typeof e === 'object' && e !== null && 'digest' in e) throw e
+    console.error('[LOGIN ERROR]', e)
     redirect('/login?error=server')
   }
 }
@@ -146,14 +149,7 @@ export default function LoginPage({
             <label htmlFor="password" className="block text-xs font-semibold text-blue-200/70 uppercase tracking-wider">
               Contraseña
             </label>
-            <input
-              id="password" name="password" type="password"
-              placeholder="••••••••"
-              required autoComplete="current-password"
-              className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm text-white placeholder-white/25
-                         focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500/40 transition-all"
-              style={{ background: 'rgba(255,255,255,0.07)' }}
-            />
+            <PasswordInput />
           </div>
 
           {errorMsg && (

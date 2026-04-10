@@ -153,7 +153,7 @@ export default async function CarteraTipoPage({
     )
   }
 
-  // ── INDIVIDUAL / AGIL / FIDUCIARIO: show clients ──────────────────────────
+  // ── INDIVIDUAL / AGIL / FIDUCIARIO: show clients grouped by coordinator ─────
   const loans = await prisma.loan.findMany({
     where: {
       branchId,
@@ -162,10 +162,10 @@ export default async function CarteraTipoPage({
       companyId: companyId!,
       ...((!isDirector && !isGerente) ? { cobradorId: userId } : {}),
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ cobrador: { nombre: 'asc' } }, { client: { nombreCompleto: 'asc' } }],
     include: {
       client: { select: { id: true, nombreCompleto: true, telefono: true } },
-      cobrador: { select: { nombre: true } },
+      cobrador: { select: { id: true, nombre: true } },
       schedule: {
         where: { estado: { not: 'PAID' } },
         orderBy: { numeroPago: 'asc' },
@@ -176,6 +176,15 @@ export default async function CarteraTipoPage({
 
   const totalCapital = loans.reduce((s, l) => s + Number(l.capital), 0)
   const vencidos = loans.filter((l) => l.schedule[0]?.estado === 'OVERDUE').length
+
+  // Agrupar por coordinador
+  const porCoordinador = new Map<string, { nombre: string; loans: typeof loans }>()
+  for (const loan of loans) {
+    const cId = loan.cobradorId ?? 'sin-asignar'
+    const cNombre = loan.cobrador?.nombre ?? 'Sin asignar'
+    if (!porCoordinador.has(cId)) porCoordinador.set(cId, { nombre: cNombre, loans: [] })
+    porCoordinador.get(cId)!.loans.push(loan)
+  }
 
   return (
     <div className="p-6 space-y-5 max-w-3xl mx-auto">
@@ -199,41 +208,49 @@ export default async function CarteraTipoPage({
         <Card><CardContent className="py-10 text-center text-muted-foreground">No hay créditos {TIPO_LABEL[tipo]} activos en esta sucursal</CardContent></Card>
       )}
 
-      <div className="space-y-2">
-        {loans.map((loan) => {
-          const pago = loan.schedule[0]
-          const overdue = pago?.estado === 'OVERDUE'
-          return (
-            <Card key={loan.id} className={overdue ? 'border-red-200' : ''}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Link href={`/clientes/${loan.client.id}`} className="font-semibold hover:underline truncate">
-                        {loan.client.nombreCompleto}
-                      </Link>
-                      {overdue && <Badge variant="error" className="text-xs shrink-0">Vencido</Badge>}
+      {Array.from(porCoordinador.values()).map(({ nombre: cobradorNombre, loans: cobradorLoans }) => (
+        <div key={cobradorNombre} className="space-y-2">
+          {/* Encabezado coordinador */}
+          <div className="flex items-center gap-2 px-1 pt-2">
+            <UserCheck className="h-4 w-4 text-primary-600" />
+            <p className="text-sm font-semibold text-gray-700">{cobradorNombre}</p>
+            <span className="text-xs text-muted-foreground">· {cobradorLoans.length} crédito(s)</span>
+          </div>
+
+          {cobradorLoans.map((loan) => {
+            const pago = loan.schedule[0]
+            const overdue = pago?.estado === 'OVERDUE'
+            return (
+              <Card key={loan.id} className={overdue ? 'border-red-200' : ''}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Link href={`/clientes/${loan.client.id}`} className="font-semibold hover:underline truncate">
+                          {loan.client.nombreCompleto}
+                        </Link>
+                        {overdue && <Badge variant="error" className="text-xs shrink-0">Vencido</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {loan.client.telefono && `${loan.client.telefono}`}
+                        {pago && ` · Pago ${pago.numeroPago} — ${formatDate(pago.fechaVencimiento)}`}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {loan.cobrador?.nombre ?? '—'}
-                      {loan.client.telefono && ` · ${loan.client.telefono}`}
-                      {pago && ` · Pago ${pago.numeroPago} — ${formatDate(pago.fechaVencimiento)}`}
-                    </p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-bold text-sm">{formatMoney(Number(loan.capital))}</span>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/prestamos/${loan.id}`}>
+                          <CreditCard className="h-3 w-3" />
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-bold text-sm">{formatMoney(Number(loan.capital))}</span>
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={`/prestamos/${loan.id}`}>
-                        <CreditCard className="h-3 w-3" />
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
 }

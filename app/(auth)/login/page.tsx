@@ -37,9 +37,10 @@ async function loginAction(formData: FormData) {
         company: { select: { license: { select: { estado: true } } } },
       },
     })
-  } catch (e) {
-    console.error('[LOGIN] DB error:', e)
-    redirect('/login?error=db')
+  } catch (e: any) {
+    const code = e?.code ?? e?.name ?? 'UNKNOWN'
+    console.error('[LOGIN] DB error code:', code, '| message:', e?.message)
+    redirect('/login?error=db&code=' + encodeURIComponent(code))
   }
 
   if (!user) redirect('/login?error=invalid')
@@ -93,13 +94,14 @@ async function loginAction(formData: FormData) {
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: { error?: string }
+  searchParams: { error?: string; code?: string }
 }) {
+  const dbCode = searchParams.code ? ` [${searchParams.code}]` : ''
   const errorMsg =
     searchParams.error === 'invalid'  ? 'Credenciales incorrectas. Verifica tu email y contraseña.' :
     searchParams.error === 'license'  ? 'Tu empresa no tiene licencia activa.' :
     searchParams.error === 'config'   ? 'Error de configuración: AUTH_SECRET no definido en Vercel.' :
-    searchParams.error === 'db'       ? 'Error de base de datos. Verifica DATABASE_URL en Vercel.' :
+    searchParams.error === 'db'       ? `Error de base de datos${dbCode}. Verifica DATABASE_URL en Vercel.` :
     searchParams.error === 'jwt'      ? 'Error al generar sesión. Verifica AUTH_SECRET en Vercel.' :
     searchParams.error === 'server'   ? 'Error del servidor. Contacta al administrador.' :
     null

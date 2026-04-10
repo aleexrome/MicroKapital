@@ -13,21 +13,22 @@ const ALLOWED_ROLES = ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'D
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { companyId } = session.user
 
   const loan = await prisma.loan.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    where: { id, companyId: companyId! },
     select: { id: true },
   })
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
 
   const docs = await prisma.loanDocument.findMany({
-    where: { loanId: params.id },
+    where: { loanId: id },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -44,8 +45,9 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
@@ -56,7 +58,7 @@ export async function POST(
   }
 
   const loan = await prisma.loan.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    where: { id, companyId: companyId! },
     select: { id: true },
   })
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
@@ -79,7 +81,7 @@ export async function POST(
       {
         folder: 'microkapital/documentos',
         resource_type: 'auto',
-        public_id: `loan_${params.id}_${tipo}_${Date.now()}`,
+        public_id: `loan_${id}_${tipo}_${Date.now()}`,
       },
       (error, result) => {
         if (error || !result) return reject(error ?? new Error('Upload failed'))
@@ -91,7 +93,7 @@ export async function POST(
 
   const doc = await prisma.loanDocument.create({
     data: {
-      loanId:    params.id,
+      loanId:    id,
       subidoPor: userId,
       tipo,
       archivoUrl: uploadResult.secure_url,
@@ -112,8 +114,9 @@ export async function POST(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
@@ -129,7 +132,7 @@ export async function DELETE(
   const doc = await prisma.loanDocument.findFirst({
     where: {
       id: documentId,
-      loanId: params.id,
+      loanId: id,
       loan: { companyId: companyId! },
     },
   })

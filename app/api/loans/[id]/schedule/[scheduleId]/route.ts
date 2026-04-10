@@ -10,8 +10,9 @@ const patchSchema = z.object({
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string; scheduleId: string } }
+  { params }: { params: Promise<{ id: string; scheduleId: string }> }
 ) {
+  const { id, scheduleId } = await params
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
@@ -32,7 +33,7 @@ export async function PATCH(
 
   // Verify the schedule belongs to a loan of this company
   const schedule = await prisma.paymentSchedule.findFirst({
-    where: { id: params.scheduleId, loanId: params.id, loan: { companyId: companyId! } },
+    where: { id: scheduleId, loanId: id, loan: { companyId: companyId! } },
   })
   if (!schedule) return NextResponse.json({ error: 'Pago no encontrado' }, { status: 404 })
   if (schedule.estado === 'PAID') {
@@ -45,7 +46,7 @@ export async function PATCH(
   const nuevaFecha = new Date(year, month - 1, day, 12, 0, 0)
 
   await prisma.paymentSchedule.update({
-    where: { id: params.scheduleId },
+    where: { id: scheduleId },
     data: { fechaVencimiento: nuevaFecha },
   })
 
@@ -53,7 +54,7 @@ export async function PATCH(
     userId,
     accion: 'DG_EDIT_SCHEDULE_DATE',
     tabla: 'PaymentSchedule',
-    registroId: params.scheduleId,
+    registroId: scheduleId,
     valoresAnteriores: { fechaVencimiento: prevFecha },
     valoresNuevos: { fechaVencimiento: nuevaFecha },
   })

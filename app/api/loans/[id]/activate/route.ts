@@ -13,8 +13,9 @@ const activateSchema = z.object({
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
@@ -26,7 +27,7 @@ export async function POST(
   }
 
   const loan = await prisma.loan.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    where: { id, companyId: companyId! },
   })
 
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })

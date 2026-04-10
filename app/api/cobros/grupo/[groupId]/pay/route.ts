@@ -22,8 +22,9 @@ const bodySchema = z.object({
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { groupId: string } }
+  { params }: { params: Promise<{ groupId: string }> }
 ) {
+  const { groupId } = await params
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
@@ -39,7 +40,7 @@ export async function POST(
 
   // Verificar que el grupo existe y pertenece a la empresa
   const grupo = await prisma.loanGroup.findFirst({
-    where: { id: params.groupId, loans: { some: { companyId: companyId! } } },
+    where: { id: groupId, loans: { some: { companyId: companyId! } } },
     select: { id: true, nombre: true },
   })
   if (!grupo) return NextResponse.json({ error: 'Grupo no encontrado' }, { status: 404 })
@@ -223,7 +224,7 @@ export async function POST(
     userId,
     accion:     'GROUP_PAYMENT_BATCH',
     tabla:      'LoanGroup',
-    registroId: params.groupId,
+    registroId: groupId,
     valoresNuevos: {
       grupoNombre: grupo.nombre,
       totalPagos:  tickets.length,

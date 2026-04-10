@@ -13,8 +13,9 @@ const patchSchema = z.object({
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const session = await getSession()
   if (!session?.user || session.user.rol !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
@@ -24,11 +25,11 @@ export async function PATCH(
   const parsed = patchSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
 
-  const user = await prisma.user.findUnique({ where: { id: params.id } })
+  const user = await prisma.user.findUnique({ where: { id } })
   if (!user) return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
 
   const updated = await prisma.user.update({
-    where: { id: params.id },
+    where: { id },
     data: parsed.data,
     select: { id: true, nombre: true, activo: true, rol: true },
   })
@@ -37,7 +38,7 @@ export async function PATCH(
     userId: session.user.id,
     accion: 'ADMIN_UPDATE_USER',
     tabla: 'User',
-    registroId: params.id,
+    registroId: id,
     valoresNuevos: parsed.data,
   })
 
@@ -46,27 +47,28 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const session = await getSession()
   if (!session?.user || session.user.rol !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
   }
 
-  const user = await prisma.user.findUnique({ where: { id: params.id } })
+  const user = await prisma.user.findUnique({ where: { id } })
   if (!user) return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
   if (user.id === session.user.id) {
     return NextResponse.json({ error: 'No puedes eliminar tu propia cuenta' }, { status: 400 })
   }
 
   // Soft delete: just deactivate
-  await prisma.user.update({ where: { id: params.id }, data: { activo: false } })
+  await prisma.user.update({ where: { id }, data: { activo: false } })
 
   createAuditLog({
     userId: session.user.id,
     accion: 'ADMIN_DELETE_USER',
     tabla: 'User',
-    registroId: params.id,
+    registroId: id,
     valoresNuevos: { activo: false },
   })
 

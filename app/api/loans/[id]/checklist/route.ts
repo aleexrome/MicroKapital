@@ -4,8 +4,9 @@ import { prisma } from '@/lib/prisma'
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
@@ -18,7 +19,7 @@ export async function PATCH(
   }
 
   const loan = await prisma.loan.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    where: { id, companyId: companyId! },
     select: { id: true },
   })
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
@@ -31,7 +32,7 @@ export async function PATCH(
   }
 
   const updated = await prisma.loan.update({
-    where: { id: params.id },
+    where: { id },
     data: { documentChecklist: checklist },
     select: { documentChecklist: true },
   })

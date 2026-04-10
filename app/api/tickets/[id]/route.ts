@@ -4,15 +4,16 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { companyId } = session.user
 
   const ticket = await prisma.ticket.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    where: { id, companyId: companyId! },
     include: {
       payment: {
         include: {

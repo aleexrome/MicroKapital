@@ -4,8 +4,9 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { scheduleId: string } }
+  { params }: { params: Promise<{ scheduleId: string }> }
 ) {
+  const { scheduleId } = await params
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
@@ -13,7 +14,7 @@ export async function GET(
 
   const schedule = await prisma.paymentSchedule.findFirst({
     where: {
-      id: params.scheduleId,
+      id: scheduleId,
       loan: { companyId: companyId! },
     },
     include: {

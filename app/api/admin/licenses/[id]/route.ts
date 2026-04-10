@@ -14,14 +14,15 @@ const patchSchema = z.object({
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const session = await getSession()
   if (!session?.user || session.user.rol !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const license = await prisma.license.findUnique({ where: { id: params.id } })
+  const license = await prisma.license.findUnique({ where: { id } })
   if (!license) return NextResponse.json({ error: 'Licencia no encontrada' }, { status: 404 })
 
   const body = await req.json()
@@ -31,7 +32,7 @@ export async function PATCH(
   }
 
   const updated = await prisma.license.update({
-    where: { id: params.id },
+    where: { id },
     data: {
       ...parsed.data,
       ultimaVerificacion: new Date(),
@@ -45,7 +46,7 @@ export async function PATCH(
     userId: session.user.id,
     accion: 'UPDATE_LICENSE',
     tabla: 'License',
-    registroId: params.id,
+    registroId: id,
     valoresAnteriores: { estado: license.estado },
     valoresNuevos: parsed.data,
   })

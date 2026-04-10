@@ -4,8 +4,9 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { groupId: string } }
+  { params }: { params: Promise<{ groupId: string }> }
 ) {
+  const { groupId } = await params
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
@@ -18,7 +19,7 @@ export async function GET(
 
   const grupo = await prisma.loanGroup.findFirst({
     where: {
-      id: params.groupId,
+      id: groupId,
       loans: { some: { companyId: companyId!, cobradorId: userId } },
     },
     select: { id: true, nombre: true },
@@ -29,7 +30,7 @@ export async function GET(
   // Préstamos activos del grupo para este cobrador
   const loans = await prisma.loan.findMany({
     where: {
-      loanGroupId: params.groupId,
+      loanGroupId: groupId,
       estado:      'ACTIVE',
       companyId:   companyId!,
       cobradorId:  userId,

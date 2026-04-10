@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { redirect } from 'next/navigation'
 import { formatMoney } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -55,7 +56,7 @@ export default async function PactadosDiaPage({
     : []
 
   // ── Loan scope ───────────────────────────────────────────────────────────────
-  const loanWhere: Record<string, unknown> = {
+  const loanWhere: Prisma.LoanWhereInput = {
     estado: 'ACTIVE',
     companyId: companyId!,
   }

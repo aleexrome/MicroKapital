@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import Link from 'next/link'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -50,7 +51,7 @@ export default async function AgendaPage({
   const yesterdayStr = toYMD(_yd)
 
   // ── Determine cobrador scope ─────────────────────────────────────────────────
-  const loanWhere: Record<string, unknown> = {
+  const loanWhere: Prisma.LoanWhereInput = {
     estado: 'ACTIVE',
     companyId: companyId!,
   }
@@ -62,7 +63,7 @@ export default async function AgendaPage({
       where: { gerenteId: userId, activo: true },
       select: { id: true },
     })
-    loanWhere.cobradorId = { in: [userId, ...subordinates.map((s: { id: string }) => s.id)] }
+    loanWhere.cobradorId = { in: [userId, ...subordinates.map((s) => s.id)] }
   }
   // Directors: no cobradorId filter → see all in company
 

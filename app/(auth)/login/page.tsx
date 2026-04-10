@@ -17,7 +17,20 @@ async function loginAction(formData: FormData) {
 
   const user = await prisma.user.findFirst({
     where: { email, activo: true },
-    include: { company: { include: { license: true } } },
+    select: {
+      id: true,
+      email: true,
+      nombre: true,
+      rol: true,
+      companyId: true,
+      branchId: true,
+      passwordHash: true,
+      company: {
+        select: {
+          license: { select: { estado: true } },
+        },
+      },
+    },
   })
   if (!user) redirect('/login?error=invalid')
 
@@ -37,7 +50,7 @@ async function loginAction(formData: FormData) {
       rol:          user!.rol,
       companyId:    user!.companyId,
       branchId:     user!.branchId ?? null,
-      zonaBranchIds: (user!.zonaBranchIds as string[] | null) ?? null,
+      zonaBranchIds: null,
     },
     secret: SECRET,
     salt:   COOKIE_NAME,

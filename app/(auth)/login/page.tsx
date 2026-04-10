@@ -15,39 +15,49 @@ async function loginAction(formData: FormData) {
 
   if (!email || !password) redirect('/login?error=invalid')
 
+  // ── 1. Verificar que el secreto JWT está configurado ────────────────────────
+  if (!SECRET) {
+    console.error('[LOGIN] AUTH_SECRET / NEXTAUTH_SECRET no configurado en variables de entorno')
+    redirect('/login?error=config')
+  }
+
+  // ── 2. Buscar usuario en BD ─────────────────────────────────────────────────
+  let user: {
+    id: string; email: string; nombre: string; rol: string
+    companyId: string; branchId: string | null; passwordHash: string
+    company: { license: { estado: string } | null } | null
+  } | null = null
+
   try {
-    // Usar select explícito para no pedir columnas que pueden no existir en la BD
-    const user = await prisma.user.findFirst({
+    user = await prisma.user.findFirst({
       where: { email, activo: true },
       select: {
-        id: true,
-        email: true,
-        nombre: true,
-        rol: true,
-        companyId: true,
-        branchId: true,
-        passwordHash: true,
-        company: {
-          select: {
-            id: true,
-            license: {
-              select: { estado: true },
-            },
-          },
-        },
+        id: true, email: true, nombre: true, rol: true,
+        companyId: true, branchId: true, passwordHash: true,
+        company: { select: { license: { select: { estado: true } } } },
       },
     })
-    if (!user) redirect('/login?error=invalid')
+  } catch (e) {
+    console.error('[LOGIN] DB error:', e)
+    redirect('/login?error=db')
+  }
 
-    const valid = await bcrypt.compare(password, user.passwordHash)
-    if (!valid) redirect('/login?error=invalid')
+  if (!user) redirect('/login?error=invalid')
 
-    if (user.rol !== 'SUPER_ADMIN') {
-      const lic = user.company?.license
-      if (!lic || lic.estado === 'CANCELLED') redirect('/login?error=license')
-    }
+  // ── 3. Verificar contraseña ─────────────────────────────────────────────────
+  const valid = await bcrypt.compare(password, user.passwordHash)
+  if (!valid) redirect('/login?error=invalid')
 
-    const token = await encode({
+  // ── 4. Verificar licencia ───────────────────────────────────────────────────
+  if (user.rol !== 'SUPER_ADMIN') {
+    const lic = user.company?.license
+    if (!lic || lic.estado === 'CANCELLED') redirect('/login?error=license')
+  }
+
+  // ── 5. Generar token JWT ────────────────────────────────────────────────────
+  let token: string
+  try {
+    token = await encode({
       token: {
         sub:           user.id,
         email:         user.email,
@@ -60,25 +70,24 @@ async function loginAction(formData: FormData) {
       secret: SECRET,
       salt:   COOKIE_NAME,
     })
-
-    prisma.user.update({ where: { id: user.id }, data: { ultimoAcceso: new Date() } }).catch(() => {})
-
-    const cookieStore = cookies()
-    cookieStore.set(COOKIE_NAME, token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      maxAge:   60 * 60 * 24 * 30,
-      path:     '/',
-    })
-
-    const dest = user.rol === 'SUPER_ADMIN' ? '/sys-mnt-9x7k/panel' : '/dashboard'
-    redirect(dest)
-  } catch (e: unknown) {
-    // Re-throw Next.js redirect errors — they are not real errors
-    if (typeof e === 'object' && e !== null && 'digest' in e) throw e
-    console.error('[LOGIN ERROR]', e)
-    redirect('/login?error=server')
+  } catch (e) {
+    console.error('[LOGIN] JWT encode error:', e)
+    redirect('/login?error=jwt')
   }
+
+  // ── 6. Guardar cookie y redirigir ───────────────────────────────────────────
+  prisma.user.update({ where: { id: user.id }, data: { ultimoAcceso: new Date() } }).catch(() => {})
+
+  const cookieStore = cookies()
+  cookieStore.set(COOKIE_NAME, token!, {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge:   60 * 60 * 24 * 30,
+    path:     '/',
+  })
+
+  const dest = user.rol === 'SUPER_ADMIN' ? '/sys-mnt-9x7k/panel' : '/dashboard'
+  redirect(dest)
 }
 
 export default function LoginPage({
@@ -87,13 +96,13 @@ export default function LoginPage({
   searchParams: { error?: string }
 }) {
   const errorMsg =
-    searchParams.error === 'invalid'
-      ? 'Credenciales incorrectas. Verifica tu email y contraseña.'
-      : searchParams.error === 'license'
-      ? 'Tu empresa no tiene licencia activa.'
-      : searchParams.error === 'server'
-      ? 'Error del servidor. Contacta al administrador.'
-      : null
+    searchParams.error === 'invalid'  ? 'Credenciales incorrectas. Verifica tu email y contraseña.' :
+    searchParams.error === 'license'  ? 'Tu empresa no tiene licencia activa.' :
+    searchParams.error === 'config'   ? 'Error de configuración: AUTH_SECRET no definido en Vercel.' :
+    searchParams.error === 'db'       ? 'Error de base de datos. Verifica DATABASE_URL en Vercel.' :
+    searchParams.error === 'jwt'      ? 'Error al generar sesión. Verifica AUTH_SECRET en Vercel.' :
+    searchParams.error === 'server'   ? 'Error del servidor. Contacta al administrador.' :
+    null
 
   return (
     /* Glass-morphism card */

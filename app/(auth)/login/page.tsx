@@ -14,45 +14,68 @@ async function loginAction(formData: FormData) {
 
   if (!email || !password) redirect('/login?error=invalid')
 
-  const user = await prisma.user.findFirst({
-    where: { email, activo: true },
-    include: { company: { include: { license: true } } },
-  })
-  if (!user) redirect('/login?error=invalid')
+  try {
+    const user = await prisma.user.findFirst({
+      where: { email, activo: true },
+      select: {
+        id: true,
+        email: true,
+        nombre: true,
+        rol: true,
+        companyId: true,
+        branchId: true,
+        passwordHash: true,
+        company: {
+          select: {
+            id: true,
+            license: {
+              select: { estado: true },
+            },
+          },
+        },
+      },
+    })
+    if (!user) redirect('/login?error=invalid')
 
-  const valid = await bcrypt.compare(password, user!.passwordHash)
-  if (!valid) redirect('/login?error=invalid')
+    const valid = await bcrypt.compare(password, user.passwordHash)
+    if (!valid) redirect('/login?error=invalid')
 
-  if (user!.rol !== 'SUPER_ADMIN') {
-    const lic = user!.company?.license
-    if (!lic || lic.estado === 'CANCELLED') redirect('/login?error=license')
+    if (user.rol !== 'SUPER_ADMIN') {
+      const lic = user.company?.license
+      if (!lic || lic.estado === 'CANCELLED') redirect('/login?error=license')
+    }
+
+    const token = await encode({
+      token: {
+        sub:       user.id,
+        email:     user.email,
+        name:      user.nombre,
+        rol:       user.rol,
+        companyId: user.companyId,
+        branchId:  user.branchId ?? null,
+      },
+      secret: SECRET,
+      salt:   COOKIE_NAME,
+    })
+
+    prisma.user.update({ where: { id: user.id }, data: { ultimoAcceso: new Date() } }).catch(() => {})
+
+    const cookieStore = cookies()
+    cookieStore.set(COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge:   60 * 60 * 24 * 30,
+      path:     '/',
+    })
+
+    const dest = user.rol === 'SUPER_ADMIN' ? '/sys-mnt-9x7k/panel' : '/dashboard'
+    redirect(dest)
+  } catch (err: unknown) {
+    // redirect() lanza internamente — hay que re-lanzarlo
+    if (err instanceof Error && err.message === 'NEXT_REDIRECT') throw err
+    console.error('[LOGIN ERROR]', err)
+    redirect('/login?error=server')
   }
-
-  const token = await encode({
-    token: {
-      sub:       user!.id,
-      email:     user!.email,
-      name:      user!.nombre,
-      rol:       user!.rol,
-      companyId: user!.companyId,
-      branchId:  user!.branchId ?? null,
-    },
-    secret: SECRET,
-    salt:   COOKIE_NAME,
-  })
-
-  prisma.user.update({ where: { id: user!.id }, data: { ultimoAcceso: new Date() } }).catch(() => {})
-
-  const cookieStore = cookies()
-  cookieStore.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge:   60 * 60 * 24 * 30,
-    path:     '/',
-  })
-
-  const dest = user!.rol === 'SUPER_ADMIN' ? '/sys-mnt-9x7k/panel' : '/dashboard'
-  redirect(dest)
 }
 
 export default function LoginPage({
@@ -65,6 +88,8 @@ export default function LoginPage({
       ? 'Credenciales incorrectas. Verifica tu email y contraseña.'
       : searchParams.error === 'license'
       ? 'Tu empresa no tiene licencia activa.'
+      : searchParams.error === 'server'
+      ? 'Error del servidor. Contacta al administrador.'
       : null
 
   return (

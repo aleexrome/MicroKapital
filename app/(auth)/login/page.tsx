@@ -15,59 +15,66 @@ async function loginAction(formData: FormData) {
 
   if (!email || !password) redirect('/login?error=invalid')
 
-  const user = await prisma.user.findFirst({
-    where: { email, activo: true },
-    select: {
-      id: true,
-      email: true,
-      nombre: true,
-      rol: true,
-      companyId: true,
-      branchId: true,
-      passwordHash: true,
-      company: {
-        select: {
-          license: { select: { estado: true } },
+  try {
+    const user = await prisma.user.findFirst({
+      where: { email, activo: true },
+      select: {
+        id: true,
+        email: true,
+        nombre: true,
+        rol: true,
+        companyId: true,
+        branchId: true,
+        passwordHash: true,
+        company: {
+          select: {
+            license: { select: { estado: true } },
+          },
         },
       },
-    },
-  })
-  if (!user) redirect('/login?error=invalid')
+    })
+    if (!user) redirect('/login?error=invalid')
 
-  const valid = await bcrypt.compare(password, user!.passwordHash)
-  if (!valid) redirect('/login?error=invalid')
+    const valid = await bcrypt.compare(password, user.passwordHash)
+    if (!valid) redirect('/login?error=invalid')
 
-  if (user!.rol !== 'SUPER_ADMIN') {
-    const lic = user!.company?.license
-    if (!lic || lic.estado === 'CANCELLED') redirect('/login?error=license')
+    if (user.rol !== 'SUPER_ADMIN') {
+      const lic = user.company?.license
+      if (!lic || lic.estado === 'CANCELLED') redirect('/login?error=license')
+    }
+
+    const token = await encode({
+      token: {
+        sub:           user.id,
+        email:         user.email,
+        name:          user.nombre,
+        rol:           user.rol,
+        companyId:     user.companyId,
+        branchId:      user.branchId ?? null,
+        zonaBranchIds: null,
+      },
+      secret: SECRET,
+      salt:   COOKIE_NAME,
+    })
+
+    prisma.user.update({ where: { id: user.id }, data: { ultimoAcceso: new Date() } }).catch(() => {})
+
+    const cookieStore = cookies()
+    cookieStore.set(COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge:   60 * 60 * 24 * 30,
+      path:     '/',
+    })
+
+    const dest = user.rol === 'SUPER_ADMIN' ? '/sys-mnt-9x7k/panel' : '/dashboard'
+    redirect(dest)
+  } catch (e: unknown) {
+    // Re-throw Next.js redirect errors — they are not real errors
+    if (typeof e === 'object' && e !== null && 'digest' in e) throw e
+    console.error('[LOGIN ERROR]', e)
+    redirect('/login?error=invalid')
   }
-
-  const token = await encode({
-    token: {
-      sub:          user!.id,
-      email:        user!.email,
-      name:         user!.nombre,
-      rol:          user!.rol,
-      companyId:    user!.companyId,
-      branchId:     user!.branchId ?? null,
-      zonaBranchIds: null,
-    },
-    secret: SECRET,
-    salt:   COOKIE_NAME,
-  })
-
-  prisma.user.update({ where: { id: user!.id }, data: { ultimoAcceso: new Date() } }).catch(() => {})
-
-  const cookieStore = cookies()
-  cookieStore.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge:   60 * 60 * 24 * 30,
-    path:     '/',
-  })
-
-  const dest = user!.rol === 'SUPER_ADMIN' ? '/sys-mnt-9x7k/panel' : '/dashboard'
-  redirect(dest)
 }
 
 export default function LoginPage({

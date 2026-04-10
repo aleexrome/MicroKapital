@@ -279,6 +279,7 @@ model Loan {
   // Plazos
   plazo         Int
   fechaDesembolso DateTime?
+  diaPago       String?                            // Día de cobro: "DOMINGO", "LUNES", etc.
   // Campos de comportamiento (para cálculo de comisiones y tasas)
   ciclo            Int     @default(1)           // INDIVIDUAL: número de ciclo (1, 2, 3…)
   tuvoAtraso       Boolean @default(false)       // INDIVIDUAL: afecta comisión de renovación

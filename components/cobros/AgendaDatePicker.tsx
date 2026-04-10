@@ -29,9 +29,10 @@ interface AgendaDatePickerProps {
   fecha: string   // YYYY-MM-DD
   baseHref: string // e.g. "/cobros/pactados"
   extraParams?: Record<string, string>
+  maxDate?: string // YYYY-MM-DD — no se puede avanzar más allá de esta fecha (default: hoy)
 }
 
-export function AgendaDatePicker({ fecha, baseHref, extraParams = {} }: AgendaDatePickerProps) {
+export function AgendaDatePicker({ fecha, baseHref, extraParams = {}, maxDate }: AgendaDatePickerProps) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -40,7 +41,8 @@ export function AgendaDatePicker({ fecha, baseHref, extraParams = {} }: AgendaDa
     router.push(`${baseHref}?${params.toString()}`)
   }
 
-  const isToday = fecha === toYMD(new Date())
+  const effectiveMax = maxDate ?? toYMD(new Date())
+  const forwardDisabled = addDays(fecha, 1) > effectiveMax
 
   return (
     <div className="flex items-center gap-1 bg-muted/40 rounded-xl p-1">
@@ -68,7 +70,8 @@ export function AgendaDatePicker({ fecha, baseHref, extraParams = {} }: AgendaDa
           ref={inputRef}
           type="date"
           value={fecha}
-          onChange={(e) => { if (e.target.value) navigate(e.target.value) }}
+          max={effectiveMax}
+          onChange={(e) => { if (e.target.value && e.target.value <= effectiveMax) navigate(e.target.value) }}
           className="absolute inset-0 opacity-0 w-full cursor-pointer"
           style={{ colorScheme: 'light' }}
         />
@@ -79,9 +82,9 @@ export function AgendaDatePicker({ fecha, baseHref, extraParams = {} }: AgendaDa
         onClick={() => navigate(addDays(fecha, 1))}
         className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
         title="Día siguiente"
-        disabled={isToday}
+        disabled={forwardDisabled}
       >
-        <ChevronRight className={`h-4 w-4 ${isToday ? 'opacity-30' : ''}`} />
+        <ChevronRight className={`h-4 w-4 ${forwardDisabled ? 'opacity-30' : ''}`} />
       </button>
     </div>
   )

@@ -38,9 +38,10 @@ async function loginAction(formData: FormData) {
       },
     })
   } catch (e: any) {
-    const code = e?.code ?? e?.name ?? 'UNKNOWN'
-    console.error('[LOGIN] DB error code:', code, '| message:', e?.message)
-    redirect('/login?error=db&code=' + encodeURIComponent(code))
+    const code = e?.errorCode ?? e?.code ?? e?.name ?? 'UNKNOWN'
+    const msg = (e?.message ?? '').slice(0, 120)
+    console.error('[LOGIN] DB error:', code, '|', msg)
+    redirect('/login?error=db&code=' + encodeURIComponent(code + ' | ' + msg))
   }
 
   if (!user) redirect('/login?error=invalid')

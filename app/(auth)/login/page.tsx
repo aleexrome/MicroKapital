@@ -73,7 +73,7 @@ async function loginAction(formData: FormData) {
     // Re-throw Next.js redirect errors — they are not real errors
     if (typeof e === 'object' && e !== null && 'digest' in e) throw e
     console.error('[LOGIN ERROR]', e)
-    redirect('/login?error=invalid')
+    redirect('/login?error=server')
   }
 }
 
@@ -87,6 +87,8 @@ export default function LoginPage({
       ? 'Credenciales incorrectas. Verifica tu email y contraseña.'
       : searchParams.error === 'license'
       ? 'Tu empresa no tiene licencia activa.'
+      : searchParams.error === 'server'
+      ? 'Error del servidor. Contacta al administrador.'
       : null
 
   return (

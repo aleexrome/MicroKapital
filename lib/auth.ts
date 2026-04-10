@@ -68,20 +68,7 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
 
         const user = await prisma.user.findFirst({
           where: { email, activo: true },
-          select: {
-            id: true,
-            email: true,
-            nombre: true,
-            rol: true,
-            companyId: true,
-            branchId: true,
-            passwordHash: true,
-            company: {
-              select: {
-                license: { select: { estado: true } },
-              },
-            },
-          },
+          include: { company: { include: { license: true } } },
         })
 
         if (!user) return null

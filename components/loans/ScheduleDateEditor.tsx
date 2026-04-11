@@ -72,8 +72,9 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fechaVencimiento: dateValue }),
       })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Error')
-      toast({ title: `Pago ${s.numeroPago} — fecha actualizada` })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      toast({ title: data.message ?? `Pago ${s.numeroPago} — fecha actualizada` })
       setEditingId(null)
       router.refresh()
     } catch (e) {

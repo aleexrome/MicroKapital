@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Pencil, Check, X } from 'lucide-react'
+import { Loader2, Pencil, Check, X, AlertCircle } from 'lucide-react'
 import { formatMoney } from '@/lib/utils'
 import { formatDate } from '@/lib/utils'
 import type { ScheduleStatus } from '@prisma/client'
@@ -80,15 +80,29 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates 
     }
   }
 
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
   return (
     <div className="divide-y">
       {schedule.map((s) => {
         const isEditing = editingId === s.id
         const editable  = canEditDates && s.estado !== 'PAID' && s.estado !== 'ADVANCE'
 
+        // Visually overdue: date has passed but still stored as PENDING/PARTIAL
+        const dueDate = new Date(s.fechaVencimiento)
+        dueDate.setHours(0, 0, 0, 0)
+        const isVisuallyOverdue =
+          (s.estado === 'PENDING' || s.estado === 'PARTIAL') && dueDate < today
+
         return (
-          <div key={s.id} className="flex items-center gap-2 py-2 text-sm">
-            <span className="text-muted-foreground w-7 shrink-0">{s.numeroPago}.</span>
+          <div
+            key={s.id}
+            className={`flex items-center gap-2 py-2 text-sm ${isVisuallyOverdue ? 'bg-red-500/5' : ''}`}
+          >
+            <span className={`w-7 shrink-0 ${isVisuallyOverdue ? 'text-red-400 font-semibold' : 'text-muted-foreground'}`}>
+              {s.numeroPago}.
+            </span>
 
             {/* Date cell */}
             {isEditing ? (
@@ -121,7 +135,12 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates 
               </div>
             ) : (
               <span className="w-24 shrink-0 flex items-center gap-1">
-                {formatDate(s.fechaVencimiento)}
+                <span className={isVisuallyOverdue ? 'text-red-400 font-medium' : ''}>
+                  {formatDate(s.fechaVencimiento)}
+                </span>
+                {isVisuallyOverdue && (
+                  <AlertCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                )}
                 {editable && (
                   <button
                     onClick={() => startEdit(s)}
@@ -135,8 +154,11 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates 
             )}
 
             <span className="font-medium w-20 shrink-0">{formatMoney(s.montoEsperado)}</span>
-            <Badge variant={STATUS_VARIANT[s.estado]} className="text-xs">
-              {STATUS_LABEL[s.estado]}
+            <Badge
+              variant={isVisuallyOverdue ? 'error' : STATUS_VARIANT[s.estado]}
+              className="text-xs"
+            >
+              {isVisuallyOverdue ? 'Vencido' : STATUS_LABEL[s.estado]}
             </Badge>
 
             {canCapture && (s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL') && (

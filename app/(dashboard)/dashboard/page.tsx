@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Prisma, type UserRole } from '@prisma/client'
+import { LoanStatusChart, MonthPaymentsChart } from '@/components/dashboard/DashboardCharts'
 
 const ESTADO_LABEL: Record<string, string> = {
   ACTIVE: 'Activo',
@@ -176,6 +177,45 @@ export default async function DashboardPage() {
         orderBy: { nombre: 'asc' },
       })
     : []
+
+  // ── Chart data ───────────────────────────────────────────────────────────────
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+
+  const [loanStatusDist, schedPagados, schedVencidos, schedPorCobrar] = await Promise.all([
+    // Donut 1: loan distribution by estado
+    prisma.loan.groupBy({
+      by: ['estado'],
+      where: loanScope,
+      _count: { _all: true },
+    }),
+    // Donut 2: this month's schedules — PAID
+    prisma.paymentSchedule.count({
+      where: {
+        loan: { ...loanScope, estado: 'ACTIVE' },
+        fechaVencimiento: { gte: firstOfMonth, lt: endOfMonth },
+        estado: 'PAID',
+      },
+    }),
+    // Donut 2: this month's schedules — visually overdue (date passed, not paid)
+    prisma.paymentSchedule.count({
+      where: {
+        loan: { ...loanScope, estado: 'ACTIVE' },
+        fechaVencimiento: { gte: firstOfMonth, lt: today },
+        estado: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] },
+      },
+    }),
+    // Donut 2: this month's schedules — upcoming (date >= today)
+    prisma.paymentSchedule.count({
+      where: {
+        loan: { ...loanScope, estado: 'ACTIVE' },
+        fechaVencimiento: { gte: today, lt: endOfMonth },
+        estado: { in: ['PENDING', 'PARTIAL'] },
+      },
+    }),
+  ])
+
+  const loanStatusData = loanStatusDist.map((r) => ({ estado: r.estado, count: r._count._all }))
+  const monthPaymentsData = { pagados: schedPagados, vencidos: schedVencidos, porCobrar: schedPorCobrar }
 
   // Recent loans (scoped)
   const recientes = await prisma.loan.findMany({
@@ -400,6 +440,20 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="p-5">
+            <LoanStatusChart data={loanStatusData} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <MonthPaymentsChart data={monthPaymentsData} />
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Recent loans */}
       <Card>

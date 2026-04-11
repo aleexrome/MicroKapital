@@ -17,9 +17,11 @@ export default async function ReportesPage() {
   today.setHours(0, 0, 0, 0)
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
 
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+
   const [
     totalCartera,
-    cobradoMes,
+    cashMesAgg,
     moraCount,
     liquidadosMes,
   ] = await Promise.all([
@@ -28,12 +30,18 @@ export default async function ReportesPage() {
       _sum: { totalPago: true },
     }),
 
-    prisma.payment.aggregate({
+    // Usar CashRegister (fecha @db.Date, sin problemas de timezone).
+    // Suma los tres métodos de pago capturados en el mes actual.
+    prisma.cashRegister.aggregate({
       where: {
-        loan: { companyId: companyId! },
-        fechaHora: { gte: startOfMonth, lt: new Date(today.getFullYear(), today.getMonth() + 1, 1) },
+        branch: { companyId: companyId! },
+        fecha: { gte: startOfMonth, lt: endOfMonth },
       },
-      _sum: { monto: true },
+      _sum: {
+        cobradoEfectivo:      true,
+        cobradoTarjeta:       true,
+        cobradoTransferencia: true,
+      },
     }),
 
     prisma.paymentSchedule.count({
@@ -53,6 +61,11 @@ export default async function ReportesPage() {
     }),
   ])
 
+  const cobradoMes =
+    Number(cashMesAgg._sum.cobradoEfectivo      ?? 0) +
+    Number(cashMesAgg._sum.cobradoTarjeta       ?? 0) +
+    Number(cashMesAgg._sum.cobradoTransferencia ?? 0)
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -69,7 +82,7 @@ export default async function ReportesPage() {
         />
         <MetricCard
           title="Cobrado este mes"
-          value={formatMoney(Number(cobradoMes._sum.monto ?? 0))}
+          value={formatMoney(cobradoMes)}
           icon={TrendingDown}
           color="green"
         />

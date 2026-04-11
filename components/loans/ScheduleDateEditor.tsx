@@ -105,18 +105,16 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
     <div className="divide-y">
       {schedule.map((s) => {
         const isEditing = editingId === s.id
-        // SUPER_ADMIN (canUndo=true) puede editar cualquier fila.
-        // Otros roles solo pueden editar las que no están PAID ni ADVANCE.
-        const editable  = canUndo
-          ? canEditDates
-          : canEditDates && s.estado !== 'PAID' && s.estado !== 'ADVANCE'
+        // canUndo (DG/SUPER_ADMIN) → puede editar TODAS las filas, incluyendo PAID.
+        // canEditDates sin canUndo → puede editar PENDING, OVERDUE, PARTIAL (no PAID ni ADVANCE).
+        const editable = canEditDates && (canUndo || (s.estado !== 'PAID' && s.estado !== 'ADVANCE'))
 
-        // Visually overdue: date has passed but still stored as PENDING/PARTIAL
-        // Use UTC date components to avoid timezone shift
+        // Visually overdue: fecha pasada con estado pendiente/parcial, OR estado explícito OVERDUE
         const _d = typeof s.fechaVencimiento === 'string' ? new Date(s.fechaVencimiento) : s.fechaVencimiento
         const dueDate = new Date(_d.getUTCFullYear(), _d.getUTCMonth(), _d.getUTCDate())
         const isVisuallyOverdue =
-          (s.estado === 'PENDING' || s.estado === 'PARTIAL') && dueDate < today
+          s.estado === 'OVERDUE' ||
+          ((s.estado === 'PENDING' || s.estado === 'PARTIAL') && dueDate < today)
 
         return (
           <div

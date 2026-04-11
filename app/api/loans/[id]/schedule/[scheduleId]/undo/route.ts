@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
-import { isOperationsAdmin } from '@/lib/permissions'
 
 export async function POST(
   _req: NextRequest,
@@ -11,7 +10,8 @@ export async function POST(
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  if (!isOperationsAdmin(session.user.email, session.user.rol)) {
+  const esOpAdmin = session.user.rol === 'DIRECTOR_GENERAL' || session.user.rol === 'SUPER_ADMIN'
+  if (!esOpAdmin) {
     return NextResponse.json({ error: 'No autorizado para deshacer pagos' }, { status: 403 })
   }
 

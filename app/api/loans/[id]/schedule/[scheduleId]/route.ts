@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
-import { isOperationsAdmin } from '@/lib/permissions'
 import { z } from 'zod'
 
 const patchSchema = z.object({
@@ -18,9 +17,9 @@ export async function PATCH(
 
   const { rol, companyId, id: userId } = session.user
 
-  const esOpAdmin = isOperationsAdmin(session.user.email, rol)
+  const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
 
-  if (rol !== 'DIRECTOR_GENERAL' && rol !== 'SUPER_ADMIN' && !esOpAdmin) {
+  if (!esOpAdmin) {
     return NextResponse.json(
       { error: 'Solo el Director General puede modificar fechas del calendario' },
       { status: 403 }

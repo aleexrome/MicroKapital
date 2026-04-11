@@ -41,7 +41,6 @@ export async function GET(req: NextRequest) {
       ...(estado ? { estado: estado as 'PENDING_APPROVAL' | 'ACTIVE' | 'LIQUIDATED' | 'REJECTED' | 'RESTRUCTURED' | 'DEFAULTED' } : {}),
     },
     orderBy: { createdAt: 'desc' },
-    take: 50,
     include: {
       client: { select: { nombreCompleto: true } },
       cobrador: { select: { nombre: true } },

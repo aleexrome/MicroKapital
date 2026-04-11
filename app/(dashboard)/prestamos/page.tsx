@@ -29,7 +29,6 @@ export default async function PrestamosPage() {
       ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
     },
     orderBy: { createdAt: 'desc' },
-    take: 50,
     include: {
       client: { select: { nombreCompleto: true } },
       cobrador: { select: { nombre: true } },

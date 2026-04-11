@@ -99,7 +99,11 @@ export default async function DashboardPage() {
       _sum: { monto: true },
     }),
     prisma.paymentSchedule.count({
-      where: { loan: { ...loanScope, estado: 'ACTIVE' }, estado: 'OVERDUE' },
+      where: {
+        loan: { ...loanScope, estado: 'ACTIVE' },
+        estado: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] },
+        fechaVencimiento: { lt: today },
+      },
     }),
     isDirector
       ? prisma.loan.count({ where: { ...loanScope, estado: 'PENDING_APPROVAL' } })

@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Prisma, type UserRole } from '@prisma/client'
-import { LoanStatusChart, MonthPaymentsChart } from '@/components/dashboard/DashboardCharts'
+import { LoanStatusChart, MonthPaymentsChart, LoanTypeChart, BranchCapitalChart } from '@/components/dashboard/DashboardCharts'
 
 const ESTADO_LABEL: Record<string, string> = {
   ACTIVE: 'Activo',
@@ -181,11 +181,17 @@ export default async function DashboardPage() {
   // ── Chart data ───────────────────────────────────────────────────────────────
   const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1)
 
-  const [loanStatusDist, schedPagados, schedVencidos, schedPorCobrar] = await Promise.all([
+  const [loanStatusDist, loanTypeDist, schedPagados, schedVencidos, schedPorCobrar] = await Promise.all([
     // Donut 1: loan distribution by estado
     prisma.loan.groupBy({
       by: ['estado'],
       where: loanScope,
+      _count: { _all: true },
+    }),
+    // Bar 3: active loans by tipo
+    prisma.loan.groupBy({
+      by: ['tipo'],
+      where: { ...loanScope, estado: 'ACTIVE' },
       _count: { _all: true },
     }),
     // Donut 2: this month's schedules — PAID
@@ -214,8 +220,14 @@ export default async function DashboardPage() {
     }),
   ])
 
-  const loanStatusData = loanStatusDist.map((r) => ({ estado: r.estado, count: r._count._all }))
+  const loanStatusData   = loanStatusDist.map((r) => ({ estado: r.estado, count: r._count._all }))
+  const loanTypeData     = loanTypeDist.map((r) => ({ tipo: r.tipo, count: r._count._all }))
   const monthPaymentsData = { pagados: schedPagados, vencidos: schedVencidos, porCobrar: schedPorCobrar }
+  const branchCapitalData = branchBreakdown.map((b) => ({
+    nombre:  b.nombre,
+    capital: b.loans.reduce((s, l) => s + Number(l.capital), 0),
+    count:   b._count.loans,
+  }))
 
   // Recent loans (scoped)
   const recientes = await prisma.loan.findMany({
@@ -369,6 +381,30 @@ export default async function DashboardPage() {
         )}
       </div>
 
+      {/* Charts 2×2 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="p-5">
+            <LoanStatusChart data={loanStatusData} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <MonthPaymentsChart data={monthPaymentsData} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <LoanTypeChart data={loanTypeData} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <BranchCapitalChart data={branchCapitalData} />
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Per-branch breakdown (directors) */}
       {isDirector && branchBreakdown.length > 0 && (
         <Card>
@@ -440,20 +476,6 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-5">
-            <LoanStatusChart data={loanStatusData} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <MonthPaymentsChart data={monthPaymentsData} />
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Recent loans */}
       <Card>

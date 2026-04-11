@@ -139,19 +139,19 @@ export default async function AgendaPage({
 
         {/* Resumen */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-green-50 rounded-lg p-3">
-            <p className="text-xs text-green-600 font-medium">Cobrado</p>
-            <p className="text-lg font-bold text-green-700">{formatMoney(totalCobrado)}</p>
-            <p className="text-xs text-green-600">{cobrados.length} clientes</p>
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+            <p className="text-xs text-emerald-400 font-medium">Cobrado</p>
+            <p className="text-lg font-bold text-emerald-300">{formatMoney(totalCobrado)}</p>
+            <p className="text-xs text-emerald-400/70">{cobrados.length} clientes</p>
           </div>
-          <div className={`rounded-lg p-3 ${pendientes.length > 0 ? 'bg-red-50' : 'bg-gray-50'}`}>
-            <p className={`text-xs font-medium ${pendientes.length > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+          <div className={`rounded-lg p-3 border ${pendientes.length > 0 ? 'bg-red-500/10 border-red-500/20' : 'bg-muted border-border'}`}>
+            <p className={`text-xs font-medium ${pendientes.length > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>
               Sin cobrar
             </p>
-            <p className={`text-lg font-bold ${pendientes.length > 0 ? 'text-red-700' : 'text-gray-500'}`}>
+            <p className={`text-lg font-bold ${pendientes.length > 0 ? 'text-red-300' : 'text-muted-foreground'}`}>
               {formatMoney(totalEsperado - totalCobrado)}
             </p>
-            <p className={`text-xs ${pendientes.length > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+            <p className={`text-xs ${pendientes.length > 0 ? 'text-red-400/70' : 'text-muted-foreground'}`}>
               {pendientes.length} clientes
             </p>
           </div>
@@ -209,8 +209,8 @@ export default async function AgendaPage({
                     {cPagados.map((row) => {
                       const pago = row.payments[0]
                       return (
-                        <div key={row.id} className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-green-50">
-                          <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                        <div key={row.id} className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-emerald-500/10 border border-emerald-500/15">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                           <div className="flex-1 min-w-0">
                             <Link href={`/clientes/${row.loan.client.id}`} className="font-medium hover:underline truncate block">
                               {row.loan.client.nombreCompleto}
@@ -221,8 +221,8 @@ export default async function AgendaPage({
                             </p>
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="font-semibold text-green-700">{formatMoney(Number(pago.monto))}</p>
-                            <p className="text-[10px] text-green-600">
+                            <p className="font-semibold text-emerald-300">{formatMoney(Number(pago.monto))}</p>
+                            <p className="text-[10px] text-emerald-400/70">
                               {new Date(pago.fechaHora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                             </p>
                           </div>
@@ -230,8 +230,8 @@ export default async function AgendaPage({
                       )
                     })}
                     {cPendientes.map((row) => (
-                      <div key={row.id} className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-red-50">
-                        <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+                      <div key={row.id} className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-red-500/10 border border-red-500/15">
+                        <XCircle className="h-4 w-4 text-red-400 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <Link href={`/clientes/${row.loan.client.id}`} className="font-medium hover:underline truncate block">
                             {row.loan.client.nombreCompleto}
@@ -241,7 +241,7 @@ export default async function AgendaPage({
                             {row.loan.client.telefono && ` · ${row.loan.client.telefono}`}
                           </p>
                         </div>
-                        <p className="font-semibold text-red-600 shrink-0">{formatMoney(Number(row.montoEsperado))}</p>
+                        <p className="font-semibold text-red-300 shrink-0">{formatMoney(Number(row.montoEsperado))}</p>
                       </div>
                     ))}
                   </CardContent>
@@ -290,19 +290,19 @@ export default async function AgendaPage({
 
       {/* Resumen */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-green-50 rounded-lg p-3">
-          <p className="text-xs text-green-600 font-medium">Cobrado</p>
-          <p className="text-lg font-bold text-green-700">{formatMoney(totalCobrado)}</p>
-          <p className="text-xs text-green-600">{cobrados.length} clientes</p>
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+          <p className="text-xs text-emerald-400 font-medium">Cobrado</p>
+          <p className="text-lg font-bold text-emerald-300">{formatMoney(totalCobrado)}</p>
+          <p className="text-xs text-emerald-400/70">{cobrados.length} clientes</p>
         </div>
-        <div className={`rounded-lg p-3 ${pendientes.length > 0 ? 'bg-amber-50' : 'bg-gray-50'}`}>
-          <p className={`text-xs font-medium ${pendientes.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+        <div className={`rounded-lg p-3 border ${pendientes.length > 0 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-muted border-border'}`}>
+          <p className={`text-xs font-medium ${pendientes.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>
             {isToday ? 'Por cobrar' : 'Sin cobrar'}
           </p>
-          <p className={`text-lg font-bold ${pendientes.length > 0 ? 'text-amber-700' : 'text-gray-500'}`}>
+          <p className={`text-lg font-bold ${pendientes.length > 0 ? 'text-amber-300' : 'text-muted-foreground'}`}>
             {formatMoney(totalEsperado - totalCobrado)}
           </p>
-          <p className={`text-xs ${pendientes.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+          <p className={`text-xs ${pendientes.length > 0 ? 'text-amber-400/70' : 'text-muted-foreground'}`}>
             {pendientes.length} clientes
           </p>
         </div>
@@ -311,7 +311,7 @@ export default async function AgendaPage({
       {/* Sin cobrar / pendientes */}
       {(gruposPendientes.length > 0 || individualesPendientes.length > 0) && (
         <section>
-          <h2 className={`text-sm font-semibold mb-2 ${isToday ? 'text-amber-600' : 'text-red-600'}`}>
+          <h2 className={`text-sm font-semibold mb-2 ${isToday ? 'text-amber-400' : 'text-red-400'}`}>
             {isToday ? '🟡 Pendientes' : '🔴 Sin cobrar'} ({pendientes.length})
           </h2>
           <div className="space-y-2">
@@ -328,7 +328,7 @@ export default async function AgendaPage({
       {/* Cobrados */}
       {(gruposCobrados.length > 0 || individualesCobrados.length > 0) && (
         <section>
-          <h2 className="text-sm font-semibold text-green-600 mb-2">
+          <h2 className="text-sm font-semibold text-emerald-400 mb-2">
             ✅ Cobrados ({cobrados.length})
           </h2>
           <div className="space-y-2">
@@ -440,7 +440,7 @@ function AgendaItem({
   const borderColor = variant === 'collected' ? 'border-l-green-500' : variant === 'pending' ? 'border-l-yellow-400' : 'border-l-red-500'
 
   const StatusIcon = variant === 'collected' ? CheckCircle2 : variant === 'pending' ? null : XCircle
-  const iconColor  = variant === 'collected' ? 'text-green-500' : 'text-red-500'
+  const iconColor  = variant === 'collected' ? 'text-emerald-400' : 'text-red-400'
 
   const href = isToday && variant === 'pending' ? `/cobros/capturar/${schedule.id}` : '#'
 
@@ -448,7 +448,7 @@ function AgendaItem({
 
   return (
     <Link href={href}>
-      <Card className={`border-l-4 ${borderColor} ${variant === 'collected' ? 'bg-green-50/30' : ''}`}>
+      <Card className={`border-l-4 ${borderColor} ${variant === 'collected' ? 'bg-emerald-500/5' : ''}`}>
         <CardContent className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             {StatusIcon && <StatusIcon className={`h-4 w-4 ${iconColor} shrink-0`} />}
@@ -459,7 +459,7 @@ function AgendaItem({
                 {schedule.loan.client.telefono && ` · ${schedule.loan.client.telefono}`}
               </p>
               {pago && (
-                <p className="text-xs text-green-600 mt-0.5">
+                <p className="text-xs text-emerald-400 mt-0.5">
                   Cobrado el {new Date(pago.fechaHora).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
                   {pago.metodoPago === 'CASH' ? ' · 💵' : pago.metodoPago === 'TRANSFER' ? ' · 🏦' : ' · 💳'}
                 </p>
@@ -467,7 +467,7 @@ function AgendaItem({
             </div>
           </div>
           <div className="flex items-center gap-2 ml-3 shrink-0">
-            <span className={`font-bold ${variant === 'collected' ? 'text-green-700' : 'text-gray-900'}`}>
+            <span className={`font-bold ${variant === 'collected' ? 'text-emerald-300' : 'text-foreground'}`}>
               {formatMoney(monto)}
             </span>
             {isToday && variant === 'pending' && <ChevronRight className="h-4 w-4 text-muted-foreground" />}

@@ -17,10 +17,12 @@ const TABS: { label: string; value: string | null }[] = [
   { label: 'Rechazados', value: 'REJECTED' },
 ]
 
+const PAGE_SIZE = 50
+
 export default async function PrestamosPage({
   searchParams,
 }: {
-  searchParams: { estado?: string }
+  searchParams: { estado?: string; page?: string }
 }) {
   const session = await getSession()
   if (!session?.user) return null
@@ -28,6 +30,7 @@ export default async function PrestamosPage({
   const { rol, companyId, branchId: userBranchId, id: userId } = session.user
 
   const estadoFiltro = searchParams.estado ?? null
+  const page = Math.max(1, parseInt(searchParams.page ?? '1', 10))
 
   const where: Prisma.LoanWhereInput = { companyId: companyId! }
 
@@ -49,7 +52,8 @@ export default async function PrestamosPage({
   const loans = await prisma.loan.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    take: 60,
+    take: PAGE_SIZE,
+    skip: (page - 1) * PAGE_SIZE,
     include: {
       client: { select: { nombreCompleto: true } },
       cobrador: { select: { nombre: true } },
@@ -78,6 +82,9 @@ export default async function PrestamosPage({
   countByEstado.forEach((r) => { countMap[r.estado] = r._count._all })
   const totalAll = Object.values(countMap).reduce((s, v) => s + v, 0)
 
+  const totalFiltered = estadoFiltro ? (countMap[estadoFiltro] ?? 0) : totalAll
+  const totalPages    = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE))
+
   const canCreate = ['COORDINADOR', 'COBRADOR', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN'].includes(rol)
 
   return (
@@ -86,7 +93,9 @@ export default async function PrestamosPage({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Solicitudes de Crédito</h1>
-          <p className="text-muted-foreground">{loans.length} registro(s)</p>
+          <p className="text-muted-foreground">
+            {totalFiltered} registro(s) · página {page} de {totalPages}
+          </p>
         </div>
         {canCreate && (
           <Button asChild>
@@ -161,6 +170,68 @@ export default async function PrestamosPage({
           )}
         </CardContent>
       </Card>
+      {/* Paginación */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Link
+            href={buildHref(estadoFiltro, Math.max(1, page - 1))}
+            className={cn(
+              'px-3 py-1.5 text-sm rounded-md border transition-colors',
+              page <= 1
+                ? 'pointer-events-none opacity-40 border-border text-muted-foreground'
+                : 'border-border hover:bg-secondary text-foreground'
+            )}
+          >
+            ← Anterior
+          </Link>
+
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+            .reduce<(number | '…')[]>((acc, p, idx, arr) => {
+              if (idx > 0 && typeof arr[idx - 1] === 'number' && (p as number) - (arr[idx - 1] as number) > 1) acc.push('…')
+              acc.push(p)
+              return acc
+            }, [])
+            .map((p, i) =>
+              p === '…' ? (
+                <span key={`ellipsis-${i}`} className="px-1 text-muted-foreground">…</span>
+              ) : (
+                <Link
+                  key={p}
+                  href={buildHref(estadoFiltro, p as number)}
+                  className={cn(
+                    'w-8 h-8 flex items-center justify-center text-sm rounded-md border transition-colors',
+                    p === page
+                      ? 'bg-primary-500 border-primary-500 text-white font-semibold'
+                      : 'border-border hover:bg-secondary text-foreground'
+                  )}
+                >
+                  {p}
+                </Link>
+              )
+            )}
+
+          <Link
+            href={buildHref(estadoFiltro, Math.min(totalPages, page + 1))}
+            className={cn(
+              'px-3 py-1.5 text-sm rounded-md border transition-colors',
+              page >= totalPages
+                ? 'pointer-events-none opacity-40 border-border text-muted-foreground'
+                : 'border-border hover:bg-secondary text-foreground'
+            )}
+          >
+            Siguiente →
+          </Link>
+        </div>
+      )}
     </div>
   )
+}
+
+function buildHref(estado: string | null, page: number) {
+  const params = new URLSearchParams()
+  if (estado) params.set('estado', estado)
+  if (page > 1) params.set('page', String(page))
+  const qs = params.toString()
+  return `/prestamos${qs ? `?${qs}` : ''}`
 }

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Pencil, Check, X, AlertCircle, Undo2 } from 'lucide-react'
+import { Loader2, Pencil, Check, X, AlertCircle, Undo2, CheckCircle2 } from 'lucide-react'
 import { formatMoney } from '@/lib/utils'
 import { formatDate } from '@/lib/utils'
 import type { ScheduleStatus } from '@prisma/client'
@@ -50,13 +50,18 @@ interface Props {
 }
 
 export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates, canUndo }: Props) {
-  const router   = useRouter()
+  const router    = useRouter()
   const { toast } = useToast()
-  const [editingId, setEditingId]   = useState<string | null>(null)
-  const [dateValue, setDateValue]   = useState('')
-  const [saving, setSaving]         = useState(false)
-  const [confirmUndoId, setConfirmUndoId] = useState<string | null>(null)
-  const [undoing, setUndoing]             = useState(false)
+
+  const [editingId, setEditingId]           = useState<string | null>(null)
+  const [dateValue, setDateValue]           = useState('')
+  const [saving, setSaving]                 = useState(false)
+
+  const [confirmUndoId, setConfirmUndoId]   = useState<string | null>(null)
+  const [undoing, setUndoing]               = useState(false)
+
+  const [confirmApplyId, setConfirmApplyId] = useState<string | null>(null)
+  const [applying, setApplying]             = useState(false)
 
   function startEdit(s: ScheduleItem) {
     setEditingId(s.id)
@@ -88,14 +93,31 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
     setUndoing(true)
     try {
       const res = await fetch(`/api/loans/${loanId}/schedule/${s.id}/undo`, { method: 'POST' })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Error')
-      toast({ title: `Pago ${s.numeroPago} revertido a Pendiente` })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      toast({ title: data.message ?? `Pago ${s.numeroPago} revertido a Pendiente` })
       setConfirmUndoId(null)
       router.refresh()
     } catch (e) {
       toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
     } finally {
       setUndoing(false)
+    }
+  }
+
+  async function applyPayment(s: ScheduleItem) {
+    setApplying(true)
+    try {
+      const res = await fetch(`/api/loans/${loanId}/schedule/${s.id}/apply`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      toast({ title: data.message ?? `Pago ${s.numeroPago} aplicado` })
+      setConfirmApplyId(null)
+      router.refresh()
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+    } finally {
+      setApplying(false)
     }
   }
 
@@ -116,6 +138,9 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
         const isVisuallyOverdue =
           s.estado === 'OVERDUE' ||
           ((s.estado === 'PENDING' || s.estado === 'PARTIAL') && dueDate < today)
+
+        const canApplyRow  = canUndo && (s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL')
+        const canUndoRow   = canUndo && s.estado === 'PAID'
 
         return (
           <div
@@ -192,8 +217,46 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
               </a>
             )}
 
-            {/* Undo — solo SUPER_ADMIN, solo pagos marcados como PAID */}
-            {canUndo && s.estado === 'PAID' && (
+            {/* Aplicar Pago — solo Director, para filas PENDING / OVERDUE / PARTIAL */}
+            {canApplyRow && (
+              <div className={canCapture ? 'shrink-0' : 'ml-auto shrink-0'}>
+                {confirmApplyId === s.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-emerald-400">¿Aplicar?</span>
+                    <Button
+                      size="sm"
+                      variant="success"
+                      className="h-6 px-2 text-xs"
+                      disabled={applying}
+                      onClick={() => applyPayment(s)}
+                    >
+                      {applying ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sí'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-xs"
+                      disabled={applying}
+                      onClick={() => setConfirmApplyId(null)}
+                    >
+                      No
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmApplyId(s.id)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-emerald-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-emerald-400/50"
+                    title="Aplicar pago (Director)"
+                  >
+                    <CheckCircle2 className="h-3 w-3" />
+                    Aplicar
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Deshacer Pago — solo Director, para filas PAID */}
+            {canUndoRow && (
               <div className="ml-auto shrink-0">
                 {confirmUndoId === s.id ? (
                   <div className="flex items-center gap-1.5">
@@ -221,7 +284,7 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
                   <button
                     onClick={() => setConfirmUndoId(s.id)}
                     className="flex items-center gap-1 text-xs text-muted-foreground hover:text-amber-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-amber-400/50"
-                    title="Deshacer pago (SUPER_ADMIN)"
+                    title="Deshacer pago (Director)"
                   >
                     <Undo2 className="h-3 w-3" />
                     Deshacer

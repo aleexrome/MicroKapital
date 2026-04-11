@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
+import { isOperationsAdmin } from '@/lib/permissions'
 import { z } from 'zod'
 
 const patchSchema = z.object({
@@ -17,7 +18,9 @@ export async function PATCH(
 
   const { rol, companyId, id: userId } = session.user
 
-  if (rol !== 'DIRECTOR_GENERAL' && rol !== 'SUPER_ADMIN') {
+  const esOpAdmin = isOperationsAdmin(session.user.email)
+
+  if (rol !== 'DIRECTOR_GENERAL' && rol !== 'SUPER_ADMIN' && !esOpAdmin) {
     return NextResponse.json(
       { error: 'Solo el Director General puede modificar fechas del calendario' },
       { status: 403 }
@@ -35,8 +38,8 @@ export async function PATCH(
     where: { id: params.scheduleId, loanId: params.id, loan: { companyId: companyId! } },
   })
   if (!schedule) return NextResponse.json({ error: 'Pago no encontrado' }, { status: 404 })
-  // Solo SUPER_ADMIN puede editar la fecha de un pago ya realizado
-  if (schedule.estado === 'PAID' && rol !== 'SUPER_ADMIN') {
+  // Solo el Operations Admin puede editar la fecha de un pago ya realizado
+  if (schedule.estado === 'PAID' && !esOpAdmin) {
     return NextResponse.json({ error: 'No se puede modificar un pago ya realizado' }, { status: 400 })
   }
 

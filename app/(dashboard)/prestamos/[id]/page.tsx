@@ -15,6 +15,7 @@ import { formatMoney, formatDate } from '@/lib/utils'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import type { LoanStatus, LoanType, ScheduleStatus } from '@prisma/client'
+import { isOperationsAdmin } from '@/lib/permissions'
 
 // Umbral de pagos para renovación anticipada por producto
 const UMBRAL_RENOVACION: Record<string, number> = {
@@ -67,14 +68,14 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     loan.estado === 'APPROVED' &&
     (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE' || rol === 'SUPER_ADMIN')
 
-  // Director General puede editar fechas en créditos activos.
-  // SUPER_ADMIN puede editar cualquier fecha en cualquier estado de crédito.
-  const puedeEditarFechas =
-    rol === 'SUPER_ADMIN' ||
-    (loan.estado === 'ACTIVE' && rol === 'DIRECTOR_GENERAL')
+  const esOpAdmin = isOperationsAdmin(session.user.email)
 
-  // Solo SUPER_ADMIN puede deshacer pagos
-  const puedeDeshacerPago = rol === 'SUPER_ADMIN'
+  // Operations admin puede editar cualquier fecha en cualquier estado de crédito.
+  // Director General solo puede editar en créditos activos (filas no pagadas).
+  const puedeEditarFechas = esOpAdmin || (loan.estado === 'ACTIVE' && rol === 'DIRECTOR_GENERAL')
+
+  // Solo el Operations Admin (Stephanie) puede deshacer pagos
+  const puedeDeshacerPago = esOpAdmin
 
   // Coordinador/Cobrador pueden capturar pagos
   const puedeCapturar = loan.estado === 'ACTIVE' && (rol === 'COBRADOR' || rol === 'COORDINADOR')

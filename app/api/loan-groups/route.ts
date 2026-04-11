@@ -35,11 +35,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Uno o más clientes no encontrados en esta empresa' }, { status: 404 })
   }
 
-  const isCampo = rol === 'COBRADOR' || rol === 'COORDINADOR'
-  const cobradorId = isCampo ? userId : null
-  if (!cobradorId) return NextResponse.json({ error: 'Solo coordinadores y cobradores pueden crear solicitudes' }, { status: 403 })
+  // Coordinador, Cobrador, Gerente y Gerente Zonal: se auto-asignan como cobrador
+  // Solo Director puede crear grupos con cobrador explícito (requiere UI con selector)
+  const isCampo = rol === 'COBRADOR' || rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
+  if (!isCampo) return NextResponse.json({ error: 'No autorizado para crear solicitudes de grupo solidario' }, { status: 403 })
+  const cobradorId = userId
 
-  const targetBranchId = branchId ?? clients[0].branchId
+  const targetBranchId = branchId ?? session.user.zonaBranchIds?.[0] ?? clients[0].branchId
   if (!targetBranchId) return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
 
   const calc = calcLoan('SOLIDARIO', data.capital, undefined, {

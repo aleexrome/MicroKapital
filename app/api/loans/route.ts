@@ -106,11 +106,12 @@ export async function POST(req: NextRequest) {
   })
   if (!client) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
 
-  const targetBranchId = data.branchId ?? branchId ?? client.branchId
+  const targetBranchId = data.branchId ?? branchId ?? session.user.zonaBranchIds?.[0] ?? client.branchId
   if (!targetBranchId) return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
 
-  // COORDINADOR y COBRADOR se asignan a sí mismos como cobrador
-  const isCampo = rol === 'COBRADOR' || rol === 'COORDINADOR'
+  // Coordinador, Cobrador, Gerente y Gerente Zonal: se asignan a sí mismos como cobrador
+  // Solo Director puede asignar a otro cobrador (envía cobradorId en el body)
+  const isCampo = rol === 'COBRADOR' || rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
   let cobradorId = data.cobradorId
   if (isCampo) {
     cobradorId = userId

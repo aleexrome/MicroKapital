@@ -88,8 +88,9 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Determinar sucursal
-  const targetBranchId = data.branchId ?? branchId
+  // Determinar sucursal — Director puede elegir cualquiera; el resto usa la propia
+  const { zonaBranchIds } = session.user
+  const targetBranchId = data.branchId ?? branchId ?? zonaBranchIds?.[0]
   if (!targetBranchId) {
     return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
   }
@@ -102,9 +103,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Sucursal no válida' }, { status: 400 })
   }
 
-  // COORDINADOR y COBRADOR: se asignan a sí mismos como cobrador
+  // Coordinador, Cobrador, Gerente y Gerente Zonal: se asignan a sí mismos como cobrador
+  // Solo Director puede asignar a otro cobrador (debe enviarlo en el body)
+  const isRolCampo = rol === 'COBRADOR' || rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
   let cobradorId = data.cobradorId
-  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
+  if (isRolCampo) {
     cobradorId = userId
   }
 

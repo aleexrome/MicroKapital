@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Pencil, Check, X, AlertCircle } from 'lucide-react'
+import { Loader2, Pencil, Check, X, AlertCircle, Undo2 } from 'lucide-react'
 import { formatMoney } from '@/lib/utils'
 import { formatDate } from '@/lib/utils'
 import type { ScheduleStatus } from '@prisma/client'
@@ -46,14 +46,17 @@ interface Props {
   schedule: ScheduleItem[]
   canCapture: boolean
   canEditDates: boolean
+  canUndo: boolean
 }
 
-export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates }: Props) {
+export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates, canUndo }: Props) {
   const router   = useRouter()
   const { toast } = useToast()
   const [editingId, setEditingId]   = useState<string | null>(null)
   const [dateValue, setDateValue]   = useState('')
   const [saving, setSaving]         = useState(false)
+  const [confirmUndoId, setConfirmUndoId] = useState<string | null>(null)
+  const [undoing, setUndoing]             = useState(false)
 
   function startEdit(s: ScheduleItem) {
     setEditingId(s.id)
@@ -77,6 +80,21 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates 
       toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function undoPayment(s: ScheduleItem) {
+    setUndoing(true)
+    try {
+      const res = await fetch(`/api/loans/${loanId}/schedule/${s.id}/undo`, { method: 'POST' })
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Error')
+      toast({ title: `Pago ${s.numeroPago} revertido a Pendiente` })
+      setConfirmUndoId(null)
+      router.refresh()
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+    } finally {
+      setUndoing(false)
     }
   }
 
@@ -168,6 +186,44 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates 
               >
                 Capturar
               </a>
+            )}
+
+            {/* Undo — solo SUPER_ADMIN, solo pagos marcados como PAID */}
+            {canUndo && s.estado === 'PAID' && (
+              <div className="ml-auto shrink-0">
+                {confirmUndoId === s.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-amber-400">¿Revertir?</span>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="h-6 px-2 text-xs"
+                      disabled={undoing}
+                      onClick={() => undoPayment(s)}
+                    >
+                      {undoing ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sí'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-xs"
+                      disabled={undoing}
+                      onClick={() => setConfirmUndoId(null)}
+                    >
+                      No
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmUndoId(s.id)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-amber-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-amber-400/50"
+                    title="Deshacer pago (SUPER_ADMIN)"
+                  >
+                    <Undo2 className="h-3 w-3" />
+                    Deshacer
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )

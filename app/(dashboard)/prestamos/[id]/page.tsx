@@ -70,6 +70,9 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   // Director General puede editar fechas del calendario
   const puedeEditarFechas = loan.estado === 'ACTIVE' && (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN')
 
+  // Solo SUPER_ADMIN puede deshacer pagos
+  const puedeDeshacerPago = rol === 'SUPER_ADMIN'
+
   // Coordinador/Cobrador pueden capturar pagos
   const puedeCapturar = loan.estado === 'ACTIVE' && (rol === 'COBRADOR' || rol === 'COORDINADOR')
 
@@ -296,6 +299,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               }))}
               canCapture={puedeCapturar}
               canEditDates={puedeEditarFechas}
+              canUndo={puedeDeshacerPago}
             />
           </CardContent>
         </Card>

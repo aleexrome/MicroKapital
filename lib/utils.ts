@@ -21,18 +21,23 @@ export function formatMoney(amount: number | string): string {
 }
 
 /**
- * Formatea una fecha en español
+ * Formatea una fecha en español.
+ * Usa los componentes UTC del Date para evitar el desfase de zona horaria
+ * cuando las fechas se almacenan como medianoche UTC en la BD.
  */
 export function formatDate(date: Date | string, fmt = 'dd/MM/yyyy'): string {
   const d = typeof date === 'string' ? new Date(date) : date
-  return format(d, fmt, { locale: es })
+  // Normalizar usando componentes UTC → medianoche local con la fecha correcta
+  const local = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  return format(local, fmt, { locale: es })
 }
 
 /**
- * Formatea fecha y hora
+ * Formatea fecha y hora (usa tiempo local, no UTC).
  */
 export function formatDateTime(date: Date | string): string {
-  return formatDate(date, "dd/MM/yyyy 'a las' HH:mm")
+  const d = typeof date === 'string' ? new Date(date) : date
+  return format(d, "dd/MM/yyyy 'a las' HH:mm", { locale: es })
 }
 
 /**

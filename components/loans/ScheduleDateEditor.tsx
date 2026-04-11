@@ -27,9 +27,9 @@ const STATUS_LABEL: Record<ScheduleStatus, string> = {
 
 function toInputValue(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 
@@ -112,8 +112,9 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
           : canEditDates && s.estado !== 'PAID' && s.estado !== 'ADVANCE'
 
         // Visually overdue: date has passed but still stored as PENDING/PARTIAL
-        const dueDate = new Date(s.fechaVencimiento)
-        dueDate.setHours(0, 0, 0, 0)
+        // Use UTC date components to avoid timezone shift
+        const _d = typeof s.fechaVencimiento === 'string' ? new Date(s.fechaVencimiento) : s.fechaVencimiento
+        const dueDate = new Date(_d.getUTCFullYear(), _d.getUTCMonth(), _d.getUTCDate())
         const isVisuallyOverdue =
           (s.estado === 'PENDING' || s.estado === 'PARTIAL') && dueDate < today
 

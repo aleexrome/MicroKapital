@@ -138,9 +138,6 @@ export default async function PrestamosPage({
         })}
       </div>
 
-      {/* Paginación superior */}
-      <PaginationBar estadoFiltro={estadoFiltro} page={page} totalPages={totalPages} />
-
       {/* List */}
       <Card>
         <CardContent className="p-0">

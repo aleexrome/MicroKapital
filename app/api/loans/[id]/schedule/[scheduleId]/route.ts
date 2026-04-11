@@ -18,7 +18,7 @@ export async function PATCH(
 
   const { rol, companyId, id: userId } = session.user
 
-  const esOpAdmin = isOperationsAdmin(session.user.email)
+  const esOpAdmin = isOperationsAdmin(session.user.email, rol)
 
   if (rol !== 'DIRECTOR_GENERAL' && rol !== 'SUPER_ADMIN' && !esOpAdmin) {
     return NextResponse.json(

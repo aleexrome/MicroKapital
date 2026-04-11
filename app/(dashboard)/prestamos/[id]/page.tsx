@@ -68,7 +68,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     loan.estado === 'APPROVED' &&
     (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE' || rol === 'SUPER_ADMIN')
 
-  const esOpAdmin = isOperationsAdmin(session.user.email)
+  const esOpAdmin = isOperationsAdmin(session.user.email, rol)
 
   // Operations admin puede editar cualquier fecha en cualquier estado de crédito.
   // Director General solo puede editar en créditos activos (filas no pagadas).

@@ -11,7 +11,7 @@ export async function POST(
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  if (!isOperationsAdmin(session.user.email)) {
+  if (!isOperationsAdmin(session.user.email, session.user.rol)) {
     return NextResponse.json({ error: 'No autorizado para deshacer pagos' }, { status: 403 })
   }
 

@@ -47,6 +47,8 @@ export default async function PrestamosPage({
   } else if (rol === 'GERENTE_ZONAL') {
     const zoneIds = session.user.zonaBranchIds
     if (zoneIds?.length) where.branchId = { in: zoneIds }
+  } else if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') {
+    if (userBranchId) where.branchId = userBranchId
   }
 
   const loans = await prisma.loan.findMany({
@@ -72,6 +74,8 @@ export default async function PrestamosPage({
   } else if (rol === 'GERENTE_ZONAL') {
     const zoneIds = session.user.zonaBranchIds
     if (zoneIds?.length) whereCount.branchId = { in: zoneIds }
+  } else if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') {
+    if (userBranchId) whereCount.branchId = userBranchId
   }
   const countByEstado = await prisma.loan.groupBy({
     by: ['estado'],

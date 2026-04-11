@@ -64,6 +64,11 @@ export default async function ClientesPage({
     if (zoneIds?.length) where.branchId = { in: zoneIds }
   }
 
+  // DIRECTOR: solo su sucursal
+  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') {
+    if (branchId) where.branchId = branchId
+  }
+
   const [clientes, total] = await Promise.all([
     prisma.client.findMany({
       where,

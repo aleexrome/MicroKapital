@@ -22,6 +22,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Prisma, type UserRole } from '@prisma/client'
 import { LoanStatusChart, MonthPaymentsChart, LoanTypeChart, BranchCapitalChart } from '@/components/dashboard/DashboardCharts'
+import { BranchFilter } from '@/components/dashboard/BranchFilter'
 
 const ESTADO_LABEL: Record<string, string> = {
   ACTIVE: 'Activo',
@@ -38,11 +39,18 @@ const ESTADO_VARIANT: Record<string, 'success' | 'warning' | 'info' | 'error' | 
   REJECTED: 'error',
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { sucursal?: string }
+}) {
   const session = await getSession()
   if (!session?.user || session.user.rol === 'COBRADOR') redirect('/cobros/agenda')
 
   const { rol, companyId, branchId: userBranchId, id: userId } = session.user
+
+  // SUPER_ADMIN puede filtrar por sucursal vía ?sucursal=
+  const superAdminBranchFilter = rol === 'SUPER_ADMIN' ? (searchParams.sucursal ?? null) : null
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -57,7 +65,11 @@ export default async function DashboardPage() {
 
   const loanScope: Prisma.LoanWhereInput = { companyId: companyId! }
 
-  if (rol === 'GERENTE_ZONAL') {
+  if (isDirector) {
+    if (userBranchId) loanScope.branchId = userBranchId
+  } else if (rol === 'SUPER_ADMIN') {
+    if (superAdminBranchFilter) loanScope.branchId = superAdminBranchFilter
+  } else if (rol === 'GERENTE_ZONAL') {
     const zoneIds = session.user.zonaBranchIds
     if (zoneIds && zoneIds.length > 0) loanScope.branchId = { in: zoneIds }
   } else if (rol === 'GERENTE') {
@@ -87,6 +99,8 @@ export default async function DashboardPage() {
         companyId: companyId!,
         activo: true,
         ...(isCoordinador ? { cobradorId: userId } : {}),
+        ...(isDirector && userBranchId ? { branchId: userBranchId } : {}),
+        ...(rol === 'SUPER_ADMIN' && superAdminBranchFilter ? { branchId: superAdminBranchFilter } : {}),
         ...(rol === 'GERENTE' && userBranchId ? { branchId: userBranchId } : {}),
         ...(rol === 'GERENTE_ZONAL' && session.user.zonaBranchIds?.length
           ? { branchId: { in: session.user.zonaBranchIds } }
@@ -139,10 +153,25 @@ export default async function DashboardPage() {
 
   // ── Role-specific extra data ──────────────────────────────────────────────────
 
-  // Directors: per-branch breakdown
-  const branchBreakdown = isDirector
+  // All branches for SUPER_ADMIN selector
+  const allBranches = rol === 'SUPER_ADMIN'
     ? await prisma.branch.findMany({
         where: { companyId: companyId!, activa: true },
+        select: { id: true, nombre: true },
+        orderBy: { nombre: 'asc' },
+      })
+    : []
+
+  // Directors + SUPER_ADMIN: per-branch breakdown
+  const showBranchBreakdown = isDirector || rol === 'SUPER_ADMIN'
+  const branchBreakdown = showBranchBreakdown
+    ? await prisma.branch.findMany({
+        where: {
+          companyId: companyId!,
+          activa: true,
+          ...(isDirector && userBranchId ? { id: userBranchId } : {}),
+          ...(rol === 'SUPER_ADMIN' && superAdminBranchFilter ? { id: superAdminBranchFilter } : {}),
+        },
         select: {
           id: true,
           nombre: true,
@@ -249,9 +278,14 @@ export default async function DashboardPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-muted-foreground">{formatDate(new Date(), "EEEE d 'de' MMMM, yyyy")}</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-muted-foreground">{formatDate(new Date(), "EEEE d 'de' MMMM, yyyy")}</p>
+        </div>
+        {rol === 'SUPER_ADMIN' && (
+          <BranchFilter branches={allBranches} selected={superAdminBranchFilter} />
+        )}
       </div>
 
       {/* KPIs */}
@@ -407,8 +441,8 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Per-branch breakdown (directors) */}
-      {isDirector && branchBreakdown.length > 0 && (
+      {/* Per-branch breakdown (directors + super admin) */}
+      {showBranchBreakdown && branchBreakdown.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Cartera por sucursal</CardTitle>

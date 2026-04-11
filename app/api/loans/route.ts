@@ -55,6 +55,8 @@ export async function GET(req: NextRequest) {
   } else if (rol === 'GERENTE_ZONAL') {
     const zoneIds = session.user.zonaBranchIds
     if (zoneIds?.length) where.branchId = { in: zoneIds }
+  } else if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') {
+    if (branchId) where.branchId = branchId
   }
 
   const loans = await prisma.loan.findMany({

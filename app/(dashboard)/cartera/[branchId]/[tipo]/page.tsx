@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { ArrowLeft, Users, UserCheck, Zap, Landmark, CreditCard } from 'lucide-react'
+import { SolidarioGroupList, type SolidarioGroup } from '@/components/loans/SolidarioGroupList'
 
 const TIPO_ICON: Record<string, React.ReactNode> = {
   SOLIDARIO:  <Users      className="h-5 w-5" />,
@@ -85,6 +86,31 @@ export default async function CarteraTipoPage({
       orderBy: { nombre: 'asc' },
     })
 
+    const groupData: SolidarioGroup[] = groups.map((grupo) => {
+      const totalCapital = grupo.loans.reduce((s, l) => s + Number(l.capital), 0)
+      const hasOverdue   = grupo.loans.some((l) => l.schedule[0]?.estado === 'OVERDUE')
+      const nextPago     = grupo.loans
+        .flatMap((l) => l.schedule)
+        .sort((a, b) => new Date(a.fechaVencimiento).getTime() - new Date(b.fechaVencimiento).getTime())[0]
+
+      return {
+        id:              grupo.id,
+        nombre:          grupo.nombre,
+        cobradorNombre:  grupo.cobrador.nombre,
+        totalCapital,
+        integranteCount: grupo.loans.length,
+        hasOverdue,
+        nextFecha:       nextPago
+          ? new Date(nextPago.fechaVencimiento).toISOString().slice(0, 10)
+          : null,
+        loans: grupo.loans.map((l) => ({
+          id:         l.id,
+          capital:    Number(l.capital),
+          clientName: l.client.nombreCompleto,
+        })),
+      }
+    })
+
     return (
       <div className="p-6 space-y-5 max-w-3xl mx-auto">
         <div className="flex items-center gap-3">
@@ -100,55 +126,7 @@ export default async function CarteraTipoPage({
           </div>
         </div>
 
-        {groups.length === 0 && (
-          <Card><CardContent className="py-10 text-center text-muted-foreground">No hay grupos Solidario activos en esta sucursal</CardContent></Card>
-        )}
-
-        {groups.map((grupo) => {
-          const totalCapital = grupo.loans.reduce((s, l) => s + Number(l.capital), 0)
-          const nextPago = grupo.loans.flatMap((l) => l.schedule).sort(
-            (a, b) => new Date(a.fechaVencimiento).getTime() - new Date(b.fechaVencimiento).getTime()
-          )[0]
-          const hasOverdue = grupo.loans.some((l) => l.schedule[0]?.estado === 'OVERDUE')
-
-          return (
-            <Card key={grupo.id} className={hasOverdue ? 'border-red-200' : ''}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-gray-900">{grupo.nombre}</p>
-                      {hasOverdue && <Badge variant="error" className="text-xs">Con vencidos</Badge>}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {grupo.cobrador.nombre} · {grupo.loans.length} integrantes · Capital: {formatMoney(totalCapital)}
-                    </p>
-                    {nextPago && (
-                      <p className="text-xs text-muted-foreground">
-                        Próximo pago: {formatDate(nextPago.fechaVencimiento)}
-                      </p>
-                    )}
-                  </div>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={`/cobros/grupo/${grupo.id}`}>
-                      <Users className="h-3 w-3 mr-1" />Reunión
-                    </Link>
-                  </Button>
-                </div>
-                <div className="space-y-1">
-                  {grupo.loans.map((loan) => (
-                    <div key={loan.id} className="flex items-center justify-between text-xs">
-                      <Link href={`/prestamos/${loan.id}`} className="hover:underline text-gray-700">
-                        {loan.client.nombreCompleto}
-                      </Link>
-                      <span className="font-medium">{formatMoney(Number(loan.capital))}</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
+        <SolidarioGroupList groups={groupData} />
       </div>
     )
   }

@@ -35,7 +35,8 @@ export async function PATCH(
     where: { id: params.scheduleId, loanId: params.id, loan: { companyId: companyId! } },
   })
   if (!schedule) return NextResponse.json({ error: 'Pago no encontrado' }, { status: 404 })
-  if (schedule.estado === 'PAID') {
+  // Solo SUPER_ADMIN puede editar la fecha de un pago ya realizado
+  if (schedule.estado === 'PAID' && rol !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'No se puede modificar un pago ya realizado' }, { status: 400 })
   }
 

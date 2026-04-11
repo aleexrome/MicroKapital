@@ -105,7 +105,11 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
     <div className="divide-y">
       {schedule.map((s) => {
         const isEditing = editingId === s.id
-        const editable  = canEditDates && s.estado !== 'PAID' && s.estado !== 'ADVANCE'
+        // SUPER_ADMIN (canUndo=true) puede editar cualquier fila.
+        // Otros roles solo pueden editar las que no están PAID ni ADVANCE.
+        const editable  = canUndo
+          ? canEditDates
+          : canEditDates && s.estado !== 'PAID' && s.estado !== 'ADVANCE'
 
         // Visually overdue: date has passed but still stored as PENDING/PARTIAL
         const dueDate = new Date(s.fechaVencimiento)

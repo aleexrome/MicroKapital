@@ -31,15 +31,16 @@ export default async function ReportesPage() {
     prisma.payment.aggregate({
       where: {
         loan: { companyId: companyId! },
-        fechaHora: { gte: startOfMonth },
+        fechaHora: { gte: startOfMonth, lt: new Date(today.getFullYear(), today.getMonth() + 1, 1) },
       },
       _sum: { monto: true },
     }),
 
     prisma.paymentSchedule.count({
       where: {
-        loan: { companyId: companyId! },
-        estado: 'OVERDUE',
+        loan: { companyId: companyId!, estado: 'ACTIVE' },
+        estado: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] },
+        fechaVencimiento: { lt: today },
       },
     }),
 

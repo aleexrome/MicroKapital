@@ -11,11 +11,13 @@ import { ClientSearch } from '@/components/clients/ClientSearch'
 import { useToast } from '@/components/ui/use-toast'
 import { ArrowLeft, Loader2, UserCheck, FileText, X, CheckCircle2, Users, Plus } from 'lucide-react'
 import Link from 'next/link'
+import { calcLoan } from '@/lib/financial-formulas'
+import { formatMoney } from '@/lib/utils'
 import type { LoanCalculation } from '@/types'
 
 type LoanTipo = 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO'
 interface QueuedDoc { id: string; tipo: string; file: File }
-interface Miembro { id: string; nombre: string }
+interface Miembro { id: string; nombre: string; capital: string }
 
 const DOC_LABELS: Record<string, string> = {
   SOLICITUD:             'Solicitud de crédito',
@@ -43,7 +45,7 @@ const TIPO_INFO: Record<LoanTipo, { label: string; plazo: string; desc: string }
   FIDUCIARIO:  { label: 'Fiduciario',         plazo: '12 quincenas',    desc: '10% comisión · garantía mueble o inmueble' },
 }
 
-const MIEMBRO_VACIO: Miembro = { id: '', nombre: '' }
+const MIEMBRO_VACIO: Miembro = { id: '', nombre: '', capital: '' }
 
 export default function NuevaSolicitudPage() {
   const router = useRouter()
@@ -90,7 +92,10 @@ export default function NuevaSolicitudPage() {
 
   // — Miembros solidario —
   function updateMiembro(i: number, id: string, nombre: string) {
-    setMiembros((prev) => prev.map((m, idx) => idx === i ? { id, nombre } : m))
+    setMiembros((prev) => prev.map((m, idx) => idx === i ? { ...m, id, nombre } : m))
+  }
+  function updateMiembroCapital(i: number, capital: string) {
+    setMiembros((prev) => prev.map((m, idx) => idx === i ? { ...m, capital } : m))
   }
   function addMiembro() {
     if (miembros.length < 5) setMiembros((prev) => [...prev, { ...MIEMBRO_VACIO }])
@@ -100,6 +105,7 @@ export default function NuevaSolicitudPage() {
   }
 
   const miembrosValidos = miembros.filter((m) => m.id)
+  const capitalGrupalTotal = miembrosValidos.reduce((s, m) => s + Number(m.capital || 0), 0)
 
   // — Documentos —
   function handleAddDoc(e: React.ChangeEvent<HTMLInputElement>) {
@@ -128,7 +134,7 @@ export default function NuevaSolicitudPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!capital) return
+    if (tipo !== 'SOLIDARIO' && !capital) return
 
     if (tipo === 'SOLIDARIO') {
       if (miembrosValidos.length < 4) {
@@ -149,7 +155,7 @@ export default function NuevaSolicitudPage() {
           body: JSON.stringify({
             nombre: nombreGrupo || `Grupo ${new Date().toLocaleDateString('es-MX')}`,
             clientIds: miembrosValidos.map((m) => m.id),
-            capital: capitalNum,
+            capitales: miembrosValidos.map((m) => Number(m.capital)),
             tipoGrupo,
             notas: notas || undefined,
           }),
@@ -211,8 +217,10 @@ export default function NuevaSolicitudPage() {
     }
   }
 
-  const canSubmit = !loading && !!capital && (
-    tipo === 'SOLIDARIO' ? miembrosValidos.length >= 4 : !!clienteId
+  const canSubmit = !loading && (
+    tipo === 'SOLIDARIO'
+      ? miembrosValidos.length >= 4 && miembrosValidos.every((m) => Number(m.capital) >= 100)
+      : !!capital && !!clienteId
   )
 
   return (
@@ -312,6 +320,18 @@ export default function NuevaSolicitudPage() {
                           placeholder={`Integrante ${i + 1}...`}
                         />
                       </div>
+                      <div className="relative w-28 shrink-0">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+                        <Input
+                          type="number"
+                          min="100"
+                          step="100"
+                          value={m.capital}
+                          onChange={(e) => updateMiembroCapital(i, e.target.value)}
+                          className="pl-5 h-9 text-sm"
+                          placeholder="capital"
+                        />
+                      </div>
                       {miembros.length > 4 && (
                         <button
                           type="button"
@@ -328,24 +348,34 @@ export default function NuevaSolicitudPage() {
             )}
 
             {/* Capital */}
-            <div className="space-y-1.5">
-              <Label htmlFor="capital">Capital a prestar *</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                <Input
-                  id="capital"
-                  type="number"
-                  min="100"
-                  step="100"
-                  value={capital}
-                  onChange={(e) => setCapital(e.target.value)}
-                  className="pl-7"
-                  placeholder="5000"
-                  required
-                />
+            {tipo !== 'SOLIDARIO' ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="capital">Capital a prestar *</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                  <Input
+                    id="capital"
+                    type="number"
+                    min="100"
+                    step="100"
+                    value={capital}
+                    onChange={(e) => setCapital(e.target.value)}
+                    className="pl-7"
+                    placeholder="5000"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">{TIPO_INFO[tipo].desc}</p>
               </div>
-              <p className="text-xs text-muted-foreground">{TIPO_INFO[tipo].desc}</p>
-            </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label>Capital total del grupo</Label>
+                <p className="text-2xl font-bold text-primary">
+                  {capitalGrupalTotal > 0 ? formatMoney(capitalGrupalTotal) : '—'}
+                </p>
+                <p className="text-xs text-muted-foreground">Suma de los capitales individuales · {TIPO_INFO[tipo].desc}</p>
+              </div>
+            )}
 
             {/* SOLIDARIO: tipo de grupo */}
             {tipo === 'SOLIDARIO' && (
@@ -556,7 +586,7 @@ export default function NuevaSolicitudPage() {
         </Card>
 
         {/* ── Calculadora ─────────────────────────────────────── */}
-        {capitalNum > 0 && (
+        {tipo !== 'SOLIDARIO' && capitalNum > 0 && (
           <LoanCalculator
             tipo={tipo}
             capital={capitalNum}
@@ -564,9 +594,40 @@ export default function NuevaSolicitudPage() {
             ciclo={tipo === 'INDIVIDUAL' ? ciclo : undefined}
             tuvoAtraso={tipo === 'INDIVIDUAL' ? tuvoAtraso : undefined}
             clienteIrregular={tipo === 'AGIL' ? clienteIrregular : undefined}
-            tipoGrupo={tipo === 'SOLIDARIO' ? tipoGrupo : undefined}
             onCalc={handleCalc}
           />
+        )}
+        {tipo === 'SOLIDARIO' && miembrosValidos.some((m) => Number(m.capital) >= 100) && (
+          <Card className="border-primary-200 bg-primary-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-primary-700">Resumen por integrante</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="divide-y divide-primary-100">
+                {miembros.map((m, i) => {
+                  if (!m.id || Number(m.capital) < 100) return null
+                  const c = calcLoan('SOLIDARIO', Number(m.capital), undefined, { tipoGrupo })
+                  return (
+                    <div key={i} className="py-2 text-sm">
+                      <p className="font-semibold text-primary-800">{m.nombre || `Integrante ${i + 1}`}</p>
+                      <div className="grid grid-cols-2 gap-x-4 mt-1 text-xs">
+                        <span className="text-gray-500">Capital:</span><span className="font-medium money">{formatMoney(c.capital)}</span>
+                        <span className="text-gray-500">Monto a entregar:</span><span className="money">{formatMoney(c.montoReal)}</span>
+                        <span className="text-gray-500">Total a pagar:</span><span className="font-semibold money">{formatMoney(c.totalPago)}</span>
+                        <span className="text-gray-500">Pago semanal:</span><span className="font-semibold text-primary-700 money">{formatMoney(c.pagoSemanal ?? 0)}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+                {capitalGrupalTotal > 0 && (
+                  <div className="pt-2 flex justify-between text-sm font-bold text-primary-800">
+                    <span>Total grupo</span>
+                    <span className="money">{formatMoney(capitalGrupalTotal)}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         <div className="flex gap-3 pt-2">

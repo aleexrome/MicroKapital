@@ -8,9 +8,12 @@ import { createAuditLog } from '@/lib/audit'
 const schema = z.object({
   nombre: z.string().min(2, 'Nombre del grupo requerido'),
   clientIds: z.array(z.string().uuid()).min(4, 'Mínimo 4 integrantes').max(5, 'Máximo 5 integrantes'),
-  capital: z.number().positive(),
+  capitales: z.array(z.number().positive()).min(4, 'Mínimo 4 capitales').max(5, 'Máximo 5 capitales'),
   tipoGrupo: z.enum(['REGULAR', 'RESCATE']).default('REGULAR'),
   notas: z.string().optional(),
+}).refine((d) => d.clientIds.length === d.capitales.length, {
+  message: 'El número de capitales debe coincidir con el número de integrantes',
+  path: ['capitales'],
 })
 
 export async function POST(req: NextRequest) {
@@ -44,10 +47,6 @@ export async function POST(req: NextRequest) {
   const targetBranchId = branchId ?? session.user.zonaBranchIds?.[0] ?? clients[0].branchId
   if (!targetBranchId) return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
 
-  const calc = calcLoan('SOLIDARIO', data.capital, undefined, {
-    tipoGrupo: data.tipoGrupo,
-  })
-
   const result = await prisma.$transaction(async (tx) => {
     // 1. Crear el grupo solidario
     const group = await tx.loanGroup.create({
@@ -59,9 +58,12 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // 2. Crear préstamo individual por cada integrante
+    // 2. Crear préstamo individual por cada integrante (capital individual por miembro)
     const loans = await Promise.all(
-      data.clientIds.map(async (clientId) => {
+      data.clientIds.map(async (clientId, idx) => {
+        const calc = calcLoan('SOLIDARIO', data.capitales[idx], undefined, {
+          tipoGrupo: data.tipoGrupo,
+        })
         const loan = await tx.loan.create({
           data: {
             companyId: companyId!,
@@ -102,7 +104,7 @@ export async function POST(req: NextRequest) {
     accion: 'CREATE_LOAN_GROUP',
     tabla: 'LoanGroup',
     registroId: result.group.id,
-    valoresNuevos: { nombre: data.nombre, integrantes: data.clientIds.length, capital: data.capital },
+    valoresNuevos: { nombre: data.nombre, integrantes: data.clientIds.length, capitales: data.capitales },
   })
 
   return NextResponse.json({ data: result }, { status: 201 })

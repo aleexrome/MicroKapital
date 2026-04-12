@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar, ChevronRight, Users, CheckCircle2, XCircle, UserCheck, Building2 } from 'lucide-react'
 import { esDiaHabil } from '@/lib/business-days'
 import { AgendaDatePicker } from '@/components/cobros/AgendaDatePicker'
+import { ImprimirAgendaButton } from '@/components/cobros/ImprimirAgendaButton'
 
 function parseDate(dateStr?: string): Date {
   const yesterday = new Date()
@@ -101,6 +102,32 @@ export default async function AgendaPage({
   const totalEsperado = schedule.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
   const totalCobrado  = cobrados.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
   const isHabil = esDiaHabil(selectedDate)
+
+  // ── Datos para impresión ─────────────────────────────────────────────────────
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0)
+  const printRows = schedule.map((s) => {
+    const _d     = new Date(s.fechaVencimiento)
+    const due    = new Date(_d.getUTCFullYear(), _d.getUTCMonth(), _d.getUTCDate())
+    const overdue = s.estado === 'OVERDUE' ||
+      ((s.estado === 'PENDING' || s.estado === 'PARTIAL') && due < today0)
+    return {
+      clientNombre:  s.loan.client.nombreCompleto,
+      numeroPago:    s.numeroPago,
+      totalPagos:    s.loan.plazo,
+      montoEsperado: Number(s.montoEsperado),
+      diaPago:       (s.loan as { diaPago?: string | null }).diaPago ?? null,
+      tipo:          s.loan.tipo,
+      mora:          overdue ? Math.max(0, Number(s.montoEsperado) - Number(s.montoPagado)) : 0,
+      grupo:         s.loan.loanGroup?.nombre ?? null,
+      cobradorNombre: s.loan.cobrador?.nombre ?? null,
+    }
+  })
+  const printBranch    = schedule[0]?.loan.branch.nombre ?? 'Sin sucursal'
+  const printCobrador  = (() => {
+    const names = Array.from(new Set(schedule.map((s) => s.loan.cobrador?.nombre).filter(Boolean)))
+    return names.length === 1 ? (names[0] ?? 'Cobrador') : names.length > 1 ? 'Varios' : 'Cobrador'
+  })()
+  const printFechaLabel = formatDate(selectedDate, "EEEE d 'de' MMMM yyyy")
 
   // ── GERENTE / DIRECTOR: vista agrupada por sucursal → coordinador ─────────────
   if (isGerente || isDirector) {
@@ -250,8 +277,18 @@ export default async function AgendaPage({
             })}
           </div>
         ))}
+
+      {/* Imprimir — gerente/director */}
+      <div className="flex justify-end pt-2">
+        <ImprimirAgendaButton
+          rows={printRows}
+          fechaLabel={printFechaLabel}
+          branchNombre={printBranch}
+          cobradorNombre={printCobrador}
+        />
       </div>
-    )
+    </div>
+  )
   }
 
   // ── COORDINADOR / COBRADOR: vista simple propia ───────────────────────────────
@@ -346,6 +383,18 @@ export default async function AgendaPage({
         <div className="text-center py-12">
           <Calendar className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
           <p className="text-muted-foreground">Sin cobros programados para este día</p>
+        </div>
+      )}
+
+      {/* Imprimir — coordinador/cobrador */}
+      {schedule.length > 0 && (
+        <div className="flex justify-end pt-2">
+          <ImprimirAgendaButton
+            rows={printRows}
+            fechaLabel={printFechaLabel}
+            branchNombre={printBranch}
+            cobradorNombre={printCobrador}
+          />
         </div>
       )}
     </div>

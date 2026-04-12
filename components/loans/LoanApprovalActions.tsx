@@ -6,14 +6,21 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { CheckCircle, XCircle, Loader2, Edit2, ChevronDown, ChevronUp } from 'lucide-react'
 
+interface GrupoMiembro {
+  loanId: string
+  clientNombre: string
+  capital: number
+}
+
 interface LoanApprovalActionsProps {
   loanId: string
   tipo: string
   capital: number
   tasaInteres?: number
+  grupoMiembros?: GrupoMiembro[]
 }
 
-export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres }: LoanApprovalActionsProps) {
+export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoMiembros }: LoanApprovalActionsProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [processing, setProcessing] = useState(false)
@@ -24,40 +31,90 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres }: Loan
   const [nuevaTasa, setNuevaTasa] = useState(tasaInteres?.toString() ?? '')
   const [notasDG, setNotasDG] = useState('')
   const [requiereDocumentos, setRequiereDocumentos] = useState(false)
+  const [capitalesMiembros, setCapitalesMiembros] = useState<Record<string, string>>(
+    () => grupoMiembros
+      ? Object.fromEntries(grupoMiembros.map((m) => [m.loanId, m.capital.toString()]))
+      : {}
+  )
 
   async function handleApprove(conContrapropuesta = false) {
     setProcessing(true)
     try {
-      const body: Record<string, unknown> = {}
-      if (conContrapropuesta) {
-        const cap = parseFloat(nuevoCapital)
-        if (!cap || cap <= 0) {
-          toast({ title: 'Error', description: 'Ingresa un capital válido', variant: 'destructive' })
-          setProcessing(false)
-          return
-        }
-        body.contrapropuesta = {
-          capital: cap,
-          ...(nuevaTasa ? { tasaInteres: parseFloat(nuevaTasa) } : {}),
-        }
-      }
-      if (notasDG) body.notas = notasDG
-      if (requiereDocumentos) body.requiereDocumentos = true
+      const esGrupo = tipo === 'SOLIDARIO' && grupoMiembros && grupoMiembros.length > 0
 
-      const res = await fetch(`/api/loans/${loanId}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error ?? 'Error al aprobar')
+      if (esGrupo) {
+        // Validar capitales por miembro antes de enviar
+        if (conContrapropuesta) {
+          for (const m of grupoMiembros!) {
+            const cap = parseFloat(capitalesMiembros[m.loanId] ?? '')
+            if (!cap || cap <= 0) {
+              toast({ title: 'Error', description: `Capital inválido para ${m.clientNombre}`, variant: 'destructive' })
+              setProcessing(false)
+              return
+            }
+          }
+        }
+
+        await Promise.all(
+          grupoMiembros!.map(async (m) => {
+            const body: Record<string, unknown> = {}
+            if (conContrapropuesta) {
+              body.contrapropuesta = { capital: parseFloat(capitalesMiembros[m.loanId] ?? '0') }
+            }
+            if (notasDG) body.notas = notasDG
+            if (requiereDocumentos) body.requiereDocumentos = true
+
+            const res = await fetch(`/api/loans/${m.loanId}/approve`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            })
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}))
+              throw new Error(`${m.clientNombre}: ${err.error ?? 'Error al aprobar'}`)
+            }
+          })
+        )
+
+        toast({
+          title: conContrapropuesta ? '✅ Contrapropuesta enviada' : '✅ Grupo aprobado',
+          description: conContrapropuesta
+            ? 'El coordinador presentará las nuevas condiciones a cada integrante'
+            : `${grupoMiembros!.length} integrantes aprobados · Pendiente de activación`,
+        })
+      } else {
+        const body: Record<string, unknown> = {}
+        if (conContrapropuesta) {
+          const cap = parseFloat(nuevoCapital)
+          if (!cap || cap <= 0) {
+            toast({ title: 'Error', description: 'Ingresa un capital válido', variant: 'destructive' })
+            setProcessing(false)
+            return
+          }
+          body.contrapropuesta = {
+            capital: cap,
+            ...(nuevaTasa ? { tasaInteres: parseFloat(nuevaTasa) } : {}),
+          }
+        }
+        if (notasDG) body.notas = notasDG
+        if (requiereDocumentos) body.requiereDocumentos = true
+
+        const res = await fetch(`/api/loans/${loanId}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err.error ?? 'Error al aprobar')
+        }
+        const data = await res.json()
+        toast({
+          title: conContrapropuesta ? '✅ Contrapropuesta enviada' : '✅ Préstamo aprobado',
+          description: data.message,
+        })
       }
-      const data = await res.json()
-      toast({
-        title: conContrapropuesta ? '✅ Contrapropuesta enviada' : '✅ Préstamo aprobado',
-        description: data.message,
-      })
+
       router.refresh()
     } catch (err) {
       toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' })
@@ -120,7 +177,10 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres }: Loan
       {/* Botones principales */}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="success" disabled={processing} onClick={() => handleApprove(false)}>
-          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle className="h-4 w-4 mr-1" />Aprobar</>}
+          {processing
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <><CheckCircle className="h-4 w-4 mr-1" />{grupoMiembros ? `Aprobar grupo (${grupoMiembros.length})` : 'Aprobar'}</>
+          }
         </Button>
         <Button
           size="sm"
@@ -150,33 +210,55 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres }: Loan
             Ajusta las condiciones. El crédito se aprobará con los nuevos valores y el coordinador
             visitará al cliente para presentarle la contrapropuesta.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div>
-              <label className="block text-xs text-amber-700 mb-1">Nuevo capital ($)</label>
-              <input
-                type="number"
-                min={1}
-                step={500}
-                className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
-                value={nuevoCapital}
-                onChange={(e) => setNuevoCapital(e.target.value)}
-              />
+          {tipo === 'SOLIDARIO' && grupoMiembros ? (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-amber-800">Capital por integrante</p>
+              {grupoMiembros.map((m) => (
+                <div key={m.loanId} className="flex items-center gap-2">
+                  <span className="flex-1 text-xs text-amber-700 truncate">{m.clientNombre}</span>
+                  <div className="relative w-32 shrink-0">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-amber-600 text-xs">$</span>
+                    <input
+                      type="number"
+                      min={100}
+                      step={100}
+                      className="border border-amber-300 rounded pl-5 pr-2 py-1.5 text-sm w-full bg-white"
+                      value={capitalesMiembros[m.loanId] ?? ''}
+                      onChange={(e) => setCapitalesMiembros((prev) => ({ ...prev, [m.loanId]: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
-            {tipo === 'FIDUCIARIO' && (
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
-                <label className="block text-xs text-amber-700 mb-1">Tasa de interés (ej. 0.30)</label>
+                <label className="block text-xs text-amber-700 mb-1">Nuevo capital ($)</label>
                 <input
                   type="number"
-                  min={0.01}
-                  max={1}
-                  step={0.01}
+                  min={1}
+                  step={500}
                   className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
-                  value={nuevaTasa}
-                  onChange={(e) => setNuevaTasa(e.target.value)}
+                  value={nuevoCapital}
+                  onChange={(e) => setNuevoCapital(e.target.value)}
                 />
               </div>
-            )}
-          </div>
+              {tipo === 'FIDUCIARIO' && (
+                <div>
+                  <label className="block text-xs text-amber-700 mb-1">Tasa de interés (ej. 0.30)</label>
+                  <input
+                    type="number"
+                    min={0.01}
+                    max={1}
+                    step={0.01}
+                    className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
+                    value={nuevaTasa}
+                    onChange={(e) => setNuevaTasa(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
           <div className="space-y-2">
             <div>
               <label className="block text-xs text-amber-700 mb-1">Notas para el coordinador (opcional)</label>

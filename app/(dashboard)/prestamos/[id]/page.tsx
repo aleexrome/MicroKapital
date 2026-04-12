@@ -65,6 +65,26 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
 
   if (!loan) notFound()
 
+  // Para SOLIDARIO pendiente de aprobación: cargar todos los integrantes del grupo
+  let grupoMiembros: Array<{ loanId: string; clientNombre: string; capital: number }> | undefined
+  if (
+    loan.tipo === 'SOLIDARIO' &&
+    loan.estado === 'PENDING_APPROVAL' &&
+    (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') &&
+    loan.loanGroupId
+  ) {
+    const siblings = await prisma.loan.findMany({
+      where: { loanGroupId: loan.loanGroupId, companyId: companyId! },
+      include: { client: { select: { nombreCompleto: true } } },
+      orderBy: { createdAt: 'asc' },
+    })
+    grupoMiembros = siblings.map((s) => ({
+      loanId: s.id,
+      clientNombre: s.client.nombreCompleto,
+      capital: Number(s.capital),
+    }))
+  }
+
   const pagados = loan.schedule.filter((s) => s.estado === 'PAID').length
 
   // Determinar si aplica renovación anticipada
@@ -110,6 +130,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               tipo={loan.tipo}
               capital={Number(loan.capital)}
               tasaInteres={loan.tasaInteres ? Number(loan.tasaInteres) : undefined}
+              grupoMiembros={grupoMiembros}
             />
           )}
 

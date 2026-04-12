@@ -86,9 +86,33 @@ export function generarFechasHabiles(fechaInicio: Date, cantidad: number): Date[
 }
 
 /**
- * Genera N fechas semanales a partir de fechaInicio
- * (para préstamos SOLIDARIO e INDIVIDUAL)
+ * Genera N fechas semanales ancladas en fechaPrimerPago (incluida)
+ * Pago 1 = fechaPrimerPago, pago 2 = fechaPrimerPago + 7, etc.
+ * (para cuando el DG define la fecha del primer pago en la contrapropuesta)
  */
+export function generarFechasSemanalesDesde(fechaPrimerPago: Date, cantidad: number): Date[] {
+  const fechas: Date[] = []
+  for (let i = 0; i < cantidad; i++) {
+    fechas.push(addDays(fechaPrimerPago, i * 7))
+  }
+  return fechas
+}
+
+/**
+ * Genera N fechas de días hábiles ancladas en fechaPrimerPago (incluida)
+ * Pago 1 = fechaPrimerPago, los siguientes son el próximo día hábil consecutivo
+ */
+export function generarFechasHabilesDesde(fechaPrimerPago: Date, cantidad: number): Date[] {
+  const fechas: Date[] = [new Date(fechaPrimerPago)]
+  let actual = new Date(fechaPrimerPago)
+  while (fechas.length < cantidad) {
+    actual = addDays(actual, 1)
+    if (esDiaHabil(actual)) {
+      fechas.push(new Date(actual))
+    }
+  }
+  return fechas
+}
 export function generarFechasSemanales(fechaInicio: Date, cantidad: number): Date[] {
   const fechas: Date[] = []
   for (let i = 1; i <= cantidad; i++) {

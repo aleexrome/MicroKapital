@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { type Prisma } from '@prisma/client'
-import { generarFechasSemanales, generarFechasHabiles, generarFechasQuincenales } from '@/lib/business-days'
+import {
+  generarFechasSemanales, generarFechasHabiles, generarFechasQuincenales,
+  generarFechasSemanalesDesde, generarFechasHabilesDesde,
+} from '@/lib/business-days'
 import { createAuditLog } from '@/lib/audit'
 import { z } from 'zod'
 
@@ -109,13 +112,21 @@ export async function POST(
   }
 
   // Activación normal (seguro en efectivo o sin seguro)
+  // Si el DG fijó la fecha del primer pago en la contrapropuesta, usarla como ancla del calendario
+  const fechaPrimerPagoRef = loan.fechaPrimerPago ?? null
+
   let fechas: Date[]
   if (loan.tipo === 'AGIL') {
-    fechas = generarFechasHabiles(fechaDesembolso, Number(loan.plazo))
+    fechas = fechaPrimerPagoRef
+      ? generarFechasHabilesDesde(fechaPrimerPagoRef, Number(loan.plazo))
+      : generarFechasHabiles(fechaDesembolso, Number(loan.plazo))
   } else if (loan.tipo === 'FIDUCIARIO') {
     fechas = generarFechasQuincenales(fechaDesembolso, Number(loan.plazo))
   } else {
-    fechas = generarFechasSemanales(fechaDesembolso, Number(loan.plazo))
+    // SOLIDARIO e INDIVIDUAL
+    fechas = fechaPrimerPagoRef
+      ? generarFechasSemanalesDesde(fechaPrimerPagoRef, Number(loan.plazo))
+      : generarFechasSemanales(fechaDesembolso, Number(loan.plazo))
   }
 
   const montoPorPago =

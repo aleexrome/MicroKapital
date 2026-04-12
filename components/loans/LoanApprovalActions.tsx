@@ -36,6 +36,8 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
       ? Object.fromEntries(grupoMiembros.map((m) => [m.loanId, m.capital.toString()]))
       : {}
   )
+  const [fechaDesembolsoCP, setFechaDesembolsoCP] = useState('')
+  const [fechaPrimerPagoCP, setFechaPrimerPagoCP] = useState('')
 
   async function handleApprove(conContrapropuesta = false) {
     setProcessing(true)
@@ -59,7 +61,11 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
           grupoMiembros!.map(async (m) => {
             const body: Record<string, unknown> = {}
             if (conContrapropuesta) {
-              body.contrapropuesta = { capital: parseFloat(capitalesMiembros[m.loanId] ?? '0') }
+              body.contrapropuesta = {
+                capital: parseFloat(capitalesMiembros[m.loanId] ?? '0'),
+                ...(fechaDesembolsoCP ? { fechaDesembolso: fechaDesembolsoCP } : {}),
+                ...(fechaPrimerPagoCP ? { fechaPrimerPago: fechaPrimerPagoCP } : {}),
+              }
             }
             if (notasDG) body.notas = notasDG
             if (requiereDocumentos) body.requiereDocumentos = true
@@ -94,6 +100,8 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
           body.contrapropuesta = {
             capital: cap,
             ...(nuevaTasa ? { tasaInteres: parseFloat(nuevaTasa) } : {}),
+            ...(fechaDesembolsoCP ? { fechaDesembolso: fechaDesembolsoCP } : {}),
+            ...(fechaPrimerPagoCP ? { fechaPrimerPago: fechaPrimerPagoCP } : {}),
           }
         }
         if (notasDG) body.notas = notasDG
@@ -259,6 +267,27 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
               )}
             </div>
           )}
+          {/* Fechas definidas por el DG — anclan el calendario al activar */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-amber-700 mb-1">Fecha de desembolso</label>
+              <input
+                type="date"
+                className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
+                value={fechaDesembolsoCP}
+                onChange={(e) => setFechaDesembolsoCP(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-amber-700 mb-1">Fecha del primer pago</label>
+              <input
+                type="date"
+                className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
+                value={fechaPrimerPagoCP}
+                onChange={(e) => setFechaPrimerPagoCP(e.target.value)}
+              />
+            </div>
+          </div>
           <div className="space-y-2">
             <div>
               <label className="block text-xs text-amber-700 mb-1">Notas para el coordinador (opcional)</label>

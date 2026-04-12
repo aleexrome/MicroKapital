@@ -11,6 +11,8 @@ const approveSchema = z.object({
   contrapropuesta: z.object({
     capital: z.number().positive(),
     tasaInteres: z.number().positive().optional(),
+    fechaDesembolso: z.string().optional(),
+    fechaPrimerPago: z.string().optional(),
   }).optional(),
 })
 
@@ -88,6 +90,8 @@ export async function POST(
       pagoDiario: calc.pagoDiario ?? null,
       pagoQuincenal: calc.pagoQuincenal ?? null,
       plazo: calc.plazo,
+      ...(contrapropuesta.fechaDesembolso ? { fechaDesembolso: new Date(contrapropuesta.fechaDesembolso) } : {}),
+      ...(contrapropuesta.fechaPrimerPago ? { fechaPrimerPago: new Date(contrapropuesta.fechaPrimerPago) } : {}),
     }
     esContrapropuesta = true
   }

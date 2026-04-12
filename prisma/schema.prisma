@@ -279,6 +279,7 @@ model Loan {
   // Plazos
   plazo         Int
   fechaDesembolso DateTime?
+  fechaPrimerPago DateTime?                          // Fecha ancla del calendario — definida por DG en contrapropuesta
   diaPago       String?                            // Día de cobro: "DOMINGO", "LUNES", etc.
   // Campos de comportamiento (para cálculo de comisiones y tasas)
   ciclo            Int     @default(1)           // INDIVIDUAL: número de ciclo (1, 2, 3…)

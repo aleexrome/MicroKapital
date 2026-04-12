@@ -28,13 +28,28 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { companyId } = session.user
+  const { companyId, rol, branchId, id: userId } = session.user
   const metodo = req.nextUrl.searchParams.get('metodo')
   const status = req.nextUrl.searchParams.get('status')
+
+  // Scope by role — coordinadores solo ven sus propios pagos
+  const roleFilter: Record<string, unknown> = {}
+  if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
+    roleFilter.cobradorId = userId
+  } else if (rol === 'GERENTE') {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : null
+    if (branchIds?.length) roleFilter.loan = { companyId: companyId!, branchId: { in: branchIds } }
+  } else if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds?.length) roleFilter.loan = { companyId: companyId!, branchId: { in: zoneIds } }
+  }
 
   const payments = await prisma.payment.findMany({
     where: {
       loan: { companyId: companyId! },
+      ...roleFilter,
       ...(metodo ? { metodoPago: metodo as 'CASH' | 'CARD' | 'TRANSFER' } : {}),
       ...(status && metodo === 'TRANSFER' ? { statusTransferencia: status } : {}),
     },

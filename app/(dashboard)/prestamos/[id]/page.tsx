@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
-import type { LoanStatus, LoanType, ScheduleStatus } from '@prisma/client'
+import type { LoanStatus, LoanType, ScheduleStatus, Prisma } from '@prisma/client'
 
 // Umbral de pagos para renovación anticipada por producto
 const UMBRAL_RENOVACION: Record<string, number> = {
@@ -34,10 +34,24 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   const session = await getSession()
   if (!session?.user) return null
 
-  const { companyId, rol } = session.user
+  const { companyId, rol, branchId, id: userId } = session.user
+
+  // Scope loan access by role — prevents cross-coordinator data leakage
+  const loanWhere: Prisma.LoanWhereInput = { id: params.id, companyId: companyId! }
+  if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
+    loanWhere.cobradorId = userId
+  } else if (rol === 'GERENTE') {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : null
+    if (branchIds?.length) loanWhere.branchId = { in: branchIds }
+  } else if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds?.length) loanWhere.branchId = { in: zoneIds }
+  }
 
   const loan = await prisma.loan.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    where: loanWhere,
     include: {
       client: { select: { id: true, nombreCompleto: true } },
       cobrador: { select: { nombre: true } },

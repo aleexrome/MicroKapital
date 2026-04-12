@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { type Prisma } from '@prisma/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDateTime } from '@/lib/utils'
@@ -9,17 +10,24 @@ export default async function HistorialCobrosPage() {
   const session = await getSession()
   if (!session?.user) return null
 
-  const { companyId } = session.user
+  const { companyId, rol, branchId, id: userId } = session.user
 
-  const cobrador = await prisma.user.findFirst({
-    where: { companyId: companyId!, email: session.user.email! },
-  })
+  // Scope by role — coordinadores ven solo los suyos, gerentes su sucursal
+  const paymentWhere: Prisma.PaymentWhereInput = { loan: { companyId: companyId! } }
+  if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
+    paymentWhere.cobradorId = userId
+  } else if (rol === 'GERENTE') {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : null
+    if (branchIds?.length) paymentWhere.loan = { companyId: companyId!, branchId: { in: branchIds } }
+  } else if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds?.length) paymentWhere.loan = { companyId: companyId!, branchId: { in: zoneIds } }
+  }
 
   const payments = await prisma.payment.findMany({
-    where: {
-      ...(cobrador ? { cobradorId: cobrador.id } : {}),
-      loan: { companyId: companyId! },
-    },
+    where: paymentWhere,
     orderBy: { fechaHora: 'desc' },
     take: 50,
     select: {

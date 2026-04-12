@@ -19,16 +19,24 @@ export default async function ClienteExpedientePage({
   const session = await getSession()
   if (!session?.user) return null
 
-  const { companyId, rol, branchId } = session.user
+  const { companyId, rol, branchId, id: userId } = session.user
 
-  const where: { id: string; companyId: string; branchId?: string } = {
+  const where: Record<string, unknown> = {
     id: params.id,
     companyId: companyId!,
   }
 
-  // COBRADOR solo accede a clientes de su sucursal
-  if (rol === 'COBRADOR' && branchId) {
-    where.branchId = branchId
+  // Scope client access by role — prevents cross-coordinator data leakage
+  if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
+    where.cobradorId = userId
+  } else if (rol === 'GERENTE') {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : null
+    if (branchIds?.length) where.branchId = { in: branchIds }
+  } else if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds?.length) where.branchId = { in: zoneIds }
   }
 
   const client = await prisma.client.findFirst({

@@ -14,10 +14,11 @@ export async function POST(req: NextRequest) {
 
   const { rol, companyId, id: userId } = session.user
 
-  // Solo Gerente Zonal, Director General o Super Admin pueden verificar
-  const rolesPermitidos = ['GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'SUPER_ADMIN', 'GERENTE']
+  // Solo Gerente Zonal/Gerente y Super Admin pueden verificar transferencias
+  // Los directores y coordinadores NO pueden aprobar
+  const rolesPermitidos = ['GERENTE_ZONAL', 'GERENTE', 'SUPER_ADMIN']
   if (!rolesPermitidos.includes(rol)) {
-    return NextResponse.json({ error: 'Sin permisos para verificar transferencias' }, { status: 403 })
+    return NextResponse.json({ error: 'Sin permisos — solo el Gerente y el Super Admin pueden verificar transferencias' }, { status: 403 })
   }
 
   const body = await req.json()
@@ -26,12 +27,21 @@ export async function POST(req: NextRequest) {
 
   const { paymentId } = parsed.data
 
+  // Scope de sucursal — gerente solo puede verificar pagos de su sucursal
+  const branchScope: Record<string, unknown> = {}
+  if (rol === 'GERENTE' || rol === 'GERENTE_ZONAL') {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : session.user.branchId ? [session.user.branchId] : null
+    if (branchIds?.length) branchScope.branchId = { in: branchIds }
+  }
+
   const payment = await prisma.payment.findFirst({
     where: {
       id: paymentId,
       metodoPago: 'TRANSFER',
       statusTransferencia: 'PENDIENTE',
-      loan: { companyId: companyId! },
+      loan: { companyId: companyId!, ...branchScope },
     },
   })
 

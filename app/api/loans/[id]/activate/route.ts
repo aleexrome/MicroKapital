@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { type Prisma } from '@prisma/client'
 import { generarFechasSemanales, generarFechasHabiles, generarFechasQuincenales } from '@/lib/business-days'
 import { createAuditLog } from '@/lib/audit'
 import { z } from 'zod'
@@ -25,9 +26,21 @@ export async function POST(
     return NextResponse.json({ error: 'Sin permisos para activar créditos' }, { status: 403 })
   }
 
-  const loan = await prisma.loan.findFirst({
-    where: { id: params.id, companyId: companyId! },
-  })
+  // Scope by ownership — coordinator can only activate their own loans
+  const activateWhere: Prisma.LoanWhereInput = { id: params.id, companyId: companyId! }
+  if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
+    activateWhere.cobradorId = userId
+  } else if (rol === 'GERENTE') {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : session.user.branchId ? [session.user.branchId] : null
+    if (branchIds?.length) activateWhere.branchId = { in: branchIds }
+  } else if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds?.length) activateWhere.branchId = { in: zoneIds }
+  }
+
+  const loan = await prisma.loan.findFirst({ where: activateWhere })
 
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
   if (loan.estado !== 'APPROVED') {

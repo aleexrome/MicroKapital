@@ -279,7 +279,7 @@ export default async function AgendaPage({
         ))}
 
       {/* Imprimir — gerente/director */}
-      <div className="flex justify-end pt-2">
+      <div className="flex justify-center pt-2">
         <ImprimirAgendaButton
           rows={printRows}
           fechaLabel={printFechaLabel}
@@ -388,7 +388,7 @@ export default async function AgendaPage({
 
       {/* Imprimir — coordinador/cobrador */}
       {schedule.length > 0 && (
-        <div className="flex justify-end pt-2">
+        <div className="flex justify-center pt-2">
           <ImprimirAgendaButton
             rows={printRows}
             fechaLabel={printFechaLabel}

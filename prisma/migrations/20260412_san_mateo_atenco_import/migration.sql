@@ -195,13 +195,16 @@ SELECT
   sl.pago_semanal,
   CASE
     WHEN sl.estado = 'LIQUIDATED' OR n <= sl.num_pagos THEN
-      CASE n
-        WHEN 1 THEN NULLIF(sl.c1, 0) WHEN 2 THEN NULLIF(sl.c2, 0)
-        WHEN 3 THEN NULLIF(sl.c3, 0) WHEN 4 THEN NULLIF(sl.c4, 0)
-        WHEN 5 THEN NULLIF(sl.c5, 0) WHEN 6 THEN NULLIF(sl.c6, 0)
-        WHEN 7 THEN NULLIF(sl.c7, 0) WHEN 8 THEN NULLIF(sl.c8, 0)
-        ELSE NULL
-      END
+      COALESCE(
+        CASE n
+          WHEN 1 THEN NULLIF(sl.c1, 0) WHEN 2 THEN NULLIF(sl.c2, 0)
+          WHEN 3 THEN NULLIF(sl.c3, 0) WHEN 4 THEN NULLIF(sl.c4, 0)
+          WHEN 5 THEN NULLIF(sl.c5, 0) WHEN 6 THEN NULLIF(sl.c6, 0)
+          WHEN 7 THEN NULLIF(sl.c7, 0) WHEN 8 THEN NULLIF(sl.c8, 0)
+          ELSE NULL
+        END,
+        sl.pago_semanal
+      )
     ELSE 0
   END AS monto_pagado,
   CASE

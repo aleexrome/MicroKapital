@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { type Prisma } from '@prisma/client'
 import { createAuditLog } from '@/lib/audit'
 
 export async function POST(
@@ -12,13 +13,18 @@ export async function POST(
 
   const { rol, companyId, id: userId } = session.user
 
-  const rolesPermitidos = ['COORDINADOR', 'GERENTE_ZONAL', 'GERENTE', 'SUPER_ADMIN']
+  const rolesPermitidos = ['COORDINADOR', 'SUPER_ADMIN']
   if (!rolesPermitidos.includes(rol)) {
     return NextResponse.json({ error: 'Sin permisos para registrar rechazo del cliente' }, { status: 403 })
   }
 
+  const rejectWhere: Prisma.LoanWhereInput = { id: params.id, companyId: companyId! }
+  if (rol === 'COORDINADOR') {
+    rejectWhere.cobradorId = userId
+  }
+
   const loan = await prisma.loan.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    where: rejectWhere,
   })
 
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })

@@ -77,6 +77,12 @@ export async function POST(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { rol, companyId, branchId, id: userId } = session.user
+
+  const rolesPermitidos = ['COORDINADOR', 'GERENTE_ZONAL', 'SUPER_ADMIN']
+  if (!rolesPermitidos.includes(rol)) {
+    return NextResponse.json({ error: 'Sin permisos para crear solicitudes de crédito' }, { status: 403 })
+  }
+
   const body = await req.json()
   const parsed = createLoanSchema.safeParse(body)
 
@@ -111,9 +117,9 @@ export async function POST(req: NextRequest) {
   const targetBranchId = data.branchId ?? branchId ?? session.user.zonaBranchIds?.[0] ?? client.branchId
   if (!targetBranchId) return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
 
-  // Coordinador, Cobrador, Gerente y Gerente Zonal: se asignan a sí mismos como cobrador
-  // Solo Director puede asignar a otro cobrador (envía cobradorId en el body)
-  const isCampo = rol === 'COBRADOR' || rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
+  // Coordinador y Gerente Zonal: se asignan a sí mismos como cobrador
+  // Solo Super Admin puede asignar a otro cobrador (envía cobradorId en el body)
+  const isCampo = rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL'
   let cobradorId = data.cobradorId
   if (isCampo) {
     cobradorId = userId

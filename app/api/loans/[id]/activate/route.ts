@@ -21,24 +21,17 @@ export async function POST(
 
   const { rol, companyId, id: userId } = session.user
 
-  const rolesPermitidos = ['COORDINADOR', 'COBRADOR', 'GERENTE_ZONAL', 'GERENTE', 'SUPER_ADMIN']
+  const rolesPermitidos = ['COORDINADOR', 'SUPER_ADMIN']
   if (!rolesPermitidos.includes(rol)) {
     return NextResponse.json({ error: 'Sin permisos para activar créditos' }, { status: 403 })
   }
 
-  // Scope by ownership — coordinator can only activate their own loans
+  // Scope by ownership — coordinador can only activate their own loans
   const activateWhere: Prisma.LoanWhereInput = { id: params.id, companyId: companyId! }
-  if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
+  if (rol === 'COORDINADOR') {
     activateWhere.cobradorId = userId
-  } else if (rol === 'GERENTE') {
-    const branchIds = session.user.zonaBranchIds?.length
-      ? session.user.zonaBranchIds
-      : session.user.branchId ? [session.user.branchId] : null
-    if (branchIds?.length) activateWhere.branchId = { in: branchIds }
-  } else if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = session.user.zonaBranchIds
-    if (zoneIds?.length) activateWhere.branchId = { in: zoneIds }
   }
+  // SUPER_ADMIN: no additional filter
 
   const loan = await prisma.loan.findFirst({ where: activateWhere })
 

@@ -146,8 +146,8 @@ export default async function PactadosDiaPage({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <CalendarDays className="h-5 w-5 text-primary-700" />
-            <h1 className="text-2xl font-bold text-gray-900">Pactados del día</h1>
+            <CalendarDays className="h-5 w-5 text-primary-400" />
+            <h1 className="text-2xl font-bold">Pactados del día</h1>
           </div>
           <p className="text-muted-foreground text-sm capitalize">{dateLabel}</p>
         </div>
@@ -155,40 +155,32 @@ export default async function PactadosDiaPage({
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Pactados</p>
-            <p className="text-2xl font-bold text-gray-900">{totalPactados}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-green-200">
-          <CardContent className="p-4">
-            <p className="text-xs text-green-600">Cobrados</p>
-            <p className="text-2xl font-bold text-green-700">{cobradosRows.length}</p>
-            <p className="text-xs text-green-600 font-medium">{formatMoney(montoCobrado)}</p>
-          </CardContent>
-        </Card>
-        <Card className={pendientesRows.length > 0 ? 'border-amber-200' : ''}>
-          <CardContent className="p-4">
-            <p className={`text-xs ${pendientesRows.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
-              {isToday ? 'Pendientes' : 'Sin cobrar'}
-            </p>
-            <p className={`text-2xl font-bold ${pendientesRows.length > 0 ? 'text-amber-700' : 'text-gray-500'}`}>
-              {pendientesRows.length}
-            </p>
-            {pendientesRows.length > 0 && (
-              <p className="text-xs text-amber-600 font-medium">{formatMoney(montoPendiente)}</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Avance</p>
-            <p className={`text-2xl font-bold ${avance === 100 ? 'text-green-700' : avance >= 80 ? 'text-blue-700' : 'text-gray-900'}`}>
-              {avance}%
-            </p>
-          </CardContent>
-        </Card>
+        <div className="rounded-lg p-4 border border-border bg-muted/30">
+          <p className="text-xs text-muted-foreground">Pactados</p>
+          <p className="text-2xl font-bold">{totalPactados}</p>
+        </div>
+        <div className="rounded-lg p-4 border border-emerald-500/20 bg-emerald-500/10">
+          <p className="text-xs text-emerald-400">Cobrados</p>
+          <p className="text-2xl font-bold text-emerald-300">{cobradosRows.length}</p>
+          <p className="text-xs text-emerald-400/80 font-medium">{formatMoney(montoCobrado)}</p>
+        </div>
+        <div className={`rounded-lg p-4 border ${pendientesRows.length > 0 ? 'border-amber-500/20 bg-amber-500/10' : 'border-border bg-muted/30'}`}>
+          <p className={`text-xs ${pendientesRows.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>
+            {isToday ? 'Pendientes' : 'Sin cobrar'}
+          </p>
+          <p className={`text-2xl font-bold ${pendientesRows.length > 0 ? 'text-amber-300' : 'text-muted-foreground'}`}>
+            {pendientesRows.length}
+          </p>
+          {pendientesRows.length > 0 && (
+            <p className="text-xs text-amber-400/80 font-medium">{formatMoney(montoPendiente)}</p>
+          )}
+        </div>
+        <div className="rounded-lg p-4 border border-border bg-muted/30">
+          <p className="text-xs text-muted-foreground">Avance</p>
+          <p className={`text-2xl font-bold ${avance === 100 ? 'text-emerald-300' : avance >= 80 ? 'text-blue-300' : ''}`}>
+            {avance}%
+          </p>
+        </div>
       </div>
 
       {/* Branch filter (directors only) */}
@@ -200,7 +192,7 @@ export default async function PactadosDiaPage({
             className={`px-3 py-1 rounded-full text-sm border transition-colors ${
               !selectedBranch
                 ? 'bg-primary-700 text-white border-primary-700'
-                : 'border-gray-300 hover:border-primary-400 text-gray-700'
+                : 'border-border hover:border-primary-400 text-muted-foreground hover:text-foreground'
             }`}
           >
             Todas
@@ -212,7 +204,7 @@ export default async function PactadosDiaPage({
               className={`px-3 py-1 rounded-full text-sm border transition-colors ${
                 selectedBranch === b.id
                   ? 'bg-primary-700 text-white border-primary-700'
-                  : 'border-gray-300 hover:border-primary-400 text-gray-700'
+                  : 'border-border hover:border-primary-400 text-muted-foreground hover:text-foreground'
               }`}
             >
               {b.nombre}
@@ -237,8 +229,8 @@ export default async function PactadosDiaPage({
           {/* Branch header */}
           {(isDirector && !selectedBranch) && (
             <div className="flex items-center gap-2 pt-2">
-              <Building2 className="h-4 w-4 text-primary-600" />
-              <h2 className="font-semibold text-gray-800">{branch.branchNombre}</h2>
+              <Building2 className="h-4 w-4 text-primary-400" />
+              <h2 className="font-semibold">{branch.branchNombre}</h2>
               <span className="text-xs text-muted-foreground">
                 · {Object.values(branch.cobradores).flatMap((c) => c.rows).length} pactados
               </span>
@@ -255,7 +247,7 @@ export default async function PactadosDiaPage({
                 <CardHeader className="pb-2 pt-4 px-4">
                   <CardTitle className="text-sm flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <UserCheck className="h-4 w-4 text-primary-600" />
+                      <UserCheck className="h-4 w-4 text-primary-400" />
                       <span>{cobrador.cobradorNombre}</span>
                       {(isDirector || isGerente) && (
                         <span className="text-xs text-muted-foreground font-normal">
@@ -264,9 +256,9 @@ export default async function PactadosDiaPage({
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-xs font-normal">
-                      <span className="text-green-600">{pagados.length} cobrados</span>
+                      <span className="text-emerald-400">{pagados.length} cobrados</span>
                       <span className="text-muted-foreground">·</span>
-                      <span className={noPagados.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}>
+                      <span className={noPagados.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}>
                         {noPagados.length} {isToday ? 'pendientes' : 'sin cobrar'}
                       </span>
                     </div>
@@ -283,9 +275,9 @@ export default async function PactadosDiaPage({
                     return (
                       <div
                         key={row.id}
-                        className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-green-50"
+                        className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-emerald-500/10 border border-emerald-500/15"
                       >
-                        <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <Link
                             href={`/clientes/${row.loan.client.id}`}
@@ -299,8 +291,8 @@ export default async function PactadosDiaPage({
                           </p>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="font-semibold text-green-700">{formatMoney(Number(pago.monto))}</p>
-                          <p className="text-[10px] text-green-600">
+                          <p className="font-semibold text-emerald-300">{formatMoney(Number(pago.monto))}</p>
+                          <p className="text-[10px] text-emerald-400/70">
                             {pago.cobrador.nombre} ·{' '}
                             {cobroTardio
                               ? pagoDate.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
@@ -320,13 +312,15 @@ export default async function PactadosDiaPage({
                     return (
                       <div
                         key={row.id}
-                        className={`flex items-center gap-3 py-2 px-3 rounded-lg text-sm ${
-                          !isToday ? 'bg-red-50' : isOverdue ? 'bg-red-50' : 'bg-amber-50'
+                        className={`flex items-center gap-3 py-2 px-3 rounded-lg text-sm border ${
+                          !isToday || isOverdue
+                            ? 'bg-red-500/10 border-red-500/15'
+                            : 'bg-amber-500/10 border-amber-500/15'
                         }`}
                       >
                         {!isToday || isOverdue
-                          ? <XCircle className="h-4 w-4 text-red-500 shrink-0" />
-                          : <Clock className="h-4 w-4 text-amber-500 shrink-0" />
+                          ? <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                          : <Clock className="h-4 w-4 text-amber-400 shrink-0" />
                         }
                         <div className="flex-1 min-w-0">
                           <Link
@@ -341,7 +335,7 @@ export default async function PactadosDiaPage({
                           </p>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className={`font-semibold ${!isToday ? 'text-red-600' : 'text-amber-700'}`}>
+                          <p className={`font-semibold ${!isToday || isOverdue ? 'text-red-300' : 'text-amber-300'}`}>
                             {formatMoney(Number(row.montoEsperado))}
                           </p>
                           <p className="text-[10px] text-muted-foreground">

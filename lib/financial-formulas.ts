@@ -31,9 +31,9 @@ export function calcSolidario(
 ): LoanCalculation {
   const plazo = 8
   const tasaInteres = tipoGrupo === 'RESCATE' ? 0.195 : 0.175
-  const interes = roundTwo(capital * tasaInteres)
-  const totalPago = roundTwo(capital + interes)
+  const totalPago = roundTwo(capital * tasaInteres * plazo)
   const pagoSemanal = roundTwo(totalPago / plazo)
+  const interes = roundTwo(totalPago - capital)
 
   return {
     capital,
@@ -73,9 +73,9 @@ export function calcIndividual(
   const tasaComision = calcComisionIndividual(ciclo, tuvoAtraso)
   const comision = roundTwo(capital * tasaComision)
   const montoReal = roundTwo(capital - comision)
-  const interes = roundTwo(capital * tasaInteres)
-  const totalPago = roundTwo(capital + interes)
+  const totalPago = roundTwo(capital * tasaInteres * plazo)
   const pagoSemanal = roundTwo(totalPago / plazo)
+  const interes = roundTwo(totalPago - capital)
 
   return {
     capital,
@@ -113,9 +113,9 @@ export function calcSeguroAgil(capital: number): number {
 export function calcAgil(capital: number, clienteIrregular = false): LoanCalculation {
   const plazo = 24
   const tasaInteres = clienteIrregular ? 0.075 : 0.065
-  const interes = roundTwo(capital * tasaInteres)
-  const totalPago = roundTwo(capital + interes)
+  const totalPago = roundTwo(capital * tasaInteres * plazo)
   const pagoDiario = roundTwo(totalPago / plazo)
+  const interes = roundTwo(totalPago - capital)
 
   return {
     capital,

@@ -76,10 +76,10 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     pagados >= umbral &&
     (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE')
 
-  // Roles que pueden activar un crédito APPROVED — solo el coordinador (o SUPER_ADMIN)
+  // Roles que pueden activar un crédito APPROVED — coordinador, gerente (tienen clientes propios) y SUPER_ADMIN
   const puedeActivar =
     loan.estado === 'APPROVED' &&
-    (rol === 'COORDINADOR' || rol === 'SUPER_ADMIN')
+    (rol === 'COORDINADOR' || rol === 'GERENTE' || rol === 'SUPER_ADMIN')
 
   // Director General y SUPER_ADMIN: pueden editar fechas en cualquier estado,
   // incluyendo filas PAID, y pueden deshacer pagos.

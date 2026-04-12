@@ -13,13 +13,13 @@ export async function POST(
 
   const { rol, companyId, id: userId } = session.user
 
-  const rolesPermitidos = ['COORDINADOR', 'SUPER_ADMIN']
+  const rolesPermitidos = ['COORDINADOR', 'GERENTE', 'SUPER_ADMIN']
   if (!rolesPermitidos.includes(rol)) {
     return NextResponse.json({ error: 'Sin permisos para registrar rechazo del cliente' }, { status: 403 })
   }
 
   const rejectWhere: Prisma.LoanWhereInput = { id: params.id, companyId: companyId! }
-  if (rol === 'COORDINADOR') {
+  if (rol === 'COORDINADOR' || rol === 'GERENTE') {
     rejectWhere.cobradorId = userId
   }
 

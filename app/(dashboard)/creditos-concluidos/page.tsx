@@ -126,30 +126,24 @@ export default async function CreditosConcluidos({
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Créditos Concluidos</h1>
+        <h1 className="text-2xl font-bold">Créditos Concluidos</h1>
         <p className="text-muted-foreground">{total} crédito(s) liquidado(s)</p>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-1">Total créditos</p>
-            <p className="text-2xl font-bold text-gray-900">{total}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-1">Capital colocado</p>
-            <p className="text-2xl font-bold text-green-700">{formatMoney(totalCapital)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-1">Total recuperado</p>
-            <p className="text-2xl font-bold text-blue-700">{formatMoney(totalRecuperado)}</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-lg p-4 border border-border bg-muted/30">
+          <p className="text-xs text-muted-foreground mb-1">Total créditos</p>
+          <p className="text-2xl font-bold">{total}</p>
+        </div>
+        <div className="rounded-lg p-4 border border-emerald-500/20 bg-emerald-500/10">
+          <p className="text-xs text-emerald-400 mb-1">Capital colocado</p>
+          <p className="text-2xl font-bold text-emerald-300">{formatMoney(totalCapital)}</p>
+        </div>
+        <div className="rounded-lg p-4 border border-blue-500/20 bg-blue-500/10">
+          <p className="text-xs text-blue-400 mb-1">Total recuperado</p>
+          <p className="text-2xl font-bold text-blue-300">{formatMoney(totalRecuperado)}</p>
+        </div>
       </div>
 
       {/* Filters */}
@@ -164,7 +158,7 @@ export default async function CreditosConcluidos({
                   <select
                     name="branchId"
                     defaultValue={searchParams.branchId ?? ''}
-                    className="border rounded px-3 py-1.5 text-sm min-w-[180px]"
+                    className="border border-border rounded px-3 py-1.5 text-sm min-w-[180px] bg-background text-foreground"
                   >
                     <option value="">Todas las sucursales</option>
                     {branches.map((b) => (
@@ -181,7 +175,7 @@ export default async function CreditosConcluidos({
                   <select
                     name="cobradorId"
                     defaultValue={searchParams.cobradorId ?? ''}
-                    className="border rounded px-3 py-1.5 text-sm min-w-[200px]"
+                    className="border border-border rounded px-3 py-1.5 text-sm min-w-[200px] bg-background text-foreground"
                   >
                     <option value="">Todos</option>
                     {coordinadoresList.map((c) => (
@@ -200,7 +194,7 @@ export default async function CreditosConcluidos({
                     name="clienteQ"
                     defaultValue={searchParams.clienteQ ?? ''}
                     placeholder="Nombre del cliente..."
-                    className="border rounded px-3 py-1.5 text-sm min-w-[220px]"
+                    className="border border-border rounded px-3 py-1.5 text-sm min-w-[220px] bg-background text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
               )}
@@ -222,7 +216,7 @@ export default async function CreditosConcluidos({
       {loans.length === 0 ? (
         <Card>
           <CardContent className="text-center py-12">
-            <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
+            <CheckCircle className="h-10 w-10 text-emerald-400 mx-auto mb-3 opacity-50" />
             <p className="text-muted-foreground">No hay créditos concluidos con los filtros aplicados</p>
           </CardContent>
         </Card>
@@ -240,7 +234,7 @@ export default async function CreditosConcluidos({
                         <Badge variant="secondary" className="text-xs">{TIPO_LABEL[loan.tipo] ?? loan.tipo}</Badge>
                         <span className="text-xs text-muted-foreground">{loan.branch.nombre}</span>
                       </div>
-                      <p className="font-semibold text-gray-900">{loan.client.nombreCompleto}</p>
+                      <p className="font-semibold">{loan.client.nombreCompleto}</p>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-0.5 mt-1.5 text-sm">
                         <div>
                           <span className="text-muted-foreground">Capital: </span>

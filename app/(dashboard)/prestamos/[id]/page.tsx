@@ -200,12 +200,25 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           )}
           <div><p className="text-muted-foreground">Monto entregado</p><p className="font-bold money">{formatMoney(Number(loan.montoReal))}</p></div>
           <div><p className="text-muted-foreground">Interés</p><p className="font-bold money">{formatMoney(Number(loan.interes))}</p></div>
-          {/* Interés por período (int_semanal / ga_semanal / pct_diario) */}
+          {/* Interés por período (ganancia semanal/diaria/quincenal) */}
           <div>
             <p className="text-muted-foreground">
               {loan.tipo === 'AGIL' ? 'Interés diario' : loan.tipo === 'FIDUCIARIO' ? 'Interés quincenal' : 'Interés semanal'}
             </p>
             <p className="font-bold money">{formatMoney(Number(loan.interes) / loan.plazo)}</p>
+          </div>
+          {/* Pago por período — aparece junto a Interés semanal para que los 3 campos queden en el mismo row del grid */}
+          <div>
+            <p className="text-muted-foreground">
+              {loan.tipo === 'AGIL' ? 'Pago diario' : loan.tipo === 'FIDUCIARIO' ? 'Pago quincenal' : 'Pago semanal'}
+            </p>
+            <p className="font-bold money">
+              {loan.tipo === 'AGIL'
+                ? formatMoney(Number(loan.pagoDiario))
+                : loan.tipo === 'FIDUCIARIO'
+                ? formatMoney(Number(loan.pagoQuincenal))
+                : formatMoney(Number(loan.pagoSemanal))}
+            </p>
           </div>
           <div><p className="text-muted-foreground">Total a pagar</p><p className="font-bold text-primary-700 money">{formatMoney(Number(loan.totalPago))}</p></div>
           {/* Saldo vigente: suma de pagos pendientes */}
@@ -221,18 +234,6 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               </p>
             </div>
           )}
-          <div>
-            <p className="text-muted-foreground">
-              {loan.tipo === 'AGIL' ? 'Pago diario' : loan.tipo === 'FIDUCIARIO' ? 'Pago quincenal' : 'Pago semanal'}
-            </p>
-            <p className="font-bold money">
-              {loan.tipo === 'AGIL'
-                ? formatMoney(Number(loan.pagoDiario))
-                : loan.tipo === 'FIDUCIARIO'
-                ? formatMoney(Number(loan.pagoQuincenal))
-                : formatMoney(Number(loan.pagoSemanal))}
-            </p>
-          </div>
           {/* Tasa (pago_por_mil / xc_por_mil) */}
           {Number(loan.tasaInteres) > 0 && (
             <div>

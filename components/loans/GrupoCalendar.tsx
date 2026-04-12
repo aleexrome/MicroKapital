@@ -1,0 +1,335 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useToast } from '@/components/ui/use-toast'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ScheduleDateEditor } from './ScheduleDateEditor'
+import { formatMoney, formatDate } from '@/lib/utils'
+import { ChevronDown, ChevronRight, Loader2, Undo2, CheckCircle2, AlertCircle } from 'lucide-react'
+import type { ScheduleStatus } from '@prisma/client'
+
+interface ScheduleItem {
+  id: string
+  numeroPago: number
+  fechaVencimiento: Date | string
+  montoEsperado: number
+  montoPagado: number
+  estado: ScheduleStatus
+}
+
+interface LoanEntry {
+  id: string
+  clientId: string
+  clientNombre: string
+  schedule: ScheduleItem[]
+}
+
+interface GroupRow {
+  numeroPago: number
+  fechaVencimiento: Date | string
+  montoGrupal: number
+  montoPagadoGrupal: number
+  estado: 'PAID' | 'PARTIAL' | 'PENDING' | 'OVERDUE'
+  pagados: number
+  total: number
+}
+
+function computeGroupRows(loans: LoanEntry[]): GroupRow[] {
+  const byNumero = new Map<number, { schedules: ScheduleItem[]; fecha: Date | string }>()
+
+  for (const loan of loans) {
+    for (const s of loan.schedule) {
+      if (!byNumero.has(s.numeroPago)) {
+        byNumero.set(s.numeroPago, { schedules: [], fecha: s.fechaVencimiento })
+      }
+      byNumero.get(s.numeroPago)!.schedules.push(s)
+    }
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const rows: GroupRow[] = []
+  const entries = Array.from(byNumero.entries()).sort(([a], [b]) => a - b)
+  for (const [numeroPago, { schedules, fecha }] of entries) {
+    const montoGrupal       = schedules.reduce((s: number, i: ScheduleItem) => s + i.montoEsperado, 0)
+    const montoPagadoGrupal = schedules.reduce((s: number, i: ScheduleItem) => s + i.montoPagado, 0)
+    const pagados           = schedules.filter((i: ScheduleItem) => i.estado === 'PAID' || i.estado === 'ADVANCE').length
+    const total             = schedules.length
+
+    const _d     = typeof fecha === 'string' ? new Date(fecha) : fecha
+    const dueDate = new Date(_d.getUTCFullYear(), _d.getUTCMonth(), _d.getUTCDate())
+
+    let estado: GroupRow['estado']
+    if (pagados === total) {
+      estado = 'PAID'
+    } else if (pagados > 0) {
+      estado = 'PARTIAL'
+    } else if (dueDate < today) {
+      estado = 'OVERDUE'
+    } else {
+      estado = 'PENDING'
+    }
+
+    rows.push({ numeroPago, fechaVencimiento: fecha, montoGrupal, montoPagadoGrupal, estado, pagados, total })
+  }
+
+  return rows
+}
+
+const GROUP_STATUS_VARIANT: Record<GroupRow['estado'], 'success' | 'info' | 'warning' | 'error'> = {
+  PAID:    'success',
+  PARTIAL: 'info',
+  PENDING: 'warning',
+  OVERDUE: 'error',
+}
+const GROUP_STATUS_LABEL: Record<GroupRow['estado'], string> = {
+  PAID:    'Pagado',
+  PARTIAL: 'Parcial',
+  PENDING: 'Pendiente',
+  OVERDUE: 'Vencido',
+}
+
+interface Props {
+  groupId: string
+  loans: LoanEntry[]
+  canActGroup: boolean   // DIRECTOR_GENERAL / SUPER_ADMIN
+}
+
+export function GrupoCalendar({ groupId, loans, canActGroup }: Props) {
+  const router    = useRouter()
+  const { toast } = useToast()
+
+  const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set())
+  const [confirmApply, setConfirmApply]       = useState<number | null>(null)
+  const [confirmUndo,  setConfirmUndo]        = useState<number | null>(null)
+  const [loadingApply, setLoadingApply]       = useState(false)
+  const [loadingUndo,  setLoadingUndo]        = useState(false)
+
+  const groupRows = computeGroupRows(loans)
+
+  function toggleClient(loanId: string) {
+    setExpandedClients((prev) => {
+      const next = new Set(prev)
+      next.has(loanId) ? next.delete(loanId) : next.add(loanId)
+      return next
+    })
+  }
+
+  async function applyGroup(numeroPago: number) {
+    setLoadingApply(true)
+    try {
+      const res  = await fetch(`/api/loan-groups/${groupId}/schedule/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numeroPago }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      toast({ title: data.message ?? `Pago ${numeroPago} aplicado al grupo` })
+      setConfirmApply(null)
+      router.refresh()
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+    } finally {
+      setLoadingApply(false)
+    }
+  }
+
+  async function undoGroup(numeroPago: number) {
+    setLoadingUndo(true)
+    try {
+      const res  = await fetch(`/api/loan-groups/${groupId}/schedule/undo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numeroPago }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      toast({ title: data.message ?? `Pago ${numeroPago} revertido en el grupo` })
+      setConfirmUndo(null)
+      router.refresh()
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+    } finally {
+      setLoadingUndo(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* ── Nivel 1: Calendario grupal ────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center justify-between">
+            <span>Calendario grupal</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {groupRows.filter((r) => r.estado === 'PAID').length}/{groupRows.length} semanas pagadas
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="divide-y">
+            {groupRows.map((row) => {
+              const canApplyRow = canActGroup && row.estado !== 'PAID'
+              const canUndoRow  = canActGroup && row.estado === 'PAID'
+              const isOverdue   = row.estado === 'OVERDUE'
+
+              return (
+                <div
+                  key={row.numeroPago}
+                  className={`px-4 py-3 text-sm flex items-center gap-2 flex-wrap ${isOverdue ? 'bg-red-500/5' : ''}`}
+                >
+                  <span className={`w-7 shrink-0 font-medium ${isOverdue ? 'text-red-400' : 'text-muted-foreground'}`}>
+                    {row.numeroPago}.
+                  </span>
+
+                  <span className={`w-24 shrink-0 flex items-center gap-1 ${isOverdue ? 'text-red-400 font-medium' : ''}`}>
+                    {formatDate(row.fechaVencimiento)}
+                    {isOverdue && <AlertCircle className="h-3 w-3 text-red-400 shrink-0" />}
+                  </span>
+
+                  <span className="font-semibold w-20 shrink-0">
+                    {formatMoney(row.montoGrupal)}
+                  </span>
+
+                  <Badge variant={GROUP_STATUS_VARIANT[row.estado]} className="text-xs shrink-0">
+                    {GROUP_STATUS_LABEL[row.estado]}
+                  </Badge>
+
+                  <span className="text-xs text-muted-foreground">
+                    {row.pagados}/{row.total}
+                    {row.estado === 'PARTIAL' && (
+                      <> · <span className="text-emerald-400">{formatMoney(row.montoPagadoGrupal)}</span> de {formatMoney(row.montoGrupal)}</>
+                    )}
+                  </span>
+
+                  {/* Aplicar todos */}
+                  {canApplyRow && (
+                    <div className="ml-auto shrink-0">
+                      {confirmApply === row.numeroPago ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-emerald-400">¿Aplicar a todos?</span>
+                          <Button
+                            size="sm"
+                            variant="success"
+                            className="h-6 px-2 text-xs"
+                            disabled={loadingApply}
+                            onClick={() => applyGroup(row.numeroPago)}
+                          >
+                            {loadingApply ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sí'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-xs"
+                            disabled={loadingApply}
+                            onClick={() => setConfirmApply(null)}
+                          >No</Button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmApply(row.numeroPago)}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-emerald-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-emerald-400/50"
+                        >
+                          <CheckCircle2 className="h-3 w-3" />
+                          Aplicar todos
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Deshacer todos */}
+                  {canUndoRow && (
+                    <div className="ml-auto shrink-0">
+                      {confirmUndo === row.numeroPago ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-amber-400">¿Revertir grupo?</span>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-6 px-2 text-xs"
+                            disabled={loadingUndo}
+                            onClick={() => undoGroup(row.numeroPago)}
+                          >
+                            {loadingUndo ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sí'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-xs"
+                            disabled={loadingUndo}
+                            onClick={() => setConfirmUndo(null)}
+                          >No</Button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmUndo(row.numeroPago)}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-amber-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-amber-400/50"
+                        >
+                          <Undo2 className="h-3 w-3" />
+                          Deshacer grupo
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Nivel 2: Calendarios individuales ─────────────────────────── */}
+      <div>
+        <h2 className="text-base font-semibold mb-3">Calendarios por integrante</h2>
+        <div className="space-y-2">
+          {loans.map((loan) => {
+            const isExpanded = expandedClients.has(loan.id)
+            const pagadosCount = loan.schedule.filter((s) => s.estado === 'PAID' || s.estado === 'ADVANCE').length
+
+            return (
+              <div key={loan.id} className="border rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggleClient(loan.id)}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+                >
+                  {isExpanded
+                    ? <ChevronDown  className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  }
+                  <span className="font-medium flex-1">{loan.clientNombre}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {pagadosCount}/{loan.schedule.length} pagados
+                  </span>
+                </button>
+
+                {isExpanded && (
+                  <div className="border-t px-4 py-3">
+                    <ScheduleDateEditor
+                      loanId={loan.id}
+                      schedule={loan.schedule.map((s) => ({
+                        id:               s.id,
+                        numeroPago:       s.numeroPago,
+                        fechaVencimiento: s.fechaVencimiento,
+                        montoEsperado:    s.montoEsperado,
+                        estado:           s.estado,
+                      }))}
+                      canCapture={false}
+                      canEditDates={canActGroup}
+                      canUndo={canActGroup}
+                    />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}

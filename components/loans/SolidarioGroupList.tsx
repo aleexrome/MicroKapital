@@ -76,7 +76,13 @@ export function SolidarioGroupList({ groups }: { groups: SolidarioGroup[] }) {
               }
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900 truncate">{grupo.nombre}</span>
+                  <Link
+                    href={`/grupos/${grupo.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-semibold truncate hover:underline"
+                  >
+                    {grupo.nombre}
+                  </Link>
                   {grupo.hasOverdue && (
                     <Badge variant="error" className="text-xs shrink-0">Con vencidos</Badge>
                   )}

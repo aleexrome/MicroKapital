@@ -105,9 +105,13 @@ export default async function ClienteExpedientePage({
 
   const puedeVerRenovacion = ROLES_RENOVACION.includes(rol)
 
+  const now = new Date()
   const overdueCount = client.loans
     .filter((l) => l.estado === 'ACTIVE')
-    .reduce((s, l) => s + l.schedule.filter((p) => p.estado === 'OVERDUE').length, 0)
+    .reduce((s, l) => s + l.schedule.filter((p) =>
+      p.estado === 'OVERDUE' ||
+      ((p.estado === 'PENDING' || p.estado === 'PARTIAL') && new Date(p.fechaVencimiento) < now)
+    ).length, 0)
 
   return (
     <div className="p-6 space-y-6 max-w-3xl mx-auto">

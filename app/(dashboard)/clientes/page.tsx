@@ -80,7 +80,15 @@ export default async function ClientesPage({
           select: {
             id: true,
             schedule: {
-              where: { estado: 'OVERDUE' },
+              where: {
+                OR: [
+                  { estado: 'OVERDUE' },
+                  {
+                    estado: { in: ['PENDING', 'PARTIAL'] },
+                    fechaVencimiento: { lt: new Date() },
+                  },
+                ],
+              },
               select: { id: true },
             },
           },

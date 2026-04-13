@@ -77,7 +77,13 @@ export default async function ClientesPage({
         cobrador: { select: { nombre: true } },
         loans: {
           where: { estado: 'ACTIVE' },
-          select: { id: true },
+          select: {
+            id: true,
+            schedule: {
+              where: { estado: 'OVERDUE' },
+              select: { id: true },
+            },
+          },
         },
       },
       take: PAGE_SIZE,
@@ -149,7 +155,12 @@ export default async function ClientesPage({
                         {cliente.loans.length} activo{cliente.loans.length > 1 ? 's' : ''}
                       </Badge>
                     )}
-                    <ScoreBadge score={cliente.score} showLabel={false} size="sm" />
+                    <ScoreBadge
+                      score={cliente.score}
+                      overdueCount={cliente.loans.reduce((s, l) => s + l.schedule.length, 0)}
+                      showLabel={false}
+                      size="sm"
+                    />
                   </div>
                 </Link>
               ))}

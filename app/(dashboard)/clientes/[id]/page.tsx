@@ -105,6 +105,10 @@ export default async function ClienteExpedientePage({
 
   const puedeVerRenovacion = ROLES_RENOVACION.includes(rol)
 
+  const overdueCount = client.loans
+    .filter((l) => l.estado === 'ACTIVE')
+    .reduce((s, l) => s + l.schedule.filter((p) => p.estado === 'OVERDUE').length, 0)
+
   return (
     <div className="p-6 space-y-6 max-w-3xl mx-auto">
       <div className="flex items-center gap-3">
@@ -142,7 +146,7 @@ export default async function ClienteExpedientePage({
               </div>
             )}
             <div className="pt-2">
-              <ScoreBadge score={client.score} size="md" />
+              <ScoreBadge score={client.score} overdueCount={overdueCount} size="md" />
             </div>
           </CardContent>
         </Card>

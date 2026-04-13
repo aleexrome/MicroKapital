@@ -65,3 +65,19 @@ export function getScoreInfo(score: number): ScoreInfo {
   }
   return { score, nivel: 'PREMIUM', label: 'Cliente Premium', color: '#8B5CF6' }
 }
+
+/**
+ * Score visual basado en pagos vencidos activos.
+ * 0 vencidos → verde (al corriente)
+ * 1-2 vencidos → amarillo (atrasos leves)
+ * 3+ vencidos → rojo (atrasos graves)
+ */
+export function getScoreFromOverdue(overdueCount: number): ScoreInfo {
+  if (overdueCount === 0) {
+    return { score: 500, nivel: 'BUEN_CLIENTE', label: 'Al Corriente', color: '#22C55E' }
+  }
+  if (overdueCount <= 2) {
+    return { score: 350, nivel: 'REGULAR', label: 'Con Atrasos', color: '#EAB308' }
+  }
+  return { score: 150, nivel: 'ALTO_RIESGO', label: 'Atrasos Graves', color: '#EF4444' }
+}

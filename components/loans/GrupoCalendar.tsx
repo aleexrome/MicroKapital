@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScheduleDateEditor } from './ScheduleDateEditor'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { ChevronDown, ChevronRight, Loader2, Undo2, CheckCircle2, AlertCircle } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2, Undo2, CheckCircle2, AlertCircle, RefreshCw, Info } from 'lucide-react'
 import type { ScheduleStatus } from '@prisma/client'
 
 interface ScheduleItem {
@@ -93,13 +93,23 @@ const GROUP_STATUS_LABEL: Record<GroupRow['estado'], string> = {
   OVERDUE: 'Vencido',
 }
 
+interface MemberRenewalData {
+  loanId: string
+  clientNombre: string
+  currentCapital: number
+  pagosFinanciadosCount: number
+  montoFinanciado: number
+}
+
 interface Props {
   groupId: string
   loans: LoanEntry[]
   canActGroup: boolean   // DIRECTOR_GENERAL / SUPER_ADMIN
+  canRenewGroup?: boolean
+  memberRenewalData?: MemberRenewalData[]
 }
 
-export function GrupoCalendar({ groupId, loans, canActGroup }: Props) {
+export function GrupoCalendar({ groupId, loans, canActGroup, canRenewGroup, memberRenewalData }: Props) {
   const router    = useRouter()
   const { toast } = useToast()
 
@@ -108,6 +118,14 @@ export function GrupoCalendar({ groupId, loans, canActGroup }: Props) {
   const [confirmUndo,  setConfirmUndo]        = useState<number | null>(null)
   const [loadingApply, setLoadingApply]       = useState(false)
   const [loadingUndo,  setLoadingUndo]        = useState(false)
+
+  const [renewOpen,    setRenewOpen]    = useState(false)
+  const [renewLoading, setRenewLoading] = useState(false)
+  const [capitales,    setCapitales]    = useState<Record<string, string>>(() =>
+    memberRenewalData
+      ? Object.fromEntries(memberRenewalData.map((m) => [m.loanId, m.currentCapital.toString()]))
+      : {}
+  )
 
   const groupRows = computeGroupRows(loans)
 
@@ -156,6 +174,43 @@ export function GrupoCalendar({ groupId, loans, canActGroup }: Props) {
       toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
     } finally {
       setLoadingUndo(false)
+    }
+  }
+
+  async function handleGroupRenew() {
+    if (!memberRenewalData) return
+
+    for (const m of memberRenewalData) {
+      const cap = parseFloat(capitales[m.loanId] ?? '')
+      if (!cap || cap <= 0) {
+        toast({ title: 'Error', description: `Capital inválido para ${m.clientNombre}`, variant: 'destructive' })
+        return
+      }
+    }
+
+    setRenewLoading(true)
+    try {
+      await Promise.all(
+        memberRenewalData.map(async (m) => {
+          const res = await fetch(`/api/loans/${m.loanId}/renew`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ capital: parseFloat(capitales[m.loanId] ?? '0') }),
+          })
+          const data = await res.json()
+          if (!res.ok) throw new Error(`${m.clientNombre}: ${data.error ?? 'Error'}`)
+        })
+      )
+      toast({
+        title: '✅ Solicitud de renovación grupal enviada',
+        description: 'Pendiente de aprobación del Director General',
+      })
+      setRenewOpen(false)
+      router.refresh()
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' })
+    } finally {
+      setRenewLoading(false)
     }
   }
 
@@ -282,6 +337,82 @@ export function GrupoCalendar({ groupId, loans, canActGroup }: Props) {
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Renovación Grupal Anticipada ──────────────────────────────── */}
+      {canRenewGroup && memberRenewalData && (
+        <Card className="border-green-200 bg-green-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span className="flex items-center gap-2 text-green-800">
+                <RefreshCw className="h-4 w-4" />
+                Renovación Anticipada Disponible
+              </span>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setRenewOpen(!renewOpen)}>
+                  {renewOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </Button>
+              </div>
+            </CardTitle>
+          </CardHeader>
+
+          {renewOpen && (
+            <CardContent className="space-y-4">
+              {/* Info */}
+              <div className="bg-white rounded-lg p-3 border border-green-100 text-sm">
+                <div className="flex items-start gap-2 text-green-700">
+                  <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                  <p>
+                    Crédito <strong>Solidario</strong> elegible desde pago 6.
+                    La empresa financia los <strong>últimos {memberRenewalData[0]?.pagosFinanciadosCount ?? 2} pagos</strong> de
+                    cada integrante — el monto se descuenta del capital entregado.
+                  </p>
+                </div>
+              </div>
+
+              {/* Capital por integrante */}
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-gray-700">Capital del nuevo crédito por integrante</p>
+                {memberRenewalData.map((m) => (
+                  <div key={m.loanId} className="flex items-center gap-3">
+                    <span className="flex-1 text-sm text-green-800 truncate">{m.clientNombre}</span>
+                    {m.montoFinanciado > 0 && (
+                      <span className="text-xs text-orange-600 shrink-0">
+                        -{formatMoney(m.montoFinanciado)} financiado
+                      </span>
+                    )}
+                    <div className="relative w-32 shrink-0">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-green-600 text-xs">$</span>
+                      <input
+                        type="number"
+                        min={100}
+                        step={500}
+                        className="border border-green-300 rounded pl-5 pr-2 py-1.5 text-sm w-full bg-white"
+                        value={capitales[m.loanId] ?? ''}
+                        onChange={(e) => setCapitales((prev) => ({ ...prev, [m.loanId]: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  disabled={renewLoading}
+                  onClick={handleGroupRenew}
+                >
+                  {renewLoading
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <><RefreshCw className="h-4 w-4 mr-1" />Solicitar renovación grupal</>
+                  }
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setRenewOpen(false)}>Cancelar</Button>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* ── Nivel 2: Calendarios individuales ─────────────────────────── */}
       <div>

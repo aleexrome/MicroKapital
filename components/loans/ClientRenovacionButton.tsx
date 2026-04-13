@@ -31,8 +31,6 @@ const TIPO_LABELS: Record<LoanType, string> = {
   FIDUCIARIO: 'Fiduciario',
 }
 
-const TIPOS: LoanType[] = ['SOLIDARIO', 'INDIVIDUAL', 'AGIL', 'FIDUCIARIO']
-
 export function ClientRenovacionButton({
   loanId,
   tipo,
@@ -45,7 +43,6 @@ export function ClientRenovacionButton({
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [capital, setCapital] = useState('')
-  const [nuevoTipo, setNuevoTipo] = useState<LoanType>(tipo)
   const [notas, setNotas] = useState('')
   const [selectedPagos, setSelectedPagos] = useState<Set<string>>(
     () => new Set(pagosPendientes.map((p) => p.id))
@@ -83,7 +80,6 @@ export function ClientRenovacionButton({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           capital: capitalNum,
-          tipo: nuevoTipo !== tipo ? nuevoTipo : undefined,
           pagosFinanciadosIds: Array.from(selectedPagos),
           notas: notas.trim() || undefined,
         }),
@@ -158,27 +154,6 @@ export function ClientRenovacionButton({
                   <span className="font-semibold text-orange-600">-{formatMoney(montoFinanciado)}</span>
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Tipo de nuevo crédito */}
-          <div>
-            <p className="text-sm font-medium text-gray-700 mb-2">Tipo de nuevo crédito</p>
-            <div className="flex flex-wrap gap-2">
-              {TIPOS.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setNuevoTipo(t)}
-                  className={`px-3 py-1.5 rounded border text-sm font-medium transition-colors ${
-                    nuevoTipo === t
-                      ? 'bg-green-700 text-white border-green-700'
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-green-500'
-                  }`}
-                >
-                  {TIPO_LABELS[t]}
-                </button>
-              ))}
             </div>
           </div>
 

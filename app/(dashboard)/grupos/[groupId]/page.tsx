@@ -7,6 +7,10 @@ import { ArrowLeft, Users } from 'lucide-react'
 import { GrupoCalendar } from '@/components/loans/GrupoCalendar'
 import { type Prisma } from '@prisma/client'
 
+const SOLIDARIO_UMBRAL             = 6
+const SOLIDARIO_PAGOS_FINANCIADOS  = 2
+const ROLES_PUEDEN_RENOVAR = ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN']
+
 export default async function GrupoCalendarioPage({ params }: { params: { groupId: string } }) {
   const session = await getSession()
   if (!session?.user) return null
@@ -40,6 +44,10 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
         include: {
           client:   { select: { id: true, nombreCompleto: true } },
           schedule: { orderBy: { numeroPago: 'asc' } },
+          loanRenovado: {
+            where: { estado: { in: ['PENDING_APPROVAL', 'APPROVED'] } },
+            select: { id: true },
+          },
         },
       },
     },
@@ -49,6 +57,35 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
 
   const totalPagos   = grupo.loans.flatMap((l) => l.schedule).length
   const totalPagados = grupo.loans.flatMap((l) => l.schedule).filter((s) => s.estado === 'PAID').length
+
+  // ── Eligibilidad de renovación grupal anticipada ──────────────────────
+  const activeLoans = grupo.loans.filter((l) => l.estado === 'ACTIVE')
+  const allEligible =
+    activeLoans.length > 0 &&
+    activeLoans.every((l) => {
+      const pagados = l.schedule.filter((s) => s.estado === 'PAID').length
+      return pagados >= SOLIDARIO_UMBRAL && l.loanRenovado.length === 0
+    })
+
+  const canRenewGroup = allEligible && ROLES_PUEDEN_RENOVAR.includes(rol)
+
+  const memberRenewalData = canRenewGroup
+    ? activeLoans.map((l) => {
+        const pagosPendientes = l.schedule.filter(
+          (s) => s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL'
+        )
+        const montoFinanciado = pagosPendientes
+          .slice(0, SOLIDARIO_PAGOS_FINANCIADOS)
+          .reduce((sum, s) => sum + Number(s.montoEsperado), 0)
+        return {
+          loanId:               l.id,
+          clientNombre:         l.client.nombreCompleto,
+          currentCapital:       Number(l.capital),
+          pagosFinanciadosCount: Math.min(SOLIDARIO_PAGOS_FINANCIADOS, pagosPendientes.length),
+          montoFinanciado,
+        }
+      })
+    : undefined
 
   // Calcular href de regreso según rol
   const loanBranchId = grupo.loans[0]?.branchId
@@ -95,6 +132,8 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
           })),
         }))}
         canActGroup={esOpAdmin}
+        canRenewGroup={canRenewGroup}
+        memberRenewalData={memberRenewalData}
       />
     </div>
   )

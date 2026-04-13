@@ -145,17 +145,15 @@ export default async function AgendaPage() {
         </div>
       )}
 
-      {/* Botón de imprimir – parte inferior centro */}
-      {schedule.length > 0 && (
-        <PrintAgendaButton
-          items={printItems}
-          fecha={fechaLabel}
-          empresa={company?.nombre ?? 'MicroKapital'}
-          sucursal={branch?.nombre ?? undefined}
-          totalEsperado={totalEsperado}
-          showCobrador={isGerente}
-        />
-      )}
+      {/* Botón de imprimir – parte inferior centro, siempre visible */}
+      <PrintAgendaButton
+        items={printItems}
+        fecha={fechaLabel}
+        empresa={company?.nombre ?? 'MicroKapital'}
+        sucursal={branch?.nombre ?? undefined}
+        totalEsperado={totalEsperado}
+        showCobrador={isGerente}
+      />
     </div>
   )
 }

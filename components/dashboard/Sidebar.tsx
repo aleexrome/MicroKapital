@@ -57,7 +57,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/cobros/agenda',
     label: 'Agenda del día',
     icon: <CalendarDays className="h-5 w-5" />,
-    roles: ['COBRADOR'],
+    roles: ['COBRADOR', 'GERENTE'],
   },
   {
     href: '/cobros/historial',

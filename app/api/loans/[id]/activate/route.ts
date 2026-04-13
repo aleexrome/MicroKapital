@@ -75,9 +75,12 @@ export async function POST(
 
   const body = await req.json().catch(() => ({}))
   const parsed = activateSchema.safeParse(body)
-  const fechaDesembolso = parsed.success && parsed.data.fechaDesembolso
-    ? new Date(parsed.data.fechaDesembolso)
-    : new Date()
+
+  // Si el DG fijó la fecha de desembolso en la contrapropuesta, tiene prioridad
+  const fechaDesembolso = loan.fechaDesembolso
+    ?? (parsed.success && parsed.data.fechaDesembolso
+        ? new Date(parsed.data.fechaDesembolso)
+        : new Date())
 
   const seguroMonto    = parsed.success ? (parsed.data.seguro ?? null) : null
   const seguroMetodo   = parsed.success ? (parsed.data.seguroMetodoPago ?? null) : null

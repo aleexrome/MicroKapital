@@ -199,7 +199,11 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
-                <LoanActivateButton loanId={loan.id} />
+                <LoanActivateButton
+                  loanId={loan.id}
+                  fechaDesembolsoDG={loan.fechaDesembolso ? loan.fechaDesembolso.toISOString().slice(0, 10) : null}
+                  fechaPrimerPagoDG={loan.fechaPrimerPago ? loan.fechaPrimerPago.toISOString().slice(0, 10) : null}
+                />
                 <LoanClientRejectButton loanId={loan.id} />
               </div>
             </div>

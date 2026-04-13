@@ -10,14 +10,22 @@ interface LoanActivateButtonProps {
   loanId: string
   // If true, this is a gerente verifying a pending seguro transfer
   seguroPendiente?: boolean
+  // Fechas pre-definidas por el Director General en la contrapropuesta
+  fechaDesembolsoDG?: string | null
+  fechaPrimerPagoDG?: string | null
 }
 
-export function LoanActivateButton({ loanId, seguroPendiente = false }: LoanActivateButtonProps) {
+export function LoanActivateButton({
+  loanId,
+  seguroPendiente = false,
+  fechaDesembolsoDG,
+  fechaPrimerPagoDG,
+}: LoanActivateButtonProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
-  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha] = useState(() => fechaDesembolsoDG ?? new Date().toISOString().slice(0, 10))
   const [seguro, setSeguro] = useState('')
   const [seguroMetodo, setSeguroMetodo] = useState<'CASH' | 'TRANSFER'>('CASH')
 
@@ -101,13 +109,37 @@ export function LoanActivateButton({ loanId, seguroPendiente = false }: LoanActi
         <label className="text-xs text-muted-foreground flex items-center gap-1">
           <CalendarDays className="h-3 w-3" /> Fecha de desembolso
         </label>
-        <input
-          type="date"
-          value={fecha}
-          onChange={(e) => setFecha(e.target.value)}
-          className="border rounded px-3 py-1.5 text-sm w-48"
-        />
+        {fechaDesembolsoDG ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">{fechaDesembolsoDG}</span>
+            <span className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded px-2 py-0.5">
+              Fijada por el Director General
+            </span>
+          </div>
+        ) : (
+          <input
+            type="date"
+            value={fecha}
+            onChange={(e) => setFecha(e.target.value)}
+            className="border rounded px-3 py-1.5 text-sm w-48"
+          />
+        )}
       </div>
+
+      {/* Fecha del primer pago (si el DG la fijó) */}
+      {fechaPrimerPagoDG && (
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-muted-foreground flex items-center gap-1">
+            <CalendarDays className="h-3 w-3" /> Fecha del primer pago
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">{fechaPrimerPagoDG}</span>
+            <span className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded px-2 py-0.5">
+              Fijada por el Director General
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Seguro de apertura */}
       <div className="space-y-2">

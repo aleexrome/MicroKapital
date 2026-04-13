@@ -54,6 +54,7 @@ enum ScheduleStatus {
   OVERDUE
   PARTIAL
   ADVANCE
+  FINANCIADO  // Pago cubierto por renovación anticipada — se muestra en morado
 }
 
 enum PaymentMethod {
@@ -315,6 +316,7 @@ model Loan {
   loanOriginal         Loan?              @relation("LoanRenewal", fields: [loanOriginalId], references: [id])
   loanRenovado         Loan[]             @relation("LoanRenewal")
   descuentoRenovacion  Decimal?           @db.Decimal(12, 2) // Monto financiado descontado del nuevo crédito
+  pagosFinanciadosIds  Json?                                  // IDs de PaymentSchedule del crédito anterior que pasan a FINANCIADO al activar
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

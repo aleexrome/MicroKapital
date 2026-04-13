@@ -6,10 +6,21 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
+import { ClientRenovacionButton } from '@/components/loans/ClientRenovacionButton'
 import { formatDate, formatMoney } from '@/lib/utils'
 import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2, FolderOpen, Users } from 'lucide-react'
 import Link from 'next/link'
 import type { LoanType } from '@prisma/client'
+
+// Umbral de pagos para habilitar renovación anticipada
+const UMBRAL_RENOVACION: Record<string, number> = {
+  SOLIDARIO:  6,
+  INDIVIDUAL: 9,
+  AGIL:       20,
+}
+
+// Roles que pueden solicitar renovaciones
+const ROLES_RENOVACION = ['COORDINADOR', 'COBRADOR', 'GERENTE_ZONAL', 'GERENTE', 'SUPER_ADMIN']
 
 export default async function ClienteExpedientePage({
   params,
@@ -48,7 +59,13 @@ export default async function ClienteExpedientePage({
         orderBy: { createdAt: 'desc' },
         include: {
           cobrador: { select: { nombre: true } },
-          schedule: { orderBy: { numeroPago: 'asc' }, take: 3 },
+          // Cargar calendario completo (necesario para calcular elegibilidad de renovación)
+          schedule: { orderBy: { numeroPago: 'asc' } },
+          // Verificar si ya existe una renovación pendiente o aprobada
+          loanRenovado: {
+            where: { estado: { in: ['PENDING_APPROVAL', 'APPROVED'] } },
+            select: { id: true },
+          },
           documents: {
             orderBy: { createdAt: 'desc' },
             select: { id: true, tipo: true },
@@ -79,11 +96,14 @@ export default async function ClienteExpedientePage({
   const statusLabel: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'outline' }> = {
     PENDING_APPROVAL: { label: 'Pendiente', variant: 'warning' },
     ACTIVE: { label: 'Activo', variant: 'success' },
-    LIQUIDATED: { label: 'Liquidado', variant: 'info' },
+    APPROVED: { label: 'Aprobado', variant: 'info' },
+    LIQUIDATED: { label: 'Concluido', variant: 'info' },
     REJECTED: { label: 'Rechazado', variant: 'error' },
     DEFAULTED: { label: 'Incumplido', variant: 'error' },
     RESTRUCTURED: { label: 'Reestructurado', variant: 'outline' },
   }
+
+  const puedeVerRenovacion = ROLES_RENOVACION.includes(rol)
 
   return (
     <div className="p-6 space-y-6 max-w-3xl mx-auto">
@@ -168,6 +188,22 @@ export default async function ClienteExpedientePage({
               {client.loans.map((loan) => {
                 const st = statusLabel[loan.estado] ?? { label: loan.estado, variant: 'outline' as const }
                 const tieneAval = (loan.tipo === 'INDIVIDUAL' || loan.tipo === 'FIDUCIARIO') && loan.avalNombre
+
+                // Calcular elegibilidad de renovación anticipada
+                const umbral = UMBRAL_RENOVACION[loan.tipo]
+                const pagados = loan.schedule.filter((s) => s.estado === 'PAID').length
+                const pagosPendientes = loan.schedule
+                  .filter((s) => s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL')
+                  .map((s) => ({ id: s.id, numeroPago: s.numeroPago, montoEsperado: Number(s.montoEsperado) }))
+                const tieneRenovacionActiva = loan.loanRenovado.length > 0
+                const puedeRenovar =
+                  puedeVerRenovacion &&
+                  loan.estado === 'ACTIVE' &&
+                  !!umbral &&
+                  pagados >= umbral &&
+                  !tieneRenovacionActiva &&
+                  pagosPendientes.length > 0
+
                 return (
                   <div key={loan.id} className="border rounded-lg overflow-hidden">
                     <Link
@@ -197,6 +233,20 @@ export default async function ClienteExpedientePage({
                             {loan.avalRelacion ? ` · ${loan.avalRelacion}` : ''}
                             {loan.avalTelefono ? ` · ${loan.avalTelefono}` : ''}
                           </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Botón de renovación anticipada */}
+                    {puedeRenovar && (
+                      <div className="px-4 pb-4 border-t bg-muted/10">
+                        <div className="mt-3">
+                          <ClientRenovacionButton
+                            loanId={loan.id}
+                            tipo={loan.tipo as LoanType}
+                            pagosRealizados={pagados}
+                            umbral={umbral}
+                            pagosPendientes={pagosPendientes}
+                          />
                         </div>
                       </div>
                     )}

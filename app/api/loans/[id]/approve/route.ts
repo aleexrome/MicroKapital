@@ -120,28 +120,8 @@ export async function POST(
       },
     })
 
-    // 2. If this is an early renewal, liquidate the original loan now
-    if (loan.loanOriginalId && loan.loanOriginal) {
-      const schedulesPendientes = loan.loanOriginal.schedule
-
-      if (schedulesPendientes.length > 0) {
-        await tx.paymentSchedule.updateMany({
-          where: {
-            id: { in: schedulesPendientes.map((s) => s.id) },
-          },
-          data: {
-            estado: 'PAID',
-            pagadoAt: new Date(),
-            montoPagado: schedulesPendientes[0].montoEsperado,
-          },
-        })
-      }
-
-      await tx.loan.update({
-        where: { id: loan.loanOriginalId },
-        data: { estado: 'LIQUIDATED' },
-      })
-    }
+    // Nota: si es renovación anticipada, el crédito original se liquida al ACTIVAR el nuevo crédito
+    // (no al aprobar), para que los pagos financiados queden marcados con estado FINANCIADO
   })
 
   const esRenovacion = !!loan.loanOriginalId
@@ -162,7 +142,7 @@ export async function POST(
   const message = esContrapropuesta
     ? 'Contrapropuesta registrada — el coordinador visitará al cliente para presentar las nuevas condiciones'
     : esRenovacion
-    ? 'Renovación aprobada — crédito anterior liquidado · Pendiente de activación por el coordinador'
+    ? 'Renovación aprobada — pendiente de activación (el crédito anterior se liquidará al activar)'
     : 'Crédito aprobado — pendiente de activación por el coordinador'
 
   return NextResponse.json({ message })

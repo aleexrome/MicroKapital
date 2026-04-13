@@ -15,6 +15,7 @@ const STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'error' | '
   OVERDUE: 'error',
   PARTIAL: 'info',
   ADVANCE: 'success',
+  FINANCIADO: 'outline',
 }
 const STATUS_LABEL: Record<ScheduleStatus, string> = {
   PAID: 'Pagado',
@@ -22,6 +23,7 @@ const STATUS_LABEL: Record<ScheduleStatus, string> = {
   OVERDUE: 'Vencido',
   PARTIAL: 'Parcial',
   ADVANCE: 'Adelantado',
+  FINANCIADO: 'Financiado',
 }
 
 export default async function GrupoCobroPage({ params }: { params: { groupId: string } }) {

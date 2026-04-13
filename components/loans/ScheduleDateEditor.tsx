@@ -16,6 +16,7 @@ const STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'error' | '
   OVERDUE: 'error',
   PARTIAL: 'info',
   ADVANCE: 'success',
+  FINANCIADO: 'outline',
 }
 const STATUS_LABEL: Record<ScheduleStatus, string> = {
   PAID: 'Pagado',
@@ -23,6 +24,7 @@ const STATUS_LABEL: Record<ScheduleStatus, string> = {
   OVERDUE: 'Vencido',
   PARTIAL: 'Parcial',
   ADVANCE: 'Adelantado',
+  FINANCIADO: 'Financiado',
 }
 
 function toInputValue(date: string | Date): string {
@@ -129,8 +131,8 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
       {schedule.map((s) => {
         const isEditing = editingId === s.id
         // canUndo (DG/SUPER_ADMIN) → puede editar TODAS las filas, incluyendo PAID.
-        // canEditDates sin canUndo → puede editar PENDING, OVERDUE, PARTIAL (no PAID ni ADVANCE).
-        const editable = canEditDates && (canUndo || (s.estado !== 'PAID' && s.estado !== 'ADVANCE'))
+        // canEditDates sin canUndo → puede editar PENDING, OVERDUE, PARTIAL (no PAID, ADVANCE ni FINANCIADO).
+        const editable = canEditDates && (canUndo || (s.estado !== 'PAID' && s.estado !== 'ADVANCE' && s.estado !== 'FINANCIADO'))
 
         // Visually overdue: fecha pasada con estado pendiente/parcial, OR estado explícito OVERDUE
         const _d = typeof s.fechaVencimiento === 'string' ? new Date(s.fechaVencimiento) : s.fechaVencimiento
@@ -203,7 +205,7 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
             <span className="font-medium w-20 shrink-0">{formatMoney(s.montoEsperado)}</span>
             <Badge
               variant={isVisuallyOverdue ? 'error' : STATUS_VARIANT[s.estado]}
-              className="text-xs"
+              className={`text-xs${s.estado === 'FINANCIADO' ? ' border-violet-400 text-violet-700 bg-violet-50' : ''}`}
             >
               {isVisuallyOverdue ? 'Vencido' : STATUS_LABEL[s.estado]}
             </Badge>

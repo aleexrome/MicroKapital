@@ -7,6 +7,9 @@ import { z } from 'zod'
 
 const renewSchema = z.object({
   capital: z.number().positive(),
+  tipo: z.enum(['SOLIDARIO', 'INDIVIDUAL', 'AGIL', 'FIDUCIARIO']).optional(),
+  pagosFinanciadosIds: z.array(z.string()).min(1).optional(),
+  notas: z.string().optional(),
   tasaInteres: z.number().positive().optional(),
   ciclo: z.number().int().min(1).optional(),
   tuvoAtraso: z.boolean().optional(),
@@ -35,7 +38,7 @@ export async function POST(
     return NextResponse.json({ error: 'Sin permisos para solicitar renovaciones' }, { status: 403 })
   }
 
-  // Cargar crédito original con su calendario
+  // Cargar crédito original con su calendario completo
   const loanOriginal = await prisma.loan.findFirst({
     where: { id: params.id, companyId: companyId!, estado: 'ACTIVE' },
     include: {
@@ -74,15 +77,7 @@ export async function POST(
     }, { status: 400 })
   }
 
-  // Calcular monto financiado (últimos N pagos pendientes que cubre la empresa)
-  const montoPorPago =
-    loanOriginal.tipo === 'AGIL'       ? Number(loanOriginal.pagoDiario) :
-    loanOriginal.tipo === 'FIDUCIARIO' ? Number(loanOriginal.pagoQuincenal) :
-                                         Number(loanOriginal.pagoSemanal)
-
-  const montoFinanciado = montoPorPago * regla.financiados
-
-  // Validar body del nuevo crédito
+  // Validar body
   const body = await req.json()
   const parsed = renewSchema.safeParse(body)
   if (!parsed.success) {
@@ -90,9 +85,46 @@ export async function POST(
   }
   const data = parsed.data
 
+  // Calcular monto financiado
+  // — Si el coordinador seleccionó pagos específicos, usar esos
+  // — Si no, usar la regla automática (últimos N pagos pendientes)
+  let montoFinanciado: number
+  let pagosFinanciadosIds: string[] | null = null
+
+  const pagosPendientes = loanOriginal.schedule.filter(
+    (s) => s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL'
+  )
+
+  if (data.pagosFinanciadosIds && data.pagosFinanciadosIds.length > 0) {
+    const loanPendingIds = new Set(pagosPendientes.map((s) => s.id))
+    const invalidos = data.pagosFinanciadosIds.filter((id) => !loanPendingIds.has(id))
+    if (invalidos.length > 0) {
+      return NextResponse.json(
+        { error: 'Uno o más pagos seleccionados no corresponden a este crédito' },
+        { status: 400 }
+      )
+    }
+    montoFinanciado = pagosPendientes
+      .filter((s) => data.pagosFinanciadosIds!.includes(s.id))
+      .reduce((sum, s) => sum + Number(s.montoEsperado), 0)
+    pagosFinanciadosIds = data.pagosFinanciadosIds
+  } else {
+    // Retrocompatibilidad: auto-financiar últimos N pagos
+    const montoPorPago =
+      loanOriginal.tipo === 'AGIL'       ? Number(loanOriginal.pagoDiario) :
+      loanOriginal.tipo === 'FIDUCIARIO' ? Number(loanOriginal.pagoQuincenal) :
+                                           Number(loanOriginal.pagoSemanal)
+    montoFinanciado = montoPorPago * regla.financiados
+    // Tomar los primeros N pagos pendientes como financiados
+    pagosFinanciadosIds = pagosPendientes.slice(0, regla.financiados).map((s) => s.id)
+  }
+
+  // Tipo del nuevo crédito (puede cambiar)
+  const nuevoTipo = data.tipo ?? loanOriginal.tipo
+
   // Calcular el nuevo crédito
   let tasaInteres = data.tasaInteres
-  if (!tasaInteres && loanOriginal.tipo === 'FIDUCIARIO') {
+  if (!tasaInteres && nuevoTipo === 'FIDUCIARIO') {
     const setting = await prisma.companySetting.findFirst({
       where: { companyId: companyId!, clave: 'tasa_fiduciario' },
     })
@@ -102,7 +134,7 @@ export async function POST(
   const nuevoCiclo = data.ciclo ?? (loanOriginal.ciclo ?? 1)
 
   const calc = calcLoan(
-    loanOriginal.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
+    nuevoTipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
     data.capital,
     tasaInteres,
     {
@@ -116,8 +148,12 @@ export async function POST(
   // El monto financiado se descuenta del monto real entregado al cliente
   const montoRealAjustado = Math.max(0, calc.montoReal - montoFinanciado)
 
+  const pagosFinanciadosCount = pagosFinanciadosIds?.length ?? 0
+  const notasLoan = data.notas
+    ?? `Renovación anticipada — financia ${pagosFinanciadosCount} pago${pagosFinanciadosCount !== 1 ? 's' : ''} del crédito anterior ($${montoFinanciado.toFixed(2)})`
+
   // Crear nuevo crédito en PENDING_APPROVAL
-  // El crédito anterior SIGUE ACTIVO — se liquida cuando el Director General apruebe
+  // El crédito anterior SIGUE ACTIVO — se liquida cuando el coordinador active el nuevo crédito
   const result = await prisma.$transaction(async (tx) => {
     const nuevoLoan = await tx.loan.create({
       data: {
@@ -125,7 +161,7 @@ export async function POST(
         branchId: loanOriginal.branchId,
         cobradorId: loanOriginal.cobradorId,
         clientId: loanOriginal.client.id,
-        tipo: loanOriginal.tipo,
+        tipo: nuevoTipo,
         estado: 'PENDING_APPROVAL',
         capital: calc.capital,
         comision: calc.comision,
@@ -144,7 +180,8 @@ export async function POST(
         // Vínculo con el crédito anterior
         loanOriginalId: loanOriginal.id,
         descuentoRenovacion: montoFinanciado,
-        notas: `Renovación anticipada — financia ${regla.financiados} pagos del crédito anterior ($${montoFinanciado.toFixed(2)})`,
+        pagosFinanciadosIds: pagosFinanciadosIds,
+        notas: notasLoan,
       },
     })
 
@@ -153,7 +190,7 @@ export async function POST(
         loanId: nuevoLoan.id,
         solicitadoPorId: userId,
         estado: 'PENDING',
-        notas: `Renovación anticipada desde crédito ${loanOriginal.id}. Financia $${montoFinanciado.toFixed(2)}.`,
+        notas: `Renovación anticipada desde crédito ${loanOriginal.id}. Financia $${montoFinanciado.toFixed(2)} (${pagosFinanciadosCount} pago${pagosFinanciadosCount !== 1 ? 's' : ''}).`,
       },
     })
 
@@ -167,7 +204,9 @@ export async function POST(
     registroId: result.id,
     valoresNuevos: {
       loanOriginalId: loanOriginal.id,
+      nuevoTipo,
       montoFinanciado,
+      pagosFinanciadosIds,
       newCapital: data.capital,
       montoRealAjustado,
     },

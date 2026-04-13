@@ -157,6 +157,37 @@ export async function POST(
     }))
 
     await tx.paymentSchedule.createMany({ data: scheduleData })
+
+    // Si es renovación anticipada: liquidar el crédito anterior y marcar pagos financiados
+    if (loan.loanOriginalId) {
+      const idsFinanciados = Array.isArray(loan.pagosFinanciadosIds)
+        ? (loan.pagosFinanciadosIds as string[])
+        : null
+
+      if (idsFinanciados && idsFinanciados.length > 0) {
+        // Pagos seleccionados → FINANCIADO (morado — cubiertos por la renovación)
+        await tx.paymentSchedule.updateMany({
+          where: { id: { in: idsFinanciados } },
+          data: { estado: 'FINANCIADO', pagadoAt: new Date() },
+        })
+      }
+
+      // Cualquier otro pago pendiente del crédito anterior → PAID
+      await tx.paymentSchedule.updateMany({
+        where: {
+          loanId: loan.loanOriginalId,
+          estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
+          ...(idsFinanciados && idsFinanciados.length > 0 ? { id: { notIn: idsFinanciados } } : {}),
+        },
+        data: { estado: 'PAID', pagadoAt: new Date() },
+      })
+
+      // Liquidar el crédito anterior
+      await tx.loan.update({
+        where: { id: loan.loanOriginalId },
+        data: { estado: 'LIQUIDATED' },
+      })
+    }
   })
 
   createAuditLog({

@@ -56,7 +56,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       client: { select: { id: true, nombreCompleto: true } },
       cobrador: { select: { nombre: true } },
       aprobadoPor: { select: { nombre: true } },
-      loanOriginal: { select: { id: true } },
+      loanOriginal: { select: { id: true, loanGroupId: true } },
       schedule: { orderBy: { numeroPago: 'asc' } },
     },
   })
@@ -125,6 +125,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') &&
     loan.loanGroupId
   ) {
+    // Crédito nuevo solidario: cargar todos los integrantes del grupo
     const siblings = await prisma.loan.findMany({
       where: { loanGroupId: loan.loanGroupId, companyId: companyId! },
       include: { client: { select: { nombreCompleto: true } } },
@@ -135,6 +136,34 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       clientNombre: s.client.nombreCompleto,
       capital: Number(s.capital),
     }))
+  } else if (
+    loan.tipo === 'SOLIDARIO' &&
+    loan.estado === 'PENDING_APPROVAL' &&
+    (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') &&
+    loan.loanOriginalId
+  ) {
+    // Renovación solidaria: rastrear el grupo original y cargar las renovaciones de los demás miembros
+    const originalGroupId = loan.loanOriginal?.loanGroupId ?? null
+    if (originalGroupId) {
+      const originalLoans = await prisma.loan.findMany({
+        where: { loanGroupId: originalGroupId, companyId: companyId! },
+        select: { id: true },
+      })
+      const renewalLoans = await prisma.loan.findMany({
+        where: {
+          loanOriginalId: { in: originalLoans.map((l) => l.id) },
+          estado: 'PENDING_APPROVAL',
+          companyId: companyId!,
+        },
+        include: { client: { select: { nombreCompleto: true } } },
+        orderBy: { createdAt: 'asc' },
+      })
+      grupoMiembros = renewalLoans.map((r) => ({
+        loanId: r.id,
+        clientNombre: r.client.nombreCompleto,
+        capital: Number(r.capital),
+      }))
+    }
   }
 
   const pagados = loan.schedule.filter((s) => s.estado === 'PAID').length

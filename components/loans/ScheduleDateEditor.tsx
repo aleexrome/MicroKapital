@@ -237,7 +237,7 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
             {isPaidStatus && s.paymentInfo && (
               <button
                 onClick={() => setOpenInfoId(infoOpen ? null : s.id)}
-                className={`shrink-0 rounded-full p-0.5 transition-colors ${infoOpen ? 'text-primary-600' : 'text-muted-foreground hover:text-primary-600'}`}
+                className={`shrink-0 rounded-full p-0.5 transition-colors ${infoOpen ? 'text-white' : 'text-white/70 hover:text-white'}`}
                 title="Ver quién registró este pago"
               >
                 <Info className="h-3.5 w-3.5" />

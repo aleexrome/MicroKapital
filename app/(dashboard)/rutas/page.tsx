@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { formatMoney } from '@/lib/utils'
 import { Navigation, ChevronRight, TrendingUp, Target } from 'lucide-react'
 import {
-  semanasRecientes, getWeekEnd, formatWeekLabel, mondayToId, getMonday,
+  semanasRecientesSatFri, getFriday, formatWeekLabelSatFri, saturdayToId, getSaturday,
 } from '@/lib/week-utils'
 
 function pct(cobrado: number, total: number) {
@@ -59,10 +59,10 @@ export default async function RutasPage() {
     cobradorIds = users.map((u) => u.id)
   }
 
-  // ── Fetch last 10 weeks in one batch ──────────────────────────────────
-  const semanas = semanasRecientes(10)
+  // ── Fetch last 10 weeks in one batch (Sábado–Viernes) ────────────────
+  const semanas = semanasRecientesSatFri(10)
   const periodoStart = semanas[semanas.length - 1]
-  const periodoEnd   = getWeekEnd(semanas[0])
+  const periodoEnd   = getFriday(semanas[0])
 
   const [allSchedules, allLoans] = await Promise.all([
     prisma.paymentSchedule.findMany({
@@ -93,16 +93,16 @@ export default async function RutasPage() {
     }),
   ])
 
-  // ── Calculate per-week stats ───────────────────────────────────────────
-  const thisMonday = getMonday(new Date())
+  // ── Calculate per-week stats (Sábado–Viernes) ────────────────────────
+  const thisSat = getSaturday(new Date())
 
-  const weekData = semanas.map((monday) => {
-    const sunday     = getWeekEnd(monday)
-    const isCurrent  = monday.getTime() === thisMonday.getTime()
+  const weekData = semanas.map((saturday) => {
+    const friday     = getFriday(saturday)
+    const isCurrent  = saturday.getTime() === thisSat.getTime()
 
     const wSchedules = allSchedules.filter((s) => {
       const d = new Date(s.fechaVencimiento)
-      return d >= monday && d <= sunday
+      return d >= saturday && d <= friday
     })
     const totalAPagar  = wSchedules.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
     const totalCobrado = wSchedules.reduce((sum, s) => {
@@ -112,7 +112,7 @@ export default async function RutasPage() {
     }, 0)
 
     const colocacion = allLoans
-      .filter((l) => l.fechaDesembolso && l.fechaDesembolso >= monday && l.fechaDesembolso <= sunday)
+      .filter((l) => l.fechaDesembolso && l.fechaDesembolso >= saturday && l.fechaDesembolso <= friday)
       .reduce((sum, l) => sum + Number(l.capital), 0)
 
     const metaTarget    = totalAPagar * 0.7
@@ -120,9 +120,9 @@ export default async function RutasPage() {
     const metaPct       = pct(colocacion, metaTarget)
 
     return {
-      monday,
-      weekId: mondayToId(monday),
-      label: formatWeekLabel(monday),
+      saturday,
+      weekId: saturdayToId(saturday),
+      label: formatWeekLabelSatFri(saturday),
       isCurrent,
       totalAPagar,
       totalCobrado,

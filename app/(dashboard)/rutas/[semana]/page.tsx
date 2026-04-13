@@ -10,7 +10,7 @@ import {
   CircleDot, Building2, User,
 } from 'lucide-react'
 import {
-  idToMonday, getWeekEnd, formatWeekLabel, getMonday,
+  idToSaturday, getFriday, formatWeekLabelSatFri, getSaturday,
 } from '@/lib/week-utils'
 import type { ScheduleStatus, Prisma } from '@prisma/client'
 
@@ -177,15 +177,15 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
 
   const { id: userId, rol, companyId, branchId } = session.user
 
-  // Parse and validate week
-  const monday = idToMonday(params.semana)
-  if (isNaN(monday.getTime())) notFound()
-  // Reject dates that aren't a Monday
-  if (monday.getUTCDay() !== 1) notFound()
+  // Parse and validate week (Sábado–Viernes)
+  const saturday = idToSaturday(params.semana)
+  if (isNaN(saturday.getTime())) notFound()
+  // Reject dates that aren't a Saturday
+  if (saturday.getUTCDay() !== 6) notFound()
 
-  const sunday = getWeekEnd(monday)
-  const weekLabel = formatWeekLabel(monday)
-  const isCurrentWeek = monday.getTime() === getMonday(new Date()).getTime()
+  const friday = getFriday(saturday)
+  const weekLabel = formatWeekLabelSatFri(saturday)
+  const isCurrentWeek = saturday.getTime() === getSaturday(new Date()).getTime()
 
   const isCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
   const isGerente     = rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
@@ -196,7 +196,7 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
     const [schedules, loans] = await Promise.all([
       prisma.paymentSchedule.findMany({
         where: {
-          fechaVencimiento: { gte: monday, lte: sunday },
+          fechaVencimiento: { gte: saturday, lte: friday },
           estado: { not: 'FINANCIADO' },
           loan: {
             cobradorId: userId,
@@ -225,7 +225,7 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
           cobradorId: userId,
           companyId: companyId!,
           estado: { in: ['ACTIVE', 'LIQUIDATED'] },
-          fechaDesembolso: { gte: monday, lte: sunday },
+          fechaDesembolso: { gte: saturday, lte: friday },
         },
         select: {
           id: true,
@@ -395,7 +395,7 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
     const [wSchedules, wLoans] = await Promise.all([
       prisma.paymentSchedule.findMany({
         where: {
-          fechaVencimiento: { gte: monday, lte: sunday },
+          fechaVencimiento: { gte: saturday, lte: friday },
           estado: { not: 'FINANCIADO' },
           loan: {
             cobradorId: { in: allIds },
@@ -410,7 +410,7 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
           cobradorId: { in: allIds },
           companyId: companyId!,
           estado: { in: ['ACTIVE', 'LIQUIDATED'] },
-          fechaDesembolso: { gte: monday, lte: sunday },
+          fechaDesembolso: { gte: saturday, lte: friday },
         },
         select: { capital: true, cobradorId: true },
       }),
@@ -524,7 +524,7 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
     const [wSchedules, wLoans] = await Promise.all([
       prisma.paymentSchedule.findMany({
         where: {
-          fechaVencimiento: { gte: monday, lte: sunday },
+          fechaVencimiento: { gte: saturday, lte: friday },
           estado: { not: 'FINANCIADO' },
           loan: {
             cobradorId: { in: allIds },
@@ -539,7 +539,7 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
           cobradorId: { in: allIds },
           companyId: companyId!,
           estado: { in: ['ACTIVE', 'LIQUIDATED'] },
-          fechaDesembolso: { gte: monday, lte: sunday },
+          fechaDesembolso: { gte: saturday, lte: friday },
         },
         select: { capital: true, cobradorId: true },
       }),

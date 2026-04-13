@@ -50,12 +50,21 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
   const totalPagos   = grupo.loans.flatMap((l) => l.schedule).length
   const totalPagados = grupo.loans.flatMap((l) => l.schedule).filter((s) => s.estado === 'PAID').length
 
+  // Calcular href de regreso según rol
+  const loanBranchId = grupo.loans[0]?.branchId
+  const backHref =
+    rol === 'COORDINADOR' || rol === 'COBRADOR'
+      ? '/cartera/mios/SOLIDARIO'
+      : loanBranchId
+      ? `/cartera/${loanBranchId}/SOLIDARIO`
+      : '/prestamos'
+
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button asChild variant="ghost" size="icon">
-          <Link href="/cartera/mios/SOLIDARIO">
+          <Link href={backHref}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>

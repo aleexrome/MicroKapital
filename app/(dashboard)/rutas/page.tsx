@@ -46,7 +46,7 @@ export default async function RutasPage() {
       },
       select: { id: true },
     })
-    cobradorIds = [...new Set([userId, ...users.map((u) => u.id)])]
+    cobradorIds = Array.from(new Set([userId, ...users.map((u) => u.id)]))
   } else if (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') {
     const users = await prisma.user.findMany({
       where: {

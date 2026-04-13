@@ -12,7 +12,7 @@ import {
 import {
   idToMonday, getWeekEnd, formatWeekLabel, getMonday,
 } from '@/lib/week-utils'
-import type { ScheduleStatus } from '@prisma/client'
+import type { ScheduleStatus, Prisma } from '@prisma/client'
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -45,11 +45,11 @@ function textColor(p: number, type: 'cobranza' | 'meta') {
   return 'text-gray-500'
 }
 
-function calcCobranza(schedules: { montoEsperado: string | number; montoPagado: string | number; estado: string }[]) {
-  const totalAPagar = schedules.reduce((s, r) => s + Number(r.montoEsperado), 0)
+function calcCobranza(schedules: Array<{ montoEsperado: Prisma.Decimal; montoPagado: Prisma.Decimal; estado: string }>) {
+  const totalAPagar = schedules.reduce((s, r) => s + r.montoEsperado.toNumber(), 0)
   const totalCobrado = schedules.reduce((s, r) => {
-    if (r.estado === 'PAID' || r.estado === 'ADVANCE') return s + Number(r.montoEsperado)
-    if (r.estado === 'PARTIAL')                        return s + Number(r.montoPagado)
+    if (r.estado === 'PAID' || r.estado === 'ADVANCE') return s + r.montoEsperado.toNumber()
+    if (r.estado === 'PARTIAL')                        return s + r.montoPagado.toNumber()
     return s
   }, 0)
   const cobradosCount = schedules.filter((r) => r.estado === 'PAID' || r.estado === 'ADVANCE' || r.estado === 'PARTIAL').length

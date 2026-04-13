@@ -201,8 +201,7 @@ export default async function ClienteExpedientePage({
                   loan.estado === 'ACTIVE' &&
                   !!umbral &&
                   pagados >= umbral &&
-                  !tieneRenovacionActiva &&
-                  pagosPendientes.length > 0
+                  !tieneRenovacionActiva
 
                 return (
                   <div key={loan.id} className="border rounded-lg overflow-hidden">

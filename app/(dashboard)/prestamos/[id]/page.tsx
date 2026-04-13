@@ -61,9 +61,61 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     },
   })
 
+  // Para DG y SUPER_ADMIN: construir mapa de quién y cuándo cobró/aplicó cada pago
+  type PaymentInfo = { quien: string; rol: string; cuando: string }
+  let paymentInfoMap: Record<string, PaymentInfo> = {}
+
   type ChecklistItem = { id: string; label: string; checked: boolean }
 
   if (!loan) notFound()
+
+  if ((rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') && loan.schedule.length > 0) {
+    const scheduleIds = loan.schedule.map((s) => s.id)
+
+    // Pagos capturados por coordinador/cobrador (crean un registro Payment)
+    const pagos = await prisma.payment.findMany({
+      where: { scheduleId: { in: scheduleIds } },
+      select: {
+        scheduleId: true,
+        fechaHora: true,
+        cobrador: { select: { nombre: true, rol: true } },
+      },
+      orderBy: { fechaHora: 'desc' },
+    })
+    for (const p of pagos) {
+      if (p.scheduleId && !paymentInfoMap[p.scheduleId]) {
+        paymentInfoMap[p.scheduleId] = {
+          quien: p.cobrador.nombre,
+          rol: p.cobrador.rol,
+          cuando: p.fechaHora.toISOString(),
+        }
+      }
+    }
+
+    // Pagos aplicados manualmente por el DG (sin Payment record, solo AuditLog)
+    const audits = await prisma.auditLog.findMany({
+      where: {
+        tabla: 'PaymentSchedule',
+        accion: 'DG_APPLY_PAYMENT',
+        registroId: { in: scheduleIds },
+      },
+      select: {
+        registroId: true,
+        createdAt: true,
+        user: { select: { nombre: true, rol: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    for (const a of audits) {
+      if (a.registroId && !paymentInfoMap[a.registroId] && a.user) {
+        paymentInfoMap[a.registroId] = {
+          quien: a.user.nombre,
+          rol: a.user.rol,
+          cuando: a.createdAt.toISOString(),
+        }
+      }
+    }
+  }
 
   // Para SOLIDARIO pendiente de aprobación: cargar todos los integrantes del grupo
   let grupoMiembros: Array<{ loanId: string; clientNombre: string; capital: number }> | undefined
@@ -333,6 +385,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 fechaVencimiento: s.fechaVencimiento,
                 montoEsperado: Number(s.montoEsperado),
                 estado: s.estado as ScheduleStatus,
+                paymentInfo: paymentInfoMap[s.id],
               }))}
               canCapture={puedeCapturar}
               canEditDates={puedeEditarFechas}

@@ -5,10 +5,26 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Pencil, Check, X, AlertCircle, Undo2, CheckCircle2 } from 'lucide-react'
+import { Loader2, Pencil, Check, X, AlertCircle, Undo2, CheckCircle2, Info } from 'lucide-react'
 import { formatMoney } from '@/lib/utils'
 import { formatDate } from '@/lib/utils'
 import type { ScheduleStatus } from '@prisma/client'
+
+export interface PaymentInfo {
+  quien: string
+  rol: string
+  cuando: string
+}
+
+const ROL_LABEL: Record<string, string> = {
+  SUPER_ADMIN:        'Super Administrador',
+  DIRECTOR_GENERAL:   'Director General',
+  DIRECTOR_COMERCIAL: 'Director Comercial',
+  GERENTE_ZONAL:      'Gerente Zonal',
+  GERENTE:            'Gerente',
+  COORDINADOR:        'Coordinador',
+  COBRADOR:           'Cobrador',
+}
 
 const STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'error' | 'info' | 'outline'> = {
   PAID: 'success',
@@ -41,6 +57,7 @@ interface ScheduleItem {
   fechaVencimiento: Date | string
   montoEsperado: number
   estado: ScheduleStatus
+  paymentInfo?: PaymentInfo
 }
 
 interface Props {
@@ -64,6 +81,8 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
 
   const [confirmApplyId, setConfirmApplyId] = useState<string | null>(null)
   const [applying, setApplying]             = useState(false)
+
+  const [openInfoId, setOpenInfoId]         = useState<string | null>(null)
 
   function startEdit(s: ScheduleItem) {
     setEditingId(s.id)
@@ -144,11 +163,15 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
         const canApplyRow  = canUndo && (s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL')
         const canUndoRow   = canUndo && s.estado === 'PAID'
 
+        const isPaidStatus = s.estado === 'PAID' || s.estado === 'ADVANCE' || s.estado === 'FINANCIADO'
+        const infoOpen = openInfoId === s.id
+
         return (
           <div
             key={s.id}
-            className={`flex items-center gap-2 py-2 text-sm ${isVisuallyOverdue ? 'bg-red-500/5' : ''}`}
+            className={`py-2 text-sm ${isVisuallyOverdue ? 'bg-red-500/5' : ''}`}
           >
+          <div className="flex items-center gap-2">
             <span className={`w-7 shrink-0 ${isVisuallyOverdue ? 'text-red-400 font-semibold' : 'text-muted-foreground'}`}>
               {s.numeroPago}.
             </span>
@@ -209,6 +232,17 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
             >
               {isVisuallyOverdue ? 'Vencido' : STATUS_LABEL[s.estado]}
             </Badge>
+
+            {/* Icono de información — solo si hay datos de quién cobró (DG / SUPER_ADMIN) */}
+            {isPaidStatus && s.paymentInfo && (
+              <button
+                onClick={() => setOpenInfoId(infoOpen ? null : s.id)}
+                className={`shrink-0 rounded-full p-0.5 transition-colors ${infoOpen ? 'text-primary-600' : 'text-muted-foreground hover:text-primary-600'}`}
+                title="Ver quién registró este pago"
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            )}
 
             {canCapture && (s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL') && (
               <a
@@ -294,6 +328,15 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
                 )}
               </div>
             )}
+          </div>
+
+          {/* Panel de información de cobro — visible solo al hacer clic en ⓘ */}
+          {infoOpen && s.paymentInfo && (
+            <div className="ml-7 mt-1 mb-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 flex flex-col gap-0.5">
+              <p><span className="font-semibold">Registrado por:</span> {s.paymentInfo.quien} <span className="text-sky-600">({ROL_LABEL[s.paymentInfo.rol] ?? s.paymentInfo.rol})</span></p>
+              <p><span className="font-semibold">Fecha y hora:</span> {new Date(s.paymentInfo.cuando).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+            </div>
+          )}
           </div>
         )
       })}

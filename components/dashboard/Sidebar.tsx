@@ -29,6 +29,7 @@ import {
   Zap,
   Landmark,
   UserCheck,
+  Navigation,
 } from 'lucide-react'
 import type { BranchTreeData } from '@/types/tree'
 
@@ -75,6 +76,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Cobranza',
     icon: <CalendarDays className="h-5 w-5" />,
     roles: ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
+  },
+  {
+    href: '/rutas',
+    label: 'Rutas',
+    icon: <Navigation className="h-5 w-5" />,
+    roles: ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'SUPER_ADMIN'],
   },
   {
     href: '/cobros/historial',

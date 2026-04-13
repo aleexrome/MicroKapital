@@ -5,6 +5,8 @@ import { formatMoney } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckCircle2, Clock, CalendarDays, Building2, UserCheck, XCircle } from 'lucide-react'
 import Link from 'next/link'
+import { ImprimirPactadosButton } from '@/components/cobros/ImprimirPactadosButton'
+import type { PactadosPrintRow } from '@/components/cobros/ImprimirPactadosButton'
 function toYMD(d: Date) {
   return d.toISOString().split('T')[0]
 }
@@ -89,6 +91,7 @@ export default async function PactadosDiaPage({
           cobrador: { select: { id: true, nombre: true } },
           client: { select: { id: true, nombreCompleto: true, telefono: true } },
           loanGroup: { select: { id: true, nombre: true } },
+          diaPago: true,
         },
       },
       // Include ALL payments for this schedule (not just those made on selected date)
@@ -139,6 +142,20 @@ export default async function PactadosDiaPage({
   const dateLabel = selectedDate.toLocaleDateString('es-MX', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   })
+
+  // ── Print rows ────────────────────────────────────────────────────────────────
+  const printRows: PactadosPrintRow[] = schedules.map((s) => ({
+    clientNombre:  s.loan.client.nombreCompleto,
+    numeroPago:    s.numeroPago,
+    totalPagos:    s.loan.plazo,
+    montoEsperado: Number(s.montoEsperado),
+    diaPago:       s.loan.diaPago ?? null,
+    tipo:          s.loan.tipo,
+    cobradorNombre: s.loan.cobrador.nombre,
+    branchNombre:   s.loan.branch.nombre,
+    cobrado:        s.payments.length > 0,
+    montoCobrado:   s.payments.length > 0 ? Number(s.payments[0].monto) : null,
+  }))
 
   return (
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
@@ -351,6 +368,24 @@ export default async function PactadosDiaPage({
           })}
         </div>
       ))}
+
+      {/* Botón imprimir — parte inferior centrada */}
+      {printRows.length > 0 && (
+        <div className="flex justify-center pt-2">
+          <ImprimirPactadosButton
+            rows={printRows}
+            fechaLabel={dateLabel}
+            branchNombre={
+              selectedBranch
+                ? (branches.find((b) => b.id === selectedBranch)?.nombre ?? 'Sucursal')
+                : isCoordinador
+                  ? (schedules[0]?.loan.branch.nombre ?? 'Sucursal')
+                  : 'Todas'
+            }
+            cobradorNombre={isCoordinador ? (schedules[0]?.loan.cobrador.nombre ?? 'Cobrador') : 'Todos'}
+          />
+        </div>
+      )}
     </div>
   )
 }

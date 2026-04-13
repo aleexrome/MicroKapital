@@ -251,14 +251,18 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             <div><p className="text-muted-foreground">Descuento renovación</p><p className="font-bold text-orange-600 money">-{formatMoney(Number(loan.descuentoRenovacion))}</p></div>
           )}
           <div><p className="text-muted-foreground">Monto entregado</p><p className="font-bold money">{formatMoney(Number(loan.montoReal))}</p></div>
-          <div><p className="text-muted-foreground">Interés</p><p className="font-bold money">{formatMoney(Number(loan.interes))}</p></div>
-          {/* Interés por período (ganancia semanal/diaria/quincenal) */}
-          <div>
-            <p className="text-muted-foreground">
-              {loan.tipo === 'AGIL' ? 'Interés diario' : loan.tipo === 'FIDUCIARIO' ? 'Interés quincenal' : 'Interés semanal'}
-            </p>
-            <p className="font-bold money">{formatMoney(Number(loan.interes) / loan.plazo)}</p>
-          </div>
+          {esOpAdmin && (
+            <div><p className="text-muted-foreground">Interés</p><p className="font-bold money">{formatMoney(Number(loan.interes))}</p></div>
+          )}
+          {/* Interés por período (ganancia semanal/diaria/quincenal) — solo DG y SA */}
+          {esOpAdmin && (
+            <div>
+              <p className="text-muted-foreground">
+                {loan.tipo === 'AGIL' ? 'Interés diario' : loan.tipo === 'FIDUCIARIO' ? 'Interés quincenal' : 'Interés semanal'}
+              </p>
+              <p className="font-bold money">{formatMoney(Number(loan.interes) / loan.plazo)}</p>
+            </div>
+          )}
           {/* Pago por período — aparece junto a Interés semanal para que los 3 campos queden en el mismo row del grid */}
           <div>
             <p className="text-muted-foreground">
@@ -286,8 +290,8 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               </p>
             </div>
           )}
-          {/* Tasa (pago_por_mil / xc_por_mil) */}
-          {Number(loan.tasaInteres) > 0 && (
+          {/* Tasa (pago_por_mil / xc_por_mil) — solo DG y SA */}
+          {esOpAdmin && Number(loan.tasaInteres) > 0 && (
             <div>
               <p className="text-muted-foreground">Tasa</p>
               <p className="font-semibold">{Number(loan.tasaInteres).toFixed(4)} x/mil</p>

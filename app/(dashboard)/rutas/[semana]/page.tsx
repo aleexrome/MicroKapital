@@ -12,6 +12,10 @@ import {
 import {
   idToSaturday, getFriday, formatWeekLabelSatFri, getSaturday,
 } from '@/lib/week-utils'
+import {
+  ImprimirRutaButton,
+  type RutaCobroRow, type RutaColocacionRow, type RutaCobradorRow,
+} from '@/components/rutas/ImprimirRutaButton'
 import type { ScheduleStatus, Prisma } from '@prisma/client'
 
 // ── helpers ──────────────────────────────────────────────────────────────
@@ -245,6 +249,26 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
     const cobranzaPct = calcPct(totalCobrado, totalAPagar)
     const metaPct     = calcPct(colocacion, metaTarget)
 
+    // ── Build print data ────────────────────────────────────────────────
+    const printCobros: RutaCobroRow[] = schedules.map((s) => {
+      const isCobrado = s.estado === 'PAID' || s.estado === 'ADVANCE'
+      const isPartial = s.estado === 'PARTIAL'
+      return {
+        clientNombre:  s.loan.client.nombreCompleto,
+        tipo:          s.loan.tipo,
+        numeroPago:    s.numeroPago,
+        montoEsperado: Number(s.montoEsperado),
+        montoCobrado:  isCobrado ? Number(s.montoEsperado) : isPartial ? Number(s.montoPagado) : 0,
+        estado:        s.estado,
+      }
+    })
+    const printColocaciones: RutaColocacionRow[] = loans.map((l) => ({
+      clientNombre: l.client.nombreCompleto,
+      tipo:         l.tipo,
+      esRenovacion: !!l.loanOriginalId,
+      capital:      Number(l.capital),
+    }))
+
     return (
       <div className="p-6 max-w-3xl mx-auto space-y-6">
         {/* Header */}
@@ -357,6 +381,22 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
               Meta: {formatMoney(metaTarget)} ({formatMoney(totalAPagar)} × 70%)
             </p>
           )}
+        </div>
+
+        {/* Botón imprimir */}
+        <div className="flex justify-center pt-2">
+          <ImprimirRutaButton
+            weekLabel={weekLabel}
+            scopeLabel={session.user.name}
+            cobros={printCobros}
+            colocaciones={printColocaciones}
+            totalAPagar={totalAPagar}
+            totalCobrado={totalCobrado}
+            colocacionTotal={colocacion}
+            metaTarget={metaTarget}
+            cobranzaPct={cobranzaPct}
+            metaPct={metaPct}
+          />
         </div>
       </div>
     )
@@ -495,6 +535,26 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
               <CobradorCard key={s.id} {...s} />
             ))}
           </div>
+        </div>
+
+        {/* Botón imprimir */}
+        <div className="flex justify-center pt-2">
+          <ImprimirRutaButton
+            weekLabel={weekLabel}
+            scopeLabel="Mi sucursal"
+            cobradores={stats.map<RutaCobradorRow>((s) => ({
+              nombre:        s.nombre,
+              rolLabel:      s.rolLabel,
+              scheduleCount: s.scheduleCount,
+              cobradosCount: s.cobradosCount,
+              totalAPagar:   s.totalAPagar,
+              totalCobrado:  s.totalCobrado,
+              cobranzaPct:   s.cobranzaPct,
+              colocacion:    s.colocacion,
+              metaTarget:    s.metaTarget,
+              metaPct:       s.metaPct,
+            }))}
+          />
         </div>
       </div>
     )
@@ -667,6 +727,28 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
             </div>
           )
         })()}
+
+        {/* Botón imprimir */}
+        <div className="flex justify-center pt-2">
+          <ImprimirRutaButton
+            weekLabel={weekLabel}
+            scopeLabel="Todas las sucursales"
+            showBranch
+            cobradores={userStats.map<RutaCobradorRow>((u) => ({
+              nombre:        u.nombre,
+              rolLabel:      u.rolLabel,
+              branchNombre:  branches.find((b) => b.id === u.branchId)?.nombre ?? '—',
+              scheduleCount: u.scheduleCount,
+              cobradosCount: u.cobradosCount,
+              totalAPagar:   u.totalAPagar,
+              totalCobrado:  u.totalCobrado,
+              cobranzaPct:   u.cobranzaPct,
+              colocacion:    u.colocacion,
+              metaTarget:    u.metaTarget,
+              metaPct:       u.metaPct,
+            }))}
+          />
+        </div>
       </div>
     )
   }

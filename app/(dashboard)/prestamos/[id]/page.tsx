@@ -188,9 +188,12 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
 
   // Usuarios con permiso especial pueden aplicar/deshacer en su propia sucursal
+  const misBranchIds = session.user.zonaBranchIds?.length
+    ? session.user.zonaBranchIds
+    : branchId ? [branchId] : []
   const tienePermisoAplicar =
     session.user.permisoAplicarPagos === true &&
-    (loan.branchId === branchId || esOpAdmin)
+    (esOpAdmin || (loan.branchId !== null && misBranchIds.includes(loan.branchId)))
 
   const puedeEditarFechas = esOpAdmin
   const puedeDeshacerPago = esOpAdmin || tienePermisoAplicar

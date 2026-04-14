@@ -18,6 +18,9 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
   const { companyId, rol, branchId, id: userId } = session.user
   const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
   // Usuarios con permiso especial pueden actuar en grupos de su propia sucursal
+  const misBranchIds = session.user.zonaBranchIds?.length
+    ? session.user.zonaBranchIds
+    : branchId ? [branchId] : []
   const tienePermisoAplicar = session.user.permisoAplicarPagos === true
 
   // Scope loans by role
@@ -134,7 +137,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
             pagadoAt:         s.pagadoAt ?? null,
           })),
         }))}
-        canActGroup={esOpAdmin || (tienePermisoAplicar && grupo.loans[0]?.branchId === branchId)}
+        canActGroup={esOpAdmin || (tienePermisoAplicar && grupo.loans[0]?.branchId != null && misBranchIds.includes(grupo.loans[0].branchId))}
         canRenewGroup={canRenewGroup}
         memberRenewalData={memberRenewalData}
       />

@@ -50,6 +50,12 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     if (zoneIds?.length) loanWhere.branchId = { in: zoneIds }
   }
 
+  // Leer permisoAplicarPagos directo de BD — evita problemas de caché en el JWT
+  const userPermisos = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { permisoAplicarPagos: true },
+  })
+
   const loan = await prisma.loan.findFirst({
     where: loanWhere,
     include: {
@@ -187,9 +193,8 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   // incluyendo filas PAID, y pueden deshacer pagos.
   const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
 
-  // Usuarios con permiso especial pueden aplicar/deshacer pagos.
-  // La seguridad real está en el API — aquí solo controlamos visibilidad.
-  const tienePermisoAplicar = session.user.permisoAplicarPagos === true
+  // Leer permiso directo de BD (no del JWT) para evitar problemas de caché
+  const tienePermisoAplicar = userPermisos?.permisoAplicarPagos === true
 
   const puedeEditarFechas = esOpAdmin
   const puedeDeshacerPago = esOpAdmin || tienePermisoAplicar
@@ -199,10 +204,6 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
-      {/* DEBUG TEMPORAL — borrar después */}
-      <div className="text-xs bg-yellow-100 border border-yellow-400 rounded p-2 text-yellow-900">
-        DEBUG sesión: rol={rol} | permiso={String(session.user.permisoAplicarPagos)} | tienePermiso={String(tienePermisoAplicar)} | canUndo={String(puedeDeshacerPago)}
-      </div>
       <div className="flex items-center gap-3">
         <Button asChild variant="ghost" size="icon">
           <Link href="/prestamos"><ArrowLeft className="h-4 w-4" /></Link>

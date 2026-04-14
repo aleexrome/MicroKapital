@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { type Prisma } from '@prisma/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { DollarSign, Banknote, CreditCard, Users } from 'lucide-react'
+import { DollarSign, Banknote, CreditCard, Users, Clock } from 'lucide-react'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -13,20 +13,38 @@ function fmt(n: number) {
   return formatMoney(n)
 }
 
+/** Compute start-of-day and start-of-next-day in Mexico City timezone (UTC-5 CDT / UTC-6 CST) */
+function getMexicoTodayBounds(): { today: Date; tomorrow: Date } {
+  const now = new Date()
+  // Get the current date string in Mexico City timezone (YYYY-MM-DD)
+  const mexicoDateStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+  }).format(now)
+  // Mexico CDT (Apr-Oct) = UTC-5 → offset 5h; CST (Nov-Mar) = UTC-6 → offset 6h
+  const month = now.getUTCMonth() + 1
+  const offsetHours = month >= 4 && month <= 10 ? 5 : 6
+  // midnight Mexico = `mexicoDateStr` 00:00 UTC + offsetHours
+  const today = new Date(`${mexicoDateStr}T00:00:00.000Z`)
+  today.setUTCHours(offsetHours, 0, 0, 0)
+  const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000)
+  return { today, tomorrow }
+}
+
 interface ScheduleRow {
   id: string
-  montoPagado: number         // total amount paid on this schedule
+  montoPagado: number
+  pagadoAt: Date | null
   clientNombre: string
   numeroPago: number
   tipo: string
   cobradorId: string
   cobradorNombre: string
   branchNombre: string
-  efectivo: number            // from Payment records
+  efectivo: number
   tarjeta: number
   transferenciaVerificada: number
   transferenciaTotal: number
-  hasPaymentRecord: boolean   // false = applied by DG, no Payment record
+  hasPaymentRecord: boolean
 }
 
 interface CobradorGroup {
@@ -48,10 +66,7 @@ export default async function HistorialCobrosPage() {
 
   const { companyId, rol, branchId: userBranchId, id: userId } = session.user
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  const { today, tomorrow } = getMexicoTodayBounds()
 
   const isDirector    = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
   const isGerente     = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
@@ -73,77 +88,98 @@ export default async function HistorialCobrosPage() {
     loanScope.cobradorId = userId
   }
 
+  const scheduleSelect = {
+    id: true,
+    montoPagado: true,
+    pagadoAt: true,
+    numeroPago: true,
+    loan: {
+      select: {
+        tipo: true,
+        cobradorId: true,
+        cobrador: { select: { id: true, nombre: true } },
+        branch:   { select: { nombre: true } },
+        client:   { select: { nombreCompleto: true } },
+      },
+    },
+    payments: {
+      select: {
+        monto: true,
+        metodoPago: true,
+        statusTransferencia: true,
+      },
+    },
+  } satisfies Prisma.PaymentScheduleSelect
+
   // ── Consulta principal: PaymentSchedule pagados hoy ──────────────────────
-  // Cubre cobros normales (vía POST /api/payments) Y cobros aplicados por DG
-  // (que solo actualizan el schedule sin crear registro Payment)
-  const schedulesHoy = await prisma.paymentSchedule.findMany({
-    where: {
-      loan: loanScope,
-      estado: { in: ['PAID', 'ADVANCE'] },
-      pagadoAt: { gte: today, lt: tomorrow },
-    },
-    select: {
-      id: true,
-      montoPagado: true,
-      numeroPago: true,
-      loan: {
-        select: {
-          tipo: true,
-          cobradorId: true,
-          cobrador: { select: { id: true, nombre: true } },
-          branch:   { select: { nombre: true } },
-          client:   { select: { nombreCompleto: true } },
-        },
+  const [schedulesHoy, schedulesRecientes] = await Promise.all([
+    prisma.paymentSchedule.findMany({
+      where: {
+        loan: loanScope,
+        estado: { in: ['PAID', 'ADVANCE'] },
+        pagadoAt: { gte: today, lt: tomorrow },
       },
-      // Payment records asociados a este schedule (para saber el método)
-      payments: {
-        select: {
-          monto: true,
-          metodoPago: true,
-          statusTransferencia: true,
-        },
+      select: scheduleSelect,
+      orderBy: { pagadoAt: 'desc' },
+    }),
+    // Last 20 payments (any date) — fallback section to verify the system is recording
+    prisma.paymentSchedule.findMany({
+      where: {
+        loan: loanScope,
+        estado: { in: ['PAID', 'ADVANCE'] },
+        pagadoAt: { not: null },
       },
-    },
-    orderBy: { pagadoAt: 'desc' },
-  })
+      select: scheduleSelect,
+      orderBy: { pagadoAt: 'desc' },
+      take: 20,
+    }),
+  ])
 
-  // ── Normalizar filas ──────────────────────────────────────────────────────
-  const rows: ScheduleRow[] = schedulesHoy.map((s) => {
-    const efectivo = s.payments
-      .filter((p) => p.metodoPago === 'CASH')
-      .reduce((sum, p) => sum + Number(p.monto), 0)
-    const tarjeta = s.payments
-      .filter((p) => p.metodoPago === 'CARD')
-      .reduce((sum, p) => sum + Number(p.monto), 0)
-    const transferenciaVerificada = s.payments
-      .filter((p) => p.metodoPago === 'TRANSFER' && p.statusTransferencia === 'VERIFICADO')
-      .reduce((sum, p) => sum + Number(p.monto), 0)
-    const transferenciaTotal = s.payments
-      .filter((p) => p.metodoPago === 'TRANSFER')
-      .reduce((sum, p) => sum + Number(p.monto), 0)
+  function normalizeRows(schedules: typeof schedulesHoy): ScheduleRow[] {
+    return schedules.map((s) => {
+      const efectivo = s.payments
+        .filter((p) => p.metodoPago === 'CASH')
+        .reduce((sum, p) => sum + Number(p.monto), 0)
+      const tarjeta = s.payments
+        .filter((p) => p.metodoPago === 'CARD')
+        .reduce((sum, p) => sum + Number(p.monto), 0)
+      const transferenciaVerificada = s.payments
+        .filter((p) => p.metodoPago === 'TRANSFER' && p.statusTransferencia === 'VERIFICADO')
+        .reduce((sum, p) => sum + Number(p.monto), 0)
+      const transferenciaTotal = s.payments
+        .filter((p) => p.metodoPago === 'TRANSFER')
+        .reduce((sum, p) => sum + Number(p.monto), 0)
 
-    return {
-      id:                      s.id,
-      montoPagado:             Number(s.montoPagado),
-      clientNombre:            s.loan.client.nombreCompleto,
-      numeroPago:              s.numeroPago,
-      tipo:                    s.loan.tipo,
-      cobradorId:              s.loan.cobradorId,
-      cobradorNombre:          s.loan.cobrador.nombre,
-      branchNombre:            s.loan.branch.nombre,
-      efectivo,
-      tarjeta,
-      transferenciaVerificada,
-      transferenciaTotal,
-      hasPaymentRecord:        s.payments.length > 0,
-    }
-  })
+      return {
+        id:                      s.id,
+        montoPagado:             Number(s.montoPagado),
+        pagadoAt:                s.pagadoAt,
+        clientNombre:            s.loan.client.nombreCompleto,
+        numeroPago:              s.numeroPago,
+        tipo:                    s.loan.tipo,
+        cobradorId:              s.loan.cobradorId,
+        cobradorNombre:          s.loan.cobrador.nombre,
+        branchNombre:            s.loan.branch.nombre,
+        efectivo,
+        tarjeta,
+        transferenciaVerificada,
+        transferenciaTotal,
+        hasPaymentRecord:        s.payments.length > 0,
+      }
+    })
+  }
+
+  const rows         = normalizeRows(schedulesHoy)
+  const rowsRecientes = normalizeRows(schedulesRecientes)
+  // Recent rows that are NOT in today's list (to avoid duplication)
+  const todayIds     = new Set(rows.map((r) => r.id))
+  const soloRecientes = rowsRecientes.filter((r) => !todayIds.has(r.id))
 
   // ── KPIs globales ─────────────────────────────────────────────────────────
-  const totalCobrado = rows.reduce((s, r) => s + r.montoPagado, 0)
-  const totalEfectivo = rows.reduce((s, r) => s + r.efectivo, 0)
-  const totalTarjeta  = rows.reduce((s, r) => s + r.tarjeta, 0)
-  const totalTransVerificada = rows.reduce((s, r) => s + r.transferenciaVerificada, 0)
+  const totalCobrado          = rows.reduce((s, r) => s + r.montoPagado, 0)
+  const totalEfectivo         = rows.reduce((s, r) => s + r.efectivo, 0)
+  const totalTarjeta          = rows.reduce((s, r) => s + r.tarjeta, 0)
+  const totalTransVerificada  = rows.reduce((s, r) => s + r.transferenciaVerificada, 0)
 
   // ── Agrupar por cobrador (para directores/gerentes) ───────────────────────
   const byCobradorMap = new Map<string, CobradorGroup>()
@@ -169,6 +205,15 @@ export default async function HistorialCobrosPage() {
   }
   const byCobraodor = Array.from(byCobradorMap.values())
     .sort((a, b) => b.total - a.total)
+
+  function metodoPrincipal(r: ScheduleRow) {
+    if (!r.hasPaymentRecord) return '—'
+    if (r.efectivo > 0 && r.tarjeta === 0 && r.transferenciaTotal === 0) return '💵 Efectivo'
+    if (r.tarjeta > 0 && r.efectivo === 0) return '💳 Tarjeta'
+    if (r.transferenciaTotal > 0 && r.efectivo === 0)
+      return `🏦 Transferencia${r.transferenciaVerificada > 0 ? ' ✓' : ' (pendiente)'}`
+    return 'Mixto'
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -229,9 +274,12 @@ export default async function HistorialCobrosPage() {
 
       {rows.length === 0 ? (
         <Card>
-          <CardContent className="py-16 text-center text-muted-foreground">
+          <CardContent className="py-12 text-center text-muted-foreground">
             <DollarSign className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            Sin cobros registrados hoy
+            <p className="font-medium">Sin cobros registrados hoy</p>
+            <p className="text-xs mt-1 opacity-70">
+              Los cobros aplicados hoy aparecerán aquí automáticamente
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -300,37 +348,72 @@ export default async function HistorialCobrosPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y">
-                {rows.map((r) => {
-                  const metodoPpal =
-                    !r.hasPaymentRecord
-                      ? '—'
-                      : r.efectivo > 0 && r.tarjeta === 0 && r.transferenciaTotal === 0
-                      ? '💵 Efectivo'
-                      : r.tarjeta > 0 && r.efectivo === 0
-                      ? '💳 Tarjeta'
-                      : r.transferenciaTotal > 0 && r.efectivo === 0
-                      ? `🏦 Transferencia${r.transferenciaVerificada > 0 ? ' ✓' : ' (pendiente)'}`
-                      : 'Mixto'
-
-                  return (
-                    <div key={r.id} className="flex items-center justify-between px-6 py-3.5">
-                      <div>
-                        <p className="font-medium text-sm">{r.clientNombre}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {r.tipo} · Pago {r.numeroPago}
-                          {(isDirector || isGerente) && ` · ${r.cobradorNombre}`}
-                          {isDirector && ` · ${r.branchNombre}`}
-                          {' · '}{metodoPpal}
-                        </p>
-                      </div>
-                      <span className="font-bold text-emerald-500">{fmt(r.montoPagado)}</span>
+                {rows.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between px-6 py-3.5">
+                    <div>
+                      <p className="font-medium text-sm">{r.clientNombre}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {r.tipo} · Pago {r.numeroPago}
+                        {(isDirector || isGerente) && ` · ${r.cobradorNombre}`}
+                        {isDirector && ` · ${r.branchNombre}`}
+                        {' · '}{metodoPrincipal(r)}
+                        {r.pagadoAt && (
+                          <span className="ml-1 text-emerald-500/70">
+                            · {new Date(r.pagadoAt).toLocaleString('es-MX', {
+                              hour: '2-digit', minute: '2-digit',
+                            })}
+                          </span>
+                        )}
+                      </p>
                     </div>
-                  )
-                })}
+                    <span className="font-bold text-emerald-500">{fmt(r.montoPagado)}</span>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* ── Últimos cobros registrados (cualquier fecha) ────────────────────── */}
+      {soloRecientes.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Cobros recientes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y">
+              {soloRecientes.map((r) => (
+                <div key={r.id} className="flex items-center justify-between px-6 py-3">
+                  <div>
+                    <p className="font-medium text-sm">{r.clientNombre}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {r.tipo} · Pago {r.numeroPago}
+                      {(isDirector || isGerente) && ` · ${r.cobradorNombre}`}
+                      {' · '}{metodoPrincipal(r)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-sm text-emerald-500">{fmt(r.montoPagado)}</p>
+                    {r.pagadoAt && (
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(r.pagadoAt).toLocaleDateString('es-MX', {
+                          day: '2-digit', month: '2-digit', year: '2-digit',
+                        })}{' '}
+                        {new Date(r.pagadoAt).toLocaleTimeString('es-MX', {
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )

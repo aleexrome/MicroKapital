@@ -52,10 +52,13 @@ export default async function DashboardPage({
   // SUPER_ADMIN puede filtrar por sucursal vía ?sucursal=
   const superAdminBranchFilter = rol === 'SUPER_ADMIN' ? (searchParams.sucursal ?? null) : null
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  // Compute today's boundaries in Mexico City timezone (UTC-5 CDT / UTC-6 CST)
+  const _now = new Date()
+  const _mexicoDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(_now)
+  const _mxOffsetH = (_now.getUTCMonth() + 1) >= 4 && (_now.getUTCMonth() + 1) <= 10 ? 5 : 6
+  const today = new Date(`${_mexicoDate}T00:00:00.000Z`)
+  today.setUTCHours(_mxOffsetH, 0, 0, 0)
+  const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000)
 
   const isDirector    = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
   const isGerente     = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'

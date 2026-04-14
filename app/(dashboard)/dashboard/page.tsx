@@ -108,12 +108,15 @@ export default async function DashboardPage({
       },
     }),
     prisma.loan.count({ where: { ...loanScope, estado: 'ACTIVE' } }),
-    prisma.payment.aggregate({
+    // Usar PaymentSchedule.pagadoAt cubre tanto cobros normales
+    // como los aplicados directamente por DG (que no crean registro Payment)
+    prisma.paymentSchedule.aggregate({
       where: {
         loan: loanScope,
-        fechaHora: { gte: today, lt: tomorrow },
+        estado: { in: ['PAID', 'ADVANCE'] },
+        pagadoAt: { gte: today, lt: tomorrow },
       },
-      _sum: { monto: true },
+      _sum: { montoPagado: true },
     }),
     prisma.paymentSchedule.count({
       where: {
@@ -146,7 +149,7 @@ export default async function DashboardPage({
       : Promise.resolve({ _sum: { comision: null } }),
   ])
 
-  const cobradoHoy     = Number(cobradoHoyAgg._sum.monto ?? 0)
+  const cobradoHoy     = Number(cobradoHoyAgg._sum.montoPagado ?? 0)
   const capitalActivo  = Number(capitalActivoAgg._sum.capital ?? 0)
   const totalSeguros   = Number((segurosAgg as { _sum: { seguro: unknown } })._sum.seguro ?? 0)
   const totalComisiones = Number((comisionesAgg as { _sum: { comision: unknown } })._sum.comision ?? 0)

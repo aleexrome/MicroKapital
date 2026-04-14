@@ -27,7 +27,7 @@ async function main() {
         rol: 'SUPER_ADMIN',
         nombre: 'Alejandro (Admin Sistema)',
         email: superAdminEmail,
-        passwordHash: await bcrypt.hash('Admin2026!', 12),
+        passwordHash: await bcrypt.hash('Alex74840616', 12),
         activo: true,
       },
     })

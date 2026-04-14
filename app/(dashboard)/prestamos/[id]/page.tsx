@@ -204,9 +204,6 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <p className="text-xs bg-yellow-100 border border-yellow-400 rounded p-2 text-yellow-900">
-        uid={userId} | permDB={String(userPermisos?.permisoAplicarPagos)} | tienePermiso={String(tienePermisoAplicar)} | canUndo={String(puedeDeshacerPago)}
-      </p>
       <div className="flex items-center gap-3">
         <Button asChild variant="ghost" size="icon">
           <Link href="/prestamos"><ArrowLeft className="h-4 w-4" /></Link>

@@ -187,13 +187,9 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   // incluyendo filas PAID, y pueden deshacer pagos.
   const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
 
-  // Usuarios con permiso especial pueden aplicar/deshacer en su propia sucursal
-  const misBranchIds = session.user.zonaBranchIds?.length
-    ? session.user.zonaBranchIds
-    : branchId ? [branchId] : []
-  const tienePermisoAplicar =
-    session.user.permisoAplicarPagos === true &&
-    (esOpAdmin || (loan.branchId !== null && misBranchIds.includes(loan.branchId)))
+  // Usuarios con permiso especial pueden aplicar/deshacer pagos.
+  // La seguridad real está en el API — aquí solo controlamos visibilidad.
+  const tienePermisoAplicar = session.user.permisoAplicarPagos === true
 
   const puedeEditarFechas = esOpAdmin
   const puedeDeshacerPago = esOpAdmin || tienePermisoAplicar

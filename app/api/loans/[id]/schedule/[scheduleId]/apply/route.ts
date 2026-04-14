@@ -11,17 +11,22 @@ export async function POST(
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const esOpAdmin = session.user.rol === 'DIRECTOR_GENERAL' || session.user.rol === 'SUPER_ADMIN'
-  const tienePermiso = esOpAdmin || session.user.permisoAplicarPagos === true
+  const { companyId, id: userId, branchId: userBranchId } = session.user
+
+  // Leer permiso directo de BD para evitar problemas de caché en el JWT
+  const userPermisos = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { permisoAplicarPagos: true },
+  })
+  const tienePermiso = esOpAdmin || userPermisos?.permisoAplicarPagos === true
   if (!tienePermiso) {
     return NextResponse.json({ error: 'No autorizado para aplicar pagos' }, { status: 403 })
   }
 
-  const { companyId, id: userId, branchId: userBranchId } = session.user
-
-  // Usuarios no-admin: solo pueden actuar sobre préstamos de su propia sucursal
+  // Usuarios con permiso: solo pueden actuar sobre préstamos de su sucursal
   const loanFilter = esOpAdmin
     ? { companyId: companyId! }
-    : { companyId: companyId!, branchId: userBranchId! }
+    : { companyId: companyId!, ...(userBranchId ? { branchId: userBranchId } : {}) }
 
   const schedule = await prisma.paymentSchedule.findFirst({
     where: {

@@ -1,7 +1,7 @@
 import { getSession } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Building2, Settings, CreditCard, LayoutDashboard, LogOut, FileText } from 'lucide-react'
+import { Building2, Settings, CreditCard, LayoutDashboard, LogOut, Users } from 'lucide-react'
 import { Toaster } from '@/components/ui/toaster'
 
 export default async function SuperAdminLayout({
@@ -19,6 +19,7 @@ export default async function SuperAdminLayout({
     { href: '/sys-mnt-9x7k/panel', label: 'Panel', icon: LayoutDashboard },
     { href: '/sys-mnt-9x7k/empresas', label: 'Empresas', icon: Building2 },
     { href: '/sys-mnt-9x7k/licencias', label: 'Licencias', icon: CreditCard },
+    { href: '/sys-mnt-9x7k/usuarios', label: 'Usuarios', icon: Users },
   ]
 
   return (

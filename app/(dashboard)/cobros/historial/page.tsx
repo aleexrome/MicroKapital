@@ -86,13 +86,13 @@ export default async function HistorialCobrosPage() {
       id: true,
       montoPagado: true,
       numeroPago: true,
-      client: { select: { nombreCompleto: true } },
       loan: {
         select: {
           tipo: true,
           cobradorId: true,
           cobrador: { select: { id: true, nombre: true } },
           branch:   { select: { nombre: true } },
+          client:   { select: { nombreCompleto: true } },
         },
       },
       // Payment records asociados a este schedule (para saber el método)
@@ -125,7 +125,7 @@ export default async function HistorialCobrosPage() {
     return {
       id:                      s.id,
       montoPagado:             Number(s.montoPagado),
-      clientNombre:            s.client.nombreCompleto,
+      clientNombre:            s.loan.client.nombreCompleto,
       numeroPago:              s.numeroPago,
       tipo:                    s.loan.tipo,
       cobradorId:              s.loan.cobradorId,

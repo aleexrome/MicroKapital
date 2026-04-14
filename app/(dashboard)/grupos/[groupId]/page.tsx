@@ -129,6 +129,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
             montoEsperado:    Number(s.montoEsperado),
             montoPagado:      Number(s.montoPagado),
             estado:           s.estado,
+            pagadoAt:         s.pagadoAt ?? null,
           })),
         }))}
         canActGroup={esOpAdmin}

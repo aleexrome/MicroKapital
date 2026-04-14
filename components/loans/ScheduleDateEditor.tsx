@@ -57,6 +57,7 @@ interface ScheduleItem {
   fechaVencimiento: Date | string
   montoEsperado: number
   estado: ScheduleStatus
+  pagadoAt?: Date | string | null
   paymentInfo?: PaymentInfo
 }
 
@@ -232,6 +233,16 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
             >
               {isVisuallyOverdue ? 'Vencido' : STATUS_LABEL[s.estado]}
             </Badge>
+
+            {/* Fecha y hora de cobro — visible para todos los roles cuando está pagado */}
+            {isPaidStatus && s.pagadoAt && (
+              <span className="text-xs text-emerald-400/80 shrink-0">
+                {new Date(s.pagadoAt).toLocaleString('es-MX', {
+                  day: '2-digit', month: '2-digit', year: '2-digit',
+                  hour: '2-digit', minute: '2-digit',
+                })}
+              </span>
+            )}
 
             {/* Icono de información — solo si hay datos de quién cobró (DG / SUPER_ADMIN) */}
             {isPaidStatus && s.paymentInfo && (

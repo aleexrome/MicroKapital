@@ -69,7 +69,8 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
 
   if (!loan) notFound()
 
-  if ((rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') && loan.schedule.length > 0) {
+  // Construir paymentInfoMap para TODOS los roles (quien cobró / aplicó)
+  if (loan.schedule.length > 0) {
     const scheduleIds = loan.schedule.map((s) => s.id)
 
     // Pagos capturados por coordinador/cobrador (crean un registro Payment)
@@ -92,7 +93,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       }
     }
 
-    // Pagos aplicados manualmente por el DG (sin Payment record, solo AuditLog)
+    // Pagos aplicados manualmente por DG (sin Payment record — solo AuditLog)
     const audits = await prisma.auditLog.findMany({
       where: {
         tabla: 'PaymentSchedule',
@@ -422,6 +423,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 fechaVencimiento: s.fechaVencimiento,
                 montoEsperado: Number(s.montoEsperado),
                 estado: s.estado as ScheduleStatus,
+                pagadoAt: s.pagadoAt ?? null,
                 paymentInfo: paymentInfoMap[s.id],
               }))}
               canCapture={puedeCapturar}

@@ -18,6 +18,7 @@ interface ScheduleItem {
   montoEsperado: number
   montoPagado: number
   estado: ScheduleStatus
+  pagadoAt?: Date | string | null
 }
 
 interface LoanEntry {
@@ -449,6 +450,7 @@ export function GrupoCalendar({ groupId, loans, canActGroup, canRenewGroup, memb
                         fechaVencimiento: s.fechaVencimiento,
                         montoEsperado:    s.montoEsperado,
                         estado:           s.estado,
+                        pagadoAt:         s.pagadoAt ?? null,
                       }))}
                       canCapture={false}
                       canEditDates={canActGroup}

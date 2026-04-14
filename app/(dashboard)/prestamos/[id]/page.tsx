@@ -187,8 +187,13 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   // incluyendo filas PAID, y pueden deshacer pagos.
   const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
 
+  // Usuarios con permiso especial pueden aplicar/deshacer en su propia sucursal
+  const tienePermisoAplicar =
+    session.user.permisoAplicarPagos === true &&
+    (loan.branchId === branchId || esOpAdmin)
+
   const puedeEditarFechas = esOpAdmin
-  const puedeDeshacerPago = esOpAdmin
+  const puedeDeshacerPago = esOpAdmin || tienePermisoAplicar
 
   // Coordinador/Cobrador pueden capturar pagos
   const puedeCapturar = loan.estado === 'ACTIVE' && (rol === 'COBRADOR' || rol === 'COORDINADOR')

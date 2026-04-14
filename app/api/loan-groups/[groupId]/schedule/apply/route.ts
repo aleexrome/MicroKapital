@@ -14,11 +14,12 @@ export async function POST(
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const esOpAdmin = session.user.rol === 'DIRECTOR_GENERAL' || session.user.rol === 'SUPER_ADMIN'
-  if (!esOpAdmin) {
+  const tienePermiso = esOpAdmin || session.user.permisoAplicarPagos === true
+  if (!tienePermiso) {
     return NextResponse.json({ error: 'No autorizado para aplicar pagos grupales' }, { status: 403 })
   }
 
-  const { companyId, id: userId } = session.user
+  const { companyId, id: userId, branchId: userBranchId } = session.user
 
   const body = await req.json()
   const parsed = schema.safeParse(body)
@@ -26,11 +27,15 @@ export async function POST(
 
   const { numeroPago } = parsed.data
 
+  const loanFilter = esOpAdmin
+    ? { loanGroupId: params.groupId, companyId: companyId! }
+    : { loanGroupId: params.groupId, companyId: companyId!, branchId: userBranchId! }
+
   const schedules = await prisma.paymentSchedule.findMany({
     where: {
       numeroPago,
       estado: { notIn: ['PAID', 'ADVANCE'] },
-      loan: { loanGroupId: params.groupId, companyId: companyId! },
+      loan: loanFilter,
     },
     include: {
       loan: { select: { id: true, estado: true } },

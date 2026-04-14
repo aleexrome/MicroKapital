@@ -31,6 +31,7 @@ export default async function AdminPage({
           rol: true,
           activo: true,
           createdAt: true,
+          permisoAplicarPagos: true,
           branch: { select: { nombre: true } },
         },
         orderBy: [{ activo: 'desc' }, { nombre: 'asc' }],

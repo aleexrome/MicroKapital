@@ -17,6 +17,8 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
 
   const { companyId, rol, branchId, id: userId } = session.user
   const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
+  // Usuarios con permiso especial pueden actuar en grupos de su propia sucursal
+  const tienePermisoAplicar = session.user.permisoAplicarPagos === true
 
   // Scope loans by role
   const loanWhere: Prisma.LoanWhereInput = { companyId: companyId! }
@@ -132,7 +134,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
             pagadoAt:         s.pagadoAt ?? null,
           })),
         }))}
-        canActGroup={esOpAdmin}
+        canActGroup={esOpAdmin || (tienePermisoAplicar && grupo.loans[0]?.branchId === branchId)}
         canRenewGroup={canRenewGroup}
         memberRenewalData={memberRenewalData}
       />

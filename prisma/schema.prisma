@@ -173,7 +173,9 @@ model User {
   gerente           User?            @relation("GerenteCoordinadores", fields: [gerenteId], references: [id])
   coordinadores     User[]           @relation("GerenteCoordinadores")
   // GERENTE_ZONAL: lista de IDs de sucursales de su zona (JSON array de strings)
-  zonaBranchIds     Json?
+  zonaBranchIds       Json?
+  // Permiso especial: puede aplicar / deshacer pagos en su sucursal (sin ser DG/SA)
+  permisoAplicarPagos Boolean  @default(false)
 
   clientsManaged    Client[]         @relation("CobradoresClientes")
   clientUser        Client?          @relation("ClienteUsuario")

@@ -26,12 +26,14 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
             companyId: string | null
             branchId: string | null
             zonaBranchIds: string[] | null
+            permisoAplicarPagos: boolean
           }
           token.id = u.id as string
           token.rol = u.rol
           token.companyId = u.companyId ?? null
           token.branchId = u.branchId ?? null
           token.zonaBranchIds = u.zonaBranchIds ?? null
+          token.permisoAplicarPagos = u.permisoAplicarPagos ?? false
         }
       } catch (e) {
         console.error('[AUTH JWT CALLBACK ERROR]', e)
@@ -98,6 +100,7 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
           companyId: user.companyId,
           branchId: user.branchId ?? null,
           zonaBranchIds: null,
+          permisoAplicarPagos: user.permisoAplicarPagos,
         }
       },
     }),

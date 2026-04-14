@@ -15,6 +15,7 @@ export interface SessionUser {
   companyId: string | null
   branchId: string | null
   zonaBranchIds?: string[] | null
+  permisoAplicarPagos?: boolean
 }
 
 export interface AppSession {
@@ -39,6 +40,7 @@ export async function getSession(): Promise<AppSession | null> {
         companyId: (decoded.companyId as string | null) ?? null,
         branchId: (decoded.branchId as string | null) ?? null,
         zonaBranchIds: (decoded.zonaBranchIds as string[] | null) ?? null,
+        permisoAplicarPagos: (decoded.permisoAplicarPagos as boolean | null) ?? false,
       },
     }
   } catch {

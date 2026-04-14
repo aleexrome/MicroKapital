@@ -9,6 +9,7 @@ const patchSchema = z.object({
   activo: z.boolean().optional(),
   rol: z.nativeEnum(UserRole).optional(),
   nombre: z.string().min(2).optional(),
+  permisoAplicarPagos: z.boolean().optional(),
 })
 
 export async function PATCH(

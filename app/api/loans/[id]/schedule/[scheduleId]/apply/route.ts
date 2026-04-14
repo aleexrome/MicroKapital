@@ -11,17 +11,23 @@ export async function POST(
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const esOpAdmin = session.user.rol === 'DIRECTOR_GENERAL' || session.user.rol === 'SUPER_ADMIN'
-  if (!esOpAdmin) {
+  const tienePermiso = esOpAdmin || session.user.permisoAplicarPagos === true
+  if (!tienePermiso) {
     return NextResponse.json({ error: 'No autorizado para aplicar pagos' }, { status: 403 })
   }
 
-  const { companyId, id: userId } = session.user
+  const { companyId, id: userId, branchId: userBranchId } = session.user
+
+  // Usuarios no-admin: solo pueden actuar sobre préstamos de su propia sucursal
+  const loanFilter = esOpAdmin
+    ? { companyId: companyId! }
+    : { companyId: companyId!, branchId: userBranchId! }
 
   const schedule = await prisma.paymentSchedule.findFirst({
     where: {
       id: params.scheduleId,
       loanId: params.id,
-      loan: { companyId: companyId! },
+      loan: loanFilter,
     },
     include: {
       loan: { select: { id: true, estado: true } },

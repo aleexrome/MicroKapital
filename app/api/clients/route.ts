@@ -75,12 +75,15 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Normalizar nombres a MAYÚSCULAS + trim. Los clientes antiguos estaban todos
-  // en mayúsculas; cobradoras/gerentes empezaron a capturar en minúsculas y la
-  // cartera se veía inconsistente. Normalizar al guardar garantiza que no
-  // importa cómo escriban en el formulario, siempre queda en MAYÚSCULAS.
+  // Normalizar nombres y documentos a MAYÚSCULAS + trim. Los clientes antiguos
+  // estaban todos en mayúsculas; cobradoras/gerentes empezaron a capturar en
+  // minúsculas y la cartera se veía inconsistente. Normalizar al guardar
+  // garantiza consistencia sin importar cómo escriban en el formulario —
+  // también defiende si el API se llama desde otro lado (p. ej. script).
   const nombreCompleto = data.nombreCompleto.trim().toUpperCase()
   const referenciaNombre = data.referenciaNombre?.trim().toUpperCase() || null
+  const numIne = data.numIne?.trim().toUpperCase() || null
+  const curp = data.curp?.trim().toUpperCase() || null
 
   // Determinar sucursal — Director puede elegir cualquiera; el resto usa la propia
   const { zonaBranchIds } = session.user
@@ -115,8 +118,8 @@ export async function POST(req: NextRequest) {
       telefonoAlt: data.telefonoAlt || null,
       email: data.email || null,
       domicilio: data.domicilio || null,
-      numIne: data.numIne || null,
-      curp: data.curp || null,
+      numIne,
+      curp,
       referenciaNombre,
       referenciaTelefono: data.referenciaTelefono || null,
       fechaNacimiento: data.fechaNacimiento ? new Date(data.fechaNacimiento) : null,

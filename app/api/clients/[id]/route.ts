@@ -73,8 +73,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ? data.referenciaNombre.trim().toUpperCase()
       : null
   }
-  // Campos que se guardan tal cual (con trim, sin normalizar caja)
-  for (const key of ['telefono', 'telefonoAlt', 'email', 'domicilio', 'numIne', 'curp', 'referenciaTelefono'] as const) {
+  // numIne y curp se normalizan a MAYÚSCULAS por convención del documento
+  for (const key of ['numIne', 'curp'] as const) {
+    if (data[key] !== undefined) {
+      const v = (data[key] ?? '').trim().toUpperCase()
+      update[key] = v === '' ? null : v
+    }
+  }
+  // Campos libres: solo trim, sin normalizar caja
+  for (const key of ['telefono', 'telefonoAlt', 'email', 'domicilio', 'referenciaTelefono'] as const) {
     if (data[key] !== undefined) {
       const v = (data[key] ?? '').trim()
       update[key] = v === '' ? null : v

@@ -27,7 +27,10 @@ const NO_MATCH = '__NO_BRANCH_ASSIGNED__'
  * - GERENTE                               → clientes/préstamos de sus
  *   sucursales asignadas (zonaBranchIds o branchId) + los suyos propios
  *   como cobrador.
- * - GERENTE_ZONAL                         → registros de su zona.
+ * - GERENTE_ZONAL                         → registros de su zona, con
+ *   fallback a su branchId individual si `zonaBranchIds` viene vacío
+ *   (p. ej. porque Prisma no lo hidrata como array nativo y el JWT
+ *   quedó con `null`).
  * - DIRECTOR_GENERAL / DIRECTOR_COMERCIAL → registros de su sucursal.
  * - COORDINADOR / COBRADOR                → solo sus propios registros,
  *   restringidos además a su sucursal cuando la tienen.
@@ -61,7 +64,16 @@ export function scopedClientWhere(user: AccessUser): Prisma.ClientWhereInput {
   }
 
   if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = zonaBranchIds ?? []
+    // Fallback a `branchId` cuando `zonaBranchIds` viene vacío/null.
+    // Es indispensable: el `authorize()` actual aplica
+    // `Array.isArray(user.zonaBranchIds)` y devuelve `null` si Prisma
+    // hidrata el campo `Json?` como algo que no es array nativo — deja
+    // al GERENTE_ZONAL sin alcance aunque sí tenga `branchId` asignado.
+    const zoneIds = zonaBranchIds?.length
+      ? zonaBranchIds
+      : branchId
+        ? [branchId]
+        : []
     if (!zoneIds.length) return { id: NO_MATCH }
     return { branchId: { in: zoneIds } }
   }
@@ -104,7 +116,12 @@ export function scopedLoanWhere(user: AccessUser): Prisma.LoanWhereInput {
   }
 
   if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = zonaBranchIds ?? []
+    // Mismo fallback que en `scopedClientWhere` — ver comentario allá.
+    const zoneIds = zonaBranchIds?.length
+      ? zonaBranchIds
+      : branchId
+        ? [branchId]
+        : []
     if (!zoneIds.length) return { id: NO_MATCH }
     return { branchId: { in: zoneIds } }
   }

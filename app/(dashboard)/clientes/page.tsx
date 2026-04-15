@@ -39,8 +39,8 @@ export default async function ClientesPage({
     where.nombreCompleto = { contains: searchParams.q, mode: 'insensitive' }
   }
 
-  // COBRADOR: solo sus clientes en su sucursal
-  if (rol === 'COBRADOR') {
+  // COBRADOR / COORDINADOR: solo sus clientes en su sucursal
+  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
     where.cobradorId = userId
     if (branchId) where.branchId = branchId
   }

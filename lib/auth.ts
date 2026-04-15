@@ -100,7 +100,11 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
           rol: user.rol,
           companyId: user.companyId,
           branchId: user.branchId ?? null,
-          zonaBranchIds: null,
+          // zonaBranchIds se guarda como JSON en BD; lo exponemos como string[]
+          // para que GERENTE_ZONAL filtre por sus sucursales asignadas.
+          zonaBranchIds: Array.isArray(user.zonaBranchIds)
+            ? (user.zonaBranchIds as string[])
+            : null,
           permisoAplicarPagos: user.permisoAplicarPagos,
         }
       },

@@ -24,6 +24,11 @@ const NO_MATCH = '__NO_BRANCH_ASSIGNED__'
 /**
  * Fragmento `where` para Client / Loan que respeta:
  * - SUPER_ADMIN                           → sin restricción.
+ * - DIRECTOR_GENERAL / DIRECTOR_COMERCIAL → toda la cartera de la empresa
+ *   (sin restricción de sucursal). El filtro `companyId` lo aplica el
+ *   caller. Los directores se siembran con `branchId: null` precisamente
+ *   porque manejan toda la empresa; restringirlos por sucursal dejaba
+ *   sus dashboards en cero.
  * - GERENTE                               → clientes/préstamos de sus
  *   sucursales asignadas (zonaBranchIds o branchId) + los suyos propios
  *   como cobrador.
@@ -31,7 +36,6 @@ const NO_MATCH = '__NO_BRANCH_ASSIGNED__'
  *   fallback a su branchId individual si `zonaBranchIds` viene vacío
  *   (p. ej. porque Prisma no lo hidrata como array nativo y el JWT
  *   quedó con `null`).
- * - DIRECTOR_GENERAL / DIRECTOR_COMERCIAL → registros de su sucursal.
  * - COORDINADOR / COBRADOR                → solo sus propios registros,
  *   restringidos además a su sucursal cuando la tienen.
  * - Sin alcance válido                    → devuelve nada (fail-closed).
@@ -40,6 +44,8 @@ export function scopedClientWhere(user: AccessUser): Prisma.ClientWhereInput {
   const { rol, id: userId, branchId, zonaBranchIds } = user
 
   if (rol === 'SUPER_ADMIN') return {}
+
+  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') return {}
 
   if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
     return {
@@ -78,11 +84,6 @@ export function scopedClientWhere(user: AccessUser): Prisma.ClientWhereInput {
     return { branchId: { in: zoneIds } }
   }
 
-  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') {
-    if (!branchId) return { id: NO_MATCH }
-    return { branchId }
-  }
-
   // Rol desconocido (p.ej. CLIENTE u otro futuro): cero registros.
   return { id: NO_MATCH }
 }
@@ -92,6 +93,8 @@ export function scopedLoanWhere(user: AccessUser): Prisma.LoanWhereInput {
   const { rol, id: userId, branchId, zonaBranchIds } = user
 
   if (rol === 'SUPER_ADMIN') return {}
+
+  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') return {}
 
   if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
     return {
@@ -124,11 +127,6 @@ export function scopedLoanWhere(user: AccessUser): Prisma.LoanWhereInput {
         : []
     if (!zoneIds.length) return { id: NO_MATCH }
     return { branchId: { in: zoneIds } }
-  }
-
-  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') {
-    if (!branchId) return { id: NO_MATCH }
-    return { branchId }
   }
 
   return { id: NO_MATCH }

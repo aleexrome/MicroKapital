@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { branchScope } from '@/lib/access'
 
 export async function GET(
   req: NextRequest,
@@ -14,7 +15,7 @@ export async function GET(
   const schedule = await prisma.paymentSchedule.findFirst({
     where: {
       id: params.scheduleId,
-      loan: { companyId: companyId! },
+      loan: { companyId: companyId!, ...branchScope(session.user) },
     },
     include: {
       loan: {

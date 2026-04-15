@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { branchScope } from '@/lib/access'
 import { notFound } from 'next/navigation'
 import { ScoreBadge } from '@/components/clients/ScoreBadge'
 import { Badge } from '@/components/ui/badge'
@@ -17,20 +18,14 @@ export default async function ClienteExpedientePage({
   const session = await getSession()
   if (!session?.user) return null
 
-  const { companyId, rol, branchId } = session.user
-
-  const where: { id: string; companyId: string; branchId?: string } = {
-    id: params.id,
-    companyId: companyId!,
-  }
-
-  // COBRADOR solo accede a clientes de su sucursal
-  if (rol === 'COBRADOR' && branchId) {
-    where.branchId = branchId
-  }
+  const { companyId } = session.user
 
   const client = await prisma.client.findFirst({
-    where,
+    where: {
+      id: params.id,
+      companyId: companyId!,
+      ...branchScope(session.user),
+    },
     include: {
       cobrador: { select: { nombre: true } },
       branch: { select: { nombre: true } },

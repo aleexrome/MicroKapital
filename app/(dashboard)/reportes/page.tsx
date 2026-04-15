@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { branchScope } from '@/lib/access'
 import { redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MetricCard } from '@/components/dashboard/MetricCard'
@@ -13,6 +14,8 @@ export default async function ReportesPage() {
   const { rol, companyId } = session.user
   if (rol !== 'GERENTE' && rol !== 'SUPER_ADMIN') redirect('/dashboard')
 
+  const scope = branchScope(session.user)
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
@@ -24,13 +27,13 @@ export default async function ReportesPage() {
     liquidadosMes,
   ] = await Promise.all([
     prisma.loan.aggregate({
-      where: { companyId: companyId!, estado: 'ACTIVE' },
+      where: { companyId: companyId!, estado: 'ACTIVE', ...scope },
       _sum: { totalPago: true },
     }),
 
     prisma.payment.aggregate({
       where: {
-        loan: { companyId: companyId! },
+        loan: { companyId: companyId!, ...scope },
         fechaHora: { gte: startOfMonth },
       },
       _sum: { monto: true },
@@ -38,7 +41,7 @@ export default async function ReportesPage() {
 
     prisma.paymentSchedule.count({
       where: {
-        loan: { companyId: companyId! },
+        loan: { companyId: companyId!, ...scope },
         estado: 'OVERDUE',
       },
     }),
@@ -48,6 +51,7 @@ export default async function ReportesPage() {
         companyId: companyId!,
         estado: 'LIQUIDATED',
         updatedAt: { gte: startOfMonth },
+        ...scope,
       },
     }),
   ])

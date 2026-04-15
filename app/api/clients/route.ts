@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { branchScope } from '@/lib/access'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
 
@@ -25,15 +26,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const { rol, companyId, branchId } = session.user
-
-  let cobradorIdFilter: string | undefined
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorIdFilter = cobrador?.id
-  }
+  const { companyId } = session.user
 
   const q = req.nextUrl.searchParams.get('q')
 
@@ -41,8 +34,7 @@ export async function GET(req: NextRequest) {
     where: {
       companyId: companyId!,
       activo: true,
-      ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
+      ...branchScope(session.user),
       ...(q ? { nombreCompleto: { contains: q, mode: 'insensitive' as const } } : {}),
     },
     orderBy: { createdAt: 'desc' },
@@ -77,8 +69,12 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Determinar sucursal
-  const targetBranchId = data.branchId ?? branchId
+  // Determinar sucursal. GERENTE/COBRADOR quedan forzados a su propia sucursal;
+  // SUPER_ADMIN (y cualquier otro futuro rol de back-office) puede elegir.
+  const targetBranchId =
+    rol === 'GERENTE' || rol === 'COBRADOR'
+      ? branchId
+      : data.branchId ?? branchId
   if (!targetBranchId) {
     return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
   }
@@ -94,10 +90,7 @@ export async function POST(req: NextRequest) {
   // Si es COBRADOR, asignarse a sí mismo
   let cobradorId = data.cobradorId
   if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorId = cobrador?.id
+    cobradorId = userId
   }
 
   const client = await prisma.client.create({

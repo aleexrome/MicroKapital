@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { branchScope } from '@/lib/access'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,21 +13,12 @@ export default async function PrestamosPage() {
   const session = await getSession()
   if (!session?.user) return null
 
-  const { rol, companyId, branchId } = session.user
-
-  let cobradorIdFilter: string | undefined
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorIdFilter = cobrador?.id
-  }
+  const { companyId } = session.user
 
   const loans = await prisma.loan.findMany({
     where: {
       companyId: companyId!,
-      ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
+      ...branchScope(session.user),
     },
     orderBy: { createdAt: 'desc' },
     take: 50,

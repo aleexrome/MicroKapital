@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { branchScope } from '@/lib/access'
 import Link from 'next/link'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -15,27 +16,19 @@ export default async function AgendaPage() {
   const { companyId } = session.user
   const isGerente = session.user.rol === 'GERENTE'
 
-  // COBRADOR: only show their own payments; GERENTE: all company payments
-  let cobradorId: string | undefined
-  if (!isGerente) {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    if (!cobrador) return null
-    cobradorId = cobrador.id
-  }
-
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const tomorrow = new Date(today)
   tomorrow.setDate(tomorrow.getDate() + 1)
 
+  // GERENTE ve cobros de toda su sucursal; COBRADOR solo sus propios cobros;
+  // ambos vía `branchScope` (inyecta branchId y cobradorId cuando corresponde).
   const schedule = await prisma.paymentSchedule.findMany({
     where: {
       loan: {
         companyId: companyId!,
         estado: 'ACTIVE',
-        ...(cobradorId ? { cobradorId } : {}),
+        ...branchScope(session.user),
       },
       estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
       fechaVencimiento: { lte: tomorrow },

@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { branchScope } from '@/lib/access'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ScoreBadge } from '@/components/clients/ScoreBadge'
@@ -21,22 +22,13 @@ export default async function ClientesPage({
   const session = await getSession()
   if (!session?.user) return null
 
-  const { rol, companyId, branchId } = session.user
-
-  let cobradorIdFilter: string | undefined
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorIdFilter = cobrador?.id
-  }
+  const { companyId } = session.user
 
   const clientes = await prisma.client.findMany({
     where: {
       companyId: companyId!,
       activo: true,
-      ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
+      ...branchScope(session.user),
       ...(searchParams.q ? { nombreCompleto: { contains: searchParams.q, mode: 'insensitive' as const } } : {}),
     },
     orderBy: { createdAt: 'desc' },

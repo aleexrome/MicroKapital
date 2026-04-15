@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { branchScope } from '@/lib/access'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDateTime } from '@/lib/utils'
@@ -11,14 +12,17 @@ export default async function HistorialCobrosPage() {
 
   const { companyId } = session.user
 
-  const cobrador = await prisma.user.findFirst({
-    where: { companyId: companyId!, email: session.user.email! },
-  })
+  // GERENTE: pagos de toda su sucursal; COBRADOR: solo los suyos
+  // (el scope va sobre el Payment: cobradorId directo + branchId vía el Loan)
+  const scope = branchScope(session.user)
 
   const payments = await prisma.payment.findMany({
     where: {
-      ...(cobrador ? { cobradorId: cobrador.id } : {}),
-      loan: { companyId: companyId! },
+      ...(scope.cobradorId ? { cobradorId: scope.cobradorId } : {}),
+      loan: {
+        companyId: companyId!,
+        ...(scope.branchId ? { branchId: scope.branchId } : {}),
+      },
     },
     orderBy: { fechaHora: 'desc' },
     take: 50,

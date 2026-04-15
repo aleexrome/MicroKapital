@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { branchScope } from '@/lib/access'
 import { notFound } from 'next/navigation'
 import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,7 +26,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   const { companyId } = session.user
 
   const loan = await prisma.loan.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    where: { id: params.id, companyId: companyId!, ...branchScope(session.user) },
     include: {
       client: { select: { id: true, nombreCompleto: true } },
       cobrador: { select: { nombre: true } },

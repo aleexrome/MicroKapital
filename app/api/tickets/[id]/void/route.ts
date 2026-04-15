@@ -15,7 +15,7 @@ export async function POST(
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { rol, companyId, id: userId } = session.user
+  const { rol, companyId, branchId, id: userId } = session.user
 
   // Solo GERENTE o SUPER_ADMIN pueden anular
   if (rol !== 'GERENTE' && rol !== 'SUPER_ADMIN') {
@@ -28,8 +28,13 @@ export async function POST(
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 })
   }
 
+  // GERENTE solo puede anular tickets de su sucursal; SUPER_ADMIN todos.
   const ticket = await prisma.ticket.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    where: {
+      id: params.id,
+      companyId: companyId!,
+      ...(rol === 'GERENTE' && branchId ? { branchId } : {}),
+    },
   })
 
   if (!ticket) return NextResponse.json({ error: 'Ticket no encontrado' }, { status: 404 })

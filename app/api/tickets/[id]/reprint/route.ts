@@ -11,15 +11,14 @@ export async function POST(
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { companyId, id: userId } = session.user
-
-  const cobrador = await prisma.user.findFirst({
-    where: { companyId: companyId!, email: session.user.email! },
-  })
-  if (!cobrador) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+  const { id: userId, rol, companyId, branchId } = session.user
 
   const original = await prisma.ticket.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    where: {
+      id: params.id,
+      companyId: companyId!,
+      ...((rol === 'GERENTE' || rol === 'COBRADOR') && branchId ? { branchId } : {}),
+    },
   })
 
   if (!original) return NextResponse.json({ error: 'Ticket no encontrado' }, { status: 404 })
@@ -49,7 +48,7 @@ export async function POST(
       companyId: original.companyId,
       branchId: original.branchId,
       numeroTicket,
-      impresoPorId: cobrador.id,
+      impresoPorId: userId,
       esReimpresion: true,
       ticketOriginalId: originalId,
       razonReimpresion: 'Reimpresión solicitada por cobrador',

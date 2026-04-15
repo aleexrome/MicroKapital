@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { branchScope } from '@/lib/access'
 import { redirect } from 'next/navigation'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { formatMoney, formatDate } from '@/lib/utils'
@@ -22,12 +23,13 @@ export default async function DashboardPage() {
   }
 
   const { companyId } = session.user
+  const scope = branchScope(session.user)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const tomorrow = new Date(today)
   tomorrow.setDate(tomorrow.getDate() + 1)
 
-  // Métricas generales
+  // Métricas generales (GERENTE: solo su sucursal; SUPER_ADMIN: redirigido fuera)
   const [
     totalClientes,
     prestamosActivos,
@@ -35,15 +37,17 @@ export default async function DashboardPage() {
     carteraVencida,
     recientes,
   ] = await Promise.all([
-    prisma.client.count({ where: { companyId: companyId!, activo: true } }),
+    prisma.client.count({
+      where: { companyId: companyId!, activo: true, ...scope },
+    }),
 
     prisma.loan.count({
-      where: { companyId: companyId!, estado: 'ACTIVE' },
+      where: { companyId: companyId!, estado: 'ACTIVE', ...scope },
     }),
 
     prisma.payment.aggregate({
       where: {
-        loan: { companyId: companyId! },
+        loan: { companyId: companyId!, ...scope },
         fechaHora: { gte: today, lt: tomorrow },
       },
       _sum: { monto: true },
@@ -51,13 +55,13 @@ export default async function DashboardPage() {
 
     prisma.paymentSchedule.count({
       where: {
-        loan: { companyId: companyId! },
+        loan: { companyId: companyId!, ...scope },
         estado: 'OVERDUE',
       },
     }),
 
     prisma.loan.findMany({
-      where: { companyId: companyId! },
+      where: { companyId: companyId!, ...scope },
       orderBy: { createdAt: 'desc' },
       take: 5,
       include: {

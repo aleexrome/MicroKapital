@@ -6,17 +6,15 @@ export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { rol, companyId, branchId } = session.user
+  const { id: userId, rol, companyId, branchId } = session.user
 
-  const cobrador = await prisma.user.findFirst({
-    where: { companyId: companyId!, email: session.user.email! },
-  })
-
+  // SUPER_ADMIN: todos; GERENTE: los de su sucursal;
+  // COBRADOR: los que él mismo imprimió (dentro de su sucursal).
   const tickets = await prisma.ticket.findMany({
     where: {
       companyId: companyId!,
-      ...(rol === 'COBRADOR' && cobrador ? { impresoPorId: cobrador.id } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
+      ...((rol === 'GERENTE' || rol === 'COBRADOR') && branchId ? { branchId } : {}),
+      ...(rol === 'COBRADOR' ? { impresoPorId: userId } : {}),
     },
     orderBy: { impresoAt: 'desc' },
     take: 50,

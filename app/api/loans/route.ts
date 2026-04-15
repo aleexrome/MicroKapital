@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { branchScope } from '@/lib/access'
 import { z } from 'zod'
 import { calcLoan } from '@/lib/financial-formulas'
 import { generarFechasSemanales, generarFechasHabiles } from '@/lib/business-days'
@@ -21,23 +22,14 @@ export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { rol, companyId, branchId } = session.user
-
-  let cobradorIdFilter: string | undefined
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorIdFilter = cobrador?.id
-  }
+  const { companyId } = session.user
 
   const estado = req.nextUrl.searchParams.get('estado')
 
   const loans = await prisma.loan.findMany({
     where: {
       companyId: companyId!,
-      ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
+      ...branchScope(session.user),
       ...(estado ? { estado: estado as 'PENDING_APPROVAL' | 'ACTIVE' | 'LIQUIDATED' | 'REJECTED' | 'RESTRUCTURED' | 'DEFAULTED' } : {}),
     },
     orderBy: { createdAt: 'desc' },
@@ -77,21 +69,23 @@ export async function POST(req: NextRequest) {
 
   const calc = calcLoan(data.tipo, data.capital, tasaInteres)
 
-  // Verificar que el cliente pertenezca a la empresa
+  // Verificar que el cliente pertenezca a la empresa y esté dentro del alcance
+  // del usuario (GERENTE solo su sucursal, COBRADOR solo sus clientes).
   const client = await prisma.client.findFirst({
-    where: { id: data.clientId, companyId: companyId! },
+    where: { id: data.clientId, companyId: companyId!, ...branchScope(session.user) },
   })
   if (!client) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
 
-  const targetBranchId = data.branchId ?? branchId ?? client.branchId
+  // GERENTE/COBRADOR: forzar a su propia sucursal.
+  const targetBranchId =
+    rol === 'GERENTE' || rol === 'COBRADOR'
+      ? branchId ?? client.branchId
+      : data.branchId ?? branchId ?? client.branchId
   if (!targetBranchId) return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
 
   let cobradorId = data.cobradorId
   if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorId = cobrador?.id
+    cobradorId = userId
   }
   if (!cobradorId) return NextResponse.json({ error: 'Cobrador requerido' }, { status: 400 })
 

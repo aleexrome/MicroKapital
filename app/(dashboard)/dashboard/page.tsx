@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { scopedClientWhere, scopedLoanWhere } from '@/lib/access'
 import { redirect } from 'next/navigation'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { formatMoney, formatDate } from '@/lib/utils'
@@ -65,20 +66,25 @@ export default async function DashboardPage({
   const isCoordinador = rol === 'COORDINADOR'
 
   // ── Scope restrictor ──────────────────────────────────────────────────────────
+  // Usamos el helper centralizado (fail-closed + fallback zonaBranchIds→branchId
+  // para GERENTE_ZONAL) y agregamos encima el filtro opcional de SUPER_ADMIN
+  // por sucursal (?sucursal=...).
 
-  const loanScope: Prisma.LoanWhereInput = { companyId: companyId! }
+  const loanScope: Prisma.LoanWhereInput = {
+    companyId: companyId!,
+    AND: [scopedLoanWhere(session.user)],
+    ...(rol === 'SUPER_ADMIN' && superAdminBranchFilter
+      ? { branchId: superAdminBranchFilter }
+      : {}),
+  }
 
-  if (isDirector) {
-    if (userBranchId) loanScope.branchId = userBranchId
-  } else if (rol === 'SUPER_ADMIN') {
-    if (superAdminBranchFilter) loanScope.branchId = superAdminBranchFilter
-  } else if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = session.user.zonaBranchIds
-    if (zoneIds && zoneIds.length > 0) loanScope.branchId = { in: zoneIds }
-  } else if (rol === 'GERENTE') {
-    if (userBranchId) loanScope.branchId = userBranchId
-  } else if (isCoordinador) {
-    loanScope.cobradorId = userId
+  const clientScope: Prisma.ClientWhereInput = {
+    companyId: companyId!,
+    activo: true,
+    AND: [scopedClientWhere(session.user)],
+    ...(rol === 'SUPER_ADMIN' && superAdminBranchFilter
+      ? { branchId: superAdminBranchFilter }
+      : {}),
   }
 
   // ── Common KPIs ───────────────────────────────────────────────────────────────
@@ -97,19 +103,7 @@ export default async function DashboardPage({
     segurosAgg,
     comisionesAgg,
   ] = await Promise.all([
-    prisma.client.count({
-      where: {
-        companyId: companyId!,
-        activo: true,
-        ...(isCoordinador ? { cobradorId: userId } : {}),
-        ...(isDirector && userBranchId ? { branchId: userBranchId } : {}),
-        ...(rol === 'SUPER_ADMIN' && superAdminBranchFilter ? { branchId: superAdminBranchFilter } : {}),
-        ...(rol === 'GERENTE' && userBranchId ? { branchId: userBranchId } : {}),
-        ...(rol === 'GERENTE_ZONAL' && session.user.zonaBranchIds?.length
-          ? { branchId: { in: session.user.zonaBranchIds } }
-          : {}),
-      },
-    }),
+    prisma.client.count({ where: clientScope }),
     prisma.loan.count({ where: { ...loanScope, estado: 'ACTIVE' } }),
     // Usar PaymentSchedule.pagadoAt cubre tanto cobros normales
     // como los aplicados directamente por DG (que no crean registro Payment)
@@ -191,17 +185,25 @@ export default async function DashboardPage({
       })
     : []
 
-  // Gerente Zonal: per-coordinator breakdown in zone
-  const coordinadorBreakdown = isGerente
+  // Gerente / Gerente Zonal: per-coordinator breakdown en su(s) sucursal(es).
+  // Mismo fallback zonaBranchIds → branchId: si el JWT trae zonaBranchIds
+  // vacío (Prisma a veces no hidrata el Json? como array nativo), caemos a
+  // branchId individual. Si ambos vacíos, no listamos coordinadores.
+  const gerenteBranchIds =
+    rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
+      ? session.user.zonaBranchIds?.length
+        ? session.user.zonaBranchIds
+        : userBranchId
+          ? [userBranchId]
+          : []
+      : []
+  const coordinadorBreakdown = isGerente && gerenteBranchIds.length > 0
     ? await prisma.user.findMany({
         where: {
           companyId: companyId!,
           rol: { in: ['COORDINADOR' as UserRole, 'COBRADOR' as UserRole] },
           activo: true,
-          ...(rol === 'GERENTE' && userBranchId ? { branchId: userBranchId } : {}),
-          ...(rol === 'GERENTE_ZONAL' && session.user.zonaBranchIds?.length
-            ? { branchId: { in: session.user.zonaBranchIds } }
-            : {}),
+          branchId: { in: gerenteBranchIds },
         },
         select: {
           id: true,

@@ -1,5 +1,7 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { scopedLoanWhere } from '@/lib/access'
+import { Prisma } from '@prisma/client'
 import { redirect } from 'next/navigation'
 import { formatMoney } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,7 +21,7 @@ export default async function PactadosDiaPage({
   const session = await getSession()
   if (!session?.user) redirect('/login')
 
-  const { id: userId, rol, companyId, branchId: myBranchId } = session.user
+  const { rol, companyId, branchId: myBranchId } = session.user
 
   const isDirector    = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
   const isGerente     = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
@@ -33,18 +35,6 @@ export default async function PactadosDiaPage({
   const fechaStr = toYMD(selectedDate)
   const isToday = true
 
-  // ── Branch scope ─────────────────────────────────────────────────────────────
-  let allowedBranchIds: string[] | undefined
-  if (rol === 'GERENTE' && myBranchId) {
-    const branchIds = session.user.zonaBranchIds?.length
-      ? session.user.zonaBranchIds
-      : [myBranchId]
-    allowedBranchIds = branchIds
-  } else if (rol === 'GERENTE_ZONAL') {
-    const z = session.user.zonaBranchIds
-    allowedBranchIds = z && z.length > 0 ? z : undefined
-  }
-
   const selectedBranch = isDirector ? (searchParams.branchId || null) : (myBranchId || null)
 
   // Fetch branches for filter dropdown (directors only)
@@ -56,17 +46,13 @@ export default async function PactadosDiaPage({
       })
     : []
 
-  // ── Loan scope ───────────────────────────────────────────────────────────────
-  const loanWhere: Record<string, unknown> = {
+  // Alcance por rol/sucursal — fail-closed si falta sucursal. Además, si el
+  // Director filtró por una sucursal específica, restringimos a ella.
+  const loanWhere: Prisma.LoanWhereInput = {
     estado: 'ACTIVE',
     companyId: companyId!,
-  }
-  if (isCoordinador) {
-    loanWhere.cobradorId = userId
-  } else if (selectedBranch) {
-    loanWhere.branchId = selectedBranch
-  } else if (allowedBranchIds) {
-    loanWhere.branchId = { in: allowedBranchIds }
+    AND: [scopedLoanWhere(session.user)],
+    ...(isDirector && selectedBranch ? { branchId: selectedBranch } : {}),
   }
 
   // ── Fetch schedules due on the selected date ──────────────────────────────────

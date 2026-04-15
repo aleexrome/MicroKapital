@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { scopedLoanWhere } from '@/lib/access'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -27,29 +28,22 @@ export default async function PrestamosPage({
   const session = await getSession()
   if (!session?.user) return null
 
-  const { rol, companyId, branchId: userBranchId, id: userId } = session.user
+  const { rol, companyId } = session.user
 
   const estadoFiltro = searchParams.estado ?? null
   const page = Math.max(1, parseInt(searchParams.page ?? '1', 10))
 
-  const where: Prisma.LoanWhereInput = { companyId: companyId! }
+  // Alcance por rol/sucursal (fail-closed): si un GERENTE / GERENTE_ZONAL /
+  // DIRECTOR no tiene sucursal asignada, la query no devuelve nada en vez
+  // de devolver todos los préstamos de la empresa.
+  const scopeWhere = scopedLoanWhere(session.user)
+
+  const where: Prisma.LoanWhereInput = {
+    companyId: companyId!,
+    AND: [scopeWhere],
+  }
 
   if (estadoFiltro) where.estado = estadoFiltro as LoanStatus
-
-  // Scope by role
-  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
-    where.cobradorId = userId
-  } else if (rol === 'GERENTE') {
-    const branchIds = session.user.zonaBranchIds?.length
-      ? session.user.zonaBranchIds
-      : userBranchId ? [userBranchId] : null
-    if (branchIds?.length) where.branchId = { in: branchIds }
-  } else if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = session.user.zonaBranchIds
-    if (zoneIds?.length) where.branchId = { in: zoneIds }
-  } else if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') {
-    if (userBranchId) where.branchId = userBranchId
-  }
 
   const loans = await prisma.loan.findMany({
     where,
@@ -63,19 +57,9 @@ export default async function PrestamosPage({
   })
 
   // Count per-tab for badges (mismo scope que la lista principal)
-  const whereCount: Prisma.LoanWhereInput = { companyId: companyId! }
-  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
-    whereCount.cobradorId = userId
-  } else if (rol === 'GERENTE') {
-    const branchIds = session.user.zonaBranchIds?.length
-      ? session.user.zonaBranchIds
-      : userBranchId ? [userBranchId] : null
-    if (branchIds?.length) whereCount.branchId = { in: branchIds }
-  } else if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = session.user.zonaBranchIds
-    if (zoneIds?.length) whereCount.branchId = { in: zoneIds }
-  } else if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') {
-    if (userBranchId) whereCount.branchId = userBranchId
+  const whereCount: Prisma.LoanWhereInput = {
+    companyId: companyId!,
+    AND: [scopeWhere],
   }
   const countByEstado = await prisma.loan.groupBy({
     by: ['estado'],

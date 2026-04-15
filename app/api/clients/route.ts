@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { scopedClientWhere } from '@/lib/access'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
 
@@ -26,34 +27,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const { rol, companyId, branchId, id: userId } = session.user
+  const { companyId } = session.user
 
   const q = req.nextUrl.searchParams.get('q')
 
+  // Alcance por rol/sucursal — fail-closed si el rol requiere sucursal pero
+  // no tiene ninguna asignada (evita que la GERENTE de Tenancingo vea los
+  // 416 clientes cuando el JWT queda sin branchId/zonaBranchIds).
   const where: Prisma.ClientWhereInput = {
     companyId: companyId!,
     activo: true,
+    AND: [scopedClientWhere(session.user)],
     ...(q ? { nombreCompleto: { contains: q, mode: 'insensitive' } } : {}),
-  }
-
-  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
-    where.cobradorId = userId
-    if (branchId) where.branchId = branchId
-  } else if (rol === 'GERENTE') {
-    const branchIds = session.user.zonaBranchIds?.length
-      ? session.user.zonaBranchIds
-      : branchId ? [branchId] : null
-    if (branchIds?.length) {
-      where.OR = [
-        { branchId: { in: branchIds } },
-        { cobradorId: userId },
-      ]
-    }
-  } else if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = session.user.zonaBranchIds
-    if (zoneIds?.length) where.branchId = { in: zoneIds }
-  } else if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') {
-    if (branchId) where.branchId = branchId
   }
 
   const clients = await prisma.client.findMany({

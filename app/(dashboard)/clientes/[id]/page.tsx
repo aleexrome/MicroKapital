@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
 import { ClientRenovacionButton } from '@/components/loans/ClientRenovacionButton'
 import { formatDate, formatMoney } from '@/lib/utils'
-import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2, FolderOpen, Users } from 'lucide-react'
+import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2, FolderOpen, Users, Pencil } from 'lucide-react'
 import Link from 'next/link'
 import type { LoanType } from '@prisma/client'
 
@@ -119,10 +119,21 @@ export default async function ClienteExpedientePage({
         <Button asChild variant="ghost" size="icon">
           <Link href="/clientes"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">{client.nombreCompleto}</h1>
           <p className="text-muted-foreground">Expediente del cliente</p>
         </div>
+        {/* Edición de expediente — solo DIRECTOR_GENERAL (Stephanie).
+            Permite corregir errores de captura como "|" en teléfonos o
+            domicilios en minúsculas. */}
+        {rol === 'DIRECTOR_GENERAL' && (
+          <Button asChild variant="outline" size="sm" title="Editar expediente">
+            <Link href={`/clientes/${client.id}/editar`}>
+              <Pencil className="h-4 w-4" />
+              Editar
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* Score + info básica */}

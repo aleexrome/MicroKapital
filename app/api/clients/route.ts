@@ -75,6 +75,13 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
+  // Normalizar nombres a MAYÚSCULAS + trim. Los clientes antiguos estaban todos
+  // en mayúsculas; cobradoras/gerentes empezaron a capturar en minúsculas y la
+  // cartera se veía inconsistente. Normalizar al guardar garantiza que no
+  // importa cómo escriban en el formulario, siempre queda en MAYÚSCULAS.
+  const nombreCompleto = data.nombreCompleto.trim().toUpperCase()
+  const referenciaNombre = data.referenciaNombre?.trim().toUpperCase() || null
+
   // Determinar sucursal — Director puede elegir cualquiera; el resto usa la propia
   const { zonaBranchIds } = session.user
   const targetBranchId = data.branchId ?? branchId ?? zonaBranchIds?.[0]
@@ -103,14 +110,14 @@ export async function POST(req: NextRequest) {
       companyId: companyId!,
       branchId: targetBranchId,
       cobradorId: cobradorId ?? null,
-      nombreCompleto: data.nombreCompleto,
+      nombreCompleto,
       telefono: data.telefono || null,
       telefonoAlt: data.telefonoAlt || null,
       email: data.email || null,
       domicilio: data.domicilio || null,
       numIne: data.numIne || null,
       curp: data.curp || null,
-      referenciaNombre: data.referenciaNombre || null,
+      referenciaNombre,
       referenciaTelefono: data.referenciaTelefono || null,
       fechaNacimiento: data.fechaNacimiento ? new Date(data.fechaNacimiento) : null,
       score: 500,
@@ -123,7 +130,7 @@ export async function POST(req: NextRequest) {
     accion: 'CREATE',
     tabla: 'Client',
     registroId: client.id,
-    valoresNuevos: { nombreCompleto: data.nombreCompleto, companyId },
+    valoresNuevos: { nombreCompleto, companyId },
     ipAddress: req.headers.get('x-forwarded-for') ?? undefined,
   })
 

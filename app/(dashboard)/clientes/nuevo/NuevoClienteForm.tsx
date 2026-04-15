@@ -10,42 +10,39 @@ import { useToast } from '@/components/ui/use-toast'
 import { ArrowLeft, Loader2, Save } from 'lucide-react'
 import Link from 'next/link'
 
-interface ClienteData {
-  id: string
-  nombreCompleto: string
-  telefono: string
-  telefonoAlt: string
-  email: string
-  domicilio: string
-  numIne: string
-  curp: string
-  referenciaNombre: string
-  referenciaTelefono: string
-  fechaNacimiento: string
-  cobradorId: string
-}
-
-interface Cobrador {
+interface Branch {
   id: string
   nombre: string
-  rol: string
 }
 
-export function EditClienteForm({
-  cliente,
-  cobradores,
+export function NuevoClienteForm({
+  isDirector,
+  branches,
 }: {
-  cliente: ClienteData
-  cobradores: Cobrador[]
+  isDirector: boolean
+  branches: Branch[]
 }) {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState<ClienteData>(cliente)
 
-  // Campos que se fuerzan a MAYÚSCULAS en tiempo real al teclear — así
-  // el capturista ve cómo queda el registro aunque tenga minúsculas en el
-  // teclado.
+  const [form, setForm] = useState({
+    nombreCompleto: '',
+    telefono: '',
+    telefonoAlt: '',
+    email: '',
+    domicilio: '',
+    numIne: '',
+    curp: '',
+    referenciaNombre: '',
+    referenciaTelefono: '',
+    fechaNacimiento: '',
+    branchId: '',
+  })
+
+  // Campos que se fuerzan a MAYÚSCULAS en tiempo real al teclear — así el
+  // capturista ve de inmediato cómo queda el registro y no importa si tiene
+  // activadas minúsculas en el teclado.
   const UPPER_FIELDS = new Set(['nombreCompleto', 'referenciaNombre', 'numIne', 'curp'])
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
@@ -56,24 +53,26 @@ export function EditClienteForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+
+    if (isDirector && !form.branchId) {
+      toast({
+        title: 'Sucursal requerida',
+        description: 'Como Director debes indicar a qué sucursal pertenece el cliente',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setLoading(true)
 
     try {
-      const res = await fetch(`/api/clients/${cliente.id}`, {
-        method: 'PATCH',
+      const res = await fetch('/api/clients', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nombreCompleto:     form.nombreCompleto,
-          telefono:           form.telefono,
-          telefonoAlt:        form.telefonoAlt,
-          email:              form.email,
-          domicilio:          form.domicilio,
-          numIne:             form.numIne,
-          curp:               form.curp,
-          referenciaNombre:   form.referenciaNombre,
-          referenciaTelefono: form.referenciaTelefono,
-          fechaNacimiento:    form.fechaNacimiento || null,
-          cobradorId:         form.cobradorId || null,
+          ...form,
+          // No mandamos branchId vacío — el API lo deduce del usuario.
+          branchId: form.branchId || undefined,
         }),
       })
 
@@ -82,17 +81,17 @@ export function EditClienteForm({
         const msg =
           typeof data?.error === 'string'
             ? data.error
-            : 'No se pudo guardar los cambios'
+            : 'Error al crear cliente'
         throw new Error(msg)
       }
 
-      toast({ title: 'Cambios guardados', description: form.nombreCompleto })
-      router.push(`/clientes/${cliente.id}`)
-      router.refresh()
+      const { data } = await res.json()
+      toast({ title: 'Cliente registrado', description: form.nombreCompleto })
+      router.push(`/clientes/${data.id}`)
     } catch (err) {
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'No se pudo guardar',
+        description: err instanceof Error ? err.message : 'No se pudo crear el cliente',
         variant: 'destructive',
       })
       setLoading(false)
@@ -103,15 +102,44 @@ export function EditClienteForm({
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <Button asChild variant="ghost" size="icon">
-          <Link href={`/clientes/${cliente.id}`}><ArrowLeft className="h-4 w-4" /></Link>
+          <Link href="/clientes"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Editar expediente</h1>
-          <p className="text-muted-foreground">Corregir datos del cliente</p>
+          <h1 className="text-2xl font-bold text-gray-900">Nuevo cliente</h1>
+          <p className="text-muted-foreground">Alta de expediente</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Selector de sucursal — solo visible para Directores */}
+        {isDirector && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Sucursal</CardTitle></CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <Label htmlFor="branchId">Sucursal de alta *</Label>
+                <select
+                  id="branchId"
+                  name="branchId"
+                  value={form.branchId}
+                  onChange={handleChange}
+                  required
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">— Selecciona la sucursal —</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.nombre}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Después el coordinador o gerente de esa sucursal podrá elegir este cliente
+                  al crear una solicitud de crédito.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader><CardTitle className="text-base">Datos personales</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -204,35 +232,12 @@ export function EditClienteForm({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader><CardTitle className="text-base">Asignación</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="cobradorId">Cobrador asignado</Label>
-              <select
-                id="cobradorId"
-                name="cobradorId"
-                value={form.cobradorId}
-                onChange={handleChange}
-                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="">— Sin asignar —</option>
-                {cobradores.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre} ({c.rol})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </CardContent>
-        </Card>
-
         <div className="flex gap-3">
           <Button type="submit" disabled={loading} className="flex-1 sm:flex-none">
-            {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : <><Save className="h-4 w-4" /> Guardar cambios</>}
+            {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : <><Save className="h-4 w-4" /> Guardar cliente</>}
           </Button>
           <Button type="button" variant="outline" asChild>
-            <Link href={`/clientes/${cliente.id}`}>Cancelar</Link>
+            <Link href="/clientes">Cancelar</Link>
           </Button>
         </div>
       </form>

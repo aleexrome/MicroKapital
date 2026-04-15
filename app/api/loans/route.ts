@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { scopedLoanWhere } from '@/lib/access'
 import { z } from 'zod'
 import { calcLoan } from '@/lib/financial-formulas'
 import { generarFechasSemanales, generarFechasHabiles } from '@/lib/business-days'
@@ -35,28 +36,15 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { rol, companyId, branchId, id: userId } = session.user
+  const { companyId } = session.user
 
   const estado = req.nextUrl.searchParams.get('estado')
 
+  // Alcance por rol/sucursal — fail-closed si falta sucursal.
   const where: Prisma.LoanWhereInput = {
     companyId: companyId!,
+    AND: [scopedLoanWhere(session.user)],
     ...(estado ? { estado: estado as 'PENDING_APPROVAL' | 'ACTIVE' | 'LIQUIDATED' | 'REJECTED' | 'RESTRUCTURED' | 'DEFAULTED' } : {}),
-  }
-
-  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
-    where.cobradorId = userId
-    if (branchId) where.branchId = branchId
-  } else if (rol === 'GERENTE') {
-    const branchIds = session.user.zonaBranchIds?.length
-      ? session.user.zonaBranchIds
-      : branchId ? [branchId] : null
-    if (branchIds?.length) where.branchId = { in: branchIds }
-  } else if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = session.user.zonaBranchIds
-    if (zoneIds?.length) where.branchId = { in: zoneIds }
-  } else if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') {
-    if (branchId) where.branchId = branchId
   }
 
   const loans = await prisma.loan.findMany({

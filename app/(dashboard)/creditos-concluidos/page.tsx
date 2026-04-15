@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { scopedLoanWhere } from '@/lib/access'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -25,48 +26,40 @@ export default async function CreditosConcluidos({
   const session = await getSession()
   if (!session?.user) return null
 
-  const { rol, companyId, branchId: userBranchId, id: userId } = session.user
+  const { rol, companyId, branchId: userBranchId } = session.user
 
   const page = Math.max(1, parseInt(searchParams.page ?? '1', 10))
   const skip = (page - 1) * PAGE_SIZE
 
-  // ── Build WHERE depending on role ────────────────────────────────────────────
-
-  const baseWhere: Prisma.LoanWhereInput = { companyId: companyId!, estado: 'LIQUIDATED' }
+  // Alcance por rol/sucursal — fail-closed si falta sucursal.
+  const baseWhere: Prisma.LoanWhereInput = {
+    companyId: companyId!,
+    estado: 'LIQUIDATED',
+    AND: [scopedLoanWhere(session.user)],
+  }
 
   const isDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
   const isGerente  = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
   const isCampo    = rol === 'COORDINADOR' || rol === 'COBRADOR'
 
-  // Directors: optionally filter by branch
-  if (isDirector) {
-    if (searchParams.branchId) baseWhere.branchId = searchParams.branchId
+  // Filtros adicionales de UI (Director elige sucursal; Gerente filtra por
+  // coordinador; Campo busca por cliente). El alcance base ya limita el
+  // universo visible — estos filtros solo lo restringen más.
+  if (isDirector && searchParams.branchId) {
+    baseWhere.branchId = searchParams.branchId
   }
-
-  // Gerente Zonal: restrict to zone branches + optional coordinador filter
-  if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = session.user.zonaBranchIds
-    if (zoneIds && zoneIds.length > 0) {
-      baseWhere.branchId = searchParams.branchId && zoneIds.includes(searchParams.branchId)
-        ? searchParams.branchId
-        : { in: zoneIds }
+  if (rol === 'GERENTE_ZONAL' && searchParams.branchId) {
+    const zoneIds = session.user.zonaBranchIds ?? []
+    if (zoneIds.includes(searchParams.branchId)) {
+      baseWhere.branchId = searchParams.branchId
     }
-    if (searchParams.cobradorId) baseWhere.cobradorId = searchParams.cobradorId
   }
-
-  // Gerente (legacy): restrict to own branch + optional coordinador filter
-  if (rol === 'GERENTE') {
-    if (userBranchId) baseWhere.branchId = userBranchId
-    if (searchParams.cobradorId) baseWhere.cobradorId = searchParams.cobradorId
+  if (isGerente && searchParams.cobradorId) {
+    baseWhere.cobradorId = searchParams.cobradorId
   }
-
-  // Campo: own loans + optional client search
-  if (isCampo) {
-    baseWhere.cobradorId = userId
-    if (searchParams.clienteQ) {
-      baseWhere.client = {
-        nombreCompleto: { contains: searchParams.clienteQ, mode: 'insensitive' },
-      }
+  if (isCampo && searchParams.clienteQ) {
+    baseWhere.client = {
+      nombreCompleto: { contains: searchParams.clienteQ, mode: 'insensitive' },
     }
   }
 

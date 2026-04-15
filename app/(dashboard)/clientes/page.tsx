@@ -1,6 +1,7 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { scopedClientWhere } from '@/lib/access'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ScoreBadge } from '@/components/clients/ScoreBadge'
@@ -26,47 +27,22 @@ export default async function ClientesPage({
   const session = await getSession()
   if (!session?.user) return null
 
-  const { rol, companyId, branchId, id: userId } = session.user
+  const { companyId } = session.user
 
   const page = Math.max(1, parseInt(searchParams.page ?? '1', 10))
 
+  // Alcance por rol/sucursal. `scopedClientWhere` es fail-closed: si un
+  // GERENTE / GERENTE_ZONAL / DIRECTOR no tiene sucursal asignada, devuelve
+  // `{ id: '__NO_BRANCH_ASSIGNED__' }` — cero resultados en lugar de los 416
+  // que veía Cristina cuando el JWT quedaba sin `branchId` ni `zonaBranchIds`.
   const where: Prisma.ClientWhereInput = {
     companyId: companyId!,
     activo: true,
+    AND: [scopedClientWhere(session.user)],
   }
 
   if (searchParams.q) {
     where.nombreCompleto = { contains: searchParams.q, mode: 'insensitive' }
-  }
-
-  // COBRADOR / COORDINADOR: solo sus clientes en su sucursal
-  if (rol === 'COBRADOR' || rol === 'COORDINADOR') {
-    where.cobradorId = userId
-    if (branchId) where.branchId = branchId
-  }
-
-  // GERENTE: clientes de su(s) sucursal(es) + sus propios clientes
-  if (rol === 'GERENTE') {
-    const branchIds = session.user.zonaBranchIds?.length
-      ? session.user.zonaBranchIds
-      : branchId ? [branchId] : null
-    if (branchIds?.length) {
-      where.OR = [
-        { branchId: { in: branchIds } },
-        { cobradorId: userId },
-      ]
-    }
-  }
-
-  // GERENTE_ZONAL: sus sucursales asignadas
-  if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = session.user.zonaBranchIds
-    if (zoneIds?.length) where.branchId = { in: zoneIds }
-  }
-
-  // DIRECTOR: solo su sucursal
-  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') {
-    if (branchId) where.branchId = branchId
   }
 
   const [clientes, total] = await Promise.all([

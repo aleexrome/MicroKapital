@@ -53,7 +53,7 @@ export function calcSolidario(
 // Tasa: $170 por cada mil = 0.170 sobre el capital
 // Comisión por apertura varía según ciclo del cliente:
 //   Ciclo 1:  10% · Ciclo 2: 7% · Ciclo 3+: 5% · Con atraso: 12%
-// Montoreal = capital − comisión (lo que recibe físicamente el cliente)
+// La comisión se cobra aparte al activar (el cliente recibe el capital completo)
 // Validaciones: $4,000–$20,000 · edad 18–64 · titular + 1 aval (2 avales si >$15,000)
 
 export function calcComisionIndividual(ciclo: number, tuvoAtraso: boolean): number {
@@ -72,7 +72,7 @@ export function calcIndividual(
   const tasaInteres = 0.170
   const tasaComision = calcComisionIndividual(ciclo, tuvoAtraso)
   const comision = roundTwo(capital * tasaComision)
-  const montoReal = roundTwo(capital - comision)
+  const montoReal = capital
   const totalPago = roundTwo(capital * tasaInteres * plazo)
   const pagoSemanal = roundTwo(totalPago / plazo)
   const interes = roundTwo(totalPago - capital)
@@ -141,7 +141,7 @@ export function calcAgil(capital: number, clienteIrregular = false): LoanCalcula
 export function calcFiduciario(capital: number, tasaInteres: number): LoanCalculation {
   const plazo = 12  // 12 quincenas
   const comision = roundTwo(capital * 0.10)
-  const montoReal = roundTwo(capital - comision)
+  const montoReal = capital
   const interes = roundTwo(capital * tasaInteres)
   const totalPago = roundTwo(capital + interes)
   const pagoQuincenal = roundTwo(totalPago / plazo)
@@ -156,6 +156,22 @@ export function calcFiduciario(capital: number, tasaInteres: number): LoanCalcul
     pagoQuincenal,
     plazo,
   }
+}
+
+// ─── TARIFA DE APERTURA ─────────────────────────────────────────────────────
+//
+// Monto que el cliente debe pagar al activar el crédito:
+//   SOLIDARIO / AGIL  → seguro (tabla por monto)
+//   INDIVIDUAL / FIDUCIARIO → comisión (% sobre capital, ya calculada en el Loan)
+
+export function calcTarifaApertura(
+  tipo: 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
+  capital: number,
+  comisionAlmacenada?: number
+): { monto: number; concepto: 'SEGURO' | 'COMISION' } {
+  if (tipo === 'SOLIDARIO') return { monto: calcSeguroSolidario(capital), concepto: 'SEGURO' }
+  if (tipo === 'AGIL') return { monto: calcSeguroAgil(capital), concepto: 'SEGURO' }
+  return { monto: comisionAlmacenada ?? 0, concepto: 'COMISION' }
 }
 
 // ─── DISPATCHER ─────────────────────────────────────────────────────────────

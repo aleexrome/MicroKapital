@@ -16,6 +16,7 @@ import { ArrowLeft, ShieldAlert, AlertTriangle, Info } from 'lucide-react'
 import Link from 'next/link'
 import type { LoanStatus, LoanType, ScheduleStatus, Prisma } from '@prisma/client'
 import { findAvalMatches, getAvalRiskLevel } from '@/lib/aval-check'
+import { calcTarifaApertura } from '@/lib/financial-formulas'
 
 // Umbral de pagos para renovación anticipada por producto
 const UMBRAL_RENOVACION: Record<string, number> = {
@@ -201,7 +202,14 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   // Roles que pueden activar un crédito APPROVED — coordinador, gerente (tienen clientes propios) y SUPER_ADMIN
   const puedeActivar =
     loan.estado === 'APPROVED' &&
-    (rol === 'COORDINADOR' || rol === 'GERENTE' || rol === 'SUPER_ADMIN')
+    (rol === 'COORDINADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN')
+
+  // Tarifa de apertura (seguro o comisión según tipo)
+  const tarifaApertura = calcTarifaApertura(
+    loan.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
+    Number(loan.capital),
+    Number(loan.comision)
+  )
 
   // Director General y SUPER_ADMIN: pueden editar fechas en cualquier estado,
   // incluyendo filas PAID, y pueden deshacer pagos.
@@ -301,6 +309,8 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                   loanId={loan.id}
                   fechaDesembolsoDG={loan.fechaDesembolso ? loan.fechaDesembolso.toISOString().slice(0, 10) : null}
                   fechaPrimerPagoDG={loan.fechaPrimerPago ? loan.fechaPrimerPago.toISOString().slice(0, 10) : null}
+                  feeConcepto={tarifaApertura.concepto}
+                  feeMonto={tarifaApertura.monto}
                 />
                 <LoanClientRejectButton loanId={loan.id} />
               </div>
@@ -310,7 +320,12 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           {/* Gerente: verificar transferencia del seguro y activar */}
           {loan.seguroPendiente && (rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN') && (
             <div className="pt-1">
-              <LoanActivateButton loanId={loan.id} seguroPendiente />
+              <LoanActivateButton
+                loanId={loan.id}
+                seguroPendiente
+                feeConcepto={tarifaApertura.concepto}
+                feeMonto={tarifaApertura.monto}
+              />
             </div>
           )}
 

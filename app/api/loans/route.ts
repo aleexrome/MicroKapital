@@ -15,6 +15,9 @@ const createLoanSchema = z.object({
   branchId: z.string().uuid().optional(),
   loanGroupId: z.string().uuid().optional(),
   notas: z.string().optional(),
+  avalNombre: z.string().optional(),
+  avalTelefono: z.string().optional(),
+  avalRelacion: z.string().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -43,7 +46,7 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: 'desc' },
     take: 50,
     include: {
-      client: { select: { nombreCompleto: true } },
+      client: { select: { id: true, nombreCompleto: true, telefono: true, score: true } },
       cobrador: { select: { nombre: true } },
     },
   })
@@ -115,6 +118,9 @@ export async function POST(req: NextRequest) {
         pagoDiario: calc.pagoDiario ?? null,
         plazo: calc.plazo,
         notas: data.notas ?? null,
+        avalNombre: data.avalNombre ?? null,
+        avalTelefono: data.avalTelefono ?? null,
+        avalRelacion: data.avalRelacion ?? null,
       },
     })
 

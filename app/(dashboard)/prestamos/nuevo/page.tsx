@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoanCalculator } from '@/components/loans/LoanCalculator'
 import { useToast } from '@/components/ui/use-toast'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, AlertTriangle, Info, ShieldAlert } from 'lucide-react'
 import Link from 'next/link'
 import type { LoanCalculation } from '@/types'
 
@@ -26,6 +26,19 @@ const DEFAULT_TASAS: Record<LoanTipo, number> = {
   AGIL: 0.56,
 }
 
+interface AvalMatchItem {
+  loanId: string
+  loanEstado: string
+  loanTipo: string
+  capital: number
+  clienteNombre: string
+  clienteScore: number
+  scoreColor: string
+  scoreLabel: string
+  scoreNivel: string
+  matchType: string
+}
+
 export default function NuevoPrestamopPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -35,10 +48,75 @@ export default function NuevoPrestamopPage() {
   const [capital, setCapital] = useState('')
   const [clienteId, setClienteId] = useState(searchParams.get('clienteId') ?? '')
   const [notas, setNotas] = useState('')
+  const [avalNombre, setAvalNombre] = useState('')
+  const [avalTelefono, setAvalTelefono] = useState('')
+  const [avalRelacion, setAvalRelacion] = useState('')
   const [loading, setLoading] = useState(false)
   const [calc, setCalc] = useState<LoanCalculation | null>(null)
 
+  // Aval check state
+  const [avalMatches, setAvalMatches] = useState<AvalMatchItem[]>([])
+  const [avalRiskLevel, setAvalRiskLevel] = useState<string | null>(null)
+  const [checkingAval, setCheckingAval] = useState(false)
+
   const handleCalc = useCallback((c: LoanCalculation) => setCalc(c), [])
+
+  // Lookup client name/phone when UUID is entered, then check aval matches
+  const [clienteName, setClienteName] = useState('')
+  const [clientePhone, setClientePhone] = useState('')
+
+  useEffect(() => {
+    if (!clienteId || clienteId.length < 36) {
+      setClienteName('')
+      setClientePhone('')
+      setAvalMatches([])
+      setAvalRiskLevel(null)
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/clients/${clienteId}`)
+        if (res.ok && !cancelled) {
+          const { data } = await res.json()
+          setClienteName(data.nombreCompleto ?? '')
+          setClientePhone(data.telefono ?? '')
+        }
+      } catch {
+        // ignore
+      }
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [clienteId])
+
+  useEffect(() => {
+    if (!clienteName) {
+      setAvalMatches([])
+      setAvalRiskLevel(null)
+      return
+    }
+    let cancelled = false
+    setCheckingAval(true)
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ nombre: clienteName })
+        if (clientePhone) params.set('telefono', clientePhone)
+        const res = await fetch(`/api/aval-check?${params}`)
+        if (res.ok && !cancelled) {
+          const { data } = await res.json()
+          setAvalMatches(data.matches ?? [])
+          setAvalRiskLevel(data.riskLevel)
+        }
+      } catch {
+        // ignore
+      }
+      if (!cancelled) setCheckingAval(false)
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [clienteName, clientePhone])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -55,6 +133,9 @@ export default function NuevoPrestamopPage() {
           capital: parseFloat(capital),
           tasaInteres: DEFAULT_TASAS[tipo],
           notas: notas || undefined,
+          avalNombre: avalNombre || undefined,
+          avalTelefono: avalTelefono || undefined,
+          avalRelacion: avalRelacion || undefined,
         }),
       })
 
@@ -76,6 +157,13 @@ export default function NuevoPrestamopPage() {
     }
   }
 
+  const ESTADO_LABELS: Record<string, string> = {
+    ACTIVE: 'Activo',
+    PENDING_APPROVAL: 'Pendiente',
+    DEFAULTED: 'Incumplido',
+    RESTRUCTURED: 'Reestructurado',
+  }
+
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
@@ -87,6 +175,49 @@ export default function NuevoPrestamopPage() {
           <p className="text-muted-foreground">La gerente deberá aprobar para activar</p>
         </div>
       </div>
+
+      {/* Aval warning banner */}
+      {avalMatches.length > 0 && (
+        <Card className={
+          avalRiskLevel === 'red'
+            ? 'border-red-400 bg-red-50'
+            : avalRiskLevel === 'yellow'
+            ? 'border-yellow-400 bg-yellow-50'
+            : 'border-blue-300 bg-blue-50'
+        }>
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              {avalRiskLevel === 'red' ? (
+                <ShieldAlert className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+              ) : avalRiskLevel === 'yellow' ? (
+                <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+              ) : (
+                <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+              )}
+              <div className="flex-1">
+                <p className={`font-semibold text-sm ${
+                  avalRiskLevel === 'red' ? 'text-red-800' : avalRiskLevel === 'yellow' ? 'text-yellow-800' : 'text-blue-800'
+                }`}>
+                  Este cliente aparece como aval en {avalMatches.length} préstamo(s)
+                </p>
+                <div className="mt-2 space-y-1.5">
+                  {avalMatches.map((m) => (
+                    <div key={m.loanId} className="text-sm flex items-center gap-2">
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: m.scoreColor }}
+                      />
+                      <span>
+                        Aval de <strong>{m.clienteNombre}</strong> — {m.loanTipo} {ESTADO_LABELS[m.loanEstado] ?? m.loanEstado} — Score: {m.clienteScore} ({m.scoreLabel})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Tipo de préstamo */}
@@ -156,6 +287,40 @@ export default function NuevoPrestamopPage() {
                 value={notas}
                 onChange={(e) => setNotas(e.target.value)}
                 placeholder="Observaciones del préstamo..."
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Datos del aval */}
+        <Card>
+          <CardHeader><CardTitle className="text-base">Datos del aval / garantía</CardTitle></CardHeader>
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2 space-y-2">
+              <Label htmlFor="avalNombre">Nombre del aval</Label>
+              <Input
+                id="avalNombre"
+                value={avalNombre}
+                onChange={(e) => setAvalNombre(e.target.value)}
+                placeholder="Nombre completo del aval"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="avalTelefono">Teléfono del aval</Label>
+              <Input
+                id="avalTelefono"
+                value={avalTelefono}
+                onChange={(e) => setAvalTelefono(e.target.value)}
+                placeholder="555-0000"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="avalRelacion">Relación con el cliente</Label>
+              <Input
+                id="avalRelacion"
+                value={avalRelacion}
+                onChange={(e) => setAvalRelacion(e.target.value)}
+                placeholder="Hermano, vecino, amigo..."
               />
             </div>
           </CardContent>

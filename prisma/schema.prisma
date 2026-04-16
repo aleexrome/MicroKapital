@@ -267,6 +267,10 @@ model Loan {
   rechazadoPor   User?     @relation("RejectedLoans", fields: [rechazadoPorId], references: [id])
   razonRechazo   String?
   notas          String?
+  // Aval / Garantía
+  avalNombre     String?
+  avalTelefono   String?
+  avalRelacion   String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

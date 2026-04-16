@@ -7,8 +7,27 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
-import { ArrowLeft, Loader2, Save } from 'lucide-react'
+import { ArrowLeft, Loader2, Save, ShieldAlert, AlertTriangle, Info } from 'lucide-react'
 import Link from 'next/link'
+
+interface AvalMatchItem {
+  loanId: string
+  loanEstado: string
+  loanTipo: string
+  capital: number
+  clienteNombre: string
+  clienteScore: number
+  scoreColor: string
+  scoreLabel: string
+  matchType: string
+}
+
+const ESTADO_LABELS: Record<string, string> = {
+  ACTIVE: 'Activo',
+  PENDING_APPROVAL: 'Pendiente',
+  DEFAULTED: 'Incumplido',
+  RESTRUCTURED: 'Reestructurado',
+}
 
 export default function NuevoClientePage() {
   const router = useRouter()
@@ -27,6 +46,11 @@ export default function NuevoClientePage() {
     referenciaTelefono: '',
     fechaNacimiento: '',
   })
+
+  // Aval check state — shown after successful save
+  const [avalMatches, setAvalMatches] = useState<AvalMatchItem[]>([])
+  const [avalRiskLevel, setAvalRiskLevel] = useState<string | null>(null)
+  const [savedClientId, setSavedClientId] = useState<string | null>(null)
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
@@ -49,8 +73,32 @@ export default function NuevoClientePage() {
       }
 
       const { data } = await res.json()
+
+      // Check if this new client is an aval of someone
+      let foundMatches = false
+      try {
+        const params = new URLSearchParams({ nombre: form.nombreCompleto })
+        if (form.telefono) params.set('telefono', form.telefono)
+        const avalRes = await fetch(`/api/aval-check?${params}`)
+        if (avalRes.ok) {
+          const { data: avalData } = await avalRes.json()
+          if (avalData.matches?.length > 0) {
+            setAvalMatches(avalData.matches)
+            setAvalRiskLevel(avalData.riskLevel)
+            setSavedClientId(data.id)
+            foundMatches = true
+          }
+        }
+      } catch {
+        // ignore aval check errors
+      }
+
       toast({ title: 'Cliente registrado', description: form.nombreCompleto, variant: 'default' })
-      router.push(`/clientes/${data.id}`)
+
+      // If no aval matches, redirect immediately to the client's page
+      if (!foundMatches) {
+        router.push(`/clientes/${data.id}`)
+      }
     } catch (err) {
       toast({
         title: 'Error',
@@ -59,6 +107,65 @@ export default function NuevoClientePage() {
       })
       setLoading(false)
     }
+  }
+
+  // If we saved and found aval matches, show the alert with a "Continue" button
+  if (savedClientId && avalMatches.length > 0) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Cliente registrado</h1>
+          <p className="text-muted-foreground">{form.nombreCompleto} fue dado de alta exitosamente</p>
+        </div>
+
+        <Card className={
+          avalRiskLevel === 'red'
+            ? 'border-red-400 bg-red-50'
+            : avalRiskLevel === 'yellow'
+            ? 'border-yellow-400 bg-yellow-50'
+            : 'border-blue-300 bg-blue-50'
+        }>
+          <CardContent className="p-5">
+            <div className="flex items-start gap-3">
+              {avalRiskLevel === 'red' ? (
+                <ShieldAlert className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+              ) : avalRiskLevel === 'yellow' ? (
+                <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+              ) : (
+                <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+              )}
+              <div className="flex-1">
+                <p className={`font-semibold ${
+                  avalRiskLevel === 'red' ? 'text-red-800' : avalRiskLevel === 'yellow' ? 'text-yellow-800' : 'text-blue-800'
+                }`}>
+                  Esta persona aparece como aval en {avalMatches.length} préstamo(s)
+                </p>
+                <div className="mt-3 space-y-2">
+                  {avalMatches.map((m) => (
+                    <div key={m.loanId} className="text-sm flex items-center gap-2">
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: m.scoreColor }}
+                      />
+                      <span>
+                        Aval de <strong>{m.clienteNombre}</strong> — {m.loanTipo} {ESTADO_LABELS[m.loanEstado] ?? m.loanEstado} — Score: {m.clienteScore} ({m.scoreLabel})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm mt-3 text-muted-foreground">
+                  Toma esto en cuenta al momento de evaluar solicitudes de crédito para este cliente.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Button asChild>
+          <Link href={`/clientes/${savedClientId}`}>Ver expediente del cliente</Link>
+        </Button>
+      </div>
+    )
   }
 
   return (

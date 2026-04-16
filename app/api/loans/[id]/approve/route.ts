@@ -8,6 +8,7 @@ import { z } from 'zod'
 const approveSchema = z.object({
   notas: z.string().optional(),
   fechaDesembolso: z.string().optional(),
+  avalOverride: z.boolean().optional(),
 })
 
 export async function POST(
@@ -34,7 +35,7 @@ export async function POST(
 
   const body = await req.json().catch(() => ({}))
   const parsed = approveSchema.safeParse(body)
-  const { notas, fechaDesembolso: fechaStr } = parsed.success ? parsed.data : {}
+  const { notas, fechaDesembolso: fechaStr, avalOverride } = parsed.success ? parsed.data : {}
 
   const fechaDesembolso = fechaStr ? new Date(fechaStr) : new Date()
 
@@ -91,6 +92,20 @@ export async function POST(
     registroId: loan.id,
     valoresNuevos: { estado: 'ACTIVE', aprobadoPorId: userId },
   })
+
+  // Log aval override separately for traceability
+  if (avalOverride) {
+    createAuditLog({
+      userId,
+      accion: 'AVAL_OVERRIDE',
+      tabla: 'Loan',
+      registroId: loan.id,
+      valoresNuevos: {
+        motivo: 'Aprobación con aval en mora — consciente del riesgo',
+        aprobadoPorId: userId,
+      },
+    })
+  }
 
   return NextResponse.json({ message: 'Préstamo aprobado y calendario generado' })
 }

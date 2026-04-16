@@ -230,24 +230,24 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
 
           {/* Alerta de aval — si el cliente es garantía de otro préstamo con riesgo */}
           {loan.estado === 'PENDING_APPROVAL' && avalMatches.length > 0 && (
-            <div className={`rounded-lg p-3 border ${
+            <div className={`rounded-xl p-4 border-2 ${
               avalRiskLevel === 'red'
-                ? 'bg-red-50 border-red-400'
+                ? 'bg-red-500/10 border-red-500/50'
                 : avalRiskLevel === 'yellow'
-                ? 'bg-yellow-50 border-yellow-400'
-                : 'bg-blue-50 border-blue-300'
+                ? 'bg-yellow-500/10 border-yellow-500/50'
+                : 'bg-blue-500/10 border-blue-500/40'
             }`}>
-              <div className="flex items-start gap-2">
+              <div className="flex items-start gap-3">
                 {avalRiskLevel === 'red' ? (
-                  <ShieldAlert className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                  <ShieldAlert className="h-8 w-8 text-red-400 mt-0.5 flex-shrink-0" />
                 ) : avalRiskLevel === 'yellow' ? (
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                  <AlertTriangle className="h-8 w-8 text-yellow-400 mt-0.5 flex-shrink-0" />
                 ) : (
-                  <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <Info className="h-8 w-8 text-blue-400 mt-0.5 flex-shrink-0" />
                 )}
                 <div className="flex-1">
-                  <p className={`text-sm font-semibold ${
-                    avalRiskLevel === 'red' ? 'text-red-800' : avalRiskLevel === 'yellow' ? 'text-yellow-800' : 'text-blue-800'
+                  <p className={`text-base font-bold ${
+                    avalRiskLevel === 'red' ? 'text-red-400' : avalRiskLevel === 'yellow' ? 'text-yellow-400' : 'text-blue-400'
                   }`}>
                     {avalRiskLevel === 'red'
                       ? 'ALERTA: Este cliente es aval de un préstamo con riesgo alto'
@@ -255,15 +255,15 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                       ? 'Advertencia: Este cliente es aval de un préstamo con atraso'
                       : 'Info: Este cliente aparece como aval en otro préstamo'}
                   </p>
-                  <div className="mt-1.5 space-y-1">
+                  <div className="mt-2 space-y-1.5">
                     {avalMatches.map((m) => (
-                      <div key={m.loanId} className="text-sm flex items-center gap-2">
+                      <div key={m.loanId} className="text-sm flex items-center gap-2 text-gray-300">
                         <span
-                          className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          className="inline-block w-3 h-3 rounded-full flex-shrink-0"
                           style={{ backgroundColor: m.scoreColor }}
                         />
                         <span>
-                          Aval de <strong>{m.clienteNombre}</strong> — {m.loanTipo} {ESTADO_LABELS[m.loanEstado] ?? m.loanEstado} — Score: {m.clienteScore} ({m.scoreLabel})
+                          Aval de <strong className="text-white">{m.clienteNombre}</strong> — {m.loanTipo} {ESTADO_LABELS[m.loanEstado] ?? m.loanEstado} — Score: {m.clienteScore} ({m.scoreLabel})
                         </span>
                       </div>
                     ))}

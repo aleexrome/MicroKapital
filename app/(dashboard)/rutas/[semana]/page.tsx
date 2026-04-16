@@ -14,7 +14,7 @@ import {
 } from '@/lib/week-utils'
 import {
   ImprimirRutaButton,
-  type RutaCobroRow, type RutaColocacionRow, type RutaCobradorRow,
+  type RutaCobroRow, type RutaColocacionRow,
 } from '@/components/rutas/ImprimirRutaButton'
 import type { ScheduleStatus, Prisma } from '@prisma/client'
 
@@ -175,7 +175,13 @@ function CobradorCard({
 
 // ── page ──────────────────────────────────────────────────────────────────
 
-export default async function RutaDetallePage({ params }: { params: { semana: string } }) {
+export default async function RutaDetallePage({
+  params,
+  searchParams,
+}: {
+  params: { semana: string }
+  searchParams: { u?: string }
+}) {
   const session = await getSession()
   if (!session?.user) return null
 
@@ -193,17 +199,54 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
 
   const isCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
   const isGerente     = rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
-  const isDG          = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
+  // DIRECTOR_COMERCIAL se sumó al grupo que ve todas las sucursales. Antes
+  // quedaba sin vista alguna y caía en el `return null` del final.
+  const isDG          = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
+
+  // ── Drill-down: Gerente/DG abrió la ficha detallada de un cobrador ───────
+  // Si llega ?u=<userId> y el rol tiene permiso, renderizamos la vista
+  // COORDINADOR (detalle con cobros y colocaciones) usando los datos de
+  // ese usuario. Validamos que el target esté dentro del alcance del caller:
+  //   - Gerente/Gerente Zonal: solo usuarios de su(s) sucursal(es).
+  //   - Director/Super Admin: cualquier usuario de la empresa.
+  let targetUserId: string = userId
+  let targetUserName: string = session.user.name ?? 'Mi ruta'
+  let isDrillDown = false
+  if (searchParams?.u && (isGerente || isDG)) {
+    const target = await prisma.user.findFirst({
+      where: { id: searchParams.u, companyId: companyId!, activo: true },
+      select: { id: true, nombre: true, branchId: true },
+    })
+    if (target) {
+      let allowed = false
+      if (isGerente) {
+        const branchIds = (session.user.zonaBranchIds as string[] | null)?.length
+          ? (session.user.zonaBranchIds as string[])
+          : branchId ? [branchId] : []
+        allowed = !!target.branchId && branchIds.includes(target.branchId)
+      } else {
+        allowed = true // DG/DC/SA ven toda la empresa
+      }
+      if (allowed) {
+        targetUserId   = target.id
+        targetUserName = target.nombre
+        isDrillDown    = true
+      }
+    }
+  }
 
   // ── COORDINADOR / COBRADOR view ─────────────────────────────────────
-  if (isCoordinador) {
+  // También usada en modo drill-down: cuando un Gerente o Director entra
+  // con ?u=<userId>, renderizamos esta misma vista pero con los datos del
+  // usuario seleccionado.
+  if (isCoordinador || isDrillDown) {
     const [schedules, loans] = await Promise.all([
       prisma.paymentSchedule.findMany({
         where: {
           fechaVencimiento: { gte: saturday, lte: friday },
           estado: { not: 'FINANCIADO' },
           loan: {
-            cobradorId: userId,
+            cobradorId: targetUserId,
             companyId: companyId!,
             estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
           },
@@ -226,7 +269,7 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
       }),
       prisma.loan.findMany({
         where: {
-          cobradorId: userId,
+          cobradorId: targetUserId,
           companyId: companyId!,
           estado: { in: ['ACTIVE', 'LIQUIDATED'] },
           fechaDesembolso: { gte: saturday, lte: friday },
@@ -269,16 +312,23 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
       capital:      Number(l.capital),
     }))
 
+    // En drill-down el "atrás" vuelve al resumen de la semana (sin ?u),
+    // no al listado de semanas, para que el Gerente/Director no pierda
+    // el contexto de la semana que estaba revisando.
+    const backHref = isDrillDown ? `/rutas/${params.semana}` : '/rutas'
+
     return (
       <div className="p-6 max-w-3xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
           <Button asChild variant="ghost" size="icon">
-            <Link href="/rutas"><ArrowLeft className="h-4 w-4" /></Link>
+            <Link href={backHref}><ArrowLeft className="h-4 w-4" /></Link>
           </Button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-gray-900">Ruta semanal</h1>
+              <h1 className="text-xl font-bold text-gray-900">
+                {isDrillDown ? `Ruta — ${targetUserName}` : 'Ruta semanal'}
+              </h1>
               {isCurrentWeek && (
                 <span className="text-[10px] font-bold uppercase tracking-wide bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
                   En curso
@@ -383,11 +433,11 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
           )}
         </div>
 
-        {/* Botón imprimir */}
+        {/* Botón imprimir — detalle por cliente */}
         <div className="flex justify-center pt-2">
           <ImprimirRutaButton
             weekLabel={weekLabel}
-            scopeLabel={session.user.name}
+            scopeLabel={targetUserName}
             cobros={printCobros}
             colocaciones={printColocaciones}
             totalAPagar={totalAPagar}
@@ -530,37 +580,30 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
 
         <div>
           <h2 className="text-base font-semibold text-gray-900 mb-3">Coordinadores ({stats.length})</h2>
+          {/* Cards clickables — navegan al detalle del coordinador con
+              ?u=<userId>. Desde ahí el Gerente puede imprimir la lista
+              detallada por cliente (la misma que ve el coordinador). */}
           <div className="space-y-3">
             {stats.map((s) => (
-              <CobradorCard key={s.id} {...s} />
+              <Link
+                key={s.id}
+                href={`/rutas/${params.semana}?u=${s.id}`}
+                className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
+              >
+                <CobradorCard {...s} />
+              </Link>
             ))}
           </div>
         </div>
 
-        {/* Botón imprimir */}
-        <div className="flex justify-center pt-2">
-          <ImprimirRutaButton
-            weekLabel={weekLabel}
-            scopeLabel="Mi sucursal"
-            cobradores={stats.map<RutaCobradorRow>((s) => ({
-              nombre:        s.nombre,
-              rolLabel:      s.rolLabel,
-              scheduleCount: s.scheduleCount,
-              cobradosCount: s.cobradosCount,
-              totalAPagar:   s.totalAPagar,
-              totalCobrado:  s.totalCobrado,
-              cobranzaPct:   s.cobranzaPct,
-              colocacion:    s.colocacion,
-              metaTarget:    s.metaTarget,
-              metaPct:       s.metaPct,
-            }))}
-          />
-        </div>
+        {/* El imprimir agregado se removió a propósito: no servía de nada
+            (era solo el resumen de coordinadores). El print útil vive
+            dentro del detalle de cada coordinador (click en una card → ?u=). */}
       </div>
     )
   }
 
-  // ── DIRECTOR GENERAL / SUPER_ADMIN view ───────────────────────────────
+  // ── DIRECTOR GENERAL / DIRECTOR_COMERCIAL / SUPER_ADMIN view ──────────
   if (isDG) {
     const [allUsuarios, branches] = await Promise.all([
       prisma.user.findMany({
@@ -704,7 +747,13 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {branchUsers.map((u) => (
-                  <CobradorCard key={u.id} {...u} />
+                  <Link
+                    key={u.id}
+                    href={`/rutas/${params.semana}?u=${u.id}`}
+                    className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
+                  >
+                    <CobradorCard {...u} />
+                  </Link>
                 ))}
               </div>
             </div>
@@ -722,33 +771,24 @@ export default async function RutaDetallePage({ params }: { params: { semana: st
                 <h2 className="text-base font-semibold text-gray-900">Sin sucursal asignada</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {noBranch.map((u) => <CobradorCard key={u.id} {...u} />)}
+                {noBranch.map((u) => (
+                  <Link
+                    key={u.id}
+                    href={`/rutas/${params.semana}?u=${u.id}`}
+                    className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
+                  >
+                    <CobradorCard {...u} />
+                  </Link>
+                ))}
               </div>
             </div>
           )
         })()}
 
-        {/* Botón imprimir */}
-        <div className="flex justify-center pt-2">
-          <ImprimirRutaButton
-            weekLabel={weekLabel}
-            scopeLabel="Todas las sucursales"
-            showBranch
-            cobradores={userStats.map<RutaCobradorRow>((u) => ({
-              nombre:        u.nombre,
-              rolLabel:      u.rolLabel,
-              branchNombre:  branches.find((b) => b.id === u.branchId)?.nombre ?? '—',
-              scheduleCount: u.scheduleCount,
-              cobradosCount: u.cobradosCount,
-              totalAPagar:   u.totalAPagar,
-              totalCobrado:  u.totalCobrado,
-              cobranzaPct:   u.cobranzaPct,
-              colocacion:    u.colocacion,
-              metaTarget:    u.metaTarget,
-              metaPct:       u.metaPct,
-            }))}
-          />
-        </div>
+        {/* El imprimir agregado de "todas las sucursales" se removió a
+            propósito: era solo un resumen sin detalle por cliente. El
+            print útil vive dentro del detalle de cada coordinador
+            (click en una card → ?u=<userId>). */}
       </div>
     )
   }

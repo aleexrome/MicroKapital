@@ -1,6 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
+import Link from 'next/link'
 
 interface MetricCardProps {
   title: string
@@ -10,14 +11,15 @@ interface MetricCardProps {
   trend?: { value: number; label: string }
   color?: 'blue' | 'green' | 'yellow' | 'red' | 'purple'
   className?: string
+  href?: string
 }
 
 const colorMap = {
-  blue: { bg: 'bg-blue-50', icon: 'bg-blue-100 text-blue-600', text: 'text-blue-900' },
-  green: { bg: 'bg-green-50', icon: 'bg-green-100 text-green-600', text: 'text-green-900' },
-  yellow: { bg: 'bg-yellow-50', icon: 'bg-yellow-100 text-yellow-600', text: 'text-yellow-900' },
-  red: { bg: 'bg-red-50', icon: 'bg-red-100 text-red-600', text: 'text-red-900' },
-  purple: { bg: 'bg-purple-50', icon: 'bg-purple-100 text-purple-600', text: 'text-purple-900' },
+  blue:   { iconBg: 'bg-blue-500/15',   iconText: 'text-blue-400',   valueText: 'text-blue-300' },
+  green:  { iconBg: 'bg-emerald-500/15', iconText: 'text-emerald-400', valueText: 'text-emerald-300' },
+  yellow: { iconBg: 'bg-amber-500/15',  iconText: 'text-amber-400',  valueText: 'text-amber-300' },
+  red:    { iconBg: 'bg-rose-500/15',   iconText: 'text-rose-400',   valueText: 'text-rose-300' },
+  purple: { iconBg: 'bg-violet-500/15', iconText: 'text-violet-400', valueText: 'text-violet-300' },
 }
 
 export function MetricCard({
@@ -28,38 +30,55 @@ export function MetricCard({
   trend,
   color = 'blue',
   className,
+  href,
 }: MetricCardProps) {
   const colors = colorMap[color]
 
-  return (
-    <Card className={cn('overflow-hidden', className)}>
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <p className="text-sm text-muted-foreground font-medium">{title}</p>
-            <p className={cn('text-2xl font-bold mt-1 money', colors.text)}>{value}</p>
-            {description && (
-              <p className="text-xs text-muted-foreground mt-1">{description}</p>
-            )}
-            {trend && (
-              <div
-                className={cn(
-                  'flex items-center gap-1 mt-2 text-xs font-medium',
-                  trend.value >= 0 ? 'text-green-600' : 'text-red-600'
-                )}
-              >
-                <span>{trend.value >= 0 ? '↑' : '↓'}</span>
-                <span>
-                  {Math.abs(trend.value)}% {trend.label}
-                </span>
-              </div>
-            )}
-          </div>
-          <div className={cn('rounded-xl p-3', colors.icon)}>
-            <Icon className="h-5 w-5" />
-          </div>
+  const inner = (
+    <CardContent className="p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0 space-y-1">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            {title}
+          </p>
+          <p className={cn('text-2xl font-bold money leading-tight', colors.valueText)}>
+            {value}
+          </p>
+          {description && (
+            <p className="text-xs text-muted-foreground">{description}</p>
+          )}
+          {trend && (
+            <div
+              className={cn(
+                'flex items-center gap-1 text-xs font-semibold',
+                trend.value >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              )}
+            >
+              <span>{trend.value >= 0 ? '↑' : '↓'}</span>
+              <span>{Math.abs(trend.value)}% {trend.label}</span>
+            </div>
+          )}
         </div>
-      </CardContent>
+        <div className={cn('rounded-xl p-3 shrink-0', colors.iconBg)}>
+          <Icon className={cn('h-5 w-5', colors.iconText)} />
+        </div>
+      </div>
+    </CardContent>
+  )
+
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        <Card className={cn('overflow-hidden border-border/50 shadow-card transition-all hover:shadow-md hover:border-border', className)}>
+          {inner}
+        </Card>
+      </Link>
+    )
+  }
+
+  return (
+    <Card className={cn('overflow-hidden border-border/50 shadow-card', className)}>
+      {inner}
     </Card>
   )
 }

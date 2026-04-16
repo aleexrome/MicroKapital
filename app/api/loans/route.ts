@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
+import { scopedLoanWhere } from '@/lib/access'
 import { z } from 'zod'
 import { calcLoan } from '@/lib/financial-formulas'
 import { generarFechasSemanales, generarFechasHabiles } from '@/lib/business-days'
@@ -8,45 +10,49 @@ import { createAuditLog } from '@/lib/audit'
 
 const createLoanSchema = z.object({
   clientId: z.string().uuid(),
-  tipo: z.enum(['SOLIDARIO', 'INDIVIDUAL', 'AGIL']),
+  tipo: z.enum(['SOLIDARIO', 'INDIVIDUAL', 'AGIL', 'FIDUCIARIO']),
   capital: z.number().positive(),
   tasaInteres: z.number().positive().optional(),
   cobradorId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
   loanGroupId: z.string().uuid().optional(),
   notas: z.string().optional(),
+  // Campos de comportamiento
+  ciclo: z.number().int().min(1).optional(),
+  tuvoAtraso: z.boolean().optional(),
+  clienteIrregular: z.boolean().optional(),
+  tipoGrupo: z.enum(['REGULAR', 'RESCATE']).optional(),
+  // Campos FIDUCIARIO
+  tipoGarantia: z.enum(['MUEBLE', 'INMUEBLE']).optional(),
+  descripcionGarantia: z.string().optional(),
+  valorGarantia: z.number().positive().optional(),
+  // Aval (INDIVIDUAL y FIDUCIARIO)
   avalNombre: z.string().optional(),
   avalTelefono: z.string().optional(),
   avalRelacion: z.string().optional(),
 })
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { rol, companyId, branchId } = session.user
-
-  let cobradorIdFilter: string | undefined
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorIdFilter = cobrador?.id
-  }
+  const { companyId } = session.user
 
   const estado = req.nextUrl.searchParams.get('estado')
 
+  // Alcance por rol/sucursal — fail-closed si falta sucursal.
+  const where: Prisma.LoanWhereInput = {
+    companyId: companyId!,
+    AND: [scopedLoanWhere(session.user)],
+    ...(estado ? { estado: estado as 'PENDING_APPROVAL' | 'ACTIVE' | 'LIQUIDATED' | 'REJECTED' | 'RESTRUCTURED' | 'DEFAULTED' } : {}),
+  }
+
   const loans = await prisma.loan.findMany({
-    where: {
-      companyId: companyId!,
-      ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
-      ...(estado ? { estado: estado as 'PENDING_APPROVAL' | 'ACTIVE' | 'LIQUIDATED' | 'REJECTED' | 'RESTRUCTURED' | 'DEFAULTED' } : {}),
-    },
+    where,
     orderBy: { createdAt: 'desc' },
     take: 50,
     include: {
-      client: { select: { id: true, nombreCompleto: true, telefono: true, score: true } },
+      client: { select: { nombreCompleto: true } },
       cobrador: { select: { nombre: true } },
     },
   })
@@ -55,10 +61,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { rol, companyId, branchId, id: userId } = session.user
+
+  const rolesPermitidos = ['COORDINADOR', 'GERENTE_ZONAL', 'SUPER_ADMIN']
+  if (!rolesPermitidos.includes(rol)) {
+    return NextResponse.json({ error: 'Sin permisos para crear solicitudes de crédito' }, { status: 403 })
+  }
+
   const body = await req.json()
   const parsed = createLoanSchema.safeParse(body)
 
@@ -68,17 +80,21 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Obtener tasa desde settings si no se envía
+  // Para FIDUCIARIO la tasa la define la empresa; para los demás está fija en las fórmulas
   let tasaInteres = data.tasaInteres
-  if (!tasaInteres) {
-    const settingKey = data.tipo === 'SOLIDARIO' ? 'tasa_solidario' : 'tasa_individual'
+  if (!tasaInteres && data.tipo === 'FIDUCIARIO') {
     const setting = await prisma.companySetting.findFirst({
-      where: { companyId: companyId!, clave: settingKey },
+      where: { companyId: companyId!, clave: 'tasa_fiduciario' },
     })
-    tasaInteres = setting ? parseFloat(setting.valor) : (data.tipo === 'SOLIDARIO' ? 0.40 : 0.30)
+    tasaInteres = setting ? parseFloat(setting.valor) : 0.30
   }
 
-  const calc = calcLoan(data.tipo, data.capital, tasaInteres)
+  const calc = calcLoan(data.tipo, data.capital, tasaInteres, {
+    ciclo: data.ciclo,
+    tuvoAtraso: data.tuvoAtraso,
+    clienteIrregular: data.clienteIrregular,
+    tipoGrupo: data.tipoGrupo,
+  })
 
   // Verificar que el cliente pertenezca a la empresa
   const client = await prisma.client.findFirst({
@@ -86,15 +102,15 @@ export async function POST(req: NextRequest) {
   })
   if (!client) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
 
-  const targetBranchId = data.branchId ?? branchId ?? client.branchId
+  const targetBranchId = data.branchId ?? branchId ?? session.user.zonaBranchIds?.[0] ?? client.branchId
   if (!targetBranchId) return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
 
+  // Coordinador y Gerente Zonal: se asignan a sí mismos como cobrador
+  // Solo Super Admin puede asignar a otro cobrador (envía cobradorId en el body)
+  const isCampo = rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL'
   let cobradorId = data.cobradorId
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorId = cobrador?.id
+  if (isCampo) {
+    cobradorId = userId
   }
   if (!cobradorId) return NextResponse.json({ error: 'Cobrador requerido' }, { status: 400 })
 
@@ -116,11 +132,19 @@ export async function POST(req: NextRequest) {
         totalPago: calc.totalPago,
         pagoSemanal: calc.pagoSemanal ?? null,
         pagoDiario: calc.pagoDiario ?? null,
+        pagoQuincenal: calc.pagoQuincenal ?? null,
         plazo: calc.plazo,
-        notas: data.notas ?? null,
+        ciclo: data.ciclo ?? 1,
+        tuvoAtraso: data.tuvoAtraso ?? false,
+        clienteIrregular: data.clienteIrregular ?? false,
+        tipoGrupo: data.tipoGrupo ?? null,
+        tipoGarantia: data.tipoGarantia ?? null,
+        descripcionGarantia: data.descripcionGarantia ?? null,
+        valorGarantia: data.valorGarantia ?? null,
         avalNombre: data.avalNombre ?? null,
         avalTelefono: data.avalTelefono ?? null,
         avalRelacion: data.avalRelacion ?? null,
+        notas: data.notas ?? null,
       },
     })
 

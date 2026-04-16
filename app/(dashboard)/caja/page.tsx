@@ -26,10 +26,18 @@ export default async function CajaPage() {
   })
 
   if (!caja) {
+    // Si el usuario no tiene sucursal asignada (ej. GERENTE), usar la primera sucursal de la empresa
+    let branchId = cobrador.branchId
+    if (!branchId) {
+      const branch = await prisma.branch.findFirst({ where: { companyId: companyId! } })
+      if (!branch) redirect('/dashboard')
+      branchId = branch.id
+    }
+
     caja = await prisma.cashRegister.create({
       data: {
         cobradorId: cobrador.id,
-        branchId: cobrador.branchId!,
+        branchId,
         fecha: today,
         estado: 'OPEN',
       },
@@ -42,7 +50,11 @@ export default async function CajaPage() {
       cobradorId: cobrador.id,
       fechaHora: { gte: today },
     },
-    include: {
+    select: {
+      id: true,
+      monto: true,
+      metodoPago: true,
+      fechaHora: true,
       client: { select: { nombreCompleto: true } },
       loan: { select: { tipo: true } },
     },
@@ -57,7 +69,7 @@ export default async function CajaPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Caja del día</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Corte del Día</h1>
         <p className="text-muted-foreground">{formatDate(today, "EEEE d 'de' MMMM, yyyy")}</p>
       </div>
 

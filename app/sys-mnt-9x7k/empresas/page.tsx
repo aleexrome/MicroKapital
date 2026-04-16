@@ -5,6 +5,8 @@ import { formatDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 const LICENSE_STATUS_BADGE: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'secondary' }> = {
   ACTIVE:    { label: 'Activa',     variant: 'success' },
   GRACE:     { label: 'Gracia',     variant: 'warning' },

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
@@ -21,7 +21,7 @@ const createCompanySchema = z.object({
 })
 
 export async function GET() {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user || session.user.rol !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
@@ -39,7 +39,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user || session.user.rol !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }

@@ -1,14 +1,15 @@
-import { getScoreInfo } from '@/lib/score-calculator'
+import { getScoreInfo, getScoreFromOverdue } from '@/lib/score-calculator'
 import { cn } from '@/lib/utils'
 
 interface ScoreBadgeProps {
   score: number
+  overdueCount?: number
   showLabel?: boolean
   size?: 'sm' | 'md' | 'lg'
 }
 
-export function ScoreBadge({ score, showLabel = true, size = 'md' }: ScoreBadgeProps) {
-  const info = getScoreInfo(score)
+export function ScoreBadge({ score, overdueCount, showLabel = true, size = 'md' }: ScoreBadgeProps) {
+  const info = overdueCount !== undefined ? getScoreFromOverdue(overdueCount) : getScoreInfo(score)
 
   const emoji =
     info.nivel === 'ALTO_RIESGO'
@@ -32,7 +33,7 @@ export function ScoreBadge({ score, showLabel = true, size = 'md' }: ScoreBadgeP
       style={{ backgroundColor: info.color + '20', color: info.color }}
     >
       <span>{emoji}</span>
-      <span className="tabular-nums">{score}</span>
+      <span className="tabular-nums">{info.score}</span>
       {showLabel && <span>{info.label}</span>}
     </div>
   )

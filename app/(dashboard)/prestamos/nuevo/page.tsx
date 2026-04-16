@@ -1,344 +1,642 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoanCalculator } from '@/components/loans/LoanCalculator'
+import { ClientSearch } from '@/components/clients/ClientSearch'
 import { useToast } from '@/components/ui/use-toast'
-import { ArrowLeft, Loader2, AlertTriangle, Info, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, Loader2, UserCheck, FileText, X, CheckCircle2, Users, Plus } from 'lucide-react'
 import Link from 'next/link'
+import { calcLoan } from '@/lib/financial-formulas'
+import { formatMoney } from '@/lib/utils'
 import type { LoanCalculation } from '@/types'
 
-type LoanTipo = 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL'
+type LoanTipo = 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO'
+interface QueuedDoc { id: string; tipo: string; file: File }
+interface Miembro { id: string; nombre: string; capital: string }
 
-const TIPO_LABELS: Record<LoanTipo, string> = {
-  SOLIDARIO: 'Grupo Solidario — 8 semanas',
-  INDIVIDUAL: 'Crédito Individual — 12 semanas',
-  AGIL: 'Cobranza Ágil — 24 días hábiles',
+const DOC_LABELS: Record<string, string> = {
+  SOLICITUD:             'Solicitud de crédito',
+  INE_FRENTE:            'INE — frente',
+  INE_REVERSO:           'INE — reverso',
+  COMPROBANTE_DOMICILIO: 'Comprobante de domicilio',
+  CONTRATO:              'Contrato firmado',
+  PAGARE:                'Pagaré',
+  FOTO:                  'Fotografía',
+  AVAL_INE:              'INE del aval',
+  OTRO:                  'Otro',
 }
 
-const DEFAULT_TASAS: Record<LoanTipo, number> = {
-  SOLIDARIO: 0.40,
-  INDIVIDUAL: 0.30,
-  AGIL: 0.56,
+const DOCS_REQUERIDOS: Record<LoanTipo, string[]> = {
+  SOLIDARIO:  ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO', 'FOTO'],
+  INDIVIDUAL: ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO', 'COMPROBANTE_DOMICILIO', 'FOTO', 'PAGARE', 'AVAL_INE'],
+  AGIL:       ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO'],
+  FIDUCIARIO: ['SOLICITUD', 'INE_FRENTE', 'INE_REVERSO', 'COMPROBANTE_DOMICILIO', 'FOTO', 'CONTRATO', 'PAGARE', 'AVAL_INE'],
 }
 
-interface AvalMatchItem {
-  loanId: string
-  loanEstado: string
-  loanTipo: string
-  capital: number
-  clienteNombre: string
-  clienteScore: number
-  scoreColor: string
-  scoreLabel: string
-  scoreNivel: string
-  matchType: string
+const TIPO_INFO: Record<LoanTipo, { label: string; plazo: string; desc: string }> = {
+  SOLIDARIO:   { label: 'Grupo Solidario',   plazo: '8 semanas',       desc: '$175/$195 por cada mil · 4–5 integrantes' },
+  INDIVIDUAL:  { label: 'Individual',         plazo: '12 semanas',      desc: '$170 por cada mil · comisión por ciclo' },
+  AGIL:        { label: 'Cobranza Ágil',      plazo: '24 días hábiles', desc: '$65/$75 por cada mil · 18–45 años' },
+  FIDUCIARIO:  { label: 'Fiduciario',         plazo: '12 quincenas',    desc: '10% comisión · garantía mueble o inmueble' },
 }
 
-export default function NuevoPrestamopPage() {
+const MIEMBRO_VACIO: Miembro = { id: '', nombre: '', capital: '' }
+
+export default function NuevaSolicitudPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
 
   const [tipo, setTipo] = useState<LoanTipo>('INDIVIDUAL')
   const [capital, setCapital] = useState('')
-  const [clienteId, setClienteId] = useState(searchParams.get('clienteId') ?? '')
   const [notas, setNotas] = useState('')
-  const [avalNombre, setAvalNombre] = useState('')
-  const [avalTelefono, setAvalTelefono] = useState('')
-  const [avalRelacion, setAvalRelacion] = useState('')
   const [loading, setLoading] = useState(false)
   const [calc, setCalc] = useState<LoanCalculation | null>(null)
 
-  // Aval check state
-  const [avalMatches, setAvalMatches] = useState<AvalMatchItem[]>([])
-  const [avalRiskLevel, setAvalRiskLevel] = useState<string | null>(null)
-  const [checkingAval, setCheckingAval] = useState(false)
+  // Cliente único (INDIVIDUAL, AGIL, FIDUCIARIO)
+  const [clienteId, setClienteId]     = useState(searchParams.get('clienteId') ?? '')
+  const [clienteNombre, setClienteNombre] = useState(searchParams.get('clienteNombre') ?? '')
+
+  // Grupo solidario
+  const [nombreGrupo, setNombreGrupo] = useState('')
+  const [miembros, setMiembros]       = useState<Miembro[]>([
+    { ...MIEMBRO_VACIO }, { ...MIEMBRO_VACIO }, { ...MIEMBRO_VACIO }, { ...MIEMBRO_VACIO },
+  ])
+
+  // Campos por tipo
+  const [tipoGrupo, setTipoGrupo]           = useState<'REGULAR' | 'RESCATE'>('REGULAR')
+  const [ciclo, setCiclo]                   = useState(1)
+  const [tuvoAtraso, setTuvoAtraso]         = useState(false)
+  const [clienteIrregular, setClienteIrregular] = useState(false)
+  const [tasaFid, setTasaFid]               = useState('0.30')
+  const [tipoGarantia, setTipoGarantia]     = useState<'MUEBLE' | 'INMUEBLE'>('INMUEBLE')
+  const [descGarantia, setDescGarantia]     = useState('')
+  const [valorGarantia, setValorGarantia]   = useState('')
+  const [avalNombre, setAvalNombre]         = useState('')
+  const [avalTelefono, setAvalTelefono]     = useState('')
+  const [avalRelacion, setAvalRelacion]     = useState('')
+
+  // Cola de documentos
+  const [queuedDocs, setQueuedDocs] = useState<QueuedDoc[]>([])
+  const [newDocTipo, setNewDocTipo]  = useState('SOLICITUD')
+  const fileInputRef                 = useRef<HTMLInputElement>(null)
 
   const handleCalc = useCallback((c: LoanCalculation) => setCalc(c), [])
 
-  // Lookup client name/phone when UUID is entered, then check aval matches
-  const [clienteName, setClienteName] = useState('')
-  const [clientePhone, setClientePhone] = useState('')
+  const capitalNum = Number(capital)
 
-  useEffect(() => {
-    if (!clienteId || clienteId.length < 36) {
-      setClienteName('')
-      setClientePhone('')
-      setAvalMatches([])
-      setAvalRiskLevel(null)
-      return
-    }
-    let cancelled = false
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/clients/${clienteId}`)
-        if (res.ok && !cancelled) {
-          const { data } = await res.json()
-          setClienteName(data.nombreCompleto ?? '')
-          setClientePhone(data.telefono ?? '')
-        }
-      } catch {
-        // ignore
-      }
-    }, 300)
-    return () => { cancelled = true; clearTimeout(timer) }
-  }, [clienteId])
+  // — Miembros solidario —
+  function updateMiembro(i: number, id: string, nombre: string) {
+    setMiembros((prev) => prev.map((m, idx) => idx === i ? { ...m, id, nombre } : m))
+  }
+  function updateMiembroCapital(i: number, capital: string) {
+    setMiembros((prev) => prev.map((m, idx) => idx === i ? { ...m, capital } : m))
+  }
+  function addMiembro() {
+    if (miembros.length < 5) setMiembros((prev) => [...prev, { ...MIEMBRO_VACIO }])
+  }
+  function removeMiembro(i: number) {
+    if (miembros.length > 4) setMiembros((prev) => prev.filter((_, idx) => idx !== i))
+  }
 
-  useEffect(() => {
-    if (!clienteName) {
-      setAvalMatches([])
-      setAvalRiskLevel(null)
-      return
-    }
-    let cancelled = false
-    setCheckingAval(true)
-    const timer = setTimeout(async () => {
-      try {
-        const params = new URLSearchParams({ nombre: clienteName })
-        if (clientePhone) params.set('telefono', clientePhone)
-        const res = await fetch(`/api/aval-check?${params}`)
-        if (res.ok && !cancelled) {
-          const { data } = await res.json()
-          setAvalMatches(data.matches ?? [])
-          setAvalRiskLevel(data.riskLevel)
-        }
-      } catch {
-        // ignore
-      }
-      if (!cancelled) setCheckingAval(false)
-    }, 300)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [clienteName, clientePhone])
+  const miembrosValidos = miembros.filter((m) => m.id)
+  const capitalGrupalTotal = miembrosValidos.reduce((s, m) => s + Number(m.capital || 0), 0)
+
+  // — Documentos —
+  function handleAddDoc(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setQueuedDocs((prev) => [...prev, { id: crypto.randomUUID(), tipo: newDocTipo, file }])
+    e.target.value = ''
+  }
+  function removeDoc(id: string) {
+    setQueuedDocs((prev) => prev.filter((d) => d.id !== id))
+  }
+
+  async function uploadDocs(loanIds: string[]) {
+    if (queuedDocs.length === 0) return
+    await Promise.all(
+      loanIds.flatMap((loanId) =>
+        queuedDocs.map(async (doc) => {
+          const fd = new FormData()
+          fd.append('file', doc.file)
+          fd.append('tipo', doc.tipo)
+          await fetch(`/api/loans/${loanId}/documents`, { method: 'POST', body: fd })
+        })
+      )
+    )
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!clienteId || !capital) return
-    setLoading(true)
+    if (tipo !== 'SOLIDARIO' && !capital) return
 
+    if (tipo === 'SOLIDARIO') {
+      if (miembrosValidos.length < 4) {
+        toast({ title: 'Faltan integrantes', description: 'El grupo solidario requiere mínimo 4 integrantes', variant: 'destructive' })
+        return
+      }
+    } else {
+      if (!clienteId) return
+    }
+
+    setLoading(true)
     try {
-      const res = await fetch('/api/loans', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      if (tipo === 'SOLIDARIO') {
+        // Crear grupo + préstamos para todos los integrantes
+        const res = await fetch('/api/loan-groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nombre: nombreGrupo || `Grupo ${new Date().toLocaleDateString('es-MX')}`,
+            clientIds: miembrosValidos.map((m) => m.id),
+            capitales: miembrosValidos.map((m) => Number(m.capital)),
+            tipoGrupo,
+            notas: notas || undefined,
+          }),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          throw new Error(typeof err.error === 'string' ? err.error : 'Error al crear grupo')
+        }
+        const { data } = await res.json()
+        const loanIds: string[] = data.loans.map((l: { id: string }) => l.id)
+        await uploadDocs(loanIds)
+        toast({
+          title: '✅ Grupo solidario creado',
+          description: `${miembrosValidos.length} integrantes · ${queuedDocs.length} documento(s) subidos`,
+        })
+        router.push(`/prestamos/${loanIds[0]}`)
+      } else {
+        // Préstamo individual
+        const body: Record<string, unknown> = {
           clientId: clienteId,
           tipo,
-          capital: parseFloat(capital),
-          tasaInteres: DEFAULT_TASAS[tipo],
+          capital: capitalNum,
           notas: notas || undefined,
-          avalNombre: avalNombre || undefined,
-          avalTelefono: avalTelefono || undefined,
-          avalRelacion: avalRelacion || undefined,
-        }),
-      })
+        }
+        if (tipo === 'INDIVIDUAL') {
+          body.ciclo = ciclo
+          body.tuvoAtraso = tuvoAtraso
+          if (avalNombre) { body.avalNombre = avalNombre; body.avalTelefono = avalTelefono || undefined; body.avalRelacion = avalRelacion || undefined }
+        } else if (tipo === 'AGIL') {
+          body.clienteIrregular = clienteIrregular
+        } else if (tipo === 'FIDUCIARIO') {
+          body.tasaInteres = parseFloat(tasaFid)
+          body.tipoGarantia = tipoGarantia
+          body.descripcionGarantia = descGarantia || undefined
+          body.valorGarantia = valorGarantia ? parseFloat(valorGarantia) : undefined
+          if (avalNombre) { body.avalNombre = avalNombre; body.avalTelefono = avalTelefono || undefined; body.avalRelacion = avalRelacion || undefined }
+        }
 
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(JSON.stringify(err.error))
+        const res = await fetch('/api/loans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          throw new Error(typeof err.error === 'string' ? err.error : 'Error al crear solicitud')
+        }
+        const { data } = await res.json()
+        await uploadDocs([data.id])
+        toast({
+          title: '✅ Solicitud enviada',
+          description: queuedDocs.length > 0 ? `${queuedDocs.length} documento(s) subidos` : 'Pendiente de aprobación',
+        })
+        router.push(`/prestamos/${data.id}`)
       }
-
-      const { data } = await res.json()
-      toast({ title: '✅ Solicitud de préstamo creada', description: 'Pendiente de aprobación del gerente' })
-      router.push(`/prestamos/${data.id}`)
     } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Error al crear solicitud',
-        variant: 'destructive',
-      })
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' })
       setLoading(false)
     }
   }
 
-  const ESTADO_LABELS: Record<string, string> = {
-    ACTIVE: 'Activo',
-    PENDING_APPROVAL: 'Pendiente',
-    DEFAULTED: 'Incumplido',
-    RESTRUCTURED: 'Reestructurado',
-  }
+  const canSubmit = !loading && (
+    tipo === 'SOLIDARIO'
+      ? miembrosValidos.length >= 4 && miembrosValidos.every((m) => Number(m.capital) >= 100)
+      : !!capital && !!clienteId
+  )
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-6">
+    <div className="p-6 max-w-2xl mx-auto space-y-5">
       <div className="flex items-center gap-3">
         <Button asChild variant="ghost" size="icon">
           <Link href="/prestamos"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div>
           <h1 className="text-2xl font-bold">Nueva solicitud de préstamo</h1>
-          <p className="text-muted-foreground">La gerente deberá aprobar para activar</p>
+          <p className="text-muted-foreground">Requiere aprobación del Director General</p>
         </div>
       </div>
 
-      {/* Aval warning banner */}
-      {avalMatches.length > 0 && (
-        <Card className={
-          avalRiskLevel === 'red'
-            ? 'border-red-400 bg-red-50'
-            : avalRiskLevel === 'yellow'
-            ? 'border-yellow-400 bg-yellow-50'
-            : 'border-blue-300 bg-blue-50'
-        }>
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              {avalRiskLevel === 'red' ? (
-                <ShieldAlert className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-              ) : avalRiskLevel === 'yellow' ? (
-                <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-              ) : (
-                <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              )}
-              <div className="flex-1">
-                <p className={`font-semibold text-sm ${
-                  avalRiskLevel === 'red' ? 'text-red-800' : avalRiskLevel === 'yellow' ? 'text-yellow-800' : 'text-blue-800'
-                }`}>
-                  Este cliente aparece como aval en {avalMatches.length} préstamo(s)
-                </p>
-                <div className="mt-2 space-y-1.5">
-                  {avalMatches.map((m) => (
-                    <div key={m.loanId} className="text-sm flex items-center gap-2">
-                      <span
-                        className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: m.scoreColor }}
-                      />
-                      <span>
-                        Aval de <strong>{m.clienteNombre}</strong> — {m.loanTipo} {ESTADO_LABELS[m.loanEstado] ?? m.loanEstado} — Score: {m.clienteScore} ({m.scoreLabel})
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Tipo de préstamo */}
+
+        {/* ── Tipo de préstamo ────────────────────────────────── */}
         <Card>
           <CardHeader><CardTitle className="text-base">Tipo de préstamo</CardTitle></CardHeader>
-          <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {(Object.keys(TIPO_LABELS) as LoanTipo[]).map((t) => (
+          <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {(Object.keys(TIPO_INFO) as LoanTipo[]).map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setTipo(t)}
                 className={`rounded-lg border-2 p-3 text-left transition-colors ${
-                  tipo === t
-                    ? 'border-primary-700 bg-primary-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                  tipo === t ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/40'
                 }`}
               >
-                <p className="font-medium text-sm">{t}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t === 'SOLIDARIO' ? '8 semanas' : t === 'INDIVIDUAL' ? '12 semanas' : '24 días hábiles'}
-                </p>
+                <p className="font-semibold text-sm">{TIPO_INFO[t].label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{TIPO_INFO[t].plazo}</p>
               </button>
             ))}
           </CardContent>
         </Card>
 
-        {/* Datos del préstamo */}
+        {/* ── Datos de la solicitud ───────────────────────────── */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Datos del préstamo</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Datos de la solicitud</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="clienteId">ID del cliente *</Label>
-              <Input
-                id="clienteId"
-                value={clienteId}
-                onChange={(e) => setClienteId(e.target.value)}
-                placeholder="UUID del cliente"
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Puedes copiarlo desde el expediente del cliente
-              </p>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="capital">Capital a prestar *</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                <Input
-                  id="capital"
-                  type="number"
-                  min="100"
-                  step="100"
-                  value={capital}
-                  onChange={(e) => setCapital(e.target.value)}
-                  className="pl-8"
-                  placeholder="5000.00"
-                  required
+            {/* Cliente — búsqueda por nombre (no solidario) */}
+            {tipo !== 'SOLIDARIO' && (
+              <div className="space-y-1.5">
+                <Label>Cliente *</Label>
+                <ClientSearch
+                  value={clienteId}
+                  nombre={clienteNombre}
+                  onChange={(id, nombre) => { setClienteId(id); setClienteNombre(nombre) }}
+                  placeholder="Buscar cliente por nombre..."
                 />
+              </div>
+            )}
+
+            {/* Integrantes — SOLIDARIO */}
+            {tipo === 'SOLIDARIO' && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Nombre del grupo (opcional)</Label>
+                  <Input
+                    value={nombreGrupo}
+                    onChange={(e) => setNombreGrupo(e.target.value)}
+                    placeholder="Ej: Las Flores, Grupo Esperanza..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      Integrantes del grupo
+                      <span className={`text-xs font-normal px-2 py-0.5 rounded-full ${
+                        miembrosValidos.length >= 4 ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
+                      }`}>
+                        {miembrosValidos.length}/5 {miembrosValidos.length < 4 ? '(mín. 4)' : ''}
+                      </span>
+                    </Label>
+                    {miembros.length < 5 && (
+                      <button
+                        type="button"
+                        onClick={addMiembro}
+                        className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Agregar integrante
+                      </button>
+                    )}
+                  </div>
+
+                  {miembros.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-5 shrink-0 text-right">{i + 1}.</span>
+                      <div className="flex-1">
+                        <ClientSearch
+                          value={m.id}
+                          nombre={m.nombre}
+                          onChange={(id, nombre) => updateMiembro(i, id, nombre)}
+                          placeholder={`Integrante ${i + 1}...`}
+                        />
+                      </div>
+                      <div className="relative w-28 shrink-0">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+                        <Input
+                          type="number"
+                          min="100"
+                          step="100"
+                          value={m.capital}
+                          onChange={(e) => updateMiembroCapital(i, e.target.value)}
+                          className="pl-5 h-9 text-sm"
+                          placeholder="capital"
+                        />
+                      </div>
+                      {miembros.length > 4 && (
+                        <button
+                          type="button"
+                          onClick={() => removeMiembro(i)}
+                          className="shrink-0 p-1 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Capital */}
+            {tipo !== 'SOLIDARIO' ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="capital">Capital a prestar *</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                  <Input
+                    id="capital"
+                    type="number"
+                    min="100"
+                    step="100"
+                    value={capital}
+                    onChange={(e) => setCapital(e.target.value)}
+                    className="pl-7"
+                    placeholder="5000"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">{TIPO_INFO[tipo].desc}</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label>Capital total del grupo</Label>
+                <p className="text-2xl font-bold text-primary">
+                  {capitalGrupalTotal > 0 ? formatMoney(capitalGrupalTotal) : '—'}
+                </p>
+                <p className="text-xs text-muted-foreground">Suma de los capitales individuales · {TIPO_INFO[tipo].desc}</p>
+              </div>
+            )}
+
+            {/* SOLIDARIO: tipo de grupo */}
+            {tipo === 'SOLIDARIO' && (
+              <div className="space-y-1.5">
+                <Label>Tipo de grupo</Label>
+                <div className="flex gap-3">
+                  {(['REGULAR', 'RESCATE'] as const).map((g) => (
+                    <button key={g} type="button" onClick={() => setTipoGrupo(g)}
+                      className={`flex-1 rounded-lg border-2 py-2 text-sm font-medium transition-colors ${
+                        tipoGrupo === g ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/40'
+                      }`}
+                    >
+                      {g === 'REGULAR' ? 'Regular · $175/mil' : 'Rescate · $195/mil'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* INDIVIDUAL */}
+            {tipo === 'INDIVIDUAL' && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Ciclo del cliente</Label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3].map((c) => (
+                      <button key={c} type="button" onClick={() => setCiclo(c)}
+                        className={`flex-1 rounded-lg border-2 py-2 text-sm font-medium transition-colors ${
+                          ciclo === c ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/40'
+                        }`}
+                      >
+                        Ciclo {c}{c === 3 ? '+' : ''}<br />
+                        <span className="text-xs font-normal text-muted-foreground">
+                          {c === 1 ? '10%' : c === 2 ? '7%' : '5%'} comisión
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={tuvoAtraso} onChange={(e) => setTuvoAtraso(e.target.checked)} className="rounded" />
+                  <span className="text-sm">Cliente tuvo atraso en ciclo anterior <span className="text-muted-foreground">(comisión 12%)</span></span>
+                </label>
+              </div>
+            )}
+
+            {/* ÁGIL */}
+            {tipo === 'AGIL' && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={clienteIrregular} onChange={(e) => setClienteIrregular(e.target.checked)} className="rounded" />
+                <span className="text-sm">Cliente irregular <span className="text-muted-foreground">($75/mil en lugar de $65/mil)</span></span>
+              </label>
+            )}
+
+            {/* FIDUCIARIO */}
+            {tipo === 'FIDUCIARIO' && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Tipo de garantía</Label>
+                  <div className="flex gap-3">
+                    {(['MUEBLE', 'INMUEBLE'] as const).map((g) => (
+                      <button key={g} type="button" onClick={() => setTipoGarantia(g)}
+                        className={`flex-1 rounded-lg border-2 py-2 text-sm font-medium transition-colors ${
+                          tipoGarantia === g ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/40'
+                        }`}
+                      >
+                        {g === 'MUEBLE' ? 'Bien Mueble' : 'Bien Inmueble'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="descGarantia">Descripción de la garantía</Label>
+                  <Input id="descGarantia" value={descGarantia} onChange={(e) => setDescGarantia(e.target.value)} placeholder="Ej: Televisión Samsung 55 pulgadas" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="valorGarantia">Valor avaluado ($)</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                    <Input id="valorGarantia" type="number" min="0" step="100" value={valorGarantia} onChange={(e) => setValorGarantia(e.target.value)} className="pl-7" placeholder="10000" />
+                  </div>
+                  {valorGarantia && Number(valorGarantia) > 0 && (
+                    <p className="text-xs text-muted-foreground">Capital permitido: ${(Number(valorGarantia) * 0.40).toLocaleString()} – ${(Number(valorGarantia) * 0.50).toLocaleString()}</p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="tasaFid">Tasa de interés (%)</Label>
+                  <div className="relative">
+                    <Input id="tasaFid" type="number" min="0.01" max="1" step="0.01" value={tasaFid} onChange={(e) => setTasaFid(e.target.value)} className="pr-8" placeholder="0.30" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Aval */}
+            {(tipo === 'INDIVIDUAL' || tipo === 'FIDUCIARIO') && (
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
+                <p className="text-sm font-semibold flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-primary" />
+                  Datos del aval
+                  <span className="text-xs font-normal text-muted-foreground">(garantía personal requerida)</span>
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Nombre completo *</Label>
+                    <Input value={avalNombre} onChange={(e) => setAvalNombre(e.target.value)} placeholder="Nombre del aval" required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Teléfono</Label>
+                    <Input value={avalTelefono} onChange={(e) => setAvalTelefono(e.target.value)} placeholder="10 dígitos" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Relación</Label>
+                    <select value={avalRelacion} onChange={(e) => setAvalRelacion(e.target.value)}
+                      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+                      <option value="">Seleccionar...</option>
+                      <option value="CONYUGE">Cónyuge</option>
+                      <option value="FAMILIAR">Familiar directo</option>
+                      <option value="CONOCIDO">Conocido / Amigo</option>
+                      <option value="OTRO">Otro</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label>Notas (opcional)</Label>
+              <Input value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Observaciones del préstamo..." />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Documentos del crédito ──────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Documentos del crédito
+              </span>
+              {queuedDocs.length > 0 && (
+                <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
+                  {queuedDocs.length} listo{queuedDocs.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Requeridos para {TIPO_INFO[tipo].label}:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {DOCS_REQUERIDOS[tipo].map((req) => {
+                  const cubierto = queuedDocs.some((d) => d.tipo === req)
+                  return (
+                    <span key={req} className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
+                      cubierto
+                        ? 'bg-green-500/15 text-green-400 border border-green-500/30'
+                        : 'bg-muted text-muted-foreground border border-transparent'
+                    }`}>
+                      {cubierto && <CheckCircle2 className="h-3 w-3" />}
+                      {DOC_LABELS[req]}
+                    </span>
+                  )
+                })}
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="notas">Notas (opcional)</Label>
-              <Input
-                id="notas"
-                value={notas}
-                onChange={(e) => setNotas(e.target.value)}
-                placeholder="Observaciones del préstamo..."
-              />
+            <div className="flex flex-col sm:flex-row gap-2 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-muted-foreground">Tipo de documento</label>
+                <select value={newDocTipo} onChange={(e) => setNewDocTipo(e.target.value)}
+                  className="border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring">
+                  {Object.entries(DOC_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1 flex-1">
+                <label className="text-xs text-muted-foreground">Archivo (PDF, JPG, PNG)</label>
+                <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={handleAddDoc}
+                  className="text-sm file:mr-2 file:text-xs file:border-0 file:rounded file:px-2 file:py-1 file:cursor-pointer"
+                  style={{ background: 'hsl(var(--background))' }} />
+              </div>
             </div>
+
+            {queuedDocs.length > 0 ? (
+              <div className="space-y-1.5">
+                {queuedDocs.map((doc) => (
+                  <div key={doc.id} className="flex items-center justify-between rounded-lg px-3 py-2 text-sm border border-border bg-muted/30">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span className="font-medium shrink-0">{DOC_LABELS[doc.tipo] ?? doc.tipo}</span>
+                      <span className="text-xs text-muted-foreground truncate">{doc.file.name}</span>
+                    </div>
+                    <button type="button" onClick={() => removeDoc(doc.id)}
+                      className="ml-2 shrink-0 p-1 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 transition-colors">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Selecciona el tipo y el archivo para agregar documentos. Se subirán al enviar la solicitud.
+              </p>
+            )}
           </CardContent>
         </Card>
 
-        {/* Datos del aval */}
-        <Card>
-          <CardHeader><CardTitle className="text-base">Datos del aval / garantía</CardTitle></CardHeader>
-          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2 space-y-2">
-              <Label htmlFor="avalNombre">Nombre del aval</Label>
-              <Input
-                id="avalNombre"
-                value={avalNombre}
-                onChange={(e) => setAvalNombre(e.target.value)}
-                placeholder="Nombre completo del aval"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="avalTelefono">Teléfono del aval</Label>
-              <Input
-                id="avalTelefono"
-                value={avalTelefono}
-                onChange={(e) => setAvalTelefono(e.target.value)}
-                placeholder="555-0000"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="avalRelacion">Relación con el cliente</Label>
-              <Input
-                id="avalRelacion"
-                value={avalRelacion}
-                onChange={(e) => setAvalRelacion(e.target.value)}
-                placeholder="Hermano, vecino, amigo..."
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Calculadora */}
-        {capital && Number(capital) > 0 && (
+        {/* ── Calculadora ─────────────────────────────────────── */}
+        {tipo !== 'SOLIDARIO' && capitalNum > 0 && (
           <LoanCalculator
             tipo={tipo}
-            capital={Number(capital)}
-            tasaInteres={DEFAULT_TASAS[tipo]}
+            capital={capitalNum}
+            tasaInteres={tipo === 'FIDUCIARIO' ? parseFloat(tasaFid) : undefined}
+            ciclo={tipo === 'INDIVIDUAL' ? ciclo : undefined}
+            tuvoAtraso={tipo === 'INDIVIDUAL' ? tuvoAtraso : undefined}
+            clienteIrregular={tipo === 'AGIL' ? clienteIrregular : undefined}
             onCalc={handleCalc}
           />
         )}
+        {tipo === 'SOLIDARIO' && miembrosValidos.some((m) => Number(m.capital) >= 100) && (
+          <Card className="border-primary-200 bg-primary-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-primary-700">Resumen por integrante</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="divide-y divide-primary-100">
+                {miembros.map((m, i) => {
+                  if (!m.id || Number(m.capital) < 100) return null
+                  const c = calcLoan('SOLIDARIO', Number(m.capital), undefined, { tipoGrupo })
+                  return (
+                    <div key={i} className="py-2 text-sm">
+                      <p className="font-semibold text-primary-800">{m.nombre || `Integrante ${i + 1}`}</p>
+                      <div className="grid grid-cols-2 gap-x-4 mt-1 text-xs">
+                        <span className="text-gray-500">Capital:</span><span className="font-medium money">{formatMoney(c.capital)}</span>
+                        <span className="text-gray-500">Monto a entregar:</span><span className="money">{formatMoney(c.montoReal)}</span>
+                        <span className="text-gray-500">Total a pagar:</span><span className="font-semibold money">{formatMoney(c.totalPago)}</span>
+                        <span className="text-gray-500">Pago semanal:</span><span className="font-semibold text-primary-700 money">{formatMoney(c.pagoSemanal ?? 0)}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+                {capitalGrupalTotal > 0 && (
+                  <div className="pt-2 flex justify-between text-sm font-bold text-primary-800">
+                    <span>Total grupo</span>
+                    <span className="money">{formatMoney(capitalGrupalTotal)}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-        <div className="flex gap-3">
-          <Button type="submit" disabled={loading || !clienteId || !capital} className="flex-1 sm:flex-none">
-            {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando...</> : 'Enviar solicitud'}
+        <div className="flex gap-3 pt-2">
+          <Button type="submit" disabled={!canSubmit} className="flex-1 sm:flex-none">
+            {loading
+              ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Enviando...</>
+              : tipo === 'SOLIDARIO'
+              ? `Enviar grupo solidario (${miembrosValidos.length} integrantes)`
+              : 'Enviar solicitud'}
           </Button>
           <Button type="button" variant="outline" asChild>
             <Link href="/prestamos">Cancelar</Link>

@@ -7,13 +7,13 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.85.0",
     "@auth/prisma-adapter": "^2.7.4",
     "@prisma/client": "^5.22.0",
     "@radix-ui/react-alert-dialog": "^1.1.2",
@@ -41,6 +41,7 @@
     "node-thermal-printer": "^4.3.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "recharts": "^3.8.1",
     "tailwind-merge": "^2.5.5",
     "zod": "^3.23.8",
     "zustand": "^5.0.2"

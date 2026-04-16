@@ -4,26 +4,27 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 213 53% 22%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 213 53% 22%;
-    --radius: 0.5rem;
+    /* ── Dark theme (default) ─────────────────────────── */
+    --background:         242 25% 9%;    /* #111020 */
+    --foreground:         240 28% 92%;   /* #E6E4F8 */
+    --card:               242 22% 13%;   /* #181727 */
+    --card-foreground:    240 28% 92%;
+    --popover:            242 22% 13%;
+    --popover-foreground: 240 28% 92%;
+    --primary:            249 87% 68%;   /* #7B6FFF */
+    --primary-foreground: 0 0% 100%;
+    --secondary:          242 22% 18%;   /* #212038 */
+    --secondary-foreground: 240 20% 72%;
+    --muted:              242 22% 17%;   /* #1E1D34 */
+    --muted-foreground:   240 12% 54%;   /* #80809A */
+    --accent:             249 87% 68%;
+    --accent-foreground:  0 0% 100%;
+    --destructive:        0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border:             242 22% 20%;   /* #252440 */
+    --input:              242 22% 20%;
+    --ring:               249 87% 68%;
+    --radius:             0.875rem;
   }
 }
 
@@ -37,7 +38,32 @@
   }
 }
 
-/* Thermal ticket preview */
+/* ── Dark-theme compatibility overrides ───────────────────
+   Make hardcoded light Tailwind classes respect the dark theme.
+   These apply globally inside the dashboard layout.            */
+.bg-white {
+  background-color: hsl(var(--card)) !important;
+}
+.bg-gray-50 {
+  background-color: hsl(var(--muted)) !important;
+}
+.hover\:bg-gray-50:hover {
+  background-color: hsl(var(--secondary)) !important;
+}
+.text-gray-900, .text-gray-800 {
+  color: hsl(var(--foreground)) !important;
+}
+.text-gray-700 {
+  color: hsl(var(--card-foreground)) !important;
+}
+.text-gray-600 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+.border-b, .divide-y > * {
+  border-color: hsl(var(--border));
+}
+
+/* ── Thermal ticket preview ───────────────────────────── */
 .ticket-preview {
   font-family: 'Courier New', Courier, monospace;
   font-size: 12px;
@@ -45,7 +71,7 @@
   white-space: pre;
 }
 
-/* Money formatting */
+/* ── Money formatting ─────────────────────────────────── */
 .money {
   font-variant-numeric: tabular-nums;
 }

@@ -7,6 +7,7 @@ import { z } from 'zod'
 
 const approveSchema = z.object({
   notas: z.string().optional(),
+  avalOverride: z.boolean().optional(),
   requiereDocumentos: z.boolean().optional(),
   contrapropuesta: z.object({
     capital: z.number().positive(),
@@ -53,6 +54,7 @@ export async function POST(
   const body = await req.json().catch(() => ({}))
   const parsed = approveSchema.safeParse(body)
   const notas = parsed.success ? parsed.data.notas : undefined
+  const avalOverride = parsed.success ? parsed.data.avalOverride : undefined
   const contrapropuesta = parsed.success ? parsed.data.contrapropuesta : undefined
   const requiereDocumentos = parsed.success ? (parsed.data.requiereDocumentos ?? false) : false
 
@@ -138,6 +140,20 @@ export async function POST(
       ...(esRenovacion ? { loanOriginalLiquidado: loan.loanOriginalId } : {}),
     },
   })
+
+  // Log aval override separately for traceability
+  if (avalOverride) {
+    createAuditLog({
+      userId,
+      accion: 'AVAL_OVERRIDE',
+      tabla: 'Loan',
+      registroId: loan.id,
+      valoresNuevos: {
+        motivo: 'Aprobación con aval en mora — consciente del riesgo',
+        aprobadoPorId: userId,
+      },
+    })
+  }
 
   const message = esContrapropuesta
     ? 'Contrapropuesta registrada — el coordinador visitará al cliente para presentar las nuevas condiciones'

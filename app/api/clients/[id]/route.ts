@@ -1,8 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
+
+/**
+ * GET — used by aval-check and other client lookups.
+ */
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const session = await auth()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+
+  const { companyId } = session.user
+
+  const client = await prisma.client.findFirst({
+    where: { id: params.id, companyId: companyId! },
+    select: {
+      id: true,
+      nombreCompleto: true,
+      telefono: true,
+      score: true,
+      activo: true,
+    },
+  })
+
+  if (!client) {
+    return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
+  }
+
+  return NextResponse.json({ data: client })
+}
 
 const updateClientSchema = z.object({
   nombreCompleto:     z.string().min(2, 'Nombre requerido').optional(),
@@ -19,11 +52,11 @@ const updateClientSchema = z.object({
 })
 
 /**
- * Edición de expediente de cliente — solo DIRECTOR_GENERAL.
+ * Edicion de expediente de cliente -- solo DIRECTOR_GENERAL.
  *
  * Stephanie necesita poder corregir errores de captura (p. ej. "|7225634881"
- * o domicilios en minúsculas). El resto de roles NO puede editar clientes
- * — tienen que pedirle a Dirección.
+ * o domicilios en minusculas). El resto de roles NO puede editar clientes
+ * -- tienen que pedirle a Direccion.
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession()
@@ -34,7 +67,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { rol, companyId, id: userId } = session.user
 
   if (rol !== 'DIRECTOR_GENERAL') {
-    return NextResponse.json({ error: 'Solo Dirección General puede editar clientes' }, { status: 403 })
+    return NextResponse.json({ error: 'Solo Direccion General puede editar clientes' }, { status: 403 })
   }
 
   // Verificar que el cliente exista y sea de su empresa
@@ -52,18 +85,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   const data = parsed.data
 
-  // Si se envía un cobradorId, verificar que pertenezca a la misma empresa
+  // Si se envia un cobradorId, verificar que pertenezca a la misma empresa
   if (data.cobradorId) {
     const cobrador = await prisma.user.findFirst({
       where: { id: data.cobradorId, companyId: companyId! },
       select: { id: true },
     })
     if (!cobrador) {
-      return NextResponse.json({ error: 'Cobrador no válido' }, { status: 400 })
+      return NextResponse.json({ error: 'Cobrador no valido' }, { status: 400 })
     }
   }
 
-  // Normalización — mismo criterio que POST: nombres en MAYÚSCULAS + trim.
+  // Normalizacion -- mismo criterio que POST: nombres en MAYUSCULAS + trim.
   const update: Record<string, unknown> = {}
   if (data.nombreCompleto !== undefined) {
     update.nombreCompleto = data.nombreCompleto.trim().toUpperCase()
@@ -73,7 +106,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ? data.referenciaNombre.trim().toUpperCase()
       : null
   }
-  // numIne y curp se normalizan a MAYÚSCULAS por convención del documento
+  // numIne y curp se normalizan a MAYUSCULAS por convencion del documento
   for (const key of ['numIne', 'curp'] as const) {
     if (data[key] !== undefined) {
       const v = (data[key] ?? '').trim().toUpperCase()

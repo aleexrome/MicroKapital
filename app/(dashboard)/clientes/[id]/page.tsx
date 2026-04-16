@@ -8,9 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
 import { ClientRenovacionButton } from '@/components/loans/ClientRenovacionButton'
 import { formatDate, formatMoney } from '@/lib/utils'
-import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2, FolderOpen, Users, Pencil } from 'lucide-react'
+import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2, FolderOpen, Users, Pencil, ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
 import type { LoanType } from '@prisma/client'
+import { findAvalMatches, getAvalRiskLevel } from '@/lib/aval-check'
+import { getScoreInfo } from '@/lib/score-calculator'
 
 // Umbral de pagos para habilitar renovación anticipada
 const UMBRAL_RENOVACION: Record<string, number> = {
@@ -92,6 +94,14 @@ export default async function ClienteExpedientePage({
   })
 
   if (!client) notFound()
+
+  // Check if this client appears as aval in any active loan
+  const avalMatches = await findAvalMatches(
+    client.nombreCompleto,
+    client.telefono,
+    companyId!
+  )
+  const avalRiskLevel = getAvalRiskLevel(avalMatches)
 
   const statusLabel: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'outline' }> = {
     PENDING_APPROVAL: { label: 'Pendiente', variant: 'warning' },
@@ -187,6 +197,63 @@ export default async function ClienteExpedientePage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Aval de otros créditos */}
+      {avalMatches.length > 0 && (
+        <Card className={
+          avalRiskLevel === 'red'
+            ? 'border-red-400'
+            : avalRiskLevel === 'yellow'
+            ? 'border-yellow-400'
+            : 'border-blue-300'
+        }>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Es aval de ({avalMatches.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {avalMatches.map((match) => {
+                const scoreInfo = getScoreInfo(match.clienteScore)
+                const estadoLabel: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'outline' }> = {
+                  ACTIVE: { label: 'Activo', variant: 'success' },
+                  PENDING_APPROVAL: { label: 'Pendiente', variant: 'warning' },
+                  DEFAULTED: { label: 'Incumplido', variant: 'error' },
+                  RESTRUCTURED: { label: 'Reestructurado', variant: 'outline' },
+                }
+                const st = estadoLabel[match.loanEstado] ?? { label: match.loanEstado, variant: 'outline' as const }
+                return (
+                  <Link
+                    key={match.loanId}
+                    href={`/prestamos/${match.loanId}`}
+                    className="block border rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-block w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: match.scoreColor }}
+                        />
+                        <div>
+                          <p className="font-medium text-sm">
+                            Aval de {match.clienteNombre}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {match.loanTipo} · {formatMoney(match.capital)} · Score: {match.clienteScore} ({match.scoreLabel})
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant={st.variant}>{st.label}</Badge>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Préstamos */}
       <Card>

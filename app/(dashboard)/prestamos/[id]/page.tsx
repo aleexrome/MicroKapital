@@ -12,9 +12,10 @@ import { ScheduleDateEditor } from '@/components/loans/ScheduleDateEditor'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ShieldAlert, AlertTriangle, Info } from 'lucide-react'
 import Link from 'next/link'
 import type { LoanStatus, LoanType, ScheduleStatus, Prisma } from '@prisma/client'
+import { findAvalMatches, getAvalRiskLevel } from '@/lib/aval-check'
 
 // Umbral de pagos para renovación anticipada por producto
 const UMBRAL_RENOVACION: Record<string, number> = {
@@ -59,7 +60,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   const loan = await prisma.loan.findFirst({
     where: loanWhere,
     include: {
-      client: { select: { id: true, nombreCompleto: true } },
+      client: { select: { id: true, nombreCompleto: true, telefono: true, score: true } },
       cobrador: { select: { nombre: true } },
       aprobadoPor: { select: { nombre: true } },
       loanOriginal: { select: { id: true, loanGroupId: true } },
@@ -74,6 +75,19 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   type ChecklistItem = { id: string; label: string; checked: boolean }
 
   if (!loan) notFound()
+
+  // Check if the client applying for this loan is a guarantor (aval) for someone else
+  const avalMatches = loan.estado === 'PENDING_APPROVAL'
+    ? await findAvalMatches(loan.client.nombreCompleto, loan.client.telefono, companyId!)
+    : []
+  const avalRiskLevel = getAvalRiskLevel(avalMatches)
+
+  const ESTADO_LABELS: Record<string, string> = {
+    ACTIVE: 'Activo',
+    PENDING_APPROVAL: 'Pendiente',
+    DEFAULTED: 'Incumplido',
+    RESTRUCTURED: 'Reestructurado',
+  }
 
   // Construir paymentInfoMap para TODOS los roles (quien cobró / aplicó)
   if (loan.schedule.length > 0) {
@@ -213,6 +227,51 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             <h1 className="text-2xl font-bold">Préstamo {loan.tipo}</h1>
             <ApprovalBadge status={loan.estado as LoanStatus} />
           </div>
+
+          {/* Alerta de aval — si el cliente es garantía de otro préstamo con riesgo */}
+          {loan.estado === 'PENDING_APPROVAL' && avalMatches.length > 0 && (
+            <div className={`rounded-lg p-3 border ${
+              avalRiskLevel === 'red'
+                ? 'bg-red-50 border-red-400'
+                : avalRiskLevel === 'yellow'
+                ? 'bg-yellow-50 border-yellow-400'
+                : 'bg-blue-50 border-blue-300'
+            }`}>
+              <div className="flex items-start gap-2">
+                {avalRiskLevel === 'red' ? (
+                  <ShieldAlert className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                ) : avalRiskLevel === 'yellow' ? (
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                )}
+                <div className="flex-1">
+                  <p className={`text-sm font-semibold ${
+                    avalRiskLevel === 'red' ? 'text-red-800' : avalRiskLevel === 'yellow' ? 'text-yellow-800' : 'text-blue-800'
+                  }`}>
+                    {avalRiskLevel === 'red'
+                      ? 'ALERTA: Este cliente es aval de un préstamo con riesgo alto'
+                      : avalRiskLevel === 'yellow'
+                      ? 'Advertencia: Este cliente es aval de un préstamo con atraso'
+                      : 'Info: Este cliente aparece como aval en otro préstamo'}
+                  </p>
+                  <div className="mt-1.5 space-y-1">
+                    {avalMatches.map((m) => (
+                      <div key={m.loanId} className="text-sm flex items-center gap-2">
+                        <span
+                          className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: m.scoreColor }}
+                        />
+                        <span>
+                          Aval de <strong>{m.clienteNombre}</strong> — {m.loanTipo} {ESTADO_LABELS[m.loanEstado] ?? m.loanEstado} — Score: {m.clienteScore} ({m.scoreLabel})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Director General: aprobar / contrapropuesta / rechazar */}
           {loan.estado === 'PENDING_APPROVAL' && (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') && (

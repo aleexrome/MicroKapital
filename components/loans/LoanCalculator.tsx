@@ -61,18 +61,18 @@ export function LoanCalculator({
   ]
 
   return (
-    <Card className="border-primary-200 bg-primary-50">
+    <Card className="border-primary-500/30 bg-primary-500/10">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm text-primary-700">Resumen del préstamo</CardTitle>
+        <CardTitle className="text-sm text-primary-400">Resumen del préstamo</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="divide-y divide-primary-100">
+        <div className="divide-y divide-primary-500/20">
           {rows.map((row, i) => (
             <div
               key={i}
               className={`flex justify-between py-1.5 text-sm ${
-                row.bold ? 'font-bold text-primary-800' : ''
-              } ${row.highlight ? 'text-primary-700 font-semibold' : 'text-gray-700'}`}
+                row.bold ? 'font-bold text-primary-300' : ''
+              } ${row.highlight ? 'text-white font-semibold' : 'text-gray-400'}`}
             >
               <span>{row.label}</span>
               <span className="money">{row.value}</span>

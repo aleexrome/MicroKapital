@@ -7,8 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { Building2, CreditCard, Users, AlertTriangle } from 'lucide-react'
 
-export const dynamic = 'force-dynamic'
-
 const LICENSE_STATUS_BADGE: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'secondary' }> = {
   ACTIVE:    { label: 'Activa',     variant: 'success' },
   GRACE:     { label: 'Gracia',     variant: 'warning' },

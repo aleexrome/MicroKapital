@@ -81,7 +81,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/rutas',
     label: 'Rutas',
     icon: <Navigation className="h-5 w-5" />,
-    roles: ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'SUPER_ADMIN'],
+    roles: ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
   },
   {
     href: '/cobros/historial',

@@ -103,10 +103,10 @@ export function calcIndividual(
 // Validaciones: $2,000–$20,000 · edad 18–45 · titular + 1 aval
 
 export function calcSeguroAgil(capital: number): number {
-  if (capital >= 2000 && capital <= 5000) return 200
-  if (capital >= 6000 && capital <= 9000) return 250
-  if (capital >= 10000 && capital <= 14000) return 300
-  if (capital >= 15000 && capital <= 19000) return 350
+  if (capital >= 2000 && capital <= 5000) return 100
+  if (capital >= 6000 && capital <= 9000) return 150
+  if (capital >= 10000 && capital <= 14000) return 200
+  if (capital >= 15000 && capital <= 19000) return 250
   return 0
 }
 

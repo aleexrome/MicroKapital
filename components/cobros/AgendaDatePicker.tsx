@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, ChevronRight, CalendarDays, CalendarRange } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { DateRangeCalendar } from './DateRangeCalendar'
 
 function toYMD(d: Date) {
   return d.toISOString().split('T')[0]
@@ -25,6 +26,13 @@ function formatLabel(dateStr: string) {
   return d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+function formatRangeLabel(start: string, end: string) {
+  const s = new Date(start + 'T12:00:00')
+  const e = new Date(end + 'T12:00:00')
+  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' }
+  return `${s.toLocaleDateString('es-MX', opts)} — ${e.toLocaleDateString('es-MX', opts)}`
+}
+
 interface AgendaDatePickerProps {
   fecha: string
   fechaFin?: string
@@ -36,105 +44,119 @@ interface AgendaDatePickerProps {
 export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, maxDate }: AgendaDatePickerProps) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
-  const [rangeMode, setRangeMode] = useState(!!fechaFin)
+  const [showRangeCalendar, setShowRangeCalendar] = useState(false)
+
+  const isRange = !!fechaFin && fechaFin !== fecha
 
   function navigate(newFecha: string, newFechaFin?: string) {
     const params = new URLSearchParams({ ...extraParams, fecha: newFecha })
-    if (newFechaFin) params.set('fechaFin', newFechaFin)
+    if (newFechaFin && newFechaFin !== newFecha) params.set('fechaFin', newFechaFin)
     router.push(`${baseHref}?${params.toString()}`)
   }
 
   const effectiveMax = maxDate ?? toYMD(new Date())
   const forwardDisabled = addDays(fecha, 1) > effectiveMax
 
-  if (rangeMode) {
-    return (
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-        <div className="flex items-center gap-2 bg-muted/40 rounded-xl p-2">
-          <CalendarRange className="h-4 w-4 text-primary-400 ml-1" />
-          <div className="flex items-center gap-1.5">
-            <label className="text-xs text-muted-foreground">Desde</label>
-            <input
-              type="date"
-              value={fecha}
-              max={effectiveMax}
-              onChange={(e) => {
-                if (e.target.value) navigate(e.target.value, fechaFin || effectiveMax)
-              }}
-              className="border border-gray-600 bg-gray-800 text-gray-100 rounded px-2 py-1 text-sm"
-            />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <label className="text-xs text-muted-foreground">Hasta</label>
-            <input
-              type="date"
-              value={fechaFin || effectiveMax}
-              max={effectiveMax}
-              min={fecha}
-              onChange={(e) => {
-                if (e.target.value) navigate(fecha, e.target.value)
-              }}
-              className="border border-gray-600 bg-gray-800 text-gray-100 rounded px-2 py-1 text-sm"
-            />
-          </div>
-        </div>
-        <button
-          onClick={() => { setRangeMode(false); navigate(fecha) }}
-          className="text-xs text-muted-foreground hover:text-primary-400 underline"
-        >
-          Ver por dia
-        </button>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex items-center gap-2">
+    <div className="relative flex items-center gap-2">
       <div className="flex items-center gap-1 bg-muted/40 rounded-xl p-1">
+        {/* Prev day */}
         <button
-          onClick={() => navigate(addDays(fecha, -1))}
+          onClick={() => navigate(addDays(fecha, isRange ? 0 : -1), isRange ? addDays(fechaFin!, -1) : undefined)}
           className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
           title="Dia anterior"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
 
-        <button
-          onClick={() => inputRef.current?.showPicker?.() ?? inputRef.current?.click()}
-          className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted transition-colors"
-          title="Seleccionar fecha"
-        >
-          <CalendarDays className="h-4 w-4 text-primary-600" />
-          <span className="text-sm font-semibold min-w-[120px] text-center">
-            {formatLabel(fecha)}
-          </span>
-          <input
-            ref={inputRef}
-            type="date"
-            value={fecha}
-            max={effectiveMax}
-            onChange={(e) => { if (e.target.value && e.target.value <= effectiveMax) navigate(e.target.value) }}
-            className="absolute inset-0 opacity-0 w-full cursor-pointer"
-          />
-        </button>
+        {/* Date display */}
+        {isRange ? (
+          <button
+            onClick={() => setShowRangeCalendar((v) => !v)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted transition-colors"
+          >
+            <CalendarRange className="h-4 w-4 text-primary-400" />
+            <span className="text-sm font-semibold min-w-[140px] text-center">
+              {formatRangeLabel(fecha, fechaFin!)}
+            </span>
+          </button>
+        ) : (
+          <button
+            onClick={() => inputRef.current?.showPicker?.() ?? inputRef.current?.click()}
+            className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted transition-colors"
+            title="Seleccionar fecha"
+          >
+            <CalendarDays className="h-4 w-4 text-primary-600" />
+            <span className="text-sm font-semibold min-w-[120px] text-center">
+              {formatLabel(fecha)}
+            </span>
+            <input
+              ref={inputRef}
+              type="date"
+              value={fecha}
+              max={effectiveMax}
+              onChange={(e) => { if (e.target.value && e.target.value <= effectiveMax) navigate(e.target.value) }}
+              className="absolute inset-0 opacity-0 w-full cursor-pointer"
+            />
+          </button>
+        )}
 
+        {/* Next day */}
         <button
-          onClick={() => navigate(addDays(fecha, 1))}
+          onClick={() => navigate(addDays(fecha, isRange ? 0 : 1), isRange ? addDays(fechaFin!, 1) : undefined)}
           className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
           title="Dia siguiente"
-          disabled={forwardDisabled}
+          disabled={isRange ? addDays(fechaFin!, 1) > effectiveMax : forwardDisabled}
         >
-          <ChevronRight className={`h-4 w-4 ${forwardDisabled ? 'opacity-30' : ''}`} />
+          <ChevronRight className={`h-4 w-4 ${(isRange ? addDays(fechaFin!, 1) > effectiveMax : forwardDisabled) ? 'opacity-30' : ''}`} />
         </button>
       </div>
 
+      {/* Range toggle button */}
       <button
-        onClick={() => setRangeMode(true)}
-        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary-400 px-2 py-1 rounded-lg hover:bg-muted/40 transition-colors"
+        onClick={() => setShowRangeCalendar((v) => !v)}
+        className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-colors ${
+          isRange || showRangeCalendar
+            ? 'text-primary-400 bg-primary-500/10 border border-primary-500/30'
+            : 'text-muted-foreground hover:text-primary-400 hover:bg-muted/40'
+        }`}
         title="Seleccionar rango de fechas"
       >
-        <CalendarRange className="h-3.5 w-3.5" /> Rango
+        <CalendarRange className="h-3.5 w-3.5" />
+        {isRange ? 'Cambiar rango' : 'Rango'}
       </button>
+
+      {/* Clear range (back to single day) */}
+      {isRange && (
+        <button
+          onClick={() => navigate(fecha)}
+          className="text-xs text-muted-foreground hover:text-red-400 underline"
+        >
+          Un dia
+        </button>
+      )}
+
+      {/* Floating range calendar */}
+      {showRangeCalendar && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setShowRangeCalendar(false)}
+          />
+          <div className="absolute top-full left-0 mt-2 z-50">
+            <DateRangeCalendar
+              startDate={fecha}
+              endDate={fechaFin ?? null}
+              maxDate={effectiveMax}
+              onSelect={(start, end) => {
+                navigate(start, end)
+                setShowRangeCalendar(false)
+              }}
+              onClose={() => setShowRangeCalendar(false)}
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }

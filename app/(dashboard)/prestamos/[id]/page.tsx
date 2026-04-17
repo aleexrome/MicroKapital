@@ -504,7 +504,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
 
       {/* Calendario de pagos */}
       {loan.schedule.length > 0 && (
-        <Card>
+        <Card className={loan.estado === 'ACTIVE' && !tieneEvidenciaDesembolso ? 'opacity-40 pointer-events-none select-none' : ''}>
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
               <span>Calendario de pagos</span>

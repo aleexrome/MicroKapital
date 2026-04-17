@@ -221,22 +221,22 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocum
                     {doc.descripcion ? ` · ${doc.descripcion}` : ''}
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   <a
                     href={doc.archivoUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-primary-400 hover:bg-primary-500/10 border border-primary-500/30"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-primary-400 hover:bg-primary-500/10 border border-primary-500/30"
                   >
-                    <ExternalLink className="h-3.5 w-3.5" /> Ver
+                    <ExternalLink className="h-4 w-4" /> Ver
                   </a>
                   {!readOnly && (
                     <button
                       onClick={() => handleDelete(doc.id)}
-                      className="p-1 rounded text-red-500 hover:bg-red-50"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 border border-red-500/30"
                       title="Eliminar"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" /> Eliminar
                     </button>
                   )}
                 </div>

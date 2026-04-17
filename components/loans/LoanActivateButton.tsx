@@ -15,6 +15,7 @@ import {
   CreditCard,
   Building2,
   CheckCircle,
+  BadgePercent,
 } from 'lucide-react'
 import type { CashBreakdownEntry } from '@/types'
 
@@ -32,10 +33,11 @@ interface LoanActivateButtonProps {
   fechaPrimerPagoDG?: string | null
   feeConcepto: 'SEGURO' | 'COMISION'
   feeMonto: number
+  capital: number
   bankAccountsUrl?: string
 }
 
-type Step = 'info' | 'cash' | 'card' | 'transfer'
+type Step = 'info' | 'cash' | 'card' | 'transfer' | 'financiado'
 
 export function LoanActivateButton({
   loanId,
@@ -44,6 +46,7 @@ export function LoanActivateButton({
   fechaPrimerPagoDG,
   feeConcepto,
   feeMonto,
+  capital,
   bankAccountsUrl = '/api/bank-accounts',
 }: LoanActivateButtonProps) {
   const router = useRouter()
@@ -73,7 +76,7 @@ export function LoanActivateButton({
   const feeLabel = feeConcepto === 'SEGURO' ? 'Seguro de apertura' : 'Comision de apertura'
 
   async function handleActivate(
-    metodoPago: 'CASH' | 'CARD' | 'TRANSFER',
+    metodoPago: 'CASH' | 'CARD' | 'TRANSFER' | 'FINANCIADO',
     cashBreakdown?: CashBreakdownEntry[],
     cambioEntregado?: number
   ) {
@@ -243,11 +246,11 @@ export function LoanActivateButton({
           {/* Payment method buttons — 3-column grid matching payment capture flow */}
           <div>
             <p className="text-xs text-muted-foreground mb-2">Metodo de pago</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <button
                 type="button"
                 onClick={() => setStep('cash')}
-                className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-gray-600 hover:border-primary-400 hover:bg-primary-500/10 transition-colors"
+                className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-600 hover:border-primary-400 hover:bg-primary-500/10 transition-colors"
               >
                 <Banknote className="h-7 w-7 text-primary-400" />
                 <span className="font-medium text-sm">Efectivo</span>
@@ -255,7 +258,7 @@ export function LoanActivateButton({
               <button
                 type="button"
                 onClick={() => setStep('card')}
-                className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-gray-600 hover:border-primary-400 hover:bg-primary-500/10 transition-colors"
+                className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-600 hover:border-primary-400 hover:bg-primary-500/10 transition-colors"
               >
                 <CreditCard className="h-7 w-7 text-primary-400" />
                 <span className="font-medium text-sm">Tarjeta</span>
@@ -263,10 +266,18 @@ export function LoanActivateButton({
               <button
                 type="button"
                 onClick={() => setStep('transfer')}
-                className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-gray-600 hover:border-primary-400 hover:bg-primary-500/10 transition-colors"
+                className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-600 hover:border-primary-400 hover:bg-primary-500/10 transition-colors"
               >
                 <Building2 className="h-7 w-7 text-primary-400" />
                 <span className="font-medium text-sm">Transferencia</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep('financiado')}
+                className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-amber-500/40 hover:border-amber-400 hover:bg-amber-500/10 transition-colors"
+              >
+                <BadgePercent className="h-7 w-7 text-amber-400" />
+                <span className="font-medium text-sm">Financiado</span>
               </button>
             </div>
           </div>
@@ -405,6 +416,60 @@ export function LoanActivateButton({
               ) : (
                 <>
                   <CheckCircle className="h-4 w-4" /> Registrar
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP: FINANCIADO ──────────────────────────────────────────────── */}
+      {step === 'financiado' && (
+        <div className="space-y-4">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 text-center">
+            <BadgePercent className="h-8 w-8 text-amber-400 mx-auto mb-2" />
+            <p className="font-medium text-amber-300">Financiado — descuento sobre capital</p>
+            <div className="mt-3 space-y-1">
+              <div className="flex justify-between text-sm px-4">
+                <span className="text-gray-400">Capital</span>
+                <span className="money">{formatMoney(capital)}</span>
+              </div>
+              <div className="flex justify-between text-sm px-4">
+                <span className="text-gray-400">{feeLabel}</span>
+                <span className="text-amber-400 money">- {formatMoney(feeMonto)}</span>
+              </div>
+              <div className="border-t border-amber-500/30 mt-2 pt-2 flex justify-between text-sm px-4">
+                <span className="font-semibold">Monto a entregar</span>
+                <span className="font-bold text-lg text-white money">{formatMoney(capital - feeMonto)}</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+            El {feeLabel.toLowerCase()} se descontara del capital. El cliente recibira{' '}
+            <strong>{formatMoney(capital - feeMonto)}</strong> en lugar de {formatMoney(capital)}.
+            El credito se activara de inmediato.
+          </p>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setStep('info')}
+              disabled={loading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+              disabled={loading}
+              onClick={() => handleActivate('FINANCIADO')}
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <BadgePercent className="h-4 w-4" /> Confirmar financiado
                 </>
               )}
             </Button>

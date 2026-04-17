@@ -13,7 +13,7 @@ import { z } from 'zod'
 
 const activateSchema = z.object({
   fechaDesembolso: z.string().optional(),
-  metodoPago: z.enum(['CASH', 'CARD', 'TRANSFER']).optional(),
+  metodoPago: z.enum(['CASH', 'CARD', 'TRANSFER', 'FINANCIADO']).optional(),
   cashBreakdown: z.array(z.object({
     denominacion: z.number(),
     cantidad: z.number(),
@@ -187,7 +187,11 @@ export async function POST(
     })
   }
 
-  // CASH o CARD — activación inmediata
+  // FINANCIADO — descontar tarifa del capital, activar inmediato sin Payment
+  const esFinanciado = data.metodoPago === 'FINANCIADO'
+  const nuevoMontoReal = esFinanciado ? Number(loan.capital) - feeMonto : undefined
+
+  // CASH, CARD o FINANCIADO — activación inmediata
   const fechaPrimerPagoRef = loan.fechaPrimerPago ?? null
 
   let fechas: Date[]
@@ -218,16 +222,16 @@ export async function POST(
   const result = await prisma.$transaction(async (tx) => {
     const now = new Date()
 
-    // 1. Crear Payment para la tarifa de apertura (solo si hay metodoPago — no en verificación del gerente)
+    // 1. Crear Payment para la tarifa de apertura (solo si hay pago real — no en verificación ni financiado)
     let payment: { id: string } | null = null
-    if (data.metodoPago) {
+    if (data.metodoPago && data.metodoPago !== 'FINANCIADO') {
       payment = await tx.payment.create({
         data: {
           loanId: loan.id,
           cobradorId: userId,
           clientId: loan.clientId,
           monto: feeMonto,
-          metodoPago: data.metodoPago,
+          metodoPago: data.metodoPago as 'CASH' | 'CARD' | 'TRANSFER',
           cambioEntregado: data.cambioEntregado ?? 0,
           notas: feeConcepto,
           fechaHora: now,
@@ -253,12 +257,13 @@ export async function POST(
       data: {
         estado: 'ACTIVE',
         fechaDesembolso,
+        ...(esFinanciado ? { montoReal: nuevoMontoReal } : {}),
         ...(esFeeSeguro ? {
           seguro: feeMonto,
-          seguroMetodoPago: data.metodoPago,
+          seguroMetodoPago: esFinanciado ? 'CASH' : ((data.metodoPago ?? 'CASH') as 'CASH' | 'CARD' | 'TRANSFER'),
           seguroPendiente: false,
         } : {
-          seguroMetodoPago: data.metodoPago,
+          seguroMetodoPago: esFinanciado ? 'CASH' : ((data.metodoPago ?? 'CASH') as 'CASH' | 'CARD' | 'TRANSFER'),
           seguroPendiente: false,
         }),
       },
@@ -302,9 +307,9 @@ export async function POST(
       })
     }
 
-    // 6. Actualizar caja y generar ticket (solo si hay pago nuevo)
+    // 6. Actualizar caja y generar ticket (solo si hay pago real, no financiado)
     let ticket = null
-    if (data.metodoPago && payment) {
+    if (data.metodoPago && data.metodoPago !== 'FINANCIADO' && payment) {
       const fechaCaja = new Date()
       fechaCaja.setHours(0, 0, 0, 0)
       const targetBranchId = session.user.branchId ?? loan.branchId

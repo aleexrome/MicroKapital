@@ -311,6 +311,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                   fechaPrimerPagoDG={loan.fechaPrimerPago ? loan.fechaPrimerPago.toISOString().slice(0, 10) : null}
                   feeConcepto={tarifaApertura.concepto}
                   feeMonto={tarifaApertura.monto}
+                  capital={Number(loan.capital)}
                 />
                 <LoanClientRejectButton loanId={loan.id} />
               </div>
@@ -325,6 +326,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 seguroPendiente
                 feeConcepto={tarifaApertura.concepto}
                 feeMonto={tarifaApertura.monto}
+                capital={Number(loan.capital)}
               />
             </div>
           )}

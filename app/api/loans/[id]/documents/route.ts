@@ -70,44 +70,49 @@ export async function POST(
     return NextResponse.json({ error: 'Archivo y tipo son requeridos' }, { status: 400 })
   }
 
-  // Upload to Cloudinary
-  const bytes = await file.arrayBuffer()
-  const buffer = Buffer.from(bytes)
+  try {
+    const bytes = await file.arrayBuffer()
+    const buffer = Buffer.from(bytes)
 
-  const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'microkapital/documentos',
-        resource_type: 'auto',
-        public_id: `loan_${params.id}_${tipo}_${Date.now()}`,
+    const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'microkapital/documentos',
+          resource_type: 'auto',
+          public_id: `loan_${params.id}_${tipo}_${Date.now()}`,
+        },
+        (error, result) => {
+          if (error || !result) return reject(error ?? new Error('Upload failed'))
+          resolve(result as { secure_url: string })
+        }
+      )
+      stream.end(buffer)
+    })
+
+    const doc = await prisma.loanDocument.create({
+      data: {
+        loanId:    params.id,
+        subidoPor: userId,
+        tipo,
+        archivoUrl: uploadResult.secure_url,
+        descripcion: descripcion ?? null,
       },
-      (error, result) => {
-        if (error || !result) return reject(error ?? new Error('Upload failed'))
-        resolve(result as { secure_url: string })
-      }
-    )
-    stream.end(buffer)
-  })
+      select: {
+        id: true,
+        tipo: true,
+        archivoUrl: true,
+        descripcion: true,
+        createdAt: true,
+        uploadedBy: { select: { nombre: true } },
+      },
+    })
 
-  const doc = await prisma.loanDocument.create({
-    data: {
-      loanId:    params.id,
-      subidoPor: userId,
-      tipo,
-      archivoUrl: uploadResult.secure_url,
-      descripcion: descripcion ?? null,
-    },
-    select: {
-      id: true,
-      tipo: true,
-      archivoUrl: true,
-      descripcion: true,
-      createdAt: true,
-      uploadedBy: { select: { nombre: true } },
-    },
-  })
-
-  return NextResponse.json({ document: doc }, { status: 201 })
+    return NextResponse.json({ document: doc }, { status: 201 })
+  } catch (err) {
+    console.error('[DocumentUpload] Error:', err)
+    const message = err instanceof Error ? err.message : 'Error al subir documento'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
 }
 
 export async function DELETE(

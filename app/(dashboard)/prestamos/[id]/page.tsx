@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
 import { LoanApprovalActions } from '@/components/loans/LoanApprovalActions'
+import { DisbursementPhoto } from '@/components/loans/DisbursementPhoto'
 import { LoanActivateButton } from '@/components/loans/LoanActivateButton'
 import { LoanClientRejectButton } from '@/components/loans/LoanClientRejectButton'
 import { LoanRenewButton } from '@/components/loans/LoanRenewButton'
@@ -222,7 +223,9 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   const puedeDeshacerPago = esOpAdmin || tienePermisoAplicar
 
   // Coordinador/Cobrador pueden capturar pagos
-  const puedeCapturar = loan.estado === 'ACTIVE' && (rol === 'COBRADOR' || rol === 'COORDINADOR')
+  const tieneEvidenciaDesembolso = !!loan.desembolsoFotoUrl
+  const puedeCapturar = loan.estado === 'ACTIVE' && (rol === 'COBRADOR' || rol === 'COORDINADOR') && tieneEvidenciaDesembolso
+  const puedeSubirEvidencia = loan.estado === 'ACTIVE' && !tieneEvidenciaDesembolso && (rol === 'COORDINADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL')
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -486,6 +489,18 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         tipo={loan.tipo as LoanType}
         readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
       />
+
+      {/* Evidencia de desembolso */}
+      {loan.estado === 'ACTIVE' && (
+        <DisbursementPhoto
+          loanId={loan.id}
+          fotoUrl={loan.desembolsoFotoUrl}
+          lat={loan.desembolsoLat}
+          lng={loan.desembolsoLng}
+          fotoAt={loan.desembolsoFotoAt?.toISOString() ?? null}
+          readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
+        />
+      )}
 
       {/* Calendario de pagos */}
       {loan.schedule.length > 0 && (

@@ -301,6 +301,11 @@ model Loan {
   seguro              Decimal?       @db.Decimal(12, 2)   // Monto del seguro cobrado
   seguroMetodoPago    PaymentMethod?                      // CASH | TRANSFER
   seguroPendiente     Boolean        @default(false)      // Seguro por transferencia pendiente de verificación por gerente
+  // Evidencia de desembolso
+  desembolsoFotoUrl   String?        // URL de la foto (Cloudinary)
+  desembolsoLat       Float?         // Latitud GPS del desembolso
+  desembolsoLng       Float?         // Longitud GPS del desembolso
+  desembolsoFotoAt    DateTime?      // Cuándo se subió la evidencia
   // Aval
   avalNombre          String?
   avalTelefono        String?

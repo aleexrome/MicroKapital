@@ -121,8 +121,8 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocum
             {!loading && (
               <span className={`text-xs font-normal px-2 py-0.5 rounded-full ${
                 pendientes.length === 0
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-amber-100 text-amber-700'
+                  ? 'bg-green-500/20 text-green-400'
+                  : 'bg-amber-500/20 text-amber-400'
               }`}>
                 {docs.length}/{requeridos.length} requeridos
               </span>
@@ -139,7 +139,7 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocum
       <CardContent className="space-y-4">
         {/* Upload form */}
         {showForm && !readOnly && (
-          <form onSubmit={handleUpload} className="bg-gray-50 rounded-lg p-4 space-y-3 border">
+          <form onSubmit={handleUpload} className="bg-gray-800/50 rounded-lg p-4 space-y-3 border border-gray-700">
             <p className="text-sm font-medium">Subir documento</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
@@ -147,7 +147,7 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocum
                 <select
                   value={selectedTipo}
                   onChange={(e) => setSelectedTipo(e.target.value)}
-                  className="border rounded px-3 py-1.5 text-sm"
+                  className="border border-gray-600 bg-gray-800 text-gray-100 rounded px-3 py-1.5 text-sm"
                 >
                   {Object.entries(TIPO_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>{label}</option>
@@ -161,7 +161,7 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocum
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
                   placeholder="Notas adicionales"
-                  className="border rounded px-3 py-1.5 text-sm"
+                  className="border border-gray-600 bg-gray-800 text-gray-100 rounded px-3 py-1.5 text-sm placeholder:text-gray-500"
                 />
               </div>
             </div>
@@ -188,11 +188,11 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocum
 
         {/* Pending required docs */}
         {!loading && pendientes.length > 0 && (
-          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
-            <p className="text-xs font-semibold text-amber-700 mb-1">Documentos pendientes</p>
+          <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3">
+            <p className="text-xs font-semibold text-amber-400 mb-1">Documentos pendientes</p>
             <div className="flex flex-wrap gap-1.5">
               {pendientes.map((t) => (
-                <span key={t} className="text-xs bg-amber-100 text-amber-800 rounded-full px-2 py-0.5">
+                <span key={t} className="text-xs bg-amber-500/20 text-amber-300 rounded-full px-2 py-0.5">
                   {TIPO_LABELS[t] ?? t}
                 </span>
               ))}

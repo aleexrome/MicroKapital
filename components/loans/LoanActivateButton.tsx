@@ -34,6 +34,7 @@ interface LoanActivateButtonProps {
   feeConcepto: 'SEGURO' | 'COMISION'
   feeMonto: number
   capital: number
+  descuentoRenovacion?: number
   bankAccountsUrl?: string
 }
 
@@ -47,6 +48,7 @@ export function LoanActivateButton({
   feeConcepto,
   feeMonto,
   capital,
+  descuentoRenovacion = 0,
   bankAccountsUrl = '/api/bank-accounts',
 }: LoanActivateButtonProps) {
   const router = useRouter()
@@ -426,30 +428,43 @@ export function LoanActivateButton({
       {/* ── STEP: FINANCIADO ──────────────────────────────────────────────── */}
       {step === 'financiado' && (
         <div className="space-y-4">
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 text-center">
-            <BadgePercent className="h-8 w-8 text-amber-400 mx-auto mb-2" />
-            <p className="font-medium text-amber-300">Financiado — descuento sobre capital</p>
-            <div className="mt-3 space-y-1">
-              <div className="flex justify-between text-sm px-4">
-                <span className="text-gray-400">Capital</span>
-                <span className="money">{formatMoney(capital)}</span>
-              </div>
-              <div className="flex justify-between text-sm px-4">
-                <span className="text-gray-400">{feeLabel}</span>
-                <span className="text-amber-400 money">- {formatMoney(feeMonto)}</span>
-              </div>
-              <div className="border-t border-amber-500/30 mt-2 pt-2 flex justify-between text-sm px-4">
-                <span className="font-semibold">Monto a entregar</span>
-                <span className="font-bold text-lg text-white money">{formatMoney(capital - feeMonto)}</span>
-              </div>
-            </div>
-          </div>
+          {(() => {
+            const montoFinal = capital - descuentoRenovacion - feeMonto
+            return (
+              <>
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 text-center">
+                  <BadgePercent className="h-8 w-8 text-amber-400 mx-auto mb-2" />
+                  <p className="font-medium text-amber-300">Financiado — descuento sobre capital</p>
+                  <div className="mt-3 space-y-1">
+                    <div className="flex justify-between text-sm px-4">
+                      <span className="text-gray-400">Capital</span>
+                      <span className="money">{formatMoney(capital)}</span>
+                    </div>
+                    {descuentoRenovacion > 0 && (
+                      <div className="flex justify-between text-sm px-4">
+                        <span className="text-gray-400">Descuento renovacion</span>
+                        <span className="text-orange-400 money">- {formatMoney(descuentoRenovacion)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm px-4">
+                      <span className="text-gray-400">{feeLabel}</span>
+                      <span className="text-amber-400 money">- {formatMoney(feeMonto)}</span>
+                    </div>
+                    <div className="border-t border-amber-500/30 mt-2 pt-2 flex justify-between text-sm px-4">
+                      <span className="font-semibold">Monto a entregar</span>
+                      <span className="font-bold text-lg text-white money">{formatMoney(montoFinal)}</span>
+                    </div>
+                  </div>
+                </div>
 
-          <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-            El {feeLabel.toLowerCase()} se descontara del capital. El cliente recibira{' '}
-            <strong>{formatMoney(capital - feeMonto)}</strong> en lugar de {formatMoney(capital)}.
-            El credito se activara de inmediato.
-          </p>
+                <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                  El {feeLabel.toLowerCase()} se descontara del capital. El cliente recibira{' '}
+                  <strong>{formatMoney(montoFinal)}</strong> en lugar de {formatMoney(capital - descuentoRenovacion)}.
+                  El credito se activara de inmediato.
+                </p>
+              </>
+            )
+          })()}
 
           <div className="flex gap-3">
             <Button

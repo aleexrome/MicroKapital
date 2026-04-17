@@ -312,6 +312,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                   feeConcepto={tarifaApertura.concepto}
                   feeMonto={tarifaApertura.monto}
                   capital={Number(loan.capital)}
+                  descuentoRenovacion={loan.descuentoRenovacion ? Number(loan.descuentoRenovacion) : 0}
                 />
                 <LoanClientRejectButton loanId={loan.id} />
               </div>
@@ -327,6 +328,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 feeConcepto={tarifaApertura.concepto}
                 feeMonto={tarifaApertura.monto}
                 capital={Number(loan.capital)}
+                  descuentoRenovacion={loan.descuentoRenovacion ? Number(loan.descuentoRenovacion) : 0}
               />
             </div>
           )}

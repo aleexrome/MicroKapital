@@ -187,9 +187,9 @@ export async function POST(
     })
   }
 
-  // FINANCIADO — descontar tarifa del capital, activar inmediato sin Payment
+  // FINANCIADO — descontar tarifa del montoReal (que ya incluye descuento de renovación si aplica)
   const esFinanciado = data.metodoPago === 'FINANCIADO'
-  const nuevoMontoReal = esFinanciado ? Number(loan.capital) - feeMonto : undefined
+  const nuevoMontoReal = esFinanciado ? Number(loan.montoReal) - feeMonto : undefined
 
   // CASH, CARD o FINANCIADO — activación inmediata
   const fechaPrimerPagoRef = loan.fechaPrimerPago ?? null

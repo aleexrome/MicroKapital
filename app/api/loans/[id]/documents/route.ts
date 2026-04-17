@@ -146,6 +146,20 @@ export async function DELETE(
   const canDelete = doc.subidoPor === userId || rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
   if (!canDelete) return NextResponse.json({ error: 'Sin permisos para eliminar' }, { status: 403 })
 
+  // Eliminar de Cloudinary
+  try {
+    const url = doc.archivoUrl
+    const parts = url.split('/')
+    const folderStart = parts.indexOf('microkapital')
+    if (folderStart !== -1) {
+      const publicIdWithExt = parts.slice(folderStart).join('/')
+      const publicId = publicIdWithExt.replace(/\.[^.]+$/, '')
+      await cloudinary.uploader.destroy(publicId, { resource_type: 'image' })
+    }
+  } catch {
+    // Si falla la eliminación en Cloudinary, igual borramos el registro
+  }
+
   await prisma.loanDocument.delete({ where: { id: documentId } })
 
   return NextResponse.json({ ok: true })

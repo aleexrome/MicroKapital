@@ -224,7 +224,9 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
 
   // Coordinador/Cobrador pueden capturar pagos
   const tieneEvidenciaDesembolso = !!loan.desembolsoFotoUrl
-  const puedeCapturar = loan.estado === 'ACTIVE' && (rol === 'COBRADOR' || rol === 'COORDINADOR') && tieneEvidenciaDesembolso
+  // Solo bloquear pagos si el crédito no tiene pagos aún (nuevo) y no tiene foto
+  const requiereFotoDesembolso = !tieneEvidenciaDesembolso && pagados === 0
+  const puedeCapturar = loan.estado === 'ACTIVE' && (rol === 'COBRADOR' || rol === 'COORDINADOR') && !requiereFotoDesembolso
   const puedeSubirEvidencia = loan.estado === 'ACTIVE' && !tieneEvidenciaDesembolso && (rol === 'COORDINADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL')
 
   return (
@@ -504,7 +506,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
 
       {/* Calendario de pagos */}
       {loan.schedule.length > 0 && (
-        <Card className={loan.estado === 'ACTIVE' && !tieneEvidenciaDesembolso ? 'opacity-40 pointer-events-none select-none' : ''}>
+        <Card className={requiereFotoDesembolso ? 'opacity-40 pointer-events-none select-none' : ''}>
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
               <span>Calendario de pagos</span>

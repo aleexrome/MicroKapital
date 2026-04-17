@@ -29,7 +29,7 @@ function toYMD(d: Date) {
 export default async function AgendaPage({
   searchParams,
 }: {
-  searchParams: { fecha?: string }
+  searchParams: { fecha?: string; fechaFin?: string }
 }) {
   const session = await getSession()
   if (!session?.user) return null
@@ -41,9 +41,18 @@ export default async function AgendaPage({
   const isCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
 
   const selectedDate = parseDate(searchParams.fecha)
-  const nextDay = new Date(selectedDate)
-  nextDay.setDate(nextDay.getDate() + 1)
   const fechaStr = toYMD(selectedDate)
+
+  // Rango de fechas: si hay fechaFin, usar rango; si no, un solo día
+  const hasFechaFin = searchParams.fechaFin && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.fechaFin)
+  let endDate: Date
+  if (hasFechaFin) {
+    endDate = new Date(searchParams.fechaFin + 'T00:00:00')
+    endDate.setDate(endDate.getDate() + 1)
+  } else {
+    endDate = new Date(selectedDate)
+    endDate.setDate(endDate.getDate() + 1)
+  }
   const isToday = fechaStr === toYMD(new Date())   // siempre false (Cobranza bloquea hoy)
 
   // Yesterday string — used as maxDate for the date picker
@@ -70,7 +79,7 @@ export default async function AgendaPage({
         companyId: companyId!,
         ...(cobradorIds ? { cobradorId: { in: cobradorIds } } : {}),
       },
-      fechaVencimiento: { gte: selectedDate, lt: nextDay },
+      fechaVencimiento: { gte: selectedDate, lt: endDate },
     },
     orderBy: [{ loan: { cobrador: { nombre: 'asc' } } }, { estado: 'asc' }, { montoEsperado: 'desc' }],
     include: {
@@ -161,7 +170,7 @@ export default async function AgendaPage({
               {formatDate(selectedDate, "EEEE d 'de' MMMM")} · {isHabil ? 'Día hábil' : 'No hábil'}
             </p>
           </div>
-          <AgendaDatePicker fecha={fechaStr} baseHref="/cobros/agenda" maxDate={yesterdayStr} />
+          <AgendaDatePicker fecha={fechaStr} fechaFin={hasFechaFin ? searchParams.fechaFin : undefined} baseHref="/cobros/agenda" maxDate={yesterdayStr} />
         </div>
 
         {/* Resumen */}

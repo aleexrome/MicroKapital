@@ -62,6 +62,8 @@ export async function POST(
         folder: 'microkapital/desembolsos',
         public_id: `${loan.id}-${Date.now()}`,
         resource_type: 'image',
+        type: 'upload',
+        access_mode: 'public',
         quality: 'auto',
         fetch_format: 'auto',
         transformation: [{ width: 1600, crop: 'limit' }],

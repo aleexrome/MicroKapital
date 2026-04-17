@@ -79,6 +79,8 @@ export async function POST(
         {
           folder: 'microkapital/documentos',
           resource_type: 'auto',
+          type: 'upload',
+          access_mode: 'public',
           public_id: `loan_${params.id}_${tipo}_${Date.now()}`,
         },
         (error, result) => {

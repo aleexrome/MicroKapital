@@ -212,7 +212,7 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocum
         ) : (
           <div className="space-y-2">
             {docs.map((doc) => (
-              <div key={doc.id} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-gray-50 text-sm">
+              <div key={doc.id} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-gray-800/50 text-sm">
                 <FileText className="h-4 w-4 text-primary-600 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{TIPO_LABELS[doc.tipo] ?? doc.tipo}</p>
@@ -221,15 +221,14 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocum
                     {doc.descripcion ? ` · ${doc.descripcion}` : ''}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <a
                     href={doc.archivoUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-1 rounded text-primary-600 hover:bg-primary-100"
-                    title="Ver documento"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-primary-400 hover:bg-primary-500/10 border border-primary-500/30"
                   >
-                    <ExternalLink className="h-3.5 w-3.5" />
+                    <ExternalLink className="h-3.5 w-3.5" /> Ver
                   </a>
                   {!readOnly && (
                     <button

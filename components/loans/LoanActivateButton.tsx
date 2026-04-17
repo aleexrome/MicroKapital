@@ -51,7 +51,6 @@ export function LoanActivateButton({
   const [loading, setLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [step, setStep] = useState<Step>('info')
-  const [fecha, setFecha] = useState(() => fechaDesembolsoDG ?? new Date().toISOString().slice(0, 10))
 
   // Transfer state
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
@@ -80,10 +79,7 @@ export function LoanActivateButton({
   ) {
     setLoading(true)
     try {
-      const body: Record<string, unknown> = {
-        fechaDesembolso: fecha,
-        metodoPago,
-      }
+      const body: Record<string, unknown> = { metodoPago }
 
       if (metodoPago === 'CASH') {
         body.cashBreakdown = cashBreakdown ?? []
@@ -141,7 +137,7 @@ export function LoanActivateButton({
       const res = await fetch(`/api/loans/${loanId}/activate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaDesembolso: fecha }),
+        body: JSON.stringify({}),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Error al activar')
@@ -222,40 +218,25 @@ export function LoanActivateButton({
             </p>
           </div>
 
-          {/* Fecha de desembolso */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground flex items-center gap-1">
-              <CalendarDays className="h-3 w-3" /> Fecha de desembolso
-            </label>
-            {fechaDesembolsoDG ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{fechaDesembolsoDG}</span>
-                <span className="text-xs text-primary-400 bg-primary-500/10 border border-primary-500/30 rounded px-2 py-0.5">
-                  Fijada por el Director General
-                </span>
-              </div>
-            ) : (
-              <input
-                type="date"
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-                className="border border-gray-600 bg-gray-800 text-gray-100 rounded px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            )}
-          </div>
-
-          {/* Fecha del primer pago (if set by DG) */}
-          {fechaPrimerPagoDG && (
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground flex items-center gap-1">
-                <CalendarDays className="h-3 w-3" /> Fecha del primer pago
-              </label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{fechaPrimerPagoDG}</span>
-                <span className="text-xs text-primary-400 bg-primary-500/10 border border-primary-500/30 rounded px-2 py-0.5">
-                  Fijada por el Director General
-                </span>
-              </div>
+          {/* Fechas fijadas por Dirección General */}
+          {(fechaDesembolsoDG || fechaPrimerPagoDG) && (
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {fechaDesembolsoDG && (
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+                    <CalendarDays className="h-3 w-3" /> Desembolso
+                  </p>
+                  <p className="font-medium">{fechaDesembolsoDG}</p>
+                </div>
+              )}
+              {fechaPrimerPagoDG && (
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+                    <CalendarDays className="h-3 w-3" /> Primer pago
+                  </p>
+                  <p className="font-medium">{fechaPrimerPagoDG}</p>
+                </div>
+              )}
             </div>
           )}
 

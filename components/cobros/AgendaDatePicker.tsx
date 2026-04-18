@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, ChevronRight, CalendarDays, CalendarRange } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { DateRangeCalendar } from './DateRangeCalendar'
 
 function toYMD(d: Date) {
@@ -44,8 +44,7 @@ interface AgendaDatePickerProps {
 
 export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, maxDate, minDate }: AgendaDatePickerProps) {
   const router = useRouter()
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [showRangeCalendar, setShowRangeCalendar] = useState(false)
+  const [showCalendar, setShowCalendar] = useState(false)
 
   const isRange = !!fechaFin && fechaFin !== fecha
 
@@ -74,43 +73,27 @@ export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, 
         </button>
 
         {/* Date display */}
-        {isRange ? (
-          <button
-            onClick={() => setShowRangeCalendar((v) => !v)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted transition-colors"
-          >
-            <CalendarRange className="h-4 w-4 text-primary-400" />
-            <span className="text-sm font-semibold min-w-[140px] text-center">
-              {formatRangeLabel(fecha, fechaFin!)}
-            </span>
-          </button>
-        ) : (
-          <button
-            onClick={() => inputRef.current?.showPicker?.() ?? inputRef.current?.click()}
-            className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted transition-colors"
-            title="Seleccionar fecha"
-          >
-            <CalendarDays className="h-4 w-4 text-primary-600" />
-            <span className="text-sm font-semibold min-w-[120px] text-center">
-              {formatLabel(fecha)}
-            </span>
-            <input
-              ref={inputRef}
-              type="date"
-              value={fecha}
-              max={effectiveMax || undefined}
-              min={effectiveMin || undefined}
-              onChange={(e) => {
-                const v = e.target.value
-                if (!v) return
-                if (effectiveMax && v > effectiveMax) return
-                if (effectiveMin && v < effectiveMin) return
-                navigate(v)
-              }}
-              className="absolute inset-0 opacity-0 w-full cursor-pointer"
-            />
-          </button>
-        )}
+        <button
+          onClick={() => setShowCalendar((v) => !v)}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted transition-colors"
+          title="Seleccionar fecha"
+        >
+          {isRange ? (
+            <>
+              <CalendarRange className="h-4 w-4 text-primary-400" />
+              <span className="text-sm font-semibold min-w-[140px] text-center">
+                {formatRangeLabel(fecha, fechaFin!)}
+              </span>
+            </>
+          ) : (
+            <>
+              <CalendarDays className="h-4 w-4 text-primary-400" />
+              <span className="text-sm font-semibold min-w-[120px] text-center">
+                {formatLabel(fecha)}
+              </span>
+            </>
+          )}
+        </button>
 
         {/* Next day */}
         <button
@@ -125,9 +108,9 @@ export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, 
 
       {/* Range toggle button */}
       <button
-        onClick={() => setShowRangeCalendar((v) => !v)}
+        onClick={() => setShowCalendar((v) => !v)}
         className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-colors ${
-          isRange || showRangeCalendar
+          isRange || showCalendar
             ? 'text-primary-400 bg-primary-500/10 border border-primary-500/30'
             : 'text-muted-foreground hover:text-primary-400 hover:bg-muted/40'
         }`}
@@ -148,11 +131,11 @@ export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, 
       )}
 
       {/* Floating range calendar */}
-      {showRangeCalendar && (
+      {showCalendar && (
         <>
           <div
             className="fixed inset-0 z-40"
-            onClick={() => setShowRangeCalendar(false)}
+            onClick={() => setShowCalendar(false)}
           />
           <div className="absolute top-full left-0 mt-2 z-50">
             <DateRangeCalendar
@@ -162,9 +145,9 @@ export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, 
               minDate={effectiveMin}
               onSelect={(start, end) => {
                 navigate(start, end)
-                setShowRangeCalendar(false)
+                setShowCalendar(false)
               }}
-              onClose={() => setShowRangeCalendar(false)}
+              onClose={() => setShowCalendar(false)}
             />
           </div>
         </>

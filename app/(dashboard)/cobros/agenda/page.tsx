@@ -8,22 +8,28 @@ import { esDiaHabil } from '@/lib/business-days'
 import { AgendaDatePicker } from '@/components/cobros/AgendaDatePicker'
 import { ImprimirAgendaButton } from '@/components/cobros/ImprimirAgendaButton'
 
+function toYMD(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function nowMx() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }))
+}
+
 function parseDate(dateStr?: string): Date {
-  const yesterday = new Date()
-  yesterday.setHours(0, 0, 0, 0)
-  yesterday.setDate(yesterday.getDate() - 1)
+  const now = nowMx()
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
 
   if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return yesterday
   }
-  const d = new Date(dateStr + 'T00:00:00')
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return d < today ? d : yesterday
-}
-
-function toYMD(d: Date) {
-  return d.toISOString().split('T')[0]
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return date < today ? date : yesterday
 }
 
 export default async function AgendaPage({
@@ -56,8 +62,8 @@ export default async function AgendaPage({
   const isToday = fechaStr === toYMD(new Date())   // siempre false (Cobranza bloquea hoy)
 
   // Yesterday string — used as maxDate for the date picker
-  const _yd = new Date(); _yd.setDate(_yd.getDate() - 1)
-  const yesterdayStr = toYMD(_yd)
+  const now = nowMx()
+  const yesterdayStr = toYMD(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
 
   // ── Determine cobrador scope ─────────────────────────────────────────────────
   let cobradorIds: string[] | undefined

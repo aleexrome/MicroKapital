@@ -8,22 +8,28 @@ import { esDiaHabil } from '@/lib/business-days'
 import { AgendaDatePicker } from '@/components/cobros/AgendaDatePicker'
 import { ImprimirAgendaButton } from '@/components/cobros/ImprimirAgendaButton'
 
+function toYMD(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function nowMx() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }))
+}
+
 function parseDate(dateStr?: string): Date {
-  const tomorrow = new Date()
-  tomorrow.setHours(0, 0, 0, 0)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  const now = nowMx()
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
 
   if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return tomorrow
   }
-  const d = new Date(dateStr + 'T00:00:00')
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return d > today ? d : tomorrow
-}
-
-function toYMD(d: Date) {
-  return d.toISOString().split('T')[0]
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return date > today ? date : tomorrow
 }
 
 export default async function CobranzaAnticipadaPage({
@@ -56,8 +62,8 @@ export default async function CobranzaAnticipadaPage({
   const isToday = false
 
   // Tomorrow string — used as minDate for the date picker (future only)
-  const _tm = new Date(); _tm.setDate(_tm.getDate() + 1)
-  const tomorrowStr = toYMD(_tm)
+  const now = nowMx()
+  const tomorrowStr = toYMD(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1))
 
   // ── Determine cobrador scope ─────────────────────────────────────────────────
   let cobradorIds: string[] | undefined

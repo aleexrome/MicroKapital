@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Pencil, Check, X, AlertCircle, Undo2, CheckCircle2, Info } from 'lucide-react'
+import { Loader2, Pencil, Check, X, AlertCircle, Undo2, CheckCircle2, Info, Eye } from 'lucide-react'
 import { formatMoney } from '@/lib/utils'
 import { formatDate } from '@/lib/utils'
 import type { ScheduleStatus } from '@prisma/client'
@@ -59,6 +59,7 @@ interface ScheduleItem {
   estado: ScheduleStatus
   pagadoAt?: Date | string | null
   paymentInfo?: PaymentInfo
+  numeroTicket?: string | null
 }
 
 interface Props {
@@ -299,6 +300,22 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
                     Aplicar
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* Ver ticket — para filas PAID con ticket registrado */}
+            {s.estado === 'PAID' && s.numeroTicket && (
+              <div className="shrink-0">
+                <a
+                  href={`/verificar/${encodeURIComponent(s.numeroTicket)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-primary-400/50"
+                  title="Ver ticket"
+                >
+                  <Eye className="h-3 w-3" />
+                  Ticket
+                </a>
               </div>
             )}
 

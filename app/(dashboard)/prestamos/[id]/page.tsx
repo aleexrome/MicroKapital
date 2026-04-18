@@ -92,6 +92,9 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   }
 
   // Construir paymentInfoMap para TODOS los roles (quien cobró / aplicó)
+  // Mapa de scheduleId → numeroTicket (para mostrar botón "Ver ticket")
+  const ticketMap: Record<string, string> = {}
+
   if (loan.schedule.length > 0) {
     const scheduleIds = loan.schedule.map((s) => s.id)
 
@@ -99,6 +102,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     const pagos = await prisma.payment.findMany({
       where: { scheduleId: { in: scheduleIds } },
       select: {
+        id: true,
         scheduleId: true,
         fechaHora: true,
         cobrador: { select: { nombre: true, rol: true } },
@@ -111,6 +115,22 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           quien: p.cobrador.nombre,
           rol: p.cobrador.rol,
           cuando: p.fechaHora.toISOString(),
+        }
+      }
+    }
+
+    // Tickets asociados a los payments (para mostrar botón "Ver ticket")
+    const paymentIds = pagos.map((p) => p.id)
+    if (paymentIds.length > 0) {
+      const tickets = await prisma.ticket.findMany({
+        where: { paymentId: { in: paymentIds }, anulado: false },
+        select: { paymentId: true, numeroTicket: true },
+      })
+      const paymentToTicket: Record<string, string> = {}
+      for (const t of tickets) paymentToTicket[t.paymentId] = t.numeroTicket
+      for (const p of pagos) {
+        if (p.scheduleId && paymentToTicket[p.id]) {
+          ticketMap[p.scheduleId] = paymentToTicket[p.id]
         }
       }
     }
@@ -529,6 +549,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 estado: s.estado as ScheduleStatus,
                 pagadoAt: s.pagadoAt ?? null,
                 paymentInfo: paymentInfoMap[s.id],
+                numeroTicket: ticketMap[s.id] ?? null,
               }))}
               canCapture={puedeCapturar}
               canEditDates={puedeEditarFechas}

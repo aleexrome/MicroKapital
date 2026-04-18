@@ -79,7 +79,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/cobros/anticipada',
-    label: 'Cobranza anticipada',
+    label: 'Cobranza Anticipada',
     icon: <CalendarDays className="h-5 w-5" />,
     roles: ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },

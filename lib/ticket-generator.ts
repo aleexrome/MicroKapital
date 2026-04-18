@@ -53,10 +53,10 @@ export async function generateTicketNumber(
 }
 
 /**
- * Genera el código QR de verificación para un ticket
- * Formato: fintech.app/v/[NUMERO_TICKET]
+ * Genera la URL de verificación del ticket.
+ * Apunta a la página pública /verificar/[numeroTicket] del sistema.
  */
 export function generateTicketQrData(numeroTicket: string): string {
-  const cleanTicket = numeroTicket.replace(/-/g, '')
-  return `fintech.app/v/${cleanTicket}`
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.microkapital.com'
+  return `${baseUrl}/verificar/${numeroTicket}`
 }

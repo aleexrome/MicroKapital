@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   '/api/auth',
   '/api/internal',
   '/licencia-suspendida',
+  '/verificar',
 ]
 
 const SUPER_ADMIN_PATH = '/sys-mnt-9x7k'

@@ -92,8 +92,9 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   }
 
   // Construir paymentInfoMap para TODOS los roles (quien cobró / aplicó)
-  // Mapa de scheduleId → numeroTicket (para mostrar botón "Ver ticket")
-  const ticketMap: Record<string, string> = {}
+  // Mapa de scheduleId → tickets (original + reimpresiones) para mostrar botones "Ver ticket"
+  type TicketItem = { numeroTicket: string; esReimpresion: boolean; impresoAt: string }
+  const ticketMap: Record<string, TicketItem[]> = {}
 
   if (loan.schedule.length > 0) {
     const scheduleIds = loan.schedule.map((s) => s.id)
@@ -119,18 +120,26 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       }
     }
 
-    // Tickets asociados a los payments (para mostrar botón "Ver ticket")
+    // Tickets asociados a los payments — incluye original + reimpresiones
     const paymentIds = pagos.map((p) => p.id)
     if (paymentIds.length > 0) {
       const tickets = await prisma.ticket.findMany({
         where: { paymentId: { in: paymentIds }, anulado: false },
-        select: { paymentId: true, numeroTicket: true },
+        select: { paymentId: true, numeroTicket: true, esReimpresion: true, impresoAt: true },
+        orderBy: { impresoAt: 'asc' },
       })
-      const paymentToTicket: Record<string, string> = {}
-      for (const t of tickets) paymentToTicket[t.paymentId] = t.numeroTicket
+      const paymentToTickets: Record<string, TicketItem[]> = {}
+      for (const t of tickets) {
+        if (!paymentToTickets[t.paymentId]) paymentToTickets[t.paymentId] = []
+        paymentToTickets[t.paymentId].push({
+          numeroTicket: t.numeroTicket,
+          esReimpresion: t.esReimpresion,
+          impresoAt: t.impresoAt.toISOString(),
+        })
+      }
       for (const p of pagos) {
-        if (p.scheduleId && paymentToTicket[p.id]) {
-          ticketMap[p.scheduleId] = paymentToTicket[p.id]
+        if (p.scheduleId && paymentToTickets[p.id]) {
+          ticketMap[p.scheduleId] = paymentToTickets[p.id]
         }
       }
     }
@@ -549,7 +558,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 estado: s.estado as ScheduleStatus,
                 pagadoAt: s.pagadoAt ?? null,
                 paymentInfo: paymentInfoMap[s.id],
-                numeroTicket: ticketMap[s.id] ?? null,
+                tickets: ticketMap[s.id] ?? [],
               }))}
               canCapture={puedeCapturar}
               canEditDates={puedeEditarFechas}

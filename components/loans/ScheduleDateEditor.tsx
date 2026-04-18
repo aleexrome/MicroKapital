@@ -59,7 +59,7 @@ interface ScheduleItem {
   estado: ScheduleStatus
   pagadoAt?: Date | string | null
   paymentInfo?: PaymentInfo
-  numeroTicket?: string | null
+  tickets?: { numeroTicket: string; esReimpresion: boolean; impresoAt: string }[]
 }
 
 interface Props {
@@ -303,19 +303,26 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
               </div>
             )}
 
-            {/* Ver ticket — para filas PAID con ticket registrado */}
-            {s.estado === 'PAID' && s.numeroTicket && (
-              <div className="shrink-0">
-                <a
-                  href={`/verificar/${encodeURIComponent(s.numeroTicket)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-primary-400/50"
-                  title="Ver ticket"
-                >
-                  <Eye className="h-3 w-3" />
-                  Ticket
-                </a>
+            {/* Ver ticket(s) — para filas PAID con tickets registrados (original + reimpresiones) */}
+            {s.estado === 'PAID' && s.tickets && s.tickets.length > 0 && (
+              <div className="shrink-0 flex items-center gap-1 flex-wrap">
+                {s.tickets.map((t, i) => (
+                  <a
+                    key={t.numeroTicket}
+                    href={`/verificar/${encodeURIComponent(t.numeroTicket)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center gap-1 text-xs transition-colors border border-dashed rounded px-2 py-1 ${
+                      t.esReimpresion
+                        ? 'text-amber-400 border-amber-400/40 hover:border-amber-400/70 hover:bg-amber-500/5'
+                        : 'text-muted-foreground border-border/50 hover:text-primary-400 hover:border-primary-400/50'
+                    }`}
+                    title={t.esReimpresion ? `Reimpresion: ${t.numeroTicket}` : `Ticket original: ${t.numeroTicket}`}
+                  >
+                    <Eye className="h-3 w-3" />
+                    {t.esReimpresion ? `Reimpr. ${i}` : 'Ticket'}
+                  </a>
+                ))}
               </div>
             )}
 

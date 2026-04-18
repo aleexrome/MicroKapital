@@ -1,7 +1,9 @@
 import { prisma } from '@/lib/prisma'
+import { getSession } from '@/lib/session'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { CheckCircle2, XCircle, Shield, Building2, User, Calendar, CreditCard } from 'lucide-react'
 import Image from 'next/image'
+import { ReprintTicketButton } from '@/components/thermal/ReprintTicketButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +53,20 @@ export default async function VerificarTicketPage({
   }
 
   const pago = ticket.payment
+
+  // Verificar si el usuario puede reimprimir (solo si tiene sesión y permisos)
+  const session = await getSession()
+  const canReprint = !!session?.user && (
+    session.user.companyId === ticket.companyId &&
+    (
+      session.user.rol === 'DIRECTOR_GENERAL' ||
+      session.user.rol === 'DIRECTOR_COMERCIAL' ||
+      session.user.rol === 'SUPER_ADMIN' ||
+      session.user.rol === 'GERENTE_ZONAL' ||
+      session.user.rol === 'GERENTE' ||
+      ticket.impresoPorId === session.user.id
+    )
+  )
 
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
@@ -146,6 +162,12 @@ export default async function VerificarTicketPage({
         {ticket.esReimpresion && (
           <div className="mt-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 text-xs text-amber-300 text-center">
             Este es un ticket reimpreso
+          </div>
+        )}
+
+        {canReprint && (
+          <div className="mt-6">
+            <ReprintTicketButton ticketId={ticket.id} />
           </div>
         )}
 

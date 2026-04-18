@@ -1,178 +1,220 @@
-'use client'
-
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { getSession } from '@/lib/session'
+import { redirect } from 'next/navigation'
+import { prisma } from '@/lib/prisma'
+import { formatMoney, formatDate } from '@/lib/utils'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
-import { useToast } from '@/components/ui/use-toast'
-import { formatDate, formatMoney } from '@/lib/utils'
-import { Printer, Ban, RotateCcw, Loader2, Ticket } from 'lucide-react'
+import Link from 'next/link'
+import { Building2, UserCheck, Ticket as TicketIcon, RotateCcw, Ban, Eye } from 'lucide-react'
+import { TicketsClientView } from './TicketsClientView'
 
-interface TicketRecord {
-  id: string
-  numeroTicket: string
-  esReimpresion: boolean
-  anulado: boolean
-  impresoAt: string
-  payment: {
-    monto: string
-    metodoPago: string
-    client: { nombreCompleto: string }
-  }
-  impresoPor: { nombre: string }
-}
+export const dynamic = 'force-dynamic'
 
-export default function TicketsPage() {
-  const { toast } = useToast()
-  const router = useRouter()
-  const [tickets, setTickets] = useState<TicketRecord[]>([])
-  const [loading, setLoading] = useState(true)
-  const [processing, setProcessing] = useState<string | null>(null)
-  const [voidId, setVoidId] = useState<string | null>(null)
-  const [razonAnulacion, setRazonAnulacion] = useState('')
+export default async function TicketsPage() {
+  const session = await getSession()
+  if (!session?.user) redirect('/login')
 
-  async function loadTickets() {
-    const res = await fetch('/api/tickets')
-    const data = await res.json()
-    setTickets(data.data ?? [])
-    setLoading(false)
+  const { rol, companyId } = session.user
+
+  const isDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
+
+  // Para coordinadores/cobradores/gerentes — vista cliente con acciones
+  if (!isDirector) {
+    return <TicketsClientView />
   }
 
-  useEffect(() => { loadTickets() }, [])
+  // Para directores — vista agrupada por sucursal → empleado (solo lectura)
+  const tickets = await prisma.ticket.findMany({
+    where: { companyId: companyId! },
+    orderBy: { impresoAt: 'desc' },
+    take: 500,
+    include: {
+      branch: { select: { id: true, nombre: true } },
+      impresoPor: { select: { id: true, nombre: true, rol: true } },
+      payment: {
+        select: {
+          monto: true,
+          metodoPago: true,
+          client: { select: { nombreCompleto: true } },
+        },
+      },
+    },
+  })
 
-  async function handleReprint(ticketId: string) {
-    setProcessing(ticketId)
-    try {
-      const res = await fetch(`/api/tickets/${ticketId}/reprint`, { method: 'POST' })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.detail ?? err.error ?? 'Error al reimprimir')
+  // Agrupar: sucursal → empleado → tickets
+  type TicketRow = typeof tickets[number]
+  const branchMap: Record<string, {
+    branchNombre: string
+    empleados: Record<string, {
+      empleadoNombre: string
+      empleadoRol: string
+      tickets: TicketRow[]
+    }>
+  }> = {}
+
+  for (const t of tickets) {
+    const bId = t.branchId
+    const eId = t.impresoPorId
+    if (!branchMap[bId]) branchMap[bId] = { branchNombre: t.branch.nombre, empleados: {} }
+    if (!branchMap[bId].empleados[eId]) {
+      branchMap[bId].empleados[eId] = {
+        empleadoNombre: t.impresoPor.nombre,
+        empleadoRol: t.impresoPor.rol,
+        tickets: [],
       }
-      const { data } = await res.json()
-      // Navigate to print page with the new reprint ticket ID
-      router.push(`/thermal-print?ticketId=${data.id}`)
-    } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' })
-    } finally {
-      setProcessing(null)
     }
+    branchMap[bId].empleados[eId].tickets.push(t)
   }
 
-  async function handleVoid(ticketId: string) {
-    if (!razonAnulacion.trim()) return
-    setProcessing(ticketId)
-    try {
-      const res = await fetch(`/api/tickets/${ticketId}/void`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ razonAnulacion }),
-      })
-      if (!res.ok) throw new Error('Error al anular')
-      toast({ title: 'Ticket anulado' })
-      setVoidId(null)
-      setRazonAnulacion('')
-      loadTickets()
-    } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' })
-    } finally {
-      setProcessing(null)
-    }
+  // Métricas globales
+  const totalTickets = tickets.length
+  const totalReimpresiones = tickets.filter((t) => t.esReimpresion).length
+  const totalAnulados = tickets.filter((t) => t.anulado).length
+  const totalOriginales = totalTickets - totalReimpresiones
+
+  const ROL_LABEL: Record<string, string> = {
+    DIRECTOR_GENERAL: 'Director General',
+    DIRECTOR_COMERCIAL: 'Director Comercial',
+    GERENTE_ZONAL: 'Gerente Zonal',
+    GERENTE: 'Gerente',
+    COORDINADOR: 'Coordinador',
+    COBRADOR: 'Cobrador',
+    SUPER_ADMIN: 'Super Administrador',
+  }
+
+  const METODO_LABEL: Record<string, string> = {
+    CASH: 'Efectivo',
+    CARD: 'Tarjeta',
+    TRANSFER: 'Transferencia',
   }
 
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Control de tickets</h1>
-        <p className="text-muted-foreground">Reimpresiones y anulaciones</p>
+        <h1 className="text-2xl font-bold">Historial de tickets</h1>
+        <p className="text-muted-foreground text-sm">
+          Registro global de impresiones y reimpresiones — últimos 500
+        </p>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary-700" />
-        </div>
-      ) : tickets.length === 0 ? (
+      {/* Métricas */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>
-          <CardContent className="text-center py-12">
-            <Ticket className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No hay tickets registrados</p>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Total tickets</p>
+            <p className="text-2xl font-bold">{totalTickets}</p>
           </CardContent>
         </Card>
-      ) : (
-        <div className="space-y-3">
-          {tickets.map((ticket) => (
-            <Card key={ticket.id} className={ticket.anulado ? 'opacity-60' : ''}>
-              <CardContent className="p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono font-semibold text-sm">{ticket.numeroTicket}</span>
-                      {ticket.esReimpresion && <Badge variant="secondary">Reimpresión</Badge>}
-                      {ticket.anulado && <Badge variant="error">Anulado</Badge>}
-                    </div>
-                    <p className="text-sm text-gray-700 mt-0.5">{ticket.payment.client.nombreCompleto}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatMoney(Number(ticket.payment.monto))} · {ticket.payment.metodoPago} ·{' '}
-                      {formatDate(ticket.impresoAt)} · {ticket.impresoPor.nombre}
-                    </p>
-                  </div>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <TicketIcon className="h-3 w-3" /> Originales
+            </p>
+            <p className="text-2xl font-bold text-emerald-400">{totalOriginales}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <RotateCcw className="h-3 w-3" /> Reimpresiones
+            </p>
+            <p className="text-2xl font-bold text-amber-400">{totalReimpresiones}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Ban className="h-3 w-3" /> Anulados
+            </p>
+            <p className="text-2xl font-bold text-red-400">{totalAnulados}</p>
+          </CardContent>
+        </Card>
+      </div>
 
-                  {!ticket.anulado && (
-                    <div className="flex items-center gap-2">
-                      {voidId === ticket.id ? (
-                        <div className="flex gap-2 items-center">
-                          <input
-                            className="border rounded px-2 py-1 text-sm w-40"
-                            placeholder="Razón de anulación..."
-                            value={razonAnulacion}
-                            onChange={(e) => setRazonAnulacion(e.target.value)}
-                            autoFocus
-                          />
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={!razonAnulacion.trim() || !!processing}
-                            onClick={() => handleVoid(ticket.id)}
-                          >
-                            {processing === ticket.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Anular'}
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setVoidId(null)}>Cancelar</Button>
-                        </div>
-                      ) : (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => router.push(`/thermal-print?ticketId=${ticket.id}`)}
-                          >
-                            <Printer className="h-3 w-3" /> Imprimir
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={!!processing}
-                            onClick={() => handleReprint(ticket.id)}
-                          >
-                            {processing === ticket.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><RotateCcw className="h-3 w-3" /> Reimprimir</>}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600 border-red-300 hover:bg-red-50"
-                            onClick={() => setVoidId(ticket.id)}
-                          >
-                            <Ban className="h-3 w-3" /> Anular
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+      {Object.keys(branchMap).length === 0 && (
+        <div className="text-center py-12">
+          <TicketIcon className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+          <p className="text-muted-foreground">No hay tickets registrados aún</p>
         </div>
       )}
+
+      {/* Agrupación por sucursal */}
+      {Object.entries(branchMap).map(([bId, branch]) => {
+        const branchTotal = Object.values(branch.empleados).reduce((s, e) => s + e.tickets.length, 0)
+
+        return (
+          <div key={bId} className="space-y-3">
+            <div className="flex items-center gap-2 pt-2">
+              <Building2 className="h-4 w-4 text-primary-400" />
+              <h2 className="font-semibold text-lg">{branch.branchNombre}</h2>
+              <span className="text-xs text-muted-foreground">· {branchTotal} tickets</span>
+            </div>
+
+            {Object.entries(branch.empleados).map(([eId, emp]) => {
+              const empReimpresiones = emp.tickets.filter((t) => t.esReimpresion).length
+              const empAnulados = emp.tickets.filter((t) => t.anulado).length
+
+              return (
+                <Card key={eId}>
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="h-4 w-4 text-primary-400" />
+                        <span>{emp.empleadoNombre}</span>
+                        <span className="text-xs text-muted-foreground font-normal">
+                          ({ROL_LABEL[emp.empleadoRol] ?? emp.empleadoRol})
+                        </span>
+                      </div>
+                      <div className="text-xs font-normal flex items-center gap-3">
+                        <span>{emp.tickets.length} tickets</span>
+                        {empReimpresiones > 0 && (
+                          <span className="text-amber-400">{empReimpresiones} reimpr.</span>
+                        )}
+                        {empAnulados > 0 && (
+                          <span className="text-red-400">{empAnulados} anulados</span>
+                        )}
+                      </div>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <div className="space-y-1.5">
+                      {emp.tickets.map((t) => (
+                        <Link
+                          key={t.id}
+                          href={`/verificar/${encodeURIComponent(t.numeroTicket)}`}
+                          target="_blank"
+                          className={`flex items-center gap-3 py-2 px-3 rounded-lg text-sm border transition-colors ${
+                            t.anulado
+                              ? 'bg-red-500/5 border-red-500/20 opacity-60'
+                              : t.esReimpresion
+                              ? 'bg-amber-500/5 border-amber-500/20 hover:border-amber-500/40'
+                              : 'bg-gray-800/50 border-gray-700 hover:border-gray-600'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-xs font-semibold">{t.numeroTicket}</span>
+                              {t.esReimpresion && <Badge variant="warning" className="text-[10px] px-1.5 py-0">Reimpr.</Badge>}
+                              {t.anulado && <Badge variant="error" className="text-[10px] px-1.5 py-0">Anulado</Badge>}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                              {t.payment.client.nombreCompleto} · {METODO_LABEL[t.payment.metodoPago] ?? t.payment.metodoPago} · {formatDate(t.impresoAt, "dd/MM/yyyy HH:mm")}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0 flex items-center gap-2">
+                            <span className="font-semibold text-sm">{formatMoney(Number(t.payment.monto))}</span>
+                            <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -106,7 +106,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/tickets',
     label: 'Tickets',
     icon: <Ticket className="h-5 w-5" />,
-    roles: ['COBRADOR', 'COORDINADOR', 'GERENTE'],
+    roles: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   {
     href: '/transferencias',

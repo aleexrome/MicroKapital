@@ -30,6 +30,7 @@ import {
   Landmark,
   UserCheck,
   Navigation,
+  CalendarClock,
 } from 'lucide-react'
 import type { BranchTreeData } from '@/types/tree'
 
@@ -80,7 +81,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: '/cobros/anticipada',
     label: 'Cobranza Anticipada',
-    icon: <CalendarDays className="h-5 w-5" />,
+    icon: <CalendarClock className="h-5 w-5" />,
     roles: ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   {

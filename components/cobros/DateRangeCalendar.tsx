@@ -7,6 +7,7 @@ interface DateRangeCalendarProps {
   startDate: string | null
   endDate: string | null
   maxDate?: string
+  minDate?: string
   onSelect: (start: string, end: string) => void
   onClose: () => void
 }
@@ -26,9 +27,10 @@ const MONTHS = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ]
 
-export function DateRangeCalendar({ startDate, endDate, maxDate, onSelect, onClose }: DateRangeCalendarProps) {
+export function DateRangeCalendar({ startDate, endDate, maxDate, minDate, onSelect, onClose }: DateRangeCalendarProps) {
   const today = toYMD(new Date())
-  const effectiveMax = maxDate ?? today
+  const effectiveMax = maxDate ?? undefined
+  const effectiveMin = minDate ?? undefined
 
   const initial = startDate ? parseYMD(startDate) : new Date()
   const [viewMonth, setViewMonth] = useState(initial.getMonth())
@@ -55,12 +57,14 @@ export function DateRangeCalendar({ startDate, endDate, maxDate, onSelect, onClo
       const m = viewMonth === 0 ? 11 : viewMonth - 1
       const y = viewMonth === 0 ? viewYear - 1 : viewYear
       const date = toYMD(new Date(y, m, d))
-      days.push({ date, day: d, inMonth: false, disabled: date > effectiveMax })
+      const disabled = (effectiveMax && date > effectiveMax) || (effectiveMin && date < effectiveMin)
+      days.push({ date, day: d, inMonth: false, disabled: !!disabled })
     }
 
     for (let d = 1; d <= daysInMonth; d++) {
       const date = toYMD(new Date(viewYear, viewMonth, d))
-      days.push({ date, day: d, inMonth: true, disabled: date > effectiveMax })
+      const disabled = (effectiveMax && date > effectiveMax) || (effectiveMin && date < effectiveMin)
+      days.push({ date, day: d, inMonth: true, disabled: !!disabled })
     }
 
     const remaining = 42 - days.length
@@ -68,7 +72,8 @@ export function DateRangeCalendar({ startDate, endDate, maxDate, onSelect, onClo
       const m = viewMonth === 11 ? 0 : viewMonth + 1
       const y = viewMonth === 11 ? viewYear + 1 : viewYear
       const date = toYMD(new Date(y, m, d))
-      days.push({ date, day: d, inMonth: false, disabled: date > effectiveMax })
+      const disabled = (effectiveMax && date > effectiveMax) || (effectiveMin && date < effectiveMin)
+      days.push({ date, day: d, inMonth: false, disabled: !!disabled })
     }
 
     return days

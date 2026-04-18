@@ -39,9 +39,10 @@ interface AgendaDatePickerProps {
   baseHref: string
   extraParams?: Record<string, string>
   maxDate?: string
+  minDate?: string
 }
 
-export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, maxDate }: AgendaDatePickerProps) {
+export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, maxDate, minDate }: AgendaDatePickerProps) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [showRangeCalendar, setShowRangeCalendar] = useState(false)
@@ -54,8 +55,10 @@ export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, 
     router.push(`${baseHref}?${params.toString()}`)
   }
 
-  const effectiveMax = maxDate ?? toYMD(new Date())
-  const forwardDisabled = addDays(fecha, 1) > effectiveMax
+  const effectiveMax = maxDate ?? undefined
+  const effectiveMin = minDate ?? undefined
+  const forwardDisabled = effectiveMax ? addDays(fecha, 1) > effectiveMax : false
+  const backwardDisabled = effectiveMin ? addDays(fecha, -1) < effectiveMin : false
 
   return (
     <div className="relative flex items-center gap-2">
@@ -65,6 +68,7 @@ export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, 
           onClick={() => navigate(addDays(fecha, isRange ? 0 : -1), isRange ? addDays(fechaFin!, -1) : undefined)}
           className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
           title="Dia anterior"
+          disabled={backwardDisabled}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -94,8 +98,15 @@ export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, 
               ref={inputRef}
               type="date"
               value={fecha}
-              max={effectiveMax}
-              onChange={(e) => { if (e.target.value && e.target.value <= effectiveMax) navigate(e.target.value) }}
+              max={effectiveMax || undefined}
+              min={effectiveMin || undefined}
+              onChange={(e) => {
+                const v = e.target.value
+                if (!v) return
+                if (effectiveMax && v > effectiveMax) return
+                if (effectiveMin && v < effectiveMin) return
+                navigate(v)
+              }}
               className="absolute inset-0 opacity-0 w-full cursor-pointer"
             />
           </button>
@@ -106,9 +117,9 @@ export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, 
           onClick={() => navigate(addDays(fecha, isRange ? 0 : 1), isRange ? addDays(fechaFin!, 1) : undefined)}
           className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
           title="Dia siguiente"
-          disabled={isRange ? addDays(fechaFin!, 1) > effectiveMax : forwardDisabled}
+          disabled={isRange ? (effectiveMax ? addDays(fechaFin!, 1) > effectiveMax : false) : forwardDisabled}
         >
-          <ChevronRight className={`h-4 w-4 ${(isRange ? addDays(fechaFin!, 1) > effectiveMax : forwardDisabled) ? 'opacity-30' : ''}`} />
+          <ChevronRight className={`h-4 w-4 ${(isRange ? (effectiveMax ? addDays(fechaFin!, 1) > effectiveMax : false) : forwardDisabled) ? 'opacity-30' : ''}`} />
         </button>
       </div>
 
@@ -148,6 +159,7 @@ export function AgendaDatePicker({ fecha, fechaFin, baseHref, extraParams = {}, 
               startDate={fecha}
               endDate={fechaFin ?? null}
               maxDate={effectiveMax}
+              minDate={effectiveMin}
               onSelect={(start, end) => {
                 navigate(start, end)
                 setShowRangeCalendar(false)

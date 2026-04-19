@@ -4,28 +4,22 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { formatMoney } from '@/lib/utils'
+import { CashBreakdownCalculator } from '@/components/payments/CashBreakdownCalculator'
 import {
-  ArrowLeft, CheckCircle, XCircle, Users, Banknote,
-  CreditCard, Building2, Loader2, Printer,
+  ArrowLeft, CheckCircle, Users, Banknote, CreditCard, Building2,
+  Loader2, Printer, Download,
 } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { buildGroupTicketBytes, loadLogoBitmap, printViaBluetooth } from '@/lib/escpos'
+import type { CashBreakdownEntry } from '@/types'
 
 const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/v1776487061/ddcb6871-4cff-422e-9a00-67d62aa6243f.png'
 
-interface GroupTicketMeta {
-  empresa:  string
-  sucursal: string
-  cobrador: string
-  fecha:    string
-  qrCode:   string | null
-}
-
-type PagoStatus = 'PAID' | 'COVERED' | 'UNPAID'
-type Metodo = 'CASH' | 'CARD' | 'TRANSFER'
+type Step = 'summary' | 'method' | 'cash' | 'transfer' | 'card' | 'done'
 
 interface MiembroInfo {
   scheduleId:   string
@@ -38,10 +32,27 @@ interface MiembroInfo {
   estadoActual: string
 }
 
-interface MiembroState {
-  status:               PagoStatus
-  metodoPago:           Metodo
-  cubridoPorClienteId?: string
+interface BankAccount {
+  id: string
+  banco: string
+  titular: string
+  clabe: string
+  numeroCuenta: string
+}
+
+interface GroupTicketMeta {
+  empresa:  string
+  sucursal: string
+  cobrador: string
+  fecha:    string
+  qrCode:   string | null
+}
+
+interface TicketItem {
+  id: string
+  numeroTicket: string
+  clienteNombre: string
+  monto: number
 }
 
 export default function CapturarGrupoPage() {
@@ -50,137 +61,102 @@ export default function CapturarGrupoPage() {
   const router  = useRouter()
   const { toast } = useToast()
 
-  const [miembros, setMiembros] = useState<MiembroInfo[]>([])
-  const [states,   setStates]   = useState<Record<string, MiembroState>>({})
-  const [loading,  setLoading]  = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [done,     setDone]     = useState(false)
-  const [tickets,  setTickets]  = useState<{ id: string; numeroTicket: string; clienteNombre: string; monto: number; esCoberturaGrupal: boolean }[]>([])
+  const [miembros, setMiembros]       = useState<MiembroInfo[]>([])
   const [grupoNombre, setGrupoNombre] = useState('')
+  const [loading, setLoading]         = useState(true)
+  const [step, setStep]               = useState<Step>('summary')
+  const [submitting, setSubmitting]   = useState(false)
+
+  const [bankAccounts, setBankAccounts]     = useState<BankAccount[]>([])
+  const [selectedAccount, setSelectedAccount] = useState('')
+  const [idTransferencia, setIdTransferencia] = useState('')
+
+  const [tickets, setTickets]     = useState<TicketItem[]>([])
   const [groupMeta, setGroupMeta] = useState<GroupTicketMeta | null>(null)
+  const [metodoFinal, setMetodoFinal] = useState<'CASH' | 'CARD' | 'TRANSFER' | null>(null)
   const [printingGroup, setPrintingGroup] = useState(false)
+
+  const totalEsperado = miembros.reduce((s, m) => s + m.monto, 0)
 
   useEffect(() => {
     fetch(`/api/cobros/grupo/${groupId}/miembros`)
       .then((r) => r.json())
       .then((d) => {
-        const data: MiembroInfo[] = d.data ?? []
-        setMiembros(data)
+        setMiembros(d.data ?? [])
         setGrupoNombre(d.grupoNombre ?? '')
-        const init: Record<string, MiembroState> = {}
-        data.forEach((m) => { init[m.clientId] = { status: 'PAID', metodoPago: 'CASH' } })
-        setStates(init)
         setLoading(false)
+      })
+      .catch(() => setLoading(false))
+    fetch('/api/bank-accounts')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.data?.length) {
+          setBankAccounts(d.data)
+          setSelectedAccount(d.data[0].id)
+        }
       })
   }, [groupId])
 
-  function setStatus(clientId: string, status: PagoStatus) {
-    setStates((prev) => ({ ...prev, [clientId]: { ...prev[clientId], status, cubridoPorClienteId: undefined } }))
-  }
-
-  function setMetodo(clientId: string, metodoPago: Metodo) {
-    setStates((prev) => ({ ...prev, [clientId]: { ...prev[clientId], metodoPago } }))
-  }
-
-  function setCubridor(clientId: string, cubridoPorClienteId: string) {
-    setStates((prev) => ({ ...prev, [clientId]: { ...prev[clientId], cubridoPorClienteId } }))
-  }
-
-  const totalEsperado  = miembros.reduce((s, m) => s + m.monto, 0)
-  const totalPagado    = miembros.filter((m) => states[m.clientId]?.status !== 'UNPAID').reduce((s, m) => s + m.monto, 0)
-  const hayProblema    = miembros.some((m) => {
-    const st = states[m.clientId]
-    return st?.status === 'COVERED' && !st.cubridoPorClienteId
-  })
-
-  async function handleSubmit() {
-    if (hayProblema) {
-      toast({ title: 'Completa la información', description: 'Indica quién cubrió a cada integrante marcada como CUBIERTA', variant: 'destructive' })
-      return
-    }
+  async function submitPayment(
+    metodoPago: 'CASH' | 'CARD' | 'TRANSFER',
+    cashBreakdown?: CashBreakdownEntry[],
+    cambio?: number,
+  ) {
     setSubmitting(true)
     try {
-      const pagos = miembros.map((m) => {
-        const st = states[m.clientId]!
-        return {
-          scheduleId:          m.scheduleId,
-          loanId:              m.loanId,
-          clientId:            m.clientId,
-          status:              st.status,
-          metodoPago:          st.metodoPago,
-          cubridoPorClienteId: st.cubridoPorClienteId,
-        }
-      })
+      const body: Record<string, unknown> = {
+        metodoPago,
+        cambioEntregado: cambio ?? 0,
+        cashBreakdown:   cashBreakdown ?? [],
+      }
+      if (metodoPago === 'TRANSFER') {
+        body.cuentaDestinoId = selectedAccount || undefined
+        body.idTransferencia = idTransferencia || undefined
+      }
 
       const res = await fetch(`/api/cobros/grupo/${groupId}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pagos }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) {
         let msg = `Error ${res.status}`
         try {
-          const body = await res.json()
-          if (typeof body?.error === 'string') msg = body.error
-          else if (body?.error) msg = JSON.stringify(body.error)
-        } catch { /* respuesta no-json */ }
+          const b = await res.json()
+          if (typeof b?.error === 'string') msg = b.error
+          else if (b?.error) msg = JSON.stringify(b.error)
+        } catch { /* no-json */ }
         throw new Error(msg)
       }
       const data = await res.json()
-      setTickets(data.tickets)
-      setGrupoNombre(data.grupoNombre)
+      setTickets(data.tickets ?? [])
       if (data.groupTicketMeta) setGroupMeta(data.groupTicketMeta)
-      setDone(true)
+      setMetodoFinal(metodoPago)
+      setStep('done')
     } catch (e) {
-      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+      toast({
+        title: 'Error',
+        description: e instanceof Error ? e.message : 'No se pudo registrar el pago',
+        variant: 'destructive',
+      })
     } finally {
       setSubmitting(false)
     }
   }
 
   async function handleGroupPrint() {
-    if (!groupMeta) return
+    if (!groupMeta || !metodoFinal) return
     setPrintingGroup(true)
     try {
-      // Construir el nombre de cobertura por cliente (quién cubrió a quién)
-      const nombreByClient = new Map<string, string>()
-      for (const m of miembros) nombreByClient.set(m.clientId, m.clientNombre)
-
-      const integrantes: { cliente: string; monto: string; nota?: string }[] = []
-      for (const m of miembros) {
-        const st = states[m.clientId]
-        if (!st || st.status === 'UNPAID') continue
-        const t = tickets.find((tk) => tk.clienteNombre === m.clientNombre)
-        const monto = t ? t.monto : m.monto
-        let nota: string | undefined
-        if (st.status === 'COVERED' && st.cubridoPorClienteId) {
-          const cubre = nombreByClient.get(st.cubridoPorClienteId) ?? ''
-          nota = `Cubierta por ${cubre}`.trim()
-        }
-        integrantes.push({
-          cliente: m.clientNombre,
-          monto:   formatMoney(monto),
-          nota,
-        })
-      }
-
-      const total = tickets.reduce((s, t) => s + t.monto, 0)
-      const metodosArr: string[] = []
-      for (const m of miembros) {
-        const st = states[m.clientId]
-        if (st && st.status !== 'UNPAID') metodosArr.push(st.metodoPago)
-      }
-      const metodosUnicos = Array.from(new Set(metodosArr))
-      let metodoLabel = 'Mixto'
-      if (metodosUnicos.length === 1) {
-        const m0 = metodosUnicos[0]
-        metodoLabel = m0 === 'CASH' ? 'Efectivo' : m0 === 'CARD' ? 'Tarjeta' : 'Transferencia'
-      }
-
       let logo: { pixels: Uint8Array; widthPx: number; heightPx: number } | undefined
-      try { logo = await loadLogoBitmap(LOGO_URL, 384) } catch { /* seguir sin logo */ }
+      try { logo = await loadLogoBitmap(LOGO_URL, 384) } catch { /* no-logo */ }
 
       const fechaD = new Date(groupMeta.fecha)
+      const integrantes = miembros.map((m) => ({
+        cliente: m.clientNombre,
+        monto:   formatMoney(m.monto),
+      }))
+
       const bytes = buildGroupTicketBytes({
         empresa:     groupMeta.empresa,
         sucursal:    groupMeta.sucursal,
@@ -189,8 +165,8 @@ export default function CapturarGrupoPage() {
         cobrador:    groupMeta.cobrador,
         grupoNombre,
         integrantes,
-        totalCobrado: formatMoney(total),
-        metodoPago:   metodoLabel,
+        totalCobrado: formatMoney(totalEsperado),
+        metodoPago:   metodoFinal === 'CASH' ? 'Efectivo' : metodoFinal === 'CARD' ? 'Tarjeta' : 'Transferencia',
         qrCode:       groupMeta.qrCode ?? undefined,
         logo,
       })
@@ -208,65 +184,7 @@ export default function CapturarGrupoPage() {
     }
   }
 
-  // ── RESULTADO ─────────────────────────────────────────────────────────────────
-  if (done) {
-    return (
-      <div className="p-4 max-w-sm mx-auto space-y-4">
-        <div className="flex items-center gap-2 text-green-600">
-          <CheckCircle className="h-6 w-6" />
-          <h2 className="text-lg font-bold">¡Pagos registrados!</h2>
-        </div>
-        <p className="text-sm text-muted-foreground">Grupo: <strong>{grupoNombre}</strong></p>
-
-        {/* Ticket grupal consolidado */}
-        {groupMeta && tickets.length > 0 && (
-          <Button
-            className="w-full"
-            size="lg"
-            onClick={handleGroupPrint}
-            disabled={printingGroup}
-          >
-            {printingGroup
-              ? <Loader2 className="h-4 w-4 animate-spin" />
-              : <><Printer className="h-4 w-4 mr-1" />Imprimir ticket grupal</>}
-          </Button>
-        )}
-
-        <div className="space-y-2">
-          {tickets.map((t) => (
-            <Card key={t.id}>
-              <CardContent className="p-3 text-sm space-y-2">
-                <div>
-                  <p className="font-semibold truncate">{t.clienteNombre}</p>
-                  <div className="flex justify-between text-muted-foreground mt-0.5">
-                    <span>Ticket: {t.numeroTicket}</span>
-                    <span>{formatMoney(t.monto)}</span>
-                  </div>
-                  {t.esCoberturaGrupal && (
-                    <p className="text-xs text-amber-600 mt-0.5">Cubierta por otra integrante</p>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => router.push(`/thermal-print?ticketId=${t.id}`)}
-                >
-                  <Printer className="h-3 w-3 mr-1" />Imprimir individual
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <Button variant="outline" className="w-full" onClick={() => router.push('/cobros/agenda')}>
-          Volver a agenda
-        </Button>
-      </div>
-    )
-  }
-
-  // ── CARGANDO ──────────────────────────────────────────────────────────────────
+  // ── Cargando ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -275,165 +193,288 @@ export default function CapturarGrupoPage() {
     )
   }
 
-  // ── FORMULARIO ────────────────────────────────────────────────────────────────
-  return (
-    <div className="p-4 max-w-lg mx-auto space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button asChild variant="ghost" size="icon">
-          <Link href={`/cobros/grupo/${groupId}`}><ArrowLeft className="h-4 w-4" /></Link>
+  if (miembros.length === 0) {
+    return (
+      <div className="p-6 text-center space-y-4">
+        <p className="text-muted-foreground">No hay pagos pendientes para este grupo.</p>
+        <Button variant="outline" onClick={() => router.back()}>Volver</Button>
+      </div>
+    )
+  }
+
+  // ── DONE: ticket generado ───────────────────────────────────────────────────
+  if (step === 'done') {
+    return (
+      <div className="p-4 space-y-4 max-w-md mx-auto">
+        <div className="flex items-center gap-2 text-emerald-400">
+          <CheckCircle className="h-6 w-6" />
+          <h2 className="text-lg font-bold">¡Pagos registrados!</h2>
+        </div>
+
+        {/* Resumen */}
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div>
+              <p className="text-xs text-muted-foreground">Grupo</p>
+              <p className="font-semibold">{grupoNombre}</p>
+            </div>
+            <div className="divide-y divide-border/40">
+              {miembros.map((m) => (
+                <div key={m.clientId} className="flex items-center justify-between py-1.5 text-sm">
+                  <span className="truncate">{m.clientNombre}</span>
+                  <span className="font-medium shrink-0">{formatMoney(m.monto)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-border">
+              <span className="font-semibold">Total</span>
+              <span className="text-lg font-bold text-primary-300">{formatMoney(totalEsperado)}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Método</span>
+              <span>
+                {metodoFinal === 'CASH' ? '💵 Efectivo'
+                  : metodoFinal === 'CARD' ? '💳 Tarjeta'
+                  : '🏦 Transferencia'}
+              </span>
+            </div>
+            {metodoFinal === 'TRANSFER' && (
+              <Badge variant="warning" className="text-[10px]">
+                Pendiente de verificación por gerencia
+              </Badge>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Acciones */}
+        <div className="grid grid-cols-2 gap-2">
+          <Button onClick={handleGroupPrint} disabled={printingGroup}>
+            {printingGroup
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <><Printer className="h-4 w-4" /> Imprimir BT</>}
+          </Button>
+          <Button variant="outline" onClick={() => window.print()}>
+            <Download className="h-4 w-4" /> Guardar PDF
+          </Button>
+        </div>
+
+        {tickets.length > 0 && (
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer">Tickets individuales ({tickets.length})</summary>
+            <ul className="mt-1 space-y-0.5 ml-2">
+              {tickets.map((t) => (
+                <li key={t.id}>
+                  <a
+                    href={`/thermal-print?ticketId=${t.id}`}
+                    className="underline hover:text-primary-300"
+                  >
+                    {t.numeroTicket} — {t.clienteNombre}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
+        <Button variant="ghost" className="w-full" onClick={() => router.push('/cobros/agenda')}>
+          Volver a agenda
         </Button>
-        <div>
-          <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-primary-600" />
-            <h1 className="text-lg font-bold">{grupoNombre}</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">Registrar pagos del grupo</p>
-        </div>
       </div>
+    )
+  }
 
-      {/* Resumen */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-primary-500/10 border border-primary-500/20 rounded-lg p-3">
-          <p className="text-xs text-primary-400 font-medium">Esperado</p>
-          <p className="text-base font-bold text-primary-300">{formatMoney(totalEsperado)}</p>
-        </div>
-        <div className={`rounded-lg p-3 border ${totalPagado < totalEsperado ? 'bg-amber-500/10 border-amber-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
-          <p className={`text-xs font-medium ${totalPagado < totalEsperado ? 'text-amber-400' : 'text-emerald-400'}`}>Confirmado</p>
-          <p className={`text-base font-bold ${totalPagado < totalEsperado ? 'text-amber-300' : 'text-emerald-300'}`}>{formatMoney(totalPagado)}</p>
-        </div>
-      </div>
-
-      {/* Tarjeta por integrante */}
-      {miembros.map((m) => {
-        const st = states[m.clientId] ?? { status: 'PAID', metodoPago: 'CASH' }
-        const otrasPagadoras = miembros.filter(
-          (other) => other.clientId !== m.clientId && states[other.clientId]?.status === 'PAID'
-        )
-
-        return (
-          <Card key={m.clientId} className={
-            st.status === 'UNPAID'  ? 'border-red-500/30 bg-red-500/5' :
-            st.status === 'COVERED' ? 'border-amber-500/30 bg-amber-500/5' :
-            'border-emerald-500/30 bg-emerald-500/5'
-          }>
-            <CardContent className="p-4 space-y-3">
-              {/* Nombre + monto */}
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-semibold">{m.clientNombre}</p>
-                  <p className="text-xs text-muted-foreground">Pago {m.numeroPago} de {m.totalPagos}</p>
-                </div>
-                <p className="text-lg font-bold">{formatMoney(m.monto)}</p>
-              </div>
-
-              {/* Botones SÍ / NO / CUBIERTA */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setStatus(m.clientId, 'PAID')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
-                    st.status === 'PAID'
-                      ? 'border-emerald-500 bg-emerald-500 text-white'
-                      : 'border-border text-muted-foreground hover:border-emerald-400 hover:text-emerald-300'
-                  }`}
-                >
-                  <CheckCircle className="h-4 w-4" />Pagó
-                </button>
-                <button
-                  onClick={() => setStatus(m.clientId, 'COVERED')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
-                    st.status === 'COVERED'
-                      ? 'border-amber-500 bg-amber-500 text-white'
-                      : 'border-border text-muted-foreground hover:border-amber-400 hover:text-amber-300'
-                  }`}
-                >
-                  <Users className="h-4 w-4" />Cubierta
-                </button>
-                <button
-                  onClick={() => setStatus(m.clientId, 'UNPAID')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
-                    st.status === 'UNPAID'
-                      ? 'border-red-500 bg-red-500 text-white'
-                      : 'border-border text-muted-foreground hover:border-red-400 hover:text-red-300'
-                  }`}
-                >
-                  <XCircle className="h-4 w-4" />No pagó
-                </button>
-              </div>
-
-              {/* Si CUBIERTA: elegir quién la cubrió */}
-              {st.status === 'COVERED' && (
-                <div>
-                  <p className="text-xs text-amber-300 mb-1 font-medium">¿Quién la cubrió?</p>
-                  {otrasPagadoras.length === 0 ? (
-                    <p className="text-xs text-red-300">Ninguna integrante marcada como pagó. Marca al menos una como "Pagó" primero.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {otrasPagadoras.map((otra) => (
-                        <button
-                          key={otra.clientId}
-                          onClick={() => setCubridor(m.clientId, otra.clientId)}
-                          className={`text-xs px-3 py-1.5 rounded-full border-2 transition-colors ${
-                            st.cubridoPorClienteId === otra.clientId
-                              ? 'border-amber-500 bg-amber-500 text-white'
-                              : 'border-border text-muted-foreground hover:border-amber-400 hover:text-amber-300'
-                          }`}
-                        >
-                          {otra.clientNombre.split(' ')[0]}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Método de pago (solo si pagó o cubrió) */}
-              {st.status !== 'UNPAID' && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Método de pago</p>
-                  <div className="flex gap-2">
-                    {(['CASH', 'CARD', 'TRANSFER'] as Metodo[]).map((m2) => (
-                      <button
-                        key={m2}
-                        onClick={() => setMetodo(m.clientId, m2)}
-                        className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-lg border text-[11px] transition-colors ${
-                          st.metodoPago === m2
-                            ? 'border-primary-500 bg-primary-500/15 text-primary-300 font-semibold'
-                            : 'border-border text-muted-foreground hover:border-primary-500/50 hover:text-primary-300'
-                        }`}
-                      >
-                        {m2 === 'CASH' && <Banknote className="h-3.5 w-3.5" />}
-                        {m2 === 'CARD' && <CreditCard className="h-3.5 w-3.5" />}
-                        {m2 === 'TRANSFER' && <Building2 className="h-3.5 w-3.5" />}
-                        {m2 === 'CASH' ? 'Efectivo' : m2 === 'CARD' ? 'Tarjeta' : 'Transferencia'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )
-      })}
-
-      {/* Botón confirmar */}
-      <Button
-        className="w-full"
-        size="lg"
-        disabled={submitting || hayProblema}
-        onClick={handleSubmit}
-      >
-        {submitting
-          ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Procesando…</>
-          : `Confirmar ${miembros.filter((m) => states[m.clientId]?.status !== 'UNPAID').length} pago(s) — ${formatMoney(totalPagado)}`
-        }
+  // ── Header común ────────────────────────────────────────────────────────────
+  const header = (
+    <div className="flex items-center gap-3">
+      <Button asChild variant="ghost" size="icon">
+        <Link href={`/cobros/grupo/${groupId}`}><ArrowLeft className="h-4 w-4" /></Link>
       </Button>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-primary-600 shrink-0" />
+          <h1 className="text-lg font-bold truncate">{grupoNombre}</h1>
+        </div>
+        <p className="text-xs text-muted-foreground">Pago grupal — {miembros.length} integrantes</p>
+      </div>
+    </div>
+  )
 
-      {hayProblema && (
-        <p className="text-xs text-center text-red-400">
-          Indica quién cubrió a la(s) integrante(s) marcada(s) como CUBIERTA
+  // ── SUMMARY ─────────────────────────────────────────────────────────────────
+  if (step === 'summary') {
+    return (
+      <div className="p-4 space-y-4 max-w-md mx-auto">
+        {header}
+
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="divide-y divide-border/40">
+              {miembros.map((m) => (
+                <div key={m.clientId} className="flex items-center justify-between py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{m.clientNombre}</p>
+                    <p className="text-xs text-muted-foreground">Pago {m.numeroPago} de {m.totalPagos}</p>
+                  </div>
+                  <span className="font-semibold shrink-0">{formatMoney(m.monto)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-border">
+              <span className="font-semibold">Total a cobrar</span>
+              <span className="text-2xl font-bold text-primary-300">{formatMoney(totalEsperado)}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <p className="text-xs text-muted-foreground text-center">
+          Si alguna integrante no trae su parte, sal y cóbrale individualmente desde su expediente.
         </p>
+
+        <Button size="lg" className="w-full" onClick={() => setStep('method')}>
+          Confirmar y cobrar
+        </Button>
+      </div>
+    )
+  }
+
+  // ── METHOD ──────────────────────────────────────────────────────────────────
+  if (step === 'method') {
+    return (
+      <div className="p-4 space-y-4 max-w-md mx-auto">
+        {header}
+        <Card className="bg-primary-500/5 border-primary-500/20">
+          <CardContent className="p-4 text-center">
+            <p className="text-xs text-primary-300">Total del grupo</p>
+            <p className="text-3xl font-bold text-primary-200">{formatMoney(totalEsperado)}</p>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-3 gap-3">
+          <button
+            onClick={() => setStep('cash')}
+            className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-border hover:border-primary-500 hover:bg-primary-500/5 transition-colors"
+          >
+            <Banknote className="h-7 w-7 text-primary-400" />
+            <span className="font-medium text-sm">Efectivo</span>
+          </button>
+          <button
+            onClick={() => setStep('card')}
+            className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-border hover:border-primary-500 hover:bg-primary-500/5 transition-colors"
+          >
+            <CreditCard className="h-7 w-7 text-primary-400" />
+            <span className="font-medium text-sm">Tarjeta</span>
+          </button>
+          <button
+            onClick={() => setStep('transfer')}
+            className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-border hover:border-primary-500 hover:bg-primary-500/5 transition-colors"
+          >
+            <Building2 className="h-7 w-7 text-primary-400" />
+            <span className="font-medium text-sm">Transferencia</span>
+          </button>
+        </div>
+
+        <Button variant="ghost" className="w-full" onClick={() => setStep('summary')}>
+          Atrás
+        </Button>
+      </div>
+    )
+  }
+
+  // ── CASH ────────────────────────────────────────────────────────────────────
+  if (step === 'cash') {
+    return (
+      <div className="p-4 space-y-4 max-w-md mx-auto">
+        {header}
+        <CashBreakdownCalculator
+          montoEsperado={totalEsperado}
+          disabled={submitting}
+          onCancel={() => setStep('method')}
+          onConfirm={(breakdown, cambio) => submitPayment('CASH', breakdown, cambio)}
+        />
+      </div>
+    )
+  }
+
+  // ── CARD ────────────────────────────────────────────────────────────────────
+  if (step === 'card') {
+    return (
+      <div className="p-4 space-y-4 max-w-md mx-auto">
+        {header}
+        <Card className="bg-primary-500/5 border-primary-500/20">
+          <CardContent className="p-4 text-center">
+            <CreditCard className="h-8 w-8 text-primary-400 mx-auto mb-2" />
+            <p className="font-medium">Pago con tarjeta — grupo completo</p>
+            <p className="text-2xl font-bold text-primary-200 mt-1">{formatMoney(totalEsperado)}</p>
+          </CardContent>
+        </Card>
+        <div className="flex gap-3">
+          <Button variant="outline" className="flex-1" onClick={() => setStep('method')} disabled={submitting}>
+            Atrás
+          </Button>
+          <Button className="flex-1" onClick={() => submitPayment('CARD')} disabled={submitting}>
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle className="h-4 w-4" /> Confirmar</>}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── TRANSFER ────────────────────────────────────────────────────────────────
+  return (
+    <div className="p-4 space-y-4 max-w-md mx-auto">
+      {header}
+      <Card className="bg-primary-500/5 border-primary-500/20">
+        <CardContent className="p-4 text-center">
+          <Building2 className="h-8 w-8 text-primary-400 mx-auto mb-2" />
+          <p className="font-medium">Transferencia — grupo completo</p>
+          <p className="text-2xl font-bold text-primary-200 mt-1">{formatMoney(totalEsperado)}</p>
+        </CardContent>
+      </Card>
+
+      {bankAccounts.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium">Cuenta destino</p>
+          <div className="space-y-2">
+            {bankAccounts.map((acc) => (
+              <button
+                key={acc.id}
+                type="button"
+                onClick={() => setSelectedAccount(acc.id)}
+                className={`w-full text-left rounded-lg border-2 p-3 transition-colors ${
+                  selectedAccount === acc.id
+                    ? 'border-primary-500 bg-primary-500/5'
+                    : 'border-border hover:border-primary-500/50'
+                }`}
+              >
+                <p className="font-medium text-sm">{acc.banco} — {acc.titular}</p>
+                <p className="text-xs text-muted-foreground">CLABE: {acc.clabe}</p>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
+
+      <div className="space-y-1.5">
+        <p className="text-sm font-medium">ID / Referencia de transferencia</p>
+        <input
+          className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+          placeholder="Número de referencia…"
+          value={idTransferencia}
+          onChange={(e) => setIdTransferencia(e.target.value)}
+        />
+      </div>
+
+      <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+        El pago quedará pendiente de verificación. El Gerente Zonal deberá confirmar que el dinero llegó a la cuenta.
+      </p>
+
+      <div className="flex gap-3">
+        <Button variant="outline" className="flex-1" onClick={() => setStep('method')} disabled={submitting}>
+          Atrás
+        </Button>
+        <Button className="flex-1" onClick={() => submitPayment('TRANSFER')} disabled={submitting}>
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle className="h-4 w-4" /> Registrar</>}
+        </Button>
+      </div>
     </div>
   )
 }

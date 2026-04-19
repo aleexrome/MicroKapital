@@ -251,11 +251,17 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   const puedeEditarFechas = esOpAdmin
   const puedeDeshacerPago = esOpAdmin || tienePermisoAplicar
 
-  // Coordinador/Cobrador pueden capturar pagos
+  // Coordinador/Cobrador/Gerente (y usuarios con permiso) pueden capturar pagos
   const tieneEvidenciaDesembolso = !!loan.desembolsoFotoUrl
   // Solo bloquear pagos si el crédito no tiene pagos aún (nuevo) y no tiene foto
   const requiereFotoDesembolso = !tieneEvidenciaDesembolso && pagados === 0
-  const puedeCapturar = loan.estado === 'ACTIVE' && (rol === 'COBRADOR' || rol === 'COORDINADOR') && !requiereFotoDesembolso
+  const rolPuedeCapturar =
+    rol === 'COBRADOR' ||
+    rol === 'COORDINADOR' ||
+    rol === 'GERENTE' ||
+    rol === 'GERENTE_ZONAL' ||
+    tienePermisoAplicar
+  const puedeCapturar = loan.estado === 'ACTIVE' && rolPuedeCapturar && !requiereFotoDesembolso
   const puedeSubirEvidencia = loan.estado === 'ACTIVE' && !tieneEvidenciaDesembolso && (rol === 'COORDINADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL')
 
   return (

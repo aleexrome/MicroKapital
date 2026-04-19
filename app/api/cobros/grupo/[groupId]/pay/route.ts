@@ -121,13 +121,28 @@ export async function POST(
     .join('')
     .slice(0, 4)
 
+  // Pre-generar los números de ticket FUERA de la transacción — generateTicketNumber
+  // usa el cliente Prisma no-transaccional y llamarlo dentro del $transaction puede
+  // provocar timeouts y resultar en 500.
+  const ticketNumbers: string[] = []
+  try {
+    for (let i = 0; i < loansPagables.length; i++) {
+      ticketNumbers.push(await generateTicketNumber(branchPrefix, now.getFullYear()))
+    }
+  } catch (e) {
+    console.error('[group-pay] error generando números de ticket', e)
+    return NextResponse.json({ error: 'No se pudo generar el número de ticket' }, { status: 500 })
+  }
+
   // ── Transacción: crear Payments + schedule updates + ticket por integrante
   const tickets: { id: string; numeroTicket: string; clienteNombre: string; monto: number }[] = []
 
-  await prisma.$transaction(async (tx) => {
+  try {
+    await prisma.$transaction(async (tx) => {
     let breakdownAdjuntado = false
 
-    for (const loan of loansPagables) {
+    for (let i = 0; i < loansPagables.length; i++) {
+      const loan = loansPagables[i]!
       const sched = loan.schedule[0]!
       const montoBase = Number(sched.montoEsperado)
 
@@ -208,8 +223,8 @@ export async function POST(
       })
       await tx.client.update({ where: { id: loan.clientId }, data: { score: nuevoScore } })
 
-      // 6. Ticket individual
-      const numeroTicket = await generateTicketNumber(branchPrefix, now.getFullYear())
+      // 6. Ticket individual (número pre-generado fuera de la transacción)
+      const numeroTicket = ticketNumbers[i]!
       const qrCode       = generateTicketQrData(numeroTicket)
       const ticketRec = await tx.ticket.create({
         data: {
@@ -249,7 +264,12 @@ export async function POST(
         cambioEntregado:      data.cambioEntregado > 0 ? { increment: data.cambioEntregado } : undefined,
       },
     })
-  })
+    }, { timeout: 20000 })
+  } catch (e) {
+    console.error('[group-pay] transacción falló', e)
+    const msg = e instanceof Error ? e.message : 'Error al registrar el pago grupal'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 
   createAuditLog({
     userId,

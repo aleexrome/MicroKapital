@@ -121,14 +121,30 @@ export async function POST(
     .join('')
     .slice(0, 4)
 
-  // Pre-generar los números de ticket FUERA de la transacción — generateTicketNumber
-  // usa el cliente Prisma no-transaccional y llamarlo dentro del $transaction puede
-  // provocar timeouts y resultar en 500.
-  const ticketNumbers: string[] = []
+  // Pre-reservar los números de ticket FUERA de la transacción.
+  // `generateTicketNumber` lee el último ticket de la BD y suma 1; si lo
+  // llamásemos N veces en loop TODAS las llamadas leerían el mismo estado y
+  // devolverían el mismo número — fallan con unique constraint al guardar.
+  // En vez de eso leemos una sola vez el último número y reservamos N
+  // consecutivos localmente.
+  const year = now.getFullYear()
+  const prefix = `${branchPrefix.toUpperCase()}-${year}-`
+  let ticketNumbers: string[] = []
   try {
-    for (let i = 0; i < loansPagables.length; i++) {
-      ticketNumbers.push(await generateTicketNumber(branchPrefix, now.getFullYear()))
+    const lastTicket = await prisma.ticket.findFirst({
+      where: { numeroTicket: { startsWith: prefix } },
+      orderBy: { numeroTicket: 'desc' },
+      select: { numeroTicket: true },
+    })
+    let nextNum = 1
+    if (lastTicket) {
+      const parts = lastTicket.numeroTicket.split('-')
+      const lastNum = parseInt(parts[parts.length - 1] ?? '', 10)
+      if (!isNaN(lastNum)) nextNum = lastNum + 1
     }
+    ticketNumbers = loansPagables.map((_, i) =>
+      `${prefix}${String(nextNum + i).padStart(5, '0')}`
+    )
   } catch (e) {
     console.error('[group-pay] error generando números de ticket', e)
     return NextResponse.json({ error: 'No se pudo generar el número de ticket' }, { status: 500 })

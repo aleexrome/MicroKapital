@@ -94,41 +94,11 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Alcance por rol: quién puede registrar un pago contra este schedule
-  //   - COORDINADOR / COBRADOR: solo loans asignados a ellos
-  //   - GERENTE / GERENTE_ZONAL: loans en sus sucursales (zonaBranchIds o branchId)
-  //   - DIRECTOR_GENERAL / SUPER_ADMIN: cualquier loan de la empresa
-  //   - Otros con permisoAplicarPagos: loans de su sucursal
-  const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
-  const esGerente = rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
-  const esCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
-
-  const loanScope: Record<string, unknown> = { companyId: companyId! }
-  if (esCoordinador) {
-    loanScope.cobradorId = cobrador.id
-  } else if (esGerente) {
-    const branchIds = session.user.zonaBranchIds?.length
-      ? session.user.zonaBranchIds
-      : branchId ? [branchId] : []
-    if (branchIds.length === 0) {
-      return NextResponse.json({ error: 'No autorizado: sin sucursal asignada' }, { status: 403 })
-    }
-    loanScope.branchId = { in: branchIds }
-  } else if (!esOpAdmin) {
-    if (!cobrador.permisoAplicarPagos) {
-      return NextResponse.json({ error: 'No autorizado para registrar pagos' }, { status: 403 })
-    }
-    if (!branchId) {
-      return NextResponse.json({ error: 'No autorizado: sin sucursal asignada' }, { status: 403 })
-    }
-    loanScope.branchId = branchId
-  }
-
-  // Obtener el schedule con el préstamo
+  // 1. Buscar el schedule dentro de la misma empresa y aún cobrable.
   const schedule = await prisma.paymentSchedule.findFirst({
     where: {
       id: data.scheduleId,
-      loan: loanScope,
+      loan: { companyId: companyId! },
       estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
     },
     include: {
@@ -146,6 +116,35 @@ export async function POST(req: NextRequest) {
 
   if (!schedule) {
     return NextResponse.json({ error: 'Cobro no encontrado o ya procesado' }, { status: 404 })
+  }
+
+  // 2. Autorizar por rol contra el préstamo ya cargado:
+  //   - COORDINADOR / COBRADOR: solo loans asignados a ellos
+  //   - GERENTE / GERENTE_ZONAL: loans en sus sucursales (zonaBranchIds o branchId)
+  //                              — si ambos vienen vacíos, se permite (misma regla que la UI)
+  //   - DIRECTOR_GENERAL / SUPER_ADMIN: cualquier loan de la empresa
+  //   - Otros con permisoAplicarPagos: loans de su sucursal
+  const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
+  const esGerente = rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
+  const esCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
+
+  let autorizado = false
+  if (esOpAdmin) {
+    autorizado = true
+  } else if (esCoordinador) {
+    autorizado = schedule.loan.cobradorId === cobrador.id
+  } else if (esGerente) {
+    const zonas = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : []
+    // Consistente con la UI: si no hay zonas definidas, no se restringe por sucursal
+    autorizado = zonas.length === 0 || zonas.includes(schedule.loan.branchId)
+  } else if (cobrador.permisoAplicarPagos) {
+    autorizado = !!branchId && schedule.loan.branchId === branchId
+  }
+
+  if (!autorizado) {
+    return NextResponse.json({ error: 'No autorizado para cobrar este préstamo' }, { status: 403 })
   }
 
   const loan = schedule.loan

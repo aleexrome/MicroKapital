@@ -19,6 +19,8 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
   const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
   // Usuarios con permiso especial pueden actuar en grupos de su propia sucursal
   const tienePermisoAplicar = session.user.permisoAplicarPagos === true
+  const rolCobra = rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
+  const puedeCapturarGrupal = rolCobra && !esOpAdmin && !tienePermisoAplicar
 
   // Scope loans by role
   const loanWhere: Prisma.LoanWhereInput = { companyId: companyId! }
@@ -117,9 +119,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
           </p>
         </div>
         {/* Botón de captura grupal — solo para roles que cobran (no DG/DC/usuarios con permiso aplicar) */}
-        {!esOpAdmin && !tienePermisoAplicar && (
-          rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
-        ) && (
+        {puedeCapturarGrupal && (
           <Button asChild size="sm">
             <Link href={`/cobros/grupo/${grupo.id}/capturar`}>
               <Banknote className="h-4 w-4 mr-1" />Capturar pago grupal

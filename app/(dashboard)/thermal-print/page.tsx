@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { Printer, Download, ArrowLeft, Loader2, Bluetooth } from 'lucide-react'
 import type { TicketData } from '@/types'
-import { buildTicketBytes, printViaBluetooth } from '@/lib/escpos'
+import { buildTicketBytes, printViaBluetooth, loadLogoBitmap } from '@/lib/escpos'
+
+const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/v1776487061/ddcb6871-4cff-422e-9a00-67d62aa6243f.png'
 import { formatMoney } from '@/lib/utils'
 import { format } from 'date-fns'
 
@@ -57,6 +59,14 @@ export default function ThermalPrintPage() {
     if (!ticketData) return
     setPrinting(true)
     try {
+      // Cargar logo a bitmap (no bloqueante si falla)
+      let logo: { pixels: Uint8Array; widthPx: number; heightPx: number } | undefined
+      try {
+        logo = await loadLogoBitmap(LOGO_URL, 256)
+      } catch {
+        // seguir sin logo si no se pudo cargar
+      }
+
       const bytes = buildTicketBytes({
         empresa: ticketData.empresa,
         sucursal: ticketData.sucursal,
@@ -73,6 +83,7 @@ export default function ThermalPrintPage() {
         recibido: ticketData.recibido !== undefined ? formatMoney(ticketData.recibido) : undefined,
         cambio: ticketData.cambio !== undefined ? formatMoney(ticketData.cambio) : undefined,
         qrCode: ticketData.qrCode,
+        logo,
       })
       await printViaBluetooth(bytes)
       toast({ title: '✅ Ticket enviado a la impresora' })

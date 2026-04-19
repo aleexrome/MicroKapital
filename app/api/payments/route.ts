@@ -78,10 +78,11 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { companyId, branchId, id: userId } = session.user
+  const { companyId, branchId, id: userId, rol } = session.user
 
   const cobrador = await prisma.user.findFirst({
     where: { companyId: companyId!, email: session.user.email! },
+    select: { id: true, rol: true, nombre: true, branchId: true, permisoAplicarPagos: true },
   })
   if (!cobrador) return NextResponse.json({ error: 'Cobrador no encontrado' }, { status: 403 })
 
@@ -93,11 +94,41 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
+  // Alcance por rol: quién puede registrar un pago contra este schedule
+  //   - COORDINADOR / COBRADOR: solo loans asignados a ellos
+  //   - GERENTE / GERENTE_ZONAL: loans en sus sucursales (zonaBranchIds o branchId)
+  //   - DIRECTOR_GENERAL / SUPER_ADMIN: cualquier loan de la empresa
+  //   - Otros con permisoAplicarPagos: loans de su sucursal
+  const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
+  const esGerente = rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
+  const esCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
+
+  const loanScope: Record<string, unknown> = { companyId: companyId! }
+  if (esCoordinador) {
+    loanScope.cobradorId = cobrador.id
+  } else if (esGerente) {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : []
+    if (branchIds.length === 0) {
+      return NextResponse.json({ error: 'No autorizado: sin sucursal asignada' }, { status: 403 })
+    }
+    loanScope.branchId = { in: branchIds }
+  } else if (!esOpAdmin) {
+    if (!cobrador.permisoAplicarPagos) {
+      return NextResponse.json({ error: 'No autorizado para registrar pagos' }, { status: 403 })
+    }
+    if (!branchId) {
+      return NextResponse.json({ error: 'No autorizado: sin sucursal asignada' }, { status: 403 })
+    }
+    loanScope.branchId = branchId
+  }
+
   // Obtener el schedule con el préstamo
   const schedule = await prisma.paymentSchedule.findFirst({
     where: {
       id: data.scheduleId,
-      loan: { companyId: companyId!, cobradorId: cobrador.id },
+      loan: loanScope,
       estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
     },
     include: {
@@ -118,7 +149,9 @@ export async function POST(req: NextRequest) {
   }
 
   const loan = schedule.loan
-  const targetBranchId = branchId ?? loan.branchId
+  // El ticket y el corte se asignan a la sucursal del préstamo, no a la del usuario
+  // (un gerente zonal puede cobrar créditos de distintas sucursales).
+  const targetBranchId = loan.branchId
 
   // Determinar prefijo de sucursal para el ticket
   const branchName = loan.branch.nombre

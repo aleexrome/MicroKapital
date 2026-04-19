@@ -138,30 +138,36 @@ export default function CapturarGrupoPage() {
       const nombreByClient = new Map<string, string>()
       for (const m of miembros) nombreByClient.set(m.clientId, m.clientNombre)
 
-      const integrantes = miembros.map((m) => {
+      const integrantes: { cliente: string; monto: string; nota?: string }[] = []
+      for (const m of miembros) {
         const st = states[m.clientId]
-        if (!st) return null
-        if (st.status === 'UNPAID') return null
+        if (!st || st.status === 'UNPAID') continue
         const t = tickets.find((tk) => tk.clienteNombre === m.clientNombre)
         const monto = t ? t.monto : m.monto
         let nota: string | undefined
         if (st.status === 'COVERED' && st.cubridoPorClienteId) {
-          nota = `Cubierta por ${nombreByClient.get(st.cubridoPorClienteId) ?? ''}`.trim()
+          const cubre = nombreByClient.get(st.cubridoPorClienteId) ?? ''
+          nota = `Cubierta por ${cubre}`.trim()
         }
-        return {
+        integrantes.push({
           cliente: m.clientNombre,
           monto:   formatMoney(monto),
           nota,
-        }
-      }).filter((x): x is NonNullable<typeof x> => x !== null)
+        })
+      }
 
       const total = tickets.reduce((s, t) => s + t.monto, 0)
-      const metodos = new Set(miembros
-        .filter((m) => states[m.clientId]?.status !== 'UNPAID')
-        .map((m) => states[m.clientId]!.metodoPago))
-      const metodoLabel = metodos.size === 1
-        ? [...metodos][0] === 'CASH' ? 'Efectivo' : [...metodos][0] === 'CARD' ? 'Tarjeta' : 'Transferencia'
-        : 'Mixto'
+      const metodosArr: string[] = []
+      for (const m of miembros) {
+        const st = states[m.clientId]
+        if (st && st.status !== 'UNPAID') metodosArr.push(st.metodoPago)
+      }
+      const metodosUnicos = Array.from(new Set(metodosArr))
+      let metodoLabel = 'Mixto'
+      if (metodosUnicos.length === 1) {
+        const m0 = metodosUnicos[0]
+        metodoLabel = m0 === 'CASH' ? 'Efectivo' : m0 === 'CARD' ? 'Tarjeta' : 'Transferencia'
+      }
 
       let logo: { pixels: Uint8Array; widthPx: number; heightPx: number } | undefined
       try { logo = await loadLogoBitmap(LOGO_URL, 384) } catch { /* seguir sin logo */ }

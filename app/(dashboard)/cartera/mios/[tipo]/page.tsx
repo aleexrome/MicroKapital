@@ -101,13 +101,11 @@ export default async function CarteraMiosTipoPage({ params }: { params: { tipo: 
           </div>
         </div>
 
+        {/* En /cartera/mios/SOLIDARIO solo entran COORDINADOR / COBRADOR (los
+            demás fueron redirigidos arriba). Siempre es modo capturar. */}
         <SolidarioGroupList
           groups={groupData}
-          mode={
-            rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN' || session.user.permisoAplicarPagos
-              ? 'aplicar'
-              : 'capturar'
-          }
+          mode={session.user.permisoAplicarPagos ? 'aplicar' : 'capturar'}
         />
       </div>
     )

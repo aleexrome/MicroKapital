@@ -33,7 +33,10 @@ export async function POST(
   const body = await req.json().catch(() => ({}))
   const parsed = bodySchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 })
+    const first = parsed.error.issues[0]
+    const path = first?.path?.join('.') ?? ''
+    const msg = `Datos inválidos${path ? ` (${path})` : ''}: ${first?.message ?? 'verifica los campos'}`
+    return NextResponse.json({ error: msg, fieldErrors: parsed.error.flatten().fieldErrors }, { status: 400 })
   }
 
   const { pagos } = parsed.data

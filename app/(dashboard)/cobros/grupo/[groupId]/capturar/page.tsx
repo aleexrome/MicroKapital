@@ -117,7 +117,15 @@ export default function CapturarGrupoPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pagos }),
       })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Error')
+      if (!res.ok) {
+        let msg = `Error ${res.status}`
+        try {
+          const body = await res.json()
+          if (typeof body?.error === 'string') msg = body.error
+          else if (body?.error) msg = JSON.stringify(body.error)
+        } catch { /* respuesta no-json */ }
+        throw new Error(msg)
+      }
       const data = await res.json()
       setTickets(data.tickets)
       setGrupoNombre(data.grupoNombre)
@@ -286,13 +294,13 @@ export default function CapturarGrupoPage() {
 
       {/* Resumen */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-primary-50 rounded-lg p-3">
-          <p className="text-xs text-primary-600 font-medium">Esperado</p>
-          <p className="text-base font-bold text-primary-800">{formatMoney(totalEsperado)}</p>
+        <div className="bg-primary-500/10 border border-primary-500/20 rounded-lg p-3">
+          <p className="text-xs text-primary-400 font-medium">Esperado</p>
+          <p className="text-base font-bold text-primary-300">{formatMoney(totalEsperado)}</p>
         </div>
-        <div className={`rounded-lg p-3 ${totalPagado < totalEsperado ? 'bg-amber-50' : 'bg-green-50'}`}>
-          <p className={`text-xs font-medium ${totalPagado < totalEsperado ? 'text-amber-600' : 'text-green-600'}`}>Confirmado</p>
-          <p className={`text-base font-bold ${totalPagado < totalEsperado ? 'text-amber-800' : 'text-green-800'}`}>{formatMoney(totalPagado)}</p>
+        <div className={`rounded-lg p-3 border ${totalPagado < totalEsperado ? 'bg-amber-500/10 border-amber-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+          <p className={`text-xs font-medium ${totalPagado < totalEsperado ? 'text-amber-400' : 'text-emerald-400'}`}>Confirmado</p>
+          <p className={`text-base font-bold ${totalPagado < totalEsperado ? 'text-amber-300' : 'text-emerald-300'}`}>{formatMoney(totalPagado)}</p>
         </div>
       </div>
 
@@ -305,15 +313,15 @@ export default function CapturarGrupoPage() {
 
         return (
           <Card key={m.clientId} className={
-            st.status === 'UNPAID'  ? 'border-red-200 bg-red-50' :
-            st.status === 'COVERED' ? 'border-amber-200 bg-amber-50' :
-            'border-green-200 bg-green-50'
+            st.status === 'UNPAID'  ? 'border-red-500/30 bg-red-500/5' :
+            st.status === 'COVERED' ? 'border-amber-500/30 bg-amber-500/5' :
+            'border-emerald-500/30 bg-emerald-500/5'
           }>
             <CardContent className="p-4 space-y-3">
               {/* Nombre + monto */}
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-semibold text-gray-900">{m.clientNombre}</p>
+                  <p className="font-semibold">{m.clientNombre}</p>
                   <p className="text-xs text-muted-foreground">Pago {m.numeroPago} de {m.totalPagos}</p>
                 </div>
                 <p className="text-lg font-bold">{formatMoney(m.monto)}</p>
@@ -325,8 +333,8 @@ export default function CapturarGrupoPage() {
                   onClick={() => setStatus(m.clientId, 'PAID')}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
                     st.status === 'PAID'
-                      ? 'border-green-500 bg-green-500 text-white'
-                      : 'border-gray-200 hover:border-green-300'
+                      ? 'border-emerald-500 bg-emerald-500 text-white'
+                      : 'border-border text-muted-foreground hover:border-emerald-400 hover:text-emerald-300'
                   }`}
                 >
                   <CheckCircle className="h-4 w-4" />Pagó
@@ -336,7 +344,7 @@ export default function CapturarGrupoPage() {
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
                     st.status === 'COVERED'
                       ? 'border-amber-500 bg-amber-500 text-white'
-                      : 'border-gray-200 hover:border-amber-300'
+                      : 'border-border text-muted-foreground hover:border-amber-400 hover:text-amber-300'
                   }`}
                 >
                   <Users className="h-4 w-4" />Cubierta
@@ -346,7 +354,7 @@ export default function CapturarGrupoPage() {
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
                     st.status === 'UNPAID'
                       ? 'border-red-500 bg-red-500 text-white'
-                      : 'border-gray-200 hover:border-red-300'
+                      : 'border-border text-muted-foreground hover:border-red-400 hover:text-red-300'
                   }`}
                 >
                   <XCircle className="h-4 w-4" />No pagó
@@ -356,9 +364,9 @@ export default function CapturarGrupoPage() {
               {/* Si CUBIERTA: elegir quién la cubrió */}
               {st.status === 'COVERED' && (
                 <div>
-                  <p className="text-xs text-amber-700 mb-1 font-medium">¿Quién la cubrió?</p>
+                  <p className="text-xs text-amber-300 mb-1 font-medium">¿Quién la cubrió?</p>
                   {otrasPagadoras.length === 0 ? (
-                    <p className="text-xs text-red-600">Ninguna integrante marcada como pagó. Marca al menos una como "Pagó" primero.</p>
+                    <p className="text-xs text-red-300">Ninguna integrante marcada como pagó. Marca al menos una como "Pagó" primero.</p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {otrasPagadoras.map((otra) => (
@@ -368,7 +376,7 @@ export default function CapturarGrupoPage() {
                           className={`text-xs px-3 py-1.5 rounded-full border-2 transition-colors ${
                             st.cubridoPorClienteId === otra.clientId
                               ? 'border-amber-500 bg-amber-500 text-white'
-                              : 'border-gray-200 hover:border-amber-300'
+                              : 'border-border text-muted-foreground hover:border-amber-400 hover:text-amber-300'
                           }`}
                         >
                           {otra.clientNombre.split(' ')[0]}
@@ -390,8 +398,8 @@ export default function CapturarGrupoPage() {
                         onClick={() => setMetodo(m.clientId, m2)}
                         className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-lg border text-[11px] transition-colors ${
                           st.metodoPago === m2
-                            ? 'border-primary-500 bg-primary-50 text-primary-700 font-semibold'
-                            : 'border-gray-200 text-muted-foreground hover:border-gray-300'
+                            ? 'border-primary-500 bg-primary-500/15 text-primary-300 font-semibold'
+                            : 'border-border text-muted-foreground hover:border-primary-500/50 hover:text-primary-300'
                         }`}
                       >
                         {m2 === 'CASH' && <Banknote className="h-3.5 w-3.5" />}
@@ -422,7 +430,7 @@ export default function CapturarGrupoPage() {
       </Button>
 
       {hayProblema && (
-        <p className="text-xs text-center text-red-600">
+        <p className="text-xs text-center text-red-400">
           Indica quién cubrió a la(s) integrante(s) marcada(s) como CUBIERTA
         </p>
       )}

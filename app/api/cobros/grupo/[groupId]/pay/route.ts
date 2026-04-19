@@ -6,18 +6,24 @@ import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generat
 import { createAuditLog } from '@/lib/audit'
 import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioScore } from '@/lib/score-calculator'
 
-// Estado de pago por integrante
-const miembroSchema = z.object({
-  scheduleId:            z.string().uuid(),
-  loanId:                z.string().uuid(),
-  clientId:              z.string().uuid(),
-  status:                z.enum(['PAID', 'COVERED', 'UNPAID']),
-  cubridoPorClienteId:   z.string().uuid().optional(), // si es COVERED, quién la cubrió
-  metodoPago:            z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
+const cashBreakdownSchema = z.object({
+  denominacion: z.number().int().positive(),
+  cantidad:     z.number().int().positive(),
+  subtotal:     z.number().positive(),
 })
 
+/**
+ * Flujo B: todos los integrantes del grupo pagan juntos con el mismo método.
+ * Si alguno no trae su parte, el cobrador la cobra después desde el flujo
+ * individual. Por eso este endpoint ya no recibe estado por integrante:
+ * solo el método de pago y (para efectivo/transferencia) su información.
+ */
 const bodySchema = z.object({
-  pagos: z.array(miembroSchema).min(1),
+  metodoPago:      z.enum(['CASH', 'CARD', 'TRANSFER']),
+  cambioEntregado: z.number().min(0).default(0),
+  cashBreakdown:   z.array(cashBreakdownSchema).optional().default([]),
+  cuentaDestinoId: z.string().uuid().optional(),
+  idTransferencia: z.string().optional(),
 })
 
 export async function POST(
@@ -38,35 +44,16 @@ export async function POST(
     const msg = `Datos inválidos${path ? ` (${path})` : ''}: ${first?.message ?? 'verifica los campos'}`
     return NextResponse.json({ error: msg, fieldErrors: parsed.error.flatten().fieldErrors }, { status: 400 })
   }
+  const data = parsed.data
 
-  const { pagos } = parsed.data
-
-  // Verificar que el grupo existe y pertenece a la empresa
+  // ── Verificar que el grupo existe y pertenece a la empresa ────────────────
   const grupo = await prisma.loanGroup.findFirst({
     where: { id: params.groupId, loans: { some: { companyId: companyId! } } },
     select: { id: true, nombre: true },
   })
   if (!grupo) return NextResponse.json({ error: 'Grupo no encontrado' }, { status: 404 })
 
-  // Cargar todos los schedules de este batch (junto con el préstamo)
-  const scheduleIds = pagos.map((p) => p.scheduleId)
-  const schedules = await prisma.paymentSchedule.findMany({
-    where: { id: { in: scheduleIds }, loan: { companyId: companyId! } },
-    include: {
-      loan: {
-        include: {
-          client: true,
-          branch: { select: { nombre: true } },
-          cobrador: { select: { nombre: true } },
-          company: { select: { nombre: true } },
-          schedule: { where: { estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] } } },
-        },
-      },
-    },
-  })
-
-  // Autorización por rol sobre cada préstamo del batch (evita que un coordinador
-  // cobre créditos de otro, o un gerente los de otra zona).
+  // ── Alcance por rol (quién puede cobrar este grupo) ───────────────────────
   const zonaBranchIds = session.user.zonaBranchIds ?? []
   const autorizaLoan = (loan: { cobradorId: string; branchId: string }): boolean => {
     if (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') return true
@@ -78,154 +65,157 @@ export async function POST(
     if (tienePermisoAplicar && userBranchId) return loan.branchId === userBranchId
     return false
   }
-  const noAutorizado = schedules.find((s) => !autorizaLoan(s.loan))
-  if (noAutorizado || schedules.length !== scheduleIds.length) {
+
+  // ── Cargar préstamos activos del grupo dentro del alcance ─────────────────
+  const loans = await prisma.loan.findMany({
+    where: {
+      loanGroupId: params.groupId,
+      estado:      'ACTIVE',
+      companyId:   companyId!,
+    },
+    include: {
+      client:   true,
+      branch:   { select: { nombre: true } },
+      cobrador: { select: { nombre: true } },
+      company:  { select: { nombre: true } },
+      schedule: {
+        where: { estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] } },
+        orderBy: { numeroPago: 'asc' },
+        take: 1,
+      },
+    },
+  })
+
+  const loansAutorizados = loans.filter((l) => autorizaLoan({ cobradorId: l.cobradorId, branchId: l.branchId }))
+  if (loansAutorizados.length === 0) {
     return NextResponse.json({ error: 'No autorizado para cobrar este grupo' }, { status: 403 })
   }
 
-  const scheduleMap = new Map(schedules.map((s) => [s.id, s]))
+  const loansPagables = loansAutorizados.filter((l) => l.schedule.length > 0)
+  if (loansPagables.length === 0) {
+    return NextResponse.json({ error: 'El grupo no tiene pagos pendientes' }, { status: 400 })
+  }
 
-  // Calcular montos para miembros que cubrieron a otras
-  // cubridor → total monto cubierto de otros
-  const montoCubiertoMap = new Map<string, number>()
-  for (const pago of pagos) {
-    if (pago.status === 'COVERED' && pago.cubridoPorClienteId) {
-      const prev = montoCubiertoMap.get(pago.cubridoPorClienteId) ?? 0
-      const sched = scheduleMap.get(pago.scheduleId)
-      montoCubiertoMap.set(pago.cubridoPorClienteId, prev + Number(sched?.montoEsperado ?? 0))
+  // ── Validar breakdown de efectivo ─────────────────────────────────────────
+  const totalEsperado = loansPagables.reduce((s, l) => s + Number(l.schedule[0]!.montoEsperado), 0)
+  if (data.metodoPago === 'CASH' && data.cashBreakdown.length > 0) {
+    const totalBreakdown = data.cashBreakdown.reduce((s, b) => s + b.subtotal, 0)
+    if (totalBreakdown < totalEsperado) {
+      return NextResponse.json({ error: 'El desglose de efectivo no cubre el total del grupo' }, { status: 400 })
     }
   }
 
-  const now    = new Date()
-  const fecha  = new Date(now)
-  fecha.setHours(0, 0, 0, 0)
+  const now = new Date()
+  const fechaDia = new Date(now); fechaDia.setHours(0, 0, 0, 0)
+  const cobradorDb = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { nombre: true },
+  })
+  const cobradorNombre = cobradorDb?.nombre ?? ''
 
-  const tickets: { id: string; numeroTicket: string; clienteNombre: string; monto: number; esCoberturaGrupal: boolean }[] = []
+  const firstLoan = loansPagables[0]!
+  const targetBranch = userBranchId ?? firstLoan.branchId
+  const branchPrefix = firstLoan.branch.nombre
+    .split(' ')
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 4)
+
+  // ── Transacción: crear Payments + schedule updates + ticket por integrante
+  const tickets: { id: string; numeroTicket: string; clienteNombre: string; monto: number }[] = []
 
   await prisma.$transaction(async (tx) => {
-    for (const pago of pagos) {
-      const sched = scheduleMap.get(pago.scheduleId)
-      if (!sched) continue
+    let breakdownAdjuntado = false
 
-      const loan        = sched.loan
-      const montoBase   = Number(sched.montoEsperado)
-      const targetBranch = userBranchId ?? loan.branchId
-      const branchNombre = loan.branch.nombre
-      const branchPrefix = branchNombre.split(' ').map((w) => w[0]?.toUpperCase() ?? '').join('').slice(0, 4)
+    for (const loan of loansPagables) {
+      const sched = loan.schedule[0]!
+      const montoBase = Number(sched.montoEsperado)
 
-      if (pago.status === 'UNPAID') {
-        // Sin Payment → solo ScoreEvent DEFAULT
-        const cambioScore = getScoreChange('DEFAULT')
-        const nuevoScore  = aplicarCambioScore(loan.client.score, cambioScore)
-
-        await tx.scoreEvent.create({
-          data: {
-            clientId:        loan.clientId,
-            loanId:          loan.id,
-            paymentId:       null,
-            registradoPorId: userId,
-            tipoEvento:      'DEFAULT',
-            diasDiferencia:  0,
-            cambioScore,
-            scoreResultado:  nuevoScore,
-          },
-        })
-
-        await tx.client.update({
-          where: { id: loan.clientId },
-          data: { score: nuevoScore },
-        })
-
-        continue
-      }
-
-      // PAID o COVERED → crear Payment
-      const esCoberturaGrupal = pago.status === 'COVERED'
-      const montoCubierto     = !esCoberturaGrupal ? (montoCubiertoMap.get(pago.clientId) ?? 0) : 0
-      const montoTotal        = montoBase + montoCubierto
-
+      // 1. Crear Payment
       const payment = await tx.payment.create({
         data: {
-          loanId:    loan.id,
+          loanId:     loan.id,
           scheduleId: sched.id,
           cobradorId: userId,
           clientId:   loan.clientId,
-          monto:      montoTotal,
-          metodoPago: pago.metodoPago,
+          monto:      montoBase,
+          metodoPago: data.metodoPago,
+          cambioEntregado: 0,
           fechaHora:  now,
-          esCoberturaGrupal,
-          ...(esCoberturaGrupal ? { cubridoPorClienteId: pago.cubridoPorClienteId ?? null } : {}),
-          ...(!esCoberturaGrupal && montoCubierto > 0 ? {
-            montoPropio:   montoBase,
-            montoCubierto: montoCubierto,
+          ...(data.metodoPago === 'TRANSFER' ? {
+            cuentaDestinoId:     data.cuentaDestinoId ?? null,
+            idTransferencia:     data.idTransferencia ?? null,
+            statusTransferencia: 'PENDIENTE',
           } : {}),
         },
       })
 
-      // Actualizar schedule
-      const nuevoEstado = montoBase >= Number(sched.montoEsperado) ? 'PAID' : 'PARTIAL'
+      // 2. Cash breakdown — se adjunta al PRIMER payment del grupo solamente,
+      //    representando el efectivo total recibido por el cobrador.
+      if (data.metodoPago === 'CASH' && data.cashBreakdown.length > 0 && !breakdownAdjuntado) {
+        await tx.cashBreakdown.createMany({
+          data: data.cashBreakdown.map((d) => ({
+            paymentId:    payment.id,
+            denominacion: d.denominacion,
+            cantidad:     d.cantidad,
+            subtotal:     d.subtotal,
+          })),
+        })
+        if (data.cambioEntregado > 0) {
+          await tx.payment.update({
+            where: { id: payment.id },
+            data:  { cambioEntregado: data.cambioEntregado },
+          })
+        }
+        breakdownAdjuntado = true
+      }
+
+      // 3. Marcar schedule como pagado
       await tx.paymentSchedule.update({
         where: { id: sched.id },
         data: {
           montoPagado: { increment: montoBase },
-          estado:      nuevoEstado,
-          pagadoAt:    nuevoEstado === 'PAID' ? now : null,
+          estado:      'PAID',
+          pagadoAt:    now,
         },
       })
 
-      // ¿Loan liquidado?
-      const otrosPendientes = loan.schedule.filter((s) => s.id !== sched.id)
-      if (otrosPendientes.length === 0 && nuevoEstado === 'PAID') {
+      // 4. ¿Loan liquidado?
+      const restantes = await tx.paymentSchedule.count({
+        where: { loanId: loan.id, id: { not: sched.id }, estado: { not: 'PAID' } },
+      })
+      if (restantes === 0) {
         await tx.loan.update({ where: { id: loan.id }, data: { estado: 'LIQUIDATED' } })
       }
 
-      // Score
+      // 5. Score event
       const diasDiff    = calcDiasDiferencia(sched.fechaVencimiento, now)
-      const tipoEvento  = esCoberturaGrupal ? 'LATE_1_7' : calcScoreEventType(diasDiff)
+      const tipoEvento  = calcScoreEventType(diasDiff)
       const cambioScore = getScoreChange(tipoEvento)
       const nuevoScore  = aplicarCambioScore(loan.client.score, cambioScore)
 
       await tx.scoreEvent.create({
         data: {
-          clientId:       loan.clientId,
-          loanId:         loan.id,
-          paymentId:      payment.id,
+          clientId:        loan.clientId,
+          loanId:          loan.id,
+          paymentId:       payment.id,
           registradoPorId: userId,
           tipoEvento,
-          diasDiferencia: diasDiff,
+          diasDiferencia:  diasDiff,
           cambioScore,
-          scoreResultado: nuevoScore,
+          scoreResultado:  nuevoScore,
         },
       })
       await tx.client.update({ where: { id: loan.clientId }, data: { score: nuevoScore } })
 
-      // Caja
-      await tx.cashRegister.upsert({
-        where: { cobradorId_fecha: { cobradorId: userId, fecha } },
-        create: {
-          cobradorId:            userId,
-          branchId:              targetBranch!,
-          fecha,
-          cobradoEfectivo:       pago.metodoPago === 'CASH'     ? montoTotal : 0,
-          cobradoTarjeta:        pago.metodoPago === 'CARD'     ? montoTotal : 0,
-          cobradoTransferencia:  pago.metodoPago === 'TRANSFER' ? montoTotal : 0,
-          cambioEntregado:       0,
-        },
-        update: {
-          cobradoEfectivo:      pago.metodoPago === 'CASH'     ? { increment: montoTotal } : undefined,
-          cobradoTarjeta:       pago.metodoPago === 'CARD'     ? { increment: montoTotal } : undefined,
-          cobradoTransferencia: pago.metodoPago === 'TRANSFER' ? { increment: montoTotal } : undefined,
-        },
-      })
-
-      // Ticket individual
+      // 6. Ticket individual
       const numeroTicket = await generateTicketNumber(branchPrefix, now.getFullYear())
       const qrCode       = generateTicketQrData(numeroTicket)
       const ticketRec = await tx.ticket.create({
         data: {
-          paymentId:   payment.id,
-          companyId:   companyId!,
-          branchId:    targetBranch!,
+          paymentId:    payment.id,
+          companyId:    companyId!,
+          branchId:     targetBranch!,
           numeroTicket,
           impresoPorId: userId,
           qrCode,
@@ -236,10 +226,29 @@ export async function POST(
         id:            ticketRec.id,
         numeroTicket,
         clienteNombre: loan.client.nombreCompleto,
-        monto:         montoTotal,
-        esCoberturaGrupal,
+        monto:         montoBase,
       })
     }
+
+    // 7. Caja del cobrador (una sola vez con el total del grupo)
+    await tx.cashRegister.upsert({
+      where:  { cobradorId_fecha: { cobradorId: userId, fecha: fechaDia } },
+      create: {
+        cobradorId:           userId,
+        branchId:             targetBranch!,
+        fecha:                fechaDia,
+        cobradoEfectivo:      data.metodoPago === 'CASH'     ? totalEsperado : 0,
+        cobradoTarjeta:       data.metodoPago === 'CARD'     ? totalEsperado : 0,
+        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? totalEsperado : 0,
+        cambioEntregado:      data.cambioEntregado,
+      },
+      update: {
+        cobradoEfectivo:      data.metodoPago === 'CASH'     ? { increment: totalEsperado } : undefined,
+        cobradoTarjeta:       data.metodoPago === 'CARD'     ? { increment: totalEsperado } : undefined,
+        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? { increment: totalEsperado } : undefined,
+        cambioEntregado:      data.cambioEntregado > 0 ? { increment: data.cambioEntregado } : undefined,
+      },
+    })
   })
 
   createAuditLog({
@@ -249,32 +258,23 @@ export async function POST(
     registroId: params.groupId,
     valoresNuevos: {
       grupoNombre: grupo.nombre,
-      totalPagos:  tickets.length,
+      metodoPago:  data.metodoPago,
+      totalCobrado: totalEsperado,
       tickets:     tickets.map((t) => t.numeroTicket),
     },
-  })
-
-  // Metadatos para imprimir un ticket consolidado del grupo desde el cliente
-  const firstLoan = schedules[0]?.loan
-  const cobradorDb = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { nombre: true },
   })
 
   return NextResponse.json({
     tickets,
     grupoNombre: grupo.nombre,
-    groupTicketMeta: firstLoan
-      ? {
-          empresa:  firstLoan.company.nombre,
-          sucursal: firstLoan.branch.nombre,
-          cobrador: cobradorDb?.nombre ?? '',
-          fecha:    now.toISOString(),
-          // Usamos el QR del primer ticket como verificación representativa
-          qrCode:   tickets[0]?.numeroTicket
-            ? `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.microkapital.com'}/verificar/${tickets[0].numeroTicket}`
-            : null,
-        }
-      : null,
+    groupTicketMeta: {
+      empresa:  firstLoan.company.nombre,
+      sucursal: firstLoan.branch.nombre,
+      cobrador: cobradorNombre,
+      fecha:    now.toISOString(),
+      qrCode:   tickets[0]?.numeroTicket
+        ? `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.microkapital.com'}/verificar/${tickets[0].numeroTicket}`
+        : null,
+    },
   })
 }

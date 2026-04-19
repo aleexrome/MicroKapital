@@ -11,6 +11,18 @@ import {
   CreditCard, Building2, Loader2, Printer,
 } from 'lucide-react'
 import Link from 'next/link'
+import { format } from 'date-fns'
+import { buildGroupTicketBytes, loadLogoBitmap, printViaBluetooth } from '@/lib/escpos'
+
+const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/v1776487061/ddcb6871-4cff-422e-9a00-67d62aa6243f.png'
+
+interface GroupTicketMeta {
+  empresa:  string
+  sucursal: string
+  cobrador: string
+  fecha:    string
+  qrCode:   string | null
+}
 
 type PagoStatus = 'PAID' | 'COVERED' | 'UNPAID'
 type Metodo = 'CASH' | 'CARD' | 'TRANSFER'
@@ -45,6 +57,8 @@ export default function CapturarGrupoPage() {
   const [done,     setDone]     = useState(false)
   const [tickets,  setTickets]  = useState<{ id: string; numeroTicket: string; clienteNombre: string; monto: number; esCoberturaGrupal: boolean }[]>([])
   const [grupoNombre, setGrupoNombre] = useState('')
+  const [groupMeta, setGroupMeta] = useState<GroupTicketMeta | null>(null)
+  const [printingGroup, setPrintingGroup] = useState(false)
 
   useEffect(() => {
     fetch(`/api/cobros/grupo/${groupId}/miembros`)
@@ -107,11 +121,76 @@ export default function CapturarGrupoPage() {
       const data = await res.json()
       setTickets(data.tickets)
       setGrupoNombre(data.grupoNombre)
+      if (data.groupTicketMeta) setGroupMeta(data.groupTicketMeta)
       setDone(true)
     } catch (e) {
       toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleGroupPrint() {
+    if (!groupMeta) return
+    setPrintingGroup(true)
+    try {
+      // Construir el nombre de cobertura por cliente (quién cubrió a quién)
+      const nombreByClient = new Map<string, string>()
+      for (const m of miembros) nombreByClient.set(m.clientId, m.clientNombre)
+
+      const integrantes = miembros.map((m) => {
+        const st = states[m.clientId]
+        if (!st) return null
+        if (st.status === 'UNPAID') return null
+        const t = tickets.find((tk) => tk.clienteNombre === m.clientNombre)
+        const monto = t ? t.monto : m.monto
+        let nota: string | undefined
+        if (st.status === 'COVERED' && st.cubridoPorClienteId) {
+          nota = `Cubierta por ${nombreByClient.get(st.cubridoPorClienteId) ?? ''}`.trim()
+        }
+        return {
+          cliente: m.clientNombre,
+          monto:   formatMoney(monto),
+          nota,
+        }
+      }).filter((x): x is NonNullable<typeof x> => x !== null)
+
+      const total = tickets.reduce((s, t) => s + t.monto, 0)
+      const metodos = new Set(miembros
+        .filter((m) => states[m.clientId]?.status !== 'UNPAID')
+        .map((m) => states[m.clientId]!.metodoPago))
+      const metodoLabel = metodos.size === 1
+        ? [...metodos][0] === 'CASH' ? 'Efectivo' : [...metodos][0] === 'CARD' ? 'Tarjeta' : 'Transferencia'
+        : 'Mixto'
+
+      let logo: { pixels: Uint8Array; widthPx: number; heightPx: number } | undefined
+      try { logo = await loadLogoBitmap(LOGO_URL, 384) } catch { /* seguir sin logo */ }
+
+      const fechaD = new Date(groupMeta.fecha)
+      const bytes = buildGroupTicketBytes({
+        empresa:     groupMeta.empresa,
+        sucursal:    groupMeta.sucursal,
+        fecha:       format(fechaD, 'dd/MM/yyyy'),
+        hora:        format(fechaD, 'HH:mm'),
+        cobrador:    groupMeta.cobrador,
+        grupoNombre,
+        integrantes,
+        totalCobrado: formatMoney(total),
+        metodoPago:   metodoLabel,
+        qrCode:       groupMeta.qrCode ?? undefined,
+        logo,
+      })
+
+      await printViaBluetooth(bytes)
+      toast({ title: '✅ Ticket grupal enviado a la impresora' })
+    } catch (err) {
+      toast({
+        title: 'Error Bluetooth',
+        description: err instanceof Error ? err.message : 'No se pudo imprimir',
+        variant: 'destructive',
+      })
+    } finally {
+      setPrintingGroup(false)
     }
   }
 
@@ -124,6 +203,20 @@ export default function CapturarGrupoPage() {
           <h2 className="text-lg font-bold">¡Pagos registrados!</h2>
         </div>
         <p className="text-sm text-muted-foreground">Grupo: <strong>{grupoNombre}</strong></p>
+
+        {/* Ticket grupal consolidado */}
+        {groupMeta && tickets.length > 0 && (
+          <Button
+            className="w-full"
+            size="lg"
+            onClick={handleGroupPrint}
+            disabled={printingGroup}
+          >
+            {printingGroup
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <><Printer className="h-4 w-4 mr-1" />Imprimir ticket grupal</>}
+          </Button>
+        )}
 
         <div className="space-y-2">
           {tickets.map((t) => (
@@ -145,7 +238,7 @@ export default function CapturarGrupoPage() {
                   className="w-full"
                   onClick={() => router.push(`/thermal-print?ticketId=${t.id}`)}
                 >
-                  <Printer className="h-3 w-3 mr-1" />Imprimir
+                  <Printer className="h-3 w-3 mr-1" />Imprimir individual
                 </Button>
               </CardContent>
             </Card>

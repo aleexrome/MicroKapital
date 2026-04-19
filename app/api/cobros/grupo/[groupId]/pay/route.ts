@@ -27,7 +27,8 @@ export async function POST(
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { companyId, branchId: userBranchId, id: userId } = session.user
+  const { companyId, branchId: userBranchId, id: userId, rol } = session.user
+  const tienePermisoAplicar = session.user.permisoAplicarPagos === true
 
   const body = await req.json().catch(() => ({}))
   const parsed = bodySchema.safeParse(body)
@@ -44,10 +45,10 @@ export async function POST(
   })
   if (!grupo) return NextResponse.json({ error: 'Grupo no encontrado' }, { status: 404 })
 
-  // Cargar todos los schedules de este batch
+  // Cargar todos los schedules de este batch (junto con el préstamo)
   const scheduleIds = pagos.map((p) => p.scheduleId)
   const schedules = await prisma.paymentSchedule.findMany({
-    where: { id: { in: scheduleIds } },
+    where: { id: { in: scheduleIds }, loan: { companyId: companyId! } },
     include: {
       loan: {
         include: {
@@ -60,6 +61,24 @@ export async function POST(
       },
     },
   })
+
+  // Autorización por rol sobre cada préstamo del batch (evita que un coordinador
+  // cobre créditos de otro, o un gerente los de otra zona).
+  const zonaBranchIds = session.user.zonaBranchIds ?? []
+  const autorizaLoan = (loan: { cobradorId: string; branchId: string }): boolean => {
+    if (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') return true
+    if (rol === 'COORDINADOR' || rol === 'COBRADOR') return loan.cobradorId === userId
+    if (rol === 'GERENTE' || rol === 'GERENTE_ZONAL') {
+      const zonas = zonaBranchIds.length ? zonaBranchIds : userBranchId ? [userBranchId] : []
+      return zonas.length === 0 || zonas.includes(loan.branchId)
+    }
+    if (tienePermisoAplicar && userBranchId) return loan.branchId === userBranchId
+    return false
+  }
+  const noAutorizado = schedules.find((s) => !autorizaLoan(s.loan))
+  if (noAutorizado || schedules.length !== scheduleIds.length) {
+    return NextResponse.json({ error: 'No autorizado para cobrar este grupo' }, { status: 403 })
+  }
 
   const scheduleMap = new Map(schedules.map((s) => [s.id, s]))
 
@@ -232,5 +251,27 @@ export async function POST(
     },
   })
 
-  return NextResponse.json({ tickets, grupoNombre: grupo.nombre })
+  // Metadatos para imprimir un ticket consolidado del grupo desde el cliente
+  const firstLoan = schedules[0]?.loan
+  const cobradorDb = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { nombre: true },
+  })
+
+  return NextResponse.json({
+    tickets,
+    grupoNombre: grupo.nombre,
+    groupTicketMeta: firstLoan
+      ? {
+          empresa:  firstLoan.company.nombre,
+          sucursal: firstLoan.branch.nombre,
+          cobrador: cobradorDb?.nombre ?? '',
+          fecha:    now.toISOString(),
+          // Usamos el QR del primer ticket como verificación representativa
+          qrCode:   tickets[0]?.numeroTicket
+            ? `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.microkapital.com'}/verificar/${tickets[0].numeroTicket}`
+            : null,
+        }
+      : null,
+  })
 }

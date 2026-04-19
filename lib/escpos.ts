@@ -215,6 +215,99 @@ async function findWritableCharacteristic(server: any): Promise<any> {
   throw new Error('No se encontró una característica de escritura en la impresora. Verifica que sea compatible con BLE.')
 }
 
+export interface GroupTicketIntegrante {
+  cliente: string
+  monto: string
+  /** texto opcional tipo "Cubierta por Juanita" o "Cubrió a María" */
+  nota?: string
+}
+
+export interface PrintGroupTicketOptions {
+  empresa: string
+  sucursal: string
+  fecha: string
+  hora: string
+  cobrador: string
+  grupoNombre: string
+  integrantes: GroupTicketIntegrante[]
+  totalCobrado: string
+  metodoPago: string
+  qrCode?: string
+  logo?: { pixels: Uint8Array; widthPx: number; heightPx: number }
+}
+
+/** Ticket consolidado para cobro grupal (solidario) — una impresión con
+ *  desglose por integrante, total y QR de verificación. */
+export function buildGroupTicketBytes(opts: PrintGroupTicketOptions): Uint8Array {
+  const W = 32
+  const bytes: number[] = [...CMD.INIT, ...CMD.ALIGN_CENTER]
+
+  if (opts.logo) {
+    bytes.push(...buildRasterBytes(opts.logo.pixels, opts.logo.widthPx, opts.logo.heightPx))
+    bytes.push(...CMD.LINE_FEED)
+  }
+
+  bytes.push(
+    ...CMD.BOLD_ON,
+    ...line(opts.empresa.slice(0, W)),
+    ...CMD.BOLD_OFF,
+    ...line(opts.sucursal.slice(0, W)),
+    ...CMD.ALIGN_LEFT,
+    ...divider('=', W),
+    ...line(`FECHA:  ${opts.fecha}`),
+    ...line(`HORA:   ${opts.hora}`),
+    ...divider('-', W),
+    ...line(`COBRADOR: ${opts.cobrador.slice(0, W - 10)}`),
+    ...divider('-', W),
+    ...CMD.BOLD_ON,
+    ...line(`GRUPO: ${opts.grupoNombre.slice(0, W - 7)}`),
+    ...CMD.BOLD_OFF,
+    ...divider('-', W),
+    ...line('INTEGRANTES:'),
+  )
+
+  for (const it of opts.integrantes) {
+    // Nombre recortado a 24 chars + monto alineado a la derecha
+    const nombre = it.cliente.length > 24 ? it.cliente.slice(0, 24) : it.cliente
+    bytes.push(...line(padRight(nombre, it.monto, W)))
+    if (it.nota) {
+      bytes.push(...line(`  ${it.nota.slice(0, W - 2)}`))
+    }
+  }
+
+  bytes.push(
+    ...divider('-', W),
+    ...CMD.BOLD_ON,
+    ...line(padRight('TOTAL COBRADO:', opts.totalCobrado, W)),
+    ...CMD.BOLD_OFF,
+    ...line(`FORMA: ${opts.metodoPago}`),
+    ...divider('-', W),
+  )
+
+  if (opts.qrCode) {
+    bytes.push(
+      ...CMD.ALIGN_CENTER,
+      ...buildQrBytes(opts.qrCode, 7, 1),
+      ...CMD.LINE_FEED,
+      ...line(center('Escanea para verificar', W)),
+      ...CMD.ALIGN_LEFT,
+      ...divider('-', W),
+    )
+  }
+
+  bytes.push(
+    ...CMD.ALIGN_CENTER,
+    ...line(center('Gracias por su pago puntual', W)),
+    ...divider('=', W),
+    ...CMD.LINE_FEED,
+    ...CMD.LINE_FEED,
+    ...CMD.LINE_FEED,
+    ...CMD.CUT,
+  )
+
+  return new Uint8Array(bytes)
+}
+
 /**
  * Carga una imagen desde URL y la convierte a bitmap 1-bit para ESC/POS.
  * Se redimensiona manteniendo proporción para encajar en `targetWidthPx`

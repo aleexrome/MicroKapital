@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Users } from 'lucide-react'
+import { ArrowLeft, Users, Banknote } from 'lucide-react'
 import { GrupoCalendar } from '@/components/loans/GrupoCalendar'
 import { type Prisma } from '@prisma/client'
 
@@ -101,7 +101,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Button asChild variant="ghost" size="icon">
           <Link href={backHref}>
             <ArrowLeft className="h-4 w-4" />
@@ -116,6 +116,16 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
             {grupo.loans.length} integrantes · {totalPagados}/{totalPagos} pagos realizados
           </p>
         </div>
+        {/* Botón de captura grupal — solo para roles que cobran (no DG/DC/usuarios con permiso aplicar) */}
+        {!esOpAdmin && !tienePermisoAplicar && (
+          rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
+        ) && (
+          <Button asChild size="sm">
+            <Link href={`/cobros/grupo/${grupo.id}/capturar`}>
+              <Banknote className="h-4 w-4 mr-1" />Capturar pago grupal
+            </Link>
+          </Button>
+        )}
       </div>
 
       <GrupoCalendar

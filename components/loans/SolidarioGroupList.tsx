@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, ChevronRight, Users } from 'lucide-react'
+import { ChevronDown, ChevronRight, Users, Banknote } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -32,7 +32,21 @@ function fmtDate(s: string) {
   return new Date(y, m - 1, d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export function SolidarioGroupList({ groups }: { groups: SolidarioGroup[] }) {
+/**
+ * mode="aplicar"  → botón "Reunión" que lleva al calendario grupal (aplicar
+ *                   pagos en conjunto). Para DG / Super Admin / usuarios con
+ *                   permisoAplicarPagos (p. ej. Cristina).
+ * mode="capturar" → botón "Capturar" que lleva directo a la captura de pagos
+ *                   en efectivo / tarjeta / transferencia. Para Coordinador,
+ *                   Cobrador, Gerente y Gerente Zonal.
+ */
+export function SolidarioGroupList({
+  groups,
+  mode = 'capturar',
+}: {
+  groups: SolidarioGroup[]
+  mode?: 'aplicar' | 'capturar'
+}) {
   const [openIds, setOpenIds] = useState<Set<string>>(new Set())
 
   function toggle(id: string) {
@@ -96,15 +110,23 @@ export function SolidarioGroupList({ groups }: { groups: SolidarioGroup[] }) {
               <span className="text-sm font-semibold shrink-0">{fmtMoney(grupo.totalCapital)}</span>
             </button>
 
-            {/* ── Expanded: client list + Reunión button ── */}
+            {/* ── Expanded: client list + botón por rol ── */}
             {isOpen && (
               <div className="border-t border-border/60">
                 <div className="px-4 py-2 flex items-center justify-end bg-muted/20">
-                  <Button asChild size="sm" variant="outline" className="h-7 text-xs px-2">
-                    <Link href={`/cobros/grupo/${grupo.id}`} onClick={(e) => e.stopPropagation()}>
-                      <Users className="h-3 w-3 mr-1" />Reunión
-                    </Link>
-                  </Button>
+                  {mode === 'aplicar' ? (
+                    <Button asChild size="sm" variant="outline" className="h-7 text-xs px-2">
+                      <Link href={`/grupos/${grupo.id}`} onClick={(e) => e.stopPropagation()}>
+                        <Users className="h-3 w-3 mr-1" />Reunión
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button asChild size="sm" className="h-7 text-xs px-2">
+                      <Link href={`/cobros/grupo/${grupo.id}/capturar`} onClick={(e) => e.stopPropagation()}>
+                        <Banknote className="h-3 w-3 mr-1" />Capturar
+                      </Link>
+                    </Button>
+                  )}
                 </div>
                 <div className="divide-y divide-border/40">
                   {grupo.loans.map((loan) => (

@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { ArrowLeft, Users, CreditCard, CheckCircle2, AlertCircle, ClipboardList } from 'lucide-react'
-import type { ScheduleStatus } from '@prisma/client'
+import type { ScheduleStatus, Prisma } from '@prisma/client'
 
 const STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'error' | 'info' | 'outline'> = {
   PAID: 'success',
@@ -30,13 +30,28 @@ export default async function GrupoCobroPage({ params }: { params: { groupId: st
   const session = await getSession()
   if (!session?.user) return null
 
-  const { id: cobradorId } = session.user
+  const { companyId, rol, branchId, id: userId } = session.user
+  const tienePermisoAplicar = session.user.permisoAplicarPagos === true
+
+  // Alcance de loans por rol — consistente con el resto de la app.
+  const loanScope: Prisma.LoanWhereInput = { estado: 'ACTIVE', companyId: companyId! }
+  if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
+    loanScope.cobradorId = userId
+  } else if (rol === 'GERENTE' || rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : null
+    if (zoneIds?.length) loanScope.branchId = { in: zoneIds }
+  } else if (tienePermisoAplicar && branchId) {
+    loanScope.branchId = branchId
+  }
+  // DIRECTOR_GENERAL / SUPER_ADMIN: sin restricción extra dentro de la empresa.
 
   const grupo = await prisma.loanGroup.findUnique({
     where: { id: params.groupId },
     include: {
       loans: {
-        where: { estado: 'ACTIVE', cobradorId },
+        where: loanScope,
         include: {
           client: { select: { id: true, nombreCompleto: true, telefono: true } },
           schedule: {

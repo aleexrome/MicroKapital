@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 
 export async function GET(
   _req: NextRequest,
@@ -9,30 +10,40 @@ export async function GET(
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { companyId, id: userId } = session.user
+  const { companyId, rol, branchId, id: userId } = session.user
+  const tienePermisoAplicar = session.user.permisoAplicarPagos === true
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  // Alcance por rol — mismo criterio que en la página del préstamo y en /cobros/grupo.
+  const loanScope: Prisma.LoanWhereInput = { estado: 'ACTIVE', companyId: companyId! }
+  if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
+    loanScope.cobradorId = userId
+  } else if (rol === 'GERENTE' || rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : null
+    if (zoneIds?.length) loanScope.branchId = { in: zoneIds }
+  } else if (rol !== 'DIRECTOR_GENERAL' && rol !== 'SUPER_ADMIN') {
+    if (!tienePermisoAplicar || !branchId) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+    }
+    loanScope.branchId = branchId
+  }
 
   const grupo = await prisma.loanGroup.findFirst({
     where: {
       id: params.groupId,
-      loans: { some: { companyId: companyId!, cobradorId: userId } },
+      loans: { some: loanScope },
     },
     select: { id: true, nombre: true },
   })
 
   if (!grupo) return NextResponse.json({ error: 'Grupo no encontrado' }, { status: 404 })
 
-  // Préstamos activos del grupo para este cobrador
+  // Préstamos activos del grupo dentro del alcance del usuario
   const loans = await prisma.loan.findMany({
     where: {
       loanGroupId: params.groupId,
-      estado:      'ACTIVE',
-      companyId:   companyId!,
-      cobradorId:  userId,
+      ...loanScope,
     },
     include: {
       client: { select: { id: true, nombreCompleto: true } },

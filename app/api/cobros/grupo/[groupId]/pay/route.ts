@@ -78,7 +78,7 @@ export async function POST(
   const fecha  = new Date(now)
   fecha.setHours(0, 0, 0, 0)
 
-  const tickets: { numeroTicket: string; clienteNombre: string; monto: number; esCoberturaGrupal: boolean }[] = []
+  const tickets: { id: string; numeroTicket: string; clienteNombre: string; monto: number; esCoberturaGrupal: boolean }[] = []
 
   await prisma.$transaction(async (tx) => {
     for (const pago of pagos) {
@@ -199,7 +199,7 @@ export async function POST(
       // Ticket individual
       const numeroTicket = await generateTicketNumber(branchPrefix, now.getFullYear())
       const qrCode       = generateTicketQrData(numeroTicket)
-      await tx.ticket.create({
+      const ticketRec = await tx.ticket.create({
         data: {
           paymentId:   payment.id,
           companyId:   companyId!,
@@ -211,6 +211,7 @@ export async function POST(
       })
 
       tickets.push({
+        id:            ticketRec.id,
         numeroTicket,
         clienteNombre: loan.client.nombreCompleto,
         monto:         montoTotal,

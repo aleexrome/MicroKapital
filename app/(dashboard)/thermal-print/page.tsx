@@ -62,7 +62,8 @@ export default function ThermalPrintPage() {
       // Cargar logo a bitmap (no bloqueante si falla)
       let logo: { pixels: Uint8Array; widthPx: number; heightPx: number } | undefined
       try {
-        logo = await loadLogoBitmap(LOGO_URL, 256)
+        // 384px = ancho máximo típico de printer BLE térmico 58mm
+        logo = await loadLogoBitmap(LOGO_URL, 384)
       } catch {
         // seguir sin logo si no se pudo cargar
       }

@@ -43,7 +43,7 @@ export default function CapturarGrupoPage() {
   const [loading,  setLoading]  = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [done,     setDone]     = useState(false)
-  const [tickets,  setTickets]  = useState<{ numeroTicket: string; clienteNombre: string; monto: number; esCoberturaGrupal: boolean }[]>([])
+  const [tickets,  setTickets]  = useState<{ id: string; numeroTicket: string; clienteNombre: string; monto: number; esCoberturaGrupal: boolean }[]>([])
   const [grupoNombre, setGrupoNombre] = useState('')
 
   useEffect(() => {
@@ -127,29 +127,34 @@ export default function CapturarGrupoPage() {
 
         <div className="space-y-2">
           {tickets.map((t) => (
-            <Card key={t.numeroTicket}>
-              <CardContent className="p-3 text-sm">
-                <p className="font-semibold truncate">{t.clienteNombre}</p>
-                <div className="flex justify-between text-muted-foreground mt-0.5">
-                  <span>Ticket: {t.numeroTicket}</span>
-                  <span>{formatMoney(t.monto)}</span>
+            <Card key={t.id}>
+              <CardContent className="p-3 text-sm space-y-2">
+                <div>
+                  <p className="font-semibold truncate">{t.clienteNombre}</p>
+                  <div className="flex justify-between text-muted-foreground mt-0.5">
+                    <span>Ticket: {t.numeroTicket}</span>
+                    <span>{formatMoney(t.monto)}</span>
+                  </div>
+                  {t.esCoberturaGrupal && (
+                    <p className="text-xs text-amber-600 mt-0.5">Cubierta por otra integrante</p>
+                  )}
                 </div>
-                {t.esCoberturaGrupal && (
-                  <p className="text-xs text-amber-600 mt-0.5">Cubierta por otra integrante</p>
-                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => router.push(`/thermal-print?ticketId=${t.id}`)}
+                >
+                  <Printer className="h-3 w-3 mr-1" />Imprimir
+                </Button>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        <div className="flex gap-3">
-          <Button className="flex-1" onClick={() => router.push('/thermal-print')}>
-            <Printer className="h-4 w-4 mr-1" />Imprimir tickets
-          </Button>
-          <Button variant="outline" className="flex-1" onClick={() => router.push('/cobros/agenda')}>
-            Volver a agenda
-          </Button>
-        </div>
+        <Button variant="outline" className="w-full" onClick={() => router.push('/cobros/agenda')}>
+          Volver a agenda
+        </Button>
       </div>
     )
   }

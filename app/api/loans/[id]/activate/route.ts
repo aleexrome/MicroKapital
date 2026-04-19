@@ -371,6 +371,8 @@ export async function POST(
 
   return NextResponse.json({
     message: 'Crédito activado — calendario de pagos generado',
-    ticket: result.ticket?.numeroTicket ?? null,
+    ticket: result.ticket
+      ? { id: result.ticket.id, numeroTicket: result.ticket.numeroTicket }
+      : null,
   })
 }

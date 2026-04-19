@@ -116,8 +116,8 @@ export function LoanActivateButton({
         })
 
         // Generate ticket for CASH payments
-        if (metodoPago === 'CASH' && data.ticket) {
-          router.push('/thermal-print')
+        if (metodoPago === 'CASH' && data.ticket?.id) {
+          router.push(`/thermal-print?ticketId=${data.ticket.id}`)
           return
         }
       }

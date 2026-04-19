@@ -48,6 +48,7 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
   const [step, setStep] = useState<PaymentStep>('method')
   const [submitting, setSubmitting] = useState(false)
   const [ticketData, setTicketData] = useState<TicketData | null>(null)
+  const [ticketId, setTicketId] = useState<string | null>(null)
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [selectedAccount, setSelectedAccount] = useState<string>('')
   const [idTransferencia, setIdTransferencia] = useState('')
@@ -95,6 +96,8 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
       }
 
       const { data } = await res.json()
+
+      setTicketId(data.ticket.id)
 
       // Construir datos del ticket
       setTicketData({
@@ -163,7 +166,8 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
         <div className="flex gap-3">
           <Button
             className="flex-1"
-            onClick={() => router.push('/thermal-print')}
+            disabled={!ticketId}
+            onClick={() => ticketId && router.push(`/thermal-print?ticketId=${ticketId}`)}
           >
             <Printer className="h-4 w-4" />
             Imprimir ticket

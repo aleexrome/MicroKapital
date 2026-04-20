@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
+import { generateTicketQrData } from '@/lib/ticket-generator'
 import { createAuditLog } from '@/lib/audit'
 import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioScore } from '@/lib/score-calculator'
 
@@ -121,17 +121,21 @@ export async function POST(
     .join('')
     .slice(0, 4)
 
-  // Pre-reservar los números de ticket FUERA de la transacción.
-  // `generateTicketNumber` lee el último ticket de la BD y suma 1; si lo
-  // llamásemos N veces en loop TODAS las llamadas leerían el mismo estado y
-  // devolverían el mismo número — fallan con unique constraint al guardar.
-  // En vez de eso leemos una sola vez el último número y reservamos N
-  // consecutivos localmente.
   const year = now.getFullYear()
   const prefix = `${branchPrefix.toUpperCase()}-${year}-`
-  let ticketNumbers: string[] = []
+
+  // ── Transacción: crear Payments + schedule updates + ticket por integrante
+  const tickets: { id: string; numeroTicket: string; clienteNombre: string; monto: number }[] = []
+
   try {
-    const lastTicket = await prisma.ticket.findFirst({
+    await prisma.$transaction(async (tx) => {
+    let breakdownAdjuntado = false
+
+    // Leemos el contador UNA vez dentro de la transacción para poder seguir
+    // incrementándolo localmente mientras creamos los N tickets. Las consultas
+    // dentro del mismo $transaction SÍ ven los inserts de iteraciones previas,
+    // pero hacemos el bump en memoria para evitar queries extra.
+    const lastTicket = await tx.ticket.findFirst({
       where: { numeroTicket: { startsWith: prefix } },
       orderBy: { numeroTicket: 'desc' },
       select: { numeroTicket: true },
@@ -142,20 +146,6 @@ export async function POST(
       const lastNum = parseInt(parts[parts.length - 1] ?? '', 10)
       if (!isNaN(lastNum)) nextNum = lastNum + 1
     }
-    ticketNumbers = loansPagables.map((_, i) =>
-      `${prefix}${String(nextNum + i).padStart(5, '0')}`
-    )
-  } catch (e) {
-    console.error('[group-pay] error generando números de ticket', e)
-    return NextResponse.json({ error: 'No se pudo generar el número de ticket' }, { status: 500 })
-  }
-
-  // ── Transacción: crear Payments + schedule updates + ticket por integrante
-  const tickets: { id: string; numeroTicket: string; clienteNombre: string; monto: number }[] = []
-
-  try {
-    await prisma.$transaction(async (tx) => {
-    let breakdownAdjuntado = false
 
     for (let i = 0; i < loansPagables.length; i++) {
       const loan = loansPagables[i]!
@@ -239,19 +229,36 @@ export async function POST(
       })
       await tx.client.update({ where: { id: loan.clientId }, data: { score: nuevoScore } })
 
-      // 6. Ticket individual (número pre-generado fuera de la transacción)
-      const numeroTicket = ticketNumbers[i]!
-      const qrCode       = generateTicketQrData(numeroTicket)
-      const ticketRec = await tx.ticket.create({
-        data: {
-          paymentId:    payment.id,
-          companyId:    companyId!,
-          branchId:     targetBranch!,
-          numeroTicket,
-          impresoPorId: userId,
-          qrCode,
-        },
-      })
+      // 6. Ticket individual — reintento si choca con un número ya usado por
+      // una captura concurrente del mismo prefijo.
+      let ticketRec: { id: string; numeroTicket: string } | null = null
+      for (let attempt = 0; attempt < 10 && !ticketRec; attempt++) {
+        const numeroTicket = `${prefix}${String(nextNum).padStart(5, '0')}`
+        try {
+          const created = await tx.ticket.create({
+            data: {
+              paymentId:    payment.id,
+              companyId:    companyId!,
+              branchId:     targetBranch!,
+              numeroTicket,
+              impresoPorId: userId,
+              qrCode:       generateTicketQrData(numeroTicket),
+            },
+            select: { id: true, numeroTicket: true },
+          })
+          ticketRec = created
+          nextNum++
+        } catch (err) {
+          const code = (err as { code?: string })?.code
+          if (code === 'P2002') {
+            nextNum++ // conflicto → probar siguiente número
+            continue
+          }
+          throw err
+        }
+      }
+      if (!ticketRec) throw new Error('No se pudo asignar número de ticket único')
+      const numeroTicket = ticketRec.numeroTicket
 
       tickets.push({
         id:            ticketRec.id,

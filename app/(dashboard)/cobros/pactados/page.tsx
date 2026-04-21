@@ -86,6 +86,7 @@ export default async function PactadosDiaPage({
           id: true,
           monto: true,
           metodoPago: true,
+          statusTransferencia: true,
           fechaHora: true,
           cobrador: { select: { nombre: true } },
         },
@@ -117,11 +118,18 @@ export default async function PactadosDiaPage({
   }
 
   // ── Totals ───────────────────────────────────────────────────────────────────
-  const totalPactados  = schedules.length
-  const cobradosRows   = schedules.filter((s) => s.payments.length > 0)
-  const pendientesRows = schedules.filter((s) => s.payments.length === 0)
-  const montoCobrado   = cobradosRows.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
-  const montoPendiente = pendientesRows.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
+  // Una transferencia PENDIENTE no cuenta como cobrado — queda "en validación"
+  type PaymentRow = ScheduleRow['payments'][number]
+  const isPendingTransfer = (p: PaymentRow) =>
+    p.metodoPago === 'TRANSFER' && p.statusTransferencia === 'PENDIENTE'
+
+  const totalPactados      = schedules.length
+  const cobradosRows       = schedules.filter((s) => s.payments.length > 0 && !isPendingTransfer(s.payments[0]))
+  const enValidacionRows   = schedules.filter((s) => s.payments.length > 0 && isPendingTransfer(s.payments[0]))
+  const pendientesRows     = schedules.filter((s) => s.payments.length === 0)
+  const montoCobrado       = cobradosRows.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
+  const montoEnValidacion  = enValidacionRows.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
+  const montoPendiente     = pendientesRows.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
   const avance = totalPactados > 0 ? Math.round((cobradosRows.length / totalPactados) * 100) : 0
 
   // ── Date label ────────────────────────────────────────────────────────────────
@@ -139,8 +147,8 @@ export default async function PactadosDiaPage({
     tipo:          s.loan.tipo,
     cobradorNombre: s.loan.cobrador.nombre,
     branchNombre:   s.loan.branch.nombre,
-    cobrado:        s.payments.length > 0,
-    montoCobrado:   s.payments.length > 0 ? Number(s.payments[0].monto) : null,
+    cobrado:        s.payments.length > 0 && !isPendingTransfer(s.payments[0]),
+    montoCobrado:   s.payments.length > 0 && !isPendingTransfer(s.payments[0]) ? Number(s.payments[0].monto) : null,
   }))
 
   return (
@@ -166,6 +174,11 @@ export default async function PactadosDiaPage({
           <p className="text-xs text-emerald-400">Cobrados</p>
           <p className="text-2xl font-bold text-emerald-300">{cobradosRows.length}</p>
           <p className="text-xs text-emerald-400/80 font-medium">{formatMoney(montoCobrado)}</p>
+          {enValidacionRows.length > 0 && (
+            <p className="text-[10px] text-yellow-400/90 font-medium mt-1">
+              + {enValidacionRows.length} en validación ({formatMoney(montoEnValidacion)})
+            </p>
+          )}
         </div>
         <div className={`rounded-lg p-4 border ${pendientesRows.length > 0 ? 'border-amber-500/20 bg-amber-500/10' : 'border-border bg-muted/30'}`}>
           <p className={`text-xs ${pendientesRows.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>
@@ -242,8 +255,9 @@ export default async function PactadosDiaPage({
 
           {/* Cobrador sections */}
           {Object.entries(branch.cobradores).map(([cId, cobrador]) => {
-            const pagados    = cobrador.rows.filter((r: ScheduleRow) => r.payments.length > 0)
-            const noPagados  = cobrador.rows.filter((r: ScheduleRow) => r.payments.length === 0)
+            const pagados     = cobrador.rows.filter((r: ScheduleRow) => r.payments.length > 0 && !isPendingTransfer(r.payments[0]))
+            const enValidacion = cobrador.rows.filter((r: ScheduleRow) => r.payments.length > 0 && isPendingTransfer(r.payments[0]))
+            const noPagados   = cobrador.rows.filter((r: ScheduleRow) => r.payments.length === 0)
 
             return (
               <Card key={cId}>
@@ -260,6 +274,12 @@ export default async function PactadosDiaPage({
                     </div>
                     <div className="flex items-center gap-2 text-xs font-normal">
                       <span className="text-emerald-400">{pagados.length} cobrados</span>
+                      {enValidacion.length > 0 && (
+                        <>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-yellow-400">{enValidacion.length} en validación</span>
+                        </>
+                      )}
                       <span className="text-muted-foreground">·</span>
                       <span className={noPagados.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}>
                         {noPagados.length} {isToday ? 'pendientes' : 'sin cobrar'}
@@ -303,6 +323,35 @@ export default async function PactadosDiaPage({
                             {cobroTardio && ' (tarde)'}
                             {pago.metodoPago === 'CASH' ? ' · 💵' : pago.metodoPago === 'TRANSFER' ? ' · 🏦' : ' · 💳'}
                           </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* En validación (transferencias pendientes de verificar) */}
+                  {enValidacion.map((row: ScheduleRow) => {
+                    const pago = row.payments[0]
+                    return (
+                      <div
+                        key={row.id}
+                        className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-yellow-500/10 border border-yellow-500/20"
+                      >
+                        <Clock className="h-4 w-4 text-yellow-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <Link
+                            href={`/clientes/${row.loan.client.id}`}
+                            className="font-medium hover:underline truncate block"
+                          >
+                            {row.loan.client.nombreCompleto}
+                          </Link>
+                          <p className="text-xs text-muted-foreground">
+                            {row.loan.tipo} · Pago #{row.numeroPago} de {row.loan.plazo}
+                            {row.loan.client.telefono && ` · ${row.loan.client.telefono}`}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-semibold text-yellow-300">{formatMoney(Number(pago.monto))}</p>
+                          <p className="text-[10px] text-yellow-400/80">En validación · 🏦</p>
                         </div>
                       </div>
                     )

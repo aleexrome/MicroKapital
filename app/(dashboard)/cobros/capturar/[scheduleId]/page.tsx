@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatMoney } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
-import { ArrowLeft, Banknote, CreditCard, Building2, Printer, Loader2, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Banknote, CreditCard, Building2, Printer, Loader2, CheckCircle, Clock } from 'lucide-react'
 import Link from 'next/link'
 import type { TicketData, CashBreakdownEntry } from '@/types'
 
@@ -38,7 +38,7 @@ interface BankAccount {
   numeroCuenta: string
 }
 
-type PaymentStep = 'method' | 'cash_calc' | 'confirm_card' | 'confirm_transfer' | 'done'
+type PaymentStep = 'method' | 'cash_calc' | 'confirm_card' | 'confirm_transfer' | 'done' | 'transfer_pending'
 
 export default function CapturarPagoPage({ params }: { params: { scheduleId: string } }) {
   const router = useRouter()
@@ -97,6 +97,12 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
 
       const { data } = await res.json()
 
+      // Transferencia: queda pendiente de verificación, no se emite ticket aún
+      if (data.pending) {
+        setStep('transfer_pending')
+        return
+      }
+
       setTicketId(data.ticket.id)
 
       // Construir datos del ticket
@@ -151,6 +157,36 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
   }
 
   const monto = Number(schedule.montoEsperado)
+
+  // ── PASO: TRANSFERENCIA PENDIENTE DE VERIFICACIÓN ──────────────────────────
+  if (step === 'transfer_pending') {
+    return (
+      <div className="p-4 space-y-4 max-w-sm mx-auto">
+        <div className="flex items-center gap-2 text-yellow-600">
+          <Clock className="h-6 w-6" />
+          <h2 className="text-lg font-bold">Transferencia registrada</h2>
+        </div>
+
+        <Card className="bg-yellow-50 border-yellow-200">
+          <CardContent className="p-4 space-y-2 text-sm">
+            <p className="font-medium text-yellow-800">En proceso de validación</p>
+            <p className="text-yellow-700">
+              El pago quedó registrado con estado <span className="font-semibold">pendiente</span>. El Gerente Zonal debe confirmar que el dinero llegó a la cuenta destino antes de que se aplique al calendario de pagos.
+            </p>
+            <div className="pt-2 text-yellow-800">
+              <p><span className="text-yellow-600/80">Cliente:</span> {schedule.loan.client.nombreCompleto}</p>
+              <p><span className="text-yellow-600/80">Monto:</span> <span className="font-semibold money">{formatMoney(monto)}</span></p>
+              {idTransferencia && <p><span className="text-yellow-600/80">Referencia:</span> <span className="font-mono">{idTransferencia}</span></p>}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Button className="w-full" variant="outline" onClick={() => router.push('/cobros/agenda')}>
+          Volver a agenda
+        </Button>
+      </div>
+    )
+  }
 
   // ── PASO: TICKET GENERADO ──────────────────────────────────────────────────
   if (step === 'done' && ticketData) {

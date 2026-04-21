@@ -160,6 +160,8 @@ export async function POST(req: NextRequest) {
     .join('')
     .slice(0, 4)
 
+  const esTransferencia = data.metodoPago === 'TRANSFER'
+
   const result = await prisma.$transaction(async (tx) => {
     const now = new Date()
 
@@ -175,7 +177,7 @@ export async function POST(req: NextRequest) {
         cambioEntregado: data.cambioEntregado,
         notas: data.notas ?? null,
         fechaHora: now,
-        ...(data.metodoPago === 'TRANSFER' ? {
+        ...(esTransferencia ? {
           cuentaDestinoId: data.cuentaDestinoId ?? null,
           idTransferencia: data.idTransferencia ?? null,
           statusTransferencia: 'PENDIENTE',
@@ -193,6 +195,13 @@ export async function POST(req: NextRequest) {
           subtotal: d.subtotal,
         })),
       })
+    }
+
+    // Transferencias: se quedan pendientes hasta que el Gerente Zonal verifique
+    // que el dinero llegó a la cuenta. Los efectos (schedule, score, caja, ticket)
+    // se aplican en POST /api/payments/verify-transfer.
+    if (esTransferencia) {
+      return { payment, pending: true as const }
     }
 
     // 3. Actualizar estado del schedule
@@ -251,13 +260,12 @@ export async function POST(req: NextRequest) {
         fecha,
         cobradoEfectivo: data.metodoPago === 'CASH' ? data.monto : 0,
         cobradoTarjeta: data.metodoPago === 'CARD' ? data.monto : 0,
-        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? data.monto : 0,
+        cobradoTransferencia: 0,
         cambioEntregado: data.cambioEntregado,
       },
       update: {
         cobradoEfectivo: data.metodoPago === 'CASH' ? { increment: data.monto } : undefined,
         cobradoTarjeta: data.metodoPago === 'CARD' ? { increment: data.monto } : undefined,
-        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? { increment: data.monto } : undefined,
         cambioEntregado: { increment: data.cambioEntregado },
       },
     })
@@ -284,19 +292,22 @@ export async function POST(req: NextRequest) {
       companyName: loan.company.nombre,
       branchName: loan.branch.nombre,
       cobradorName: cobrador.nombre,
+      pending: false as const,
     }
   })
 
   createAuditLog({
     userId,
-    accion: 'CREATE_PAYMENT',
+    accion: result.pending ? 'CREATE_PAYMENT_PENDING' : 'CREATE_PAYMENT',
     tabla: 'Payment',
     registroId: result.payment.id,
     valoresNuevos: {
       scheduleId: data.scheduleId,
       monto: data.monto,
       metodoPago: data.metodoPago,
-      ticket: result.ticket.numeroTicket,
+      ...(result.pending
+        ? { statusTransferencia: 'PENDIENTE', idTransferencia: data.idTransferencia }
+        : { ticket: result.ticket.numeroTicket }),
     },
   })
 

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Calendar, ChevronRight, Users, CheckCircle2, XCircle, UserCheck, Building2 } from 'lucide-react'
+import { Calendar, ChevronRight, Users, CheckCircle2, XCircle, UserCheck, Building2, Clock } from 'lucide-react'
 import { esDiaHabil } from '@/lib/business-days'
 import { AgendaDatePicker } from '@/components/cobros/AgendaDatePicker'
 import { ImprimirAgendaButton } from '@/components/cobros/ImprimirAgendaButton'
@@ -103,6 +103,7 @@ export default async function AgendaPage({
           id: true,
           monto: true,
           metodoPago: true,
+          statusTransferencia: true,
           fechaHora: true,
         },
         orderBy: { fechaHora: 'asc' },
@@ -111,11 +112,18 @@ export default async function AgendaPage({
     },
   })
 
-  const cobrados   = schedule.filter((s) => s.payments.length > 0)
-  const pendientes = schedule.filter((s) => s.payments.length === 0)
+  // Una transferencia PENDIENTE no cuenta como cobrado — queda "en validación"
+  type SchedPayment = (typeof schedule)[number]['payments'][number]
+  const isPendingTransfer = (p: SchedPayment) =>
+    p.metodoPago === 'TRANSFER' && p.statusTransferencia === 'PENDIENTE'
 
-  const totalEsperado = schedule.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
-  const totalCobrado  = cobrados.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
+  const cobrados     = schedule.filter((s) => s.payments.length > 0 && !isPendingTransfer(s.payments[0]))
+  const enValidacion = schedule.filter((s) => s.payments.length > 0 && isPendingTransfer(s.payments[0]))
+  const pendientes   = schedule.filter((s) => s.payments.length === 0)
+
+  const totalEsperado      = schedule.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
+  const totalCobrado       = cobrados.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
+  const totalEnValidacion  = enValidacion.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
   const isHabil = esDiaHabil(selectedDate)
 
   // ── Datos para impresión ─────────────────────────────────────────────────────
@@ -185,6 +193,11 @@ export default async function AgendaPage({
             <p className="text-xs text-emerald-400 font-medium">Cobrado</p>
             <p className="text-lg font-bold text-emerald-300">{formatMoney(totalCobrado)}</p>
             <p className="text-xs text-emerald-400/70">{cobrados.length} clientes</p>
+            {enValidacion.length > 0 && (
+              <p className="text-[10px] text-yellow-400/90 font-medium mt-1">
+                + {enValidacion.length} en validación ({formatMoney(totalEnValidacion)})
+              </p>
+            )}
           </div>
           <div className={`rounded-lg p-3 border ${pendientes.length > 0 ? 'bg-red-500/10 border-red-500/20' : 'bg-muted border-border'}`}>
             <p className={`text-xs font-medium ${pendientes.length > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>
@@ -219,9 +232,10 @@ export default async function AgendaPage({
             )}
 
             {Object.entries(branch.cobradores).map(([cId, cobrador]) => {
-              const cPagados    = cobrador.rows.filter((r) => r.payments.length > 0)
-              const cPendientes = cobrador.rows.filter((r) => r.payments.length === 0)
-              const cCobrado    = cPagados.reduce((sum, r) => sum + Number(r.payments[0].monto), 0)
+              const cPagados      = cobrador.rows.filter((r) => r.payments.length > 0 && !isPendingTransfer(r.payments[0]))
+              const cEnValidacion = cobrador.rows.filter((r) => r.payments.length > 0 && isPendingTransfer(r.payments[0]))
+              const cPendientes   = cobrador.rows.filter((r) => r.payments.length === 0)
+              const cCobrado      = cPagados.reduce((sum, r) => sum + Number(r.payments[0].monto), 0)
 
               return (
                 <Card key={cId}>
@@ -238,6 +252,12 @@ export default async function AgendaPage({
                       </div>
                       <div className="flex items-center gap-2 text-xs font-normal">
                         <span className="text-green-600">{cPagados.length} cobrados · {formatMoney(cCobrado)}</span>
+                        {cEnValidacion.length > 0 && (
+                          <>
+                            <span className="text-muted-foreground">·</span>
+                            <span className="text-yellow-400">{cEnValidacion.length} en validación</span>
+                          </>
+                        )}
                         {cPendientes.length > 0 && (
                           <>
                             <span className="text-muted-foreground">·</span>
@@ -267,6 +287,27 @@ export default async function AgendaPage({
                             <p className="text-[10px] text-emerald-400/70">
                               {new Date(pago.fechaHora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                             </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {cEnValidacion.map((row) => {
+                      const pago = row.payments[0]
+                      return (
+                        <div key={row.id} className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-yellow-500/10 border border-yellow-500/20">
+                          <Clock className="h-4 w-4 text-yellow-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <Link href={`/clientes/${row.loan.client.id}`} className="font-medium hover:underline truncate block">
+                              {row.loan.client.nombreCompleto}
+                            </Link>
+                            <p className="text-xs text-muted-foreground">
+                              {row.loan.tipo} · Pago #{row.numeroPago}
+                              {row.loan.client.telefono && ` · ${row.loan.client.telefono}`}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="font-semibold text-yellow-300">{formatMoney(Number(pago.monto))}</p>
+                            <p className="text-[10px] text-yellow-400/80">En validación · 🏦</p>
                           </div>
                         </div>
                       )
@@ -326,6 +367,7 @@ export default async function AgendaPage({
 
   const { grupos: gruposPendientes, individuales: individualesPendientes } = agrupar(pendientes)
   const { grupos: gruposCobrados, individuales: individualesCobrados } = agrupar(cobrados)
+  const { grupos: gruposValidacion, individuales: individualesValidacion } = agrupar(enValidacion)
 
   return (
     <div className="p-4 space-y-5">
@@ -346,6 +388,11 @@ export default async function AgendaPage({
           <p className="text-xs text-emerald-400 font-medium">Cobrado</p>
           <p className="text-lg font-bold text-emerald-300">{formatMoney(totalCobrado)}</p>
           <p className="text-xs text-emerald-400/70">{cobrados.length} clientes</p>
+          {enValidacion.length > 0 && (
+            <p className="text-[10px] text-yellow-400/90 font-medium mt-1">
+              + {enValidacion.length} en validación ({formatMoney(totalEnValidacion)})
+            </p>
+          )}
         </div>
         <div className={`rounded-lg p-3 border ${pendientes.length > 0 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-muted border-border'}`}>
           <p className={`text-xs font-medium ${pendientes.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>
@@ -372,6 +419,23 @@ export default async function AgendaPage({
             ))}
             {individualesPendientes.map((s) => (
               <AgendaItem key={s.id} schedule={s} variant={isToday ? 'pending' : 'uncollected'} isToday={isToday} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* En validación (transferencias pendientes de verificar) */}
+      {(gruposValidacion.length > 0 || individualesValidacion.length > 0) && (
+        <section>
+          <h2 className="text-sm font-semibold text-yellow-400 mb-2">
+            🕒 En validación ({enValidacion.length})
+          </h2>
+          <div className="space-y-2">
+            {gruposValidacion.map((g) => (
+              <GrupoCard key={g.groupId} {...g} variant="validation" isToday={isToday} />
+            ))}
+            {individualesValidacion.map((s) => (
+              <AgendaItem key={s.id} schedule={s} variant="validation" isToday={isToday} />
             ))}
           </div>
         </section>
@@ -430,7 +494,7 @@ interface GroupScheduleItem {
   }
 }
 
-type Variant = 'pending' | 'uncollected' | 'collected'
+type Variant = 'pending' | 'uncollected' | 'collected' | 'validation'
 
 // ── Tarjeta de grupo Solidario ─────────────────────────────────────────────────
 
@@ -450,7 +514,10 @@ function GrupoCard({
     const m = typeof i.montoEsperado === 'number' ? i.montoEsperado : i.montoEsperado.toNumber()
     return s + m
   }, 0)
-  const borderColor = variant === 'collected' ? 'border-l-green-500' : variant === 'pending' ? 'border-l-yellow-400' : 'border-l-red-500'
+  const borderColor = variant === 'collected' ? 'border-l-green-500'
+    : variant === 'pending' ? 'border-l-yellow-400'
+    : variant === 'validation' ? 'border-l-yellow-400'
+    : 'border-l-red-500'
 
   return (
     <Link href={`/cobros/grupo/${groupId}`}>
@@ -501,10 +568,18 @@ function AgendaItem({
     ? schedule.montoEsperado
     : schedule.montoEsperado.toNumber()
 
-  const borderColor = variant === 'collected' ? 'border-l-green-500' : variant === 'pending' ? 'border-l-yellow-400' : 'border-l-red-500'
+  const borderColor = variant === 'collected' ? 'border-l-green-500'
+    : variant === 'pending' ? 'border-l-yellow-400'
+    : variant === 'validation' ? 'border-l-yellow-400'
+    : 'border-l-red-500'
 
-  const StatusIcon = variant === 'collected' ? CheckCircle2 : variant === 'pending' ? null : XCircle
-  const iconColor  = variant === 'collected' ? 'text-emerald-400' : 'text-red-400'
+  const StatusIcon = variant === 'collected' ? CheckCircle2
+    : variant === 'validation' ? Clock
+    : variant === 'pending' ? null
+    : XCircle
+  const iconColor  = variant === 'collected' ? 'text-emerald-400'
+    : variant === 'validation' ? 'text-yellow-400'
+    : 'text-red-400'
 
   const href = isToday && variant === 'pending' ? `/cobros/capturar/${schedule.id}` : '#'
 
@@ -512,7 +587,7 @@ function AgendaItem({
 
   return (
     <Link href={href}>
-      <Card className={`border-l-4 ${borderColor} ${variant === 'collected' ? 'bg-emerald-500/5' : ''}`}>
+      <Card className={`border-l-4 ${borderColor} ${variant === 'collected' ? 'bg-emerald-500/5' : variant === 'validation' ? 'bg-yellow-500/5' : ''}`}>
         <CardContent className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             {StatusIcon && <StatusIcon className={`h-4 w-4 ${iconColor} shrink-0`} />}
@@ -522,16 +597,21 @@ function AgendaItem({
                 Pago {schedule.numeroPago} de {schedule.loan.plazo} · {schedule.loan.tipo}
                 {schedule.loan.client.telefono && ` · ${schedule.loan.client.telefono}`}
               </p>
-              {pago && (
+              {pago && variant === 'collected' && (
                 <p className="text-xs text-emerald-400 mt-0.5">
                   Cobrado el {new Date(pago.fechaHora).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
                   {pago.metodoPago === 'CASH' ? ' · 💵' : pago.metodoPago === 'TRANSFER' ? ' · 🏦' : ' · 💳'}
                 </p>
               )}
+              {pago && variant === 'validation' && (
+                <p className="text-xs text-yellow-400 mt-0.5">
+                  🏦 Transferencia pendiente de verificación por el Gerente Zonal
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 ml-3 shrink-0">
-            <span className={`font-bold ${variant === 'collected' ? 'text-emerald-300' : 'text-foreground'}`}>
+            <span className={`font-bold ${variant === 'collected' ? 'text-emerald-300' : variant === 'validation' ? 'text-yellow-300' : 'text-foreground'}`}>
               {formatMoney(monto)}
             </span>
             {isToday && variant === 'pending' && <ChevronRight className="h-4 w-4 text-muted-foreground" />}

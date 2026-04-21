@@ -112,7 +112,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/transferencias',
     label: 'Transferencias',
     icon: <ArrowLeftRight className="h-5 w-5" />,
-    roles: ['GERENTE', 'GERENTE_ZONAL'],
+    roles: ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
   },
   {
     href: '/creditos-concluidos',

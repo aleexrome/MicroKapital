@@ -1,13 +1,23 @@
--- One-off fix: LAS ELOTITAS — San Mateo Atenco
--- Links the 5 SOLIDARIO loans (2026-04-14) to the kept group and deletes the
--- duplicate empty group. Does NOT touch capital, tasa, pagoSemanal, or
--- PaymentSchedule. Safe to run once in Supabase SQL editor.
+-- One-off fix: LAS ELOTITAS — San Mateo Atenco (Ciclo 04)
 --
--- Equivalent to scripts/fix-elotitas-grouping.ts
+-- Context: the 5 SOLIDARIO loans of cycle 04 (disbursed 2026-04-14) were
+-- created with loanGroupId = NULL instead of being attached to the real
+-- group "LAS ELOTITAS" (id a29a2bd0-..44c8, created 2026-04-12).
+--
+-- A second row for "LAS ELOTITAS" exists (id 95ab9dab-..f50c, created
+-- 2026-04-13) holding 5 REJECTED loan applications from the same clients
+-- for higher amounts. That row is INTENTIONALLY left untouched to
+-- preserve audit history; the duplication is an artifact of the new-loan
+-- flow and will be addressed separately (unique constraint + group
+-- selector in the form).
+--
+-- This script only attaches the 5 ACTIVE loans of cycle 04 to a29a2bd0.
+-- It does not modify capital, tasa, pagoSemanal, PaymentSchedule,
+-- LIQUIDATED loans from the previous cycle, REJECTED applications, nor
+-- ROCIO's INDIVIDUAL loan.
 
 BEGIN;
 
--- 1. Link the 5 SOLIDARIO loans to the group we keep
 UPDATE "Loan"
 SET "loanGroupId" = 'a29a2bd0-f322-456e-bc32-d413eeff44c8'
 WHERE "id" IN (
@@ -21,28 +31,11 @@ AND "tipo" = 'SOLIDARIO'
 AND "estado" = 'ACTIVE'
 AND "loanGroupId" IS NULL;
 
--- 2. Verify the duplicate has no loans, then delete it
-DO $$
-DECLARE
-  remaining int;
-BEGIN
-  SELECT COUNT(*) INTO remaining
-  FROM "Loan"
-  WHERE "loanGroupId" = '95ab9dab-b974-447c-b2c7-ddf40591f50c';
-
-  IF remaining > 0 THEN
-    RAISE EXCEPTION 'Cannot delete duplicate group: % loans still reference it', remaining;
-  END IF;
-END $$;
-
-DELETE FROM "LoanGroup"
-WHERE "id" = '95ab9dab-b974-447c-b2c7-ddf40591f50c';
-
--- 3. Verification (review before committing)
-SELECT l."id", c."nombreCompleto", l."tipo", l."capital", l."pagoSemanal", l."loanGroupId"
+-- Verification: should show 5 LIQUIDATED (previous cycle) + 5 ACTIVE (cycle 04)
+SELECT c."nombreCompleto", l."tipo", l."estado", l."capital", l."fechaDesembolso"
 FROM "Loan" l
 JOIN "Client" c ON c."id" = l."clientId"
 WHERE l."loanGroupId" = 'a29a2bd0-f322-456e-bc32-d413eeff44c8'
-ORDER BY c."nombreCompleto";
+ORDER BY l."fechaDesembolso" DESC NULLS LAST, c."nombreCompleto";
 
 COMMIT;

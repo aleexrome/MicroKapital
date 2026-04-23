@@ -70,6 +70,27 @@ function buildEscPosBuffer(ticket: TicketData): Uint8Array {
   cmds.push(...textToBytes('Gracias por tu pago puntual'), LF)
   cmds.push(ESC, 0x45, 0x00)
   cmds.push(...textToBytes('================================'), LF)
+
+  // QR code (ESC/POS native QR commands — GS ( k)
+  if (ticket.qrCode) {
+    const qrData = ticket.qrCode
+    const qrLen = qrData.length + 3
+
+    // Model 2
+    cmds.push(GS, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00)
+    // Module size (1-16) — use 6 for readable QR on thermal paper
+    cmds.push(GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x06)
+    // Error correction level — M
+    cmds.push(GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31)
+    // Store data
+    cmds.push(GS, 0x28, 0x6b, qrLen & 0xff, (qrLen >> 8) & 0xff, 0x31, 0x50, 0x30)
+    cmds.push(...textToBytes(qrData))
+    // Print
+    cmds.push(GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30)
+    cmds.push(LF)
+    cmds.push(...textToBytes('Escanea para verificar'), LF)
+  }
+
   cmds.push(LF, LF, LF)
 
   // Cut

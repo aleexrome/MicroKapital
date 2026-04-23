@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
+import { scopedClientWhere } from '@/lib/access'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
 
@@ -20,31 +22,27 @@ const createClientSchema = z.object({
 })
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const { rol, companyId, branchId } = session.user
-
-  let cobradorIdFilter: string | undefined
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorIdFilter = cobrador?.id
-  }
+  const { companyId } = session.user
 
   const q = req.nextUrl.searchParams.get('q')
 
+  // Alcance por rol/sucursal — fail-closed si el rol requiere sucursal pero
+  // no tiene ninguna asignada (evita que la GERENTE de Tenancingo vea los
+  // 416 clientes cuando el JWT queda sin branchId/zonaBranchIds).
+  const where: Prisma.ClientWhereInput = {
+    companyId: companyId!,
+    activo: true,
+    AND: [scopedClientWhere(session.user)],
+    ...(q ? { nombreCompleto: { contains: q, mode: 'insensitive' } } : {}),
+  }
+
   const clients = await prisma.client.findMany({
-    where: {
-      companyId: companyId!,
-      activo: true,
-      ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
-      ...(q ? { nombreCompleto: { contains: q, mode: 'insensitive' as const } } : {}),
-    },
+    where,
     orderBy: { createdAt: 'desc' },
     take: 100,
     select: {
@@ -61,7 +59,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
@@ -77,8 +75,19 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Determinar sucursal
-  const targetBranchId = data.branchId ?? branchId
+  // Normalizar nombres y documentos a MAYÚSCULAS + trim. Los clientes antiguos
+  // estaban todos en mayúsculas; cobradoras/gerentes empezaron a capturar en
+  // minúsculas y la cartera se veía inconsistente. Normalizar al guardar
+  // garantiza consistencia sin importar cómo escriban en el formulario —
+  // también defiende si el API se llama desde otro lado (p. ej. script).
+  const nombreCompleto = data.nombreCompleto.trim().toUpperCase()
+  const referenciaNombre = data.referenciaNombre?.trim().toUpperCase() || null
+  const numIne = data.numIne?.trim().toUpperCase() || null
+  const curp = data.curp?.trim().toUpperCase() || null
+
+  // Determinar sucursal — Director puede elegir cualquiera; el resto usa la propia
+  const { zonaBranchIds } = session.user
+  const targetBranchId = data.branchId ?? branchId ?? zonaBranchIds?.[0]
   if (!targetBranchId) {
     return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
   }
@@ -91,13 +100,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Sucursal no válida' }, { status: 400 })
   }
 
-  // Si es COBRADOR, asignarse a sí mismo
+  // Coordinador, Cobrador, Gerente y Gerente Zonal: se asignan a sí mismos como cobrador
+  // Solo Director puede asignar a otro cobrador (debe enviarlo en el body)
+  const isRolCampo = rol === 'COBRADOR' || rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
   let cobradorId = data.cobradorId
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorId = cobrador?.id
+  if (isRolCampo) {
+    cobradorId = userId
   }
 
   const client = await prisma.client.create({
@@ -105,14 +113,14 @@ export async function POST(req: NextRequest) {
       companyId: companyId!,
       branchId: targetBranchId,
       cobradorId: cobradorId ?? null,
-      nombreCompleto: data.nombreCompleto,
+      nombreCompleto,
       telefono: data.telefono || null,
       telefonoAlt: data.telefonoAlt || null,
       email: data.email || null,
       domicilio: data.domicilio || null,
-      numIne: data.numIne || null,
-      curp: data.curp || null,
-      referenciaNombre: data.referenciaNombre || null,
+      numIne,
+      curp,
+      referenciaNombre,
       referenciaTelefono: data.referenciaTelefono || null,
       fechaNacimiento: data.fechaNacimiento ? new Date(data.fechaNacimiento) : null,
       score: 500,
@@ -125,7 +133,7 @@ export async function POST(req: NextRequest) {
     accion: 'CREATE',
     tabla: 'Client',
     registroId: client.id,
-    valoresNuevos: { nombreCompleto: data.nombreCompleto, companyId },
+    valoresNuevos: { nombreCompleto, companyId },
     ipAddress: req.headers.get('x-forwarded-for') ?? undefined,
   })
 

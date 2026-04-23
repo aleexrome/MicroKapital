@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
@@ -14,21 +14,75 @@ const cashBreakdownSchema = z.object({
 
 const createPaymentSchema = z.object({
   scheduleId: z.string().uuid(),
-  metodoPago: z.enum(['CASH', 'CARD']),
+  metodoPago: z.enum(['CASH', 'CARD', 'TRANSFER']),
   monto: z.number().positive(),
   cambioEntregado: z.number().min(0).default(0),
   notas: z.string().optional(),
   cashBreakdown: z.array(cashBreakdownSchema).optional().default([]),
+  // Transferencia
+  cuentaDestinoId: z.string().uuid().optional(),
+  idTransferencia: z.string().optional(),
 })
 
-export async function POST(req: NextRequest) {
-  const session = await auth()
+export async function GET(req: NextRequest) {
+  const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { companyId, branchId, id: userId } = session.user
+  const { companyId, rol, branchId, id: userId } = session.user
+  const metodo = req.nextUrl.searchParams.get('metodo')
+  const status = req.nextUrl.searchParams.get('status')
+
+  // Scope by role — coordinadores solo ven sus propios pagos
+  const roleFilter: Record<string, unknown> = {}
+  if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
+    roleFilter.cobradorId = userId
+  } else if (rol === 'GERENTE') {
+    const branchIds = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : null
+    if (branchIds?.length) roleFilter.loan = { companyId: companyId!, branchId: { in: branchIds } }
+  } else if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    if (zoneIds?.length) roleFilter.loan = { companyId: companyId!, branchId: { in: zoneIds } }
+  }
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      loan: { companyId: companyId! },
+      ...roleFilter,
+      ...(metodo ? { metodoPago: metodo as 'CASH' | 'CARD' | 'TRANSFER' } : {}),
+      ...(status && metodo === 'TRANSFER' ? { statusTransferencia: status } : {}),
+    },
+    orderBy: { fechaHora: 'desc' },
+    take: 100,
+    select: {
+      id: true,
+      monto: true,
+      metodoPago: true,
+      fechaHora: true,
+      cambioEntregado: true,
+      notas: true,
+      idTransferencia: true,
+      statusTransferencia: true,
+      cobrador: { select: { nombre: true } },
+      client: { select: { nombreCompleto: true } },
+      loan: { select: { tipo: true } },
+      cuentaDestino: { select: { banco: true, titular: true, clabe: true } },
+    },
+  })
+
+  return NextResponse.json({ data: payments })
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getSession()
+  if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const { companyId, branchId, id: userId, rol } = session.user
 
   const cobrador = await prisma.user.findFirst({
     where: { companyId: companyId!, email: session.user.email! },
+    select: { id: true, rol: true, nombre: true, branchId: true, permisoAplicarPagos: true },
   })
   if (!cobrador) return NextResponse.json({ error: 'Cobrador no encontrado' }, { status: 403 })
 
@@ -40,11 +94,11 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Obtener el schedule con el préstamo
+  // 1. Buscar el schedule dentro de la misma empresa y aún cobrable.
   const schedule = await prisma.paymentSchedule.findFirst({
     where: {
       id: data.scheduleId,
-      loan: { companyId: companyId!, cobradorId: cobrador.id },
+      loan: { companyId: companyId! },
       estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
     },
     include: {
@@ -64,8 +118,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Cobro no encontrado o ya procesado' }, { status: 404 })
   }
 
+  // 2. Autorizar por rol contra el préstamo ya cargado:
+  //   - COORDINADOR / COBRADOR: solo loans asignados a ellos
+  //   - GERENTE / GERENTE_ZONAL: loans en sus sucursales (zonaBranchIds o branchId)
+  //                              — si ambos vienen vacíos, se permite (misma regla que la UI)
+  //   - DIRECTOR_GENERAL / SUPER_ADMIN: cualquier loan de la empresa
+  //   - Otros con permisoAplicarPagos: loans de su sucursal
+  const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
+  const esGerente = rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
+  const esCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
+
+  let autorizado = false
+  if (esOpAdmin) {
+    autorizado = true
+  } else if (esCoordinador) {
+    autorizado = schedule.loan.cobradorId === cobrador.id
+  } else if (esGerente) {
+    const zonas = session.user.zonaBranchIds?.length
+      ? session.user.zonaBranchIds
+      : branchId ? [branchId] : []
+    // Consistente con la UI: si no hay zonas definidas, no se restringe por sucursal
+    autorizado = zonas.length === 0 || zonas.includes(schedule.loan.branchId)
+  } else if (cobrador.permisoAplicarPagos) {
+    autorizado = !!branchId && schedule.loan.branchId === branchId
+  }
+
+  if (!autorizado) {
+    return NextResponse.json({ error: 'No autorizado para cobrar este préstamo' }, { status: 403 })
+  }
+
   const loan = schedule.loan
-  const targetBranchId = branchId ?? loan.branchId
+  // El ticket y el corte se asignan a la sucursal del préstamo, no a la del usuario
+  // (un gerente zonal puede cobrar créditos de distintas sucursales).
+  const targetBranchId = loan.branchId
 
   // Determinar prefijo de sucursal para el ticket
   const branchName = loan.branch.nombre
@@ -74,6 +159,8 @@ export async function POST(req: NextRequest) {
     .map((w) => w[0]?.toUpperCase() ?? '')
     .join('')
     .slice(0, 4)
+
+  const esTransferencia = data.metodoPago === 'TRANSFER'
 
   const result = await prisma.$transaction(async (tx) => {
     const now = new Date()
@@ -90,6 +177,11 @@ export async function POST(req: NextRequest) {
         cambioEntregado: data.cambioEntregado,
         notas: data.notas ?? null,
         fechaHora: now,
+        ...(esTransferencia ? {
+          cuentaDestinoId: data.cuentaDestinoId ?? null,
+          idTransferencia: data.idTransferencia ?? null,
+          statusTransferencia: 'PENDIENTE',
+        } : {}),
       },
     })
 
@@ -103,6 +195,13 @@ export async function POST(req: NextRequest) {
           subtotal: d.subtotal,
         })),
       })
+    }
+
+    // Transferencias: se quedan pendientes hasta que el Gerente Zonal verifique
+    // que el dinero llegó a la cuenta. Los efectos (schedule, score, caja, ticket)
+    // se aplican en POST /api/payments/verify-transfer.
+    if (esTransferencia) {
+      return { payment, pending: true as const }
     }
 
     // 3. Actualizar estado del schedule
@@ -161,6 +260,7 @@ export async function POST(req: NextRequest) {
         fecha,
         cobradoEfectivo: data.metodoPago === 'CASH' ? data.monto : 0,
         cobradoTarjeta: data.metodoPago === 'CARD' ? data.monto : 0,
+        cobradoTransferencia: 0,
         cambioEntregado: data.cambioEntregado,
       },
       update: {
@@ -192,19 +292,22 @@ export async function POST(req: NextRequest) {
       companyName: loan.company.nombre,
       branchName: loan.branch.nombre,
       cobradorName: cobrador.nombre,
+      pending: false as const,
     }
   })
 
   createAuditLog({
     userId,
-    accion: 'CREATE_PAYMENT',
+    accion: result.pending ? 'CREATE_PAYMENT_PENDING' : 'CREATE_PAYMENT',
     tabla: 'Payment',
     registroId: result.payment.id,
     valoresNuevos: {
       scheduleId: data.scheduleId,
       monto: data.monto,
       metodoPago: data.metodoPago,
-      ticket: result.ticket.numeroTicket,
+      ...(result.pending
+        ? { statusTransferencia: 'PENDIENTE', idTransferencia: data.idTransferencia }
+        : { ticket: result.ticket.numeroTicket }),
     },
   })
 

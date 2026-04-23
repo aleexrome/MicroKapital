@@ -1,5 +1,7 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
+import { scopedClientWhere } from '@/lib/access'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ScoreBadge } from '@/components/clients/ScoreBadge'
@@ -7,11 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate } from '@/lib/utils'
 import { UserPlus, Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 
 interface SearchParams {
   q?: string
   cobrador?: string
+  page?: string
 }
+
+const PAGE_SIZE = 50
 
 export default async function ClientesPage({
   searchParams,
@@ -21,41 +27,65 @@ export default async function ClientesPage({
   const session = await getSession()
   if (!session?.user) return null
 
-  const { rol, companyId, branchId } = session.user
+  const { companyId } = session.user
 
-  let cobradorIdFilter: string | undefined
-  if (rol === 'COBRADOR') {
-    const cobrador = await prisma.user.findFirst({
-      where: { companyId: companyId!, email: session.user.email! },
-    })
-    cobradorIdFilter = cobrador?.id
+  const page = Math.max(1, parseInt(searchParams.page ?? '1', 10))
+
+  // Alcance por rol/sucursal. `scopedClientWhere` es fail-closed: si un
+  // GERENTE / GERENTE_ZONAL / DIRECTOR no tiene sucursal asignada, devuelve
+  // `{ id: '__NO_BRANCH_ASSIGNED__' }` — cero resultados en lugar de los 416
+  // que veía Cristina cuando el JWT quedaba sin `branchId` ni `zonaBranchIds`.
+  const where: Prisma.ClientWhereInput = {
+    companyId: companyId!,
+    activo: true,
+    AND: [scopedClientWhere(session.user)],
   }
 
-  const clientes = await prisma.client.findMany({
-    where: {
-      companyId: companyId!,
-      activo: true,
-      ...(cobradorIdFilter ? { cobradorId: cobradorIdFilter } : {}),
-      ...(rol === 'COBRADOR' && branchId ? { branchId } : {}),
-      ...(searchParams.q ? { nombreCompleto: { contains: searchParams.q, mode: 'insensitive' as const } } : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      cobrador: { select: { nombre: true } },
-      loans: {
-        where: { estado: 'ACTIVE' },
-        select: { id: true },
+  if (searchParams.q) {
+    where.nombreCompleto = { contains: searchParams.q, mode: 'insensitive' }
+  }
+
+  const [clientes, total] = await Promise.all([
+    prisma.client.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        cobrador: { select: { nombre: true } },
+        loans: {
+          where: { estado: 'ACTIVE' },
+          select: {
+            id: true,
+            schedule: {
+              where: {
+                OR: [
+                  { estado: 'OVERDUE' },
+                  {
+                    estado: { in: ['PENDING', 'PARTIAL'] },
+                    fechaVencimiento: { lt: new Date() },
+                  },
+                ],
+              },
+              select: { id: true },
+            },
+          },
+        },
       },
-    },
-    take: 50,
-  })
+      take: PAGE_SIZE,
+      skip: (page - 1) * PAGE_SIZE,
+    }),
+    prisma.client.count({ where }),
+  ])
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
-          <p className="text-muted-foreground">{clientes.length} clientes encontrados</p>
+          <h1 className="text-2xl font-bold text-gray-900">Cartera de Clientes</h1>
+          <p className="text-muted-foreground">
+            {total} cliente(s) · página {page} de {totalPages}
+          </p>
         </div>
         <Button asChild>
           <Link href="/clientes/nuevo">
@@ -109,7 +139,12 @@ export default async function ClientesPage({
                         {cliente.loans.length} activo{cliente.loans.length > 1 ? 's' : ''}
                       </Badge>
                     )}
-                    <ScoreBadge score={cliente.score} showLabel={false} size="sm" />
+                    <ScoreBadge
+                      score={cliente.score}
+                      overdueCount={cliente.loans.reduce((s, l) => s + l.schedule.length, 0)}
+                      showLabel={false}
+                      size="sm"
+                    />
                   </div>
                 </Link>
               ))}
@@ -117,6 +152,84 @@ export default async function ClientesPage({
           )}
         </CardContent>
       </Card>
+
+      <PaginationBar q={searchParams.q ?? null} page={page} totalPages={totalPages} />
+    </div>
+  )
+}
+
+function buildHref(q: string | null, page: number) {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  if (page > 1) params.set('page', String(page))
+  const qs = params.toString()
+  return `/clientes${qs ? `?${qs}` : ''}`
+}
+
+function PaginationBar({
+  q,
+  page,
+  totalPages,
+}: {
+  q: string | null
+  page: number
+  totalPages: number
+}) {
+  if (totalPages <= 1) return null
+
+  const pages = Array.from({ length: totalPages }, (_, i) => i + 1)
+    .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+    .reduce<(number | '…')[]>((acc, p, idx, arr) => {
+      if (idx > 0 && typeof arr[idx - 1] === 'number' && (p as number) - (arr[idx - 1] as number) > 1)
+        acc.push('…')
+      acc.push(p)
+      return acc
+    }, [])
+
+  return (
+    <div className="flex items-center justify-center gap-2 py-1">
+      <Link
+        href={buildHref(q, Math.max(1, page - 1))}
+        className={cn(
+          'px-3 py-1.5 text-sm rounded-md border transition-colors',
+          page <= 1
+            ? 'pointer-events-none opacity-40 border-border text-muted-foreground'
+            : 'border-border hover:bg-secondary text-foreground',
+        )}
+      >
+        ← Anterior
+      </Link>
+
+      {pages.map((p, i) =>
+        p === '…' ? (
+          <span key={`e-${i}`} className="px-1 text-muted-foreground">…</span>
+        ) : (
+          <Link
+            key={p}
+            href={buildHref(q, p as number)}
+            className={cn(
+              'w-8 h-8 flex items-center justify-center text-sm rounded-md border transition-colors',
+              p === page
+                ? 'bg-primary-500 border-primary-500 text-white font-semibold'
+                : 'border-border hover:bg-secondary text-foreground',
+            )}
+          >
+            {p}
+          </Link>
+        ),
+      )}
+
+      <Link
+        href={buildHref(q, Math.min(totalPages, page + 1))}
+        className={cn(
+          'px-3 py-1.5 text-sm rounded-md border transition-colors',
+          page >= totalPages
+            ? 'pointer-events-none opacity-40 border-border text-muted-foreground'
+            : 'border-border hover:bg-secondary text-foreground',
+        )}
+      >
+        Siguiente →
+      </Link>
     </div>
   )
 }

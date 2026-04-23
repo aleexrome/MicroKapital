@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
@@ -11,15 +13,17 @@ export default async function ReportesPage() {
   if (!session?.user) redirect('/login')
 
   const { rol, companyId } = session.user
-  if (rol !== 'GERENTE' && rol !== 'SUPER_ADMIN') redirect('/dashboard')
+  if (!['GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'].includes(rol)) redirect('/dashboard')
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
 
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+
   const [
     totalCartera,
-    cobradoMes,
+    cashMesAgg,
     moraCount,
     liquidadosMes,
   ] = await Promise.all([
@@ -28,18 +32,25 @@ export default async function ReportesPage() {
       _sum: { totalPago: true },
     }),
 
-    prisma.payment.aggregate({
+    // Usar CashRegister (fecha @db.Date, sin problemas de timezone).
+    // Suma los tres métodos de pago capturados en el mes actual.
+    prisma.cashRegister.aggregate({
       where: {
-        loan: { companyId: companyId! },
-        fechaHora: { gte: startOfMonth },
+        branch: { companyId: companyId! },
+        fecha: { gte: startOfMonth, lt: endOfMonth },
       },
-      _sum: { monto: true },
+      _sum: {
+        cobradoEfectivo:      true,
+        cobradoTarjeta:       true,
+        cobradoTransferencia: true,
+      },
     }),
 
     prisma.paymentSchedule.count({
       where: {
-        loan: { companyId: companyId! },
-        estado: 'OVERDUE',
+        loan: { companyId: companyId!, estado: 'ACTIVE' },
+        estado: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] },
+        fechaVencimiento: { lt: today },
       },
     }),
 
@@ -51,6 +62,11 @@ export default async function ReportesPage() {
       },
     }),
   ])
+
+  const cobradoMes =
+    Number(cashMesAgg._sum.cobradoEfectivo      ?? 0) +
+    Number(cashMesAgg._sum.cobradoTarjeta       ?? 0) +
+    Number(cashMesAgg._sum.cobradoTransferencia ?? 0)
 
   return (
     <div className="p-6 space-y-6">
@@ -68,7 +84,7 @@ export default async function ReportesPage() {
         />
         <MetricCard
           title="Cobrado este mes"
-          value={formatMoney(Number(cobradoMes._sum.monto ?? 0))}
+          value={formatMoney(cobradoMes)}
           icon={TrendingDown}
           color="green"
         />

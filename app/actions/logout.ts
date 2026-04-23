@@ -1,10 +1,7 @@
 'use server'
 
-import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
+import { signOut } from '@/lib/auth'
 
 export async function logoutAction() {
-  cookies().delete('authjs.session-token')
-  cookies().delete('authjs.callback-url')
-  redirect('/login')
+  await signOut({ redirectTo: '/login' })
 }

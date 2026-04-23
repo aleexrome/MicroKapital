@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
 import { z } from 'zod'
@@ -12,13 +12,13 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const session = await auth()
+  const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { rol, companyId, id: userId } = session.user
 
-  if (rol !== 'GERENTE' && rol !== 'SUPER_ADMIN') {
-    return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
+  if (rol !== 'DIRECTOR_GENERAL' && rol !== 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Sin permisos — solo el Director General puede rechazar créditos' }, { status: 403 })
   }
 
   const loan = await prisma.loan.findFirst({

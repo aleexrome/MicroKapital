@@ -1,0 +1,380 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/use-toast'
+import { Badge } from '@/components/ui/badge'
+import { Loader2, Pencil, Check, X, AlertCircle, Undo2, CheckCircle2, Info, Eye } from 'lucide-react'
+import { formatMoney } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import type { ScheduleStatus } from '@prisma/client'
+
+export interface PaymentInfo {
+  quien: string
+  rol: string
+  cuando: string
+}
+
+const ROL_LABEL: Record<string, string> = {
+  SUPER_ADMIN:        'Super Administrador',
+  DIRECTOR_GENERAL:   'Director General',
+  DIRECTOR_COMERCIAL: 'Director Comercial',
+  GERENTE_ZONAL:      'Gerente Zonal',
+  GERENTE:            'Gerente',
+  COORDINADOR:        'Coordinador',
+  COBRADOR:           'Cobrador',
+}
+
+const STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'error' | 'info' | 'outline'> = {
+  PAID: 'success',
+  PENDING: 'warning',
+  OVERDUE: 'error',
+  PARTIAL: 'info',
+  ADVANCE: 'success',
+  FINANCIADO: 'outline',
+}
+const STATUS_LABEL: Record<ScheduleStatus, string> = {
+  PAID: 'Pagado',
+  PENDING: 'Pendiente',
+  OVERDUE: 'Vencido',
+  PARTIAL: 'Parcial',
+  ADVANCE: 'Adelantado',
+  FINANCIADO: 'Financiado',
+}
+
+function toInputValue(date: string | Date): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+interface ScheduleItem {
+  id: string
+  numeroPago: number
+  fechaVencimiento: Date | string
+  montoEsperado: number
+  estado: ScheduleStatus
+  pagadoAt?: Date | string | null
+  paymentInfo?: PaymentInfo
+  tickets?: { numeroTicket: string; esReimpresion: boolean; impresoAt: string }[]
+}
+
+interface Props {
+  loanId: string
+  schedule: ScheduleItem[]
+  canCapture: boolean
+  canEditDates: boolean
+  canUndo: boolean
+}
+
+export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates, canUndo }: Props) {
+  const router    = useRouter()
+  const { toast } = useToast()
+
+  const [editingId, setEditingId]           = useState<string | null>(null)
+  const [dateValue, setDateValue]           = useState('')
+  const [saving, setSaving]                 = useState(false)
+
+  const [confirmUndoId, setConfirmUndoId]   = useState<string | null>(null)
+  const [undoing, setUndoing]               = useState(false)
+
+  const [confirmApplyId, setConfirmApplyId] = useState<string | null>(null)
+  const [applying, setApplying]             = useState(false)
+
+  const [openInfoId, setOpenInfoId]         = useState<string | null>(null)
+
+  function startEdit(s: ScheduleItem) {
+    setEditingId(s.id)
+    setDateValue(toInputValue(s.fechaVencimiento))
+  }
+
+  async function saveDate(s: ScheduleItem) {
+    if (!dateValue) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/loans/${loanId}/schedule/${s.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fechaVencimiento: dateValue }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      toast({ title: data.message ?? `Pago ${s.numeroPago} — fecha actualizada` })
+      setEditingId(null)
+      router.refresh()
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function undoPayment(s: ScheduleItem) {
+    setUndoing(true)
+    try {
+      const res = await fetch(`/api/loans/${loanId}/schedule/${s.id}/undo`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      toast({ title: data.message ?? `Pago ${s.numeroPago} revertido a Pendiente` })
+      setConfirmUndoId(null)
+      router.refresh()
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+    } finally {
+      setUndoing(false)
+    }
+  }
+
+  async function applyPayment(s: ScheduleItem) {
+    setApplying(true)
+    try {
+      const res = await fetch(`/api/loans/${loanId}/schedule/${s.id}/apply`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      toast({ title: data.message ?? `Pago ${s.numeroPago} aplicado` })
+      setConfirmApplyId(null)
+      router.refresh()
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  return (
+    <div className="divide-y">
+      {schedule.map((s) => {
+        const isEditing = editingId === s.id
+        // canUndo (DG/SUPER_ADMIN) → puede editar TODAS las filas, incluyendo PAID.
+        // canEditDates sin canUndo → puede editar PENDING, OVERDUE, PARTIAL (no PAID, ADVANCE ni FINANCIADO).
+        const editable = canEditDates && (canUndo || (s.estado !== 'PAID' && s.estado !== 'ADVANCE' && s.estado !== 'FINANCIADO'))
+
+        // Visually overdue: fecha pasada con estado pendiente/parcial, OR estado explícito OVERDUE
+        const _d = typeof s.fechaVencimiento === 'string' ? new Date(s.fechaVencimiento) : s.fechaVencimiento
+        const dueDate = new Date(_d.getUTCFullYear(), _d.getUTCMonth(), _d.getUTCDate())
+        const isVisuallyOverdue =
+          s.estado === 'OVERDUE' ||
+          ((s.estado === 'PENDING' || s.estado === 'PARTIAL') && dueDate < today)
+
+        const canApplyRow  = canUndo && (s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL')
+        const canUndoRow   = canUndo && s.estado === 'PAID'
+
+        const isPaidStatus = s.estado === 'PAID' || s.estado === 'ADVANCE' || s.estado === 'FINANCIADO'
+        const infoOpen = openInfoId === s.id
+
+        return (
+          <div
+            key={s.id}
+            className={`py-2 text-sm ${isVisuallyOverdue ? 'bg-red-500/5' : ''}`}
+          >
+          <div className="flex items-center gap-2">
+            <span className={`w-7 shrink-0 ${isVisuallyOverdue ? 'text-red-400 font-semibold' : 'text-muted-foreground'}`}>
+              {s.numeroPago}.
+            </span>
+
+            {/* Date cell */}
+            {isEditing ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  value={dateValue}
+                  onChange={(e) => setDateValue(e.target.value)}
+                  className="border rounded px-2 py-0.5 text-xs"
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  variant="success"
+                  disabled={saving}
+                  onClick={() => saveDate(s)}
+                >
+                  {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  variant="outline"
+                  disabled={saving}
+                  onClick={() => setEditingId(null)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <span className="w-24 shrink-0 flex items-center gap-1">
+                <span className={isVisuallyOverdue ? 'text-red-400 font-medium' : ''}>
+                  {formatDate(s.fechaVencimiento)}
+                </span>
+                {isVisuallyOverdue && (
+                  <AlertCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                )}
+                {editable && (
+                  <button
+                    onClick={() => startEdit(s)}
+                    className="text-muted-foreground hover:text-primary-600 transition-colors"
+                    title="Editar fecha"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+              </span>
+            )}
+
+            <span className="font-medium w-20 shrink-0">{formatMoney(s.montoEsperado)}</span>
+            <Badge
+              variant={isVisuallyOverdue ? 'error' : STATUS_VARIANT[s.estado]}
+              className={`text-xs${s.estado === 'FINANCIADO' ? ' border-violet-400 text-violet-700 bg-violet-50' : ''}`}
+            >
+              {isVisuallyOverdue ? 'Vencido' : STATUS_LABEL[s.estado]}
+            </Badge>
+
+            {/* Fecha y hora de cobro — visible para todos los roles cuando está pagado */}
+            {isPaidStatus && s.pagadoAt && (
+              <span className="text-xs text-emerald-400/80 shrink-0">
+                {new Date(s.pagadoAt).toLocaleString('es-MX', {
+                  day: '2-digit', month: '2-digit', year: '2-digit',
+                  hour: '2-digit', minute: '2-digit',
+                })}
+              </span>
+            )}
+
+            {/* Icono de información — solo si hay datos de quién cobró (DG / SUPER_ADMIN) */}
+            {isPaidStatus && s.paymentInfo && (
+              <button
+                onClick={() => setOpenInfoId(infoOpen ? null : s.id)}
+                className={`shrink-0 rounded-full p-0.5 transition-colors ${infoOpen ? 'text-white' : 'text-white/70 hover:text-white'}`}
+                title="Ver quién registró este pago"
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            )}
+
+            {canCapture && (s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL') && (
+              <a
+                href={`/cobros/capturar/${s.id}`}
+                className="ml-auto flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-gray-50 transition-colors shrink-0"
+              >
+                Capturar
+              </a>
+            )}
+
+            {/* Aplicar Pago — solo Director, para filas PENDING / OVERDUE / PARTIAL */}
+            {canApplyRow && (
+              <div className={canCapture ? 'shrink-0' : 'ml-auto shrink-0'}>
+                {confirmApplyId === s.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-emerald-400">¿Aplicar?</span>
+                    <Button
+                      size="sm"
+                      variant="success"
+                      className="h-6 px-2 text-xs"
+                      disabled={applying}
+                      onClick={() => applyPayment(s)}
+                    >
+                      {applying ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sí'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-xs"
+                      disabled={applying}
+                      onClick={() => setConfirmApplyId(null)}
+                    >
+                      No
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmApplyId(s.id)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-emerald-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-emerald-400/50"
+                    title="Aplicar pago (Director)"
+                  >
+                    <CheckCircle2 className="h-3 w-3" />
+                    Aplicar
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Ver ticket(s) — para filas PAID con tickets registrados (original + reimpresiones) */}
+            {s.estado === 'PAID' && s.tickets && s.tickets.length > 0 && (
+              <div className="shrink-0 flex items-center gap-1 flex-wrap">
+                {s.tickets.map((t, i) => (
+                  <a
+                    key={t.numeroTicket}
+                    href={`/verificar/${encodeURIComponent(t.numeroTicket)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center gap-1 text-xs transition-colors border border-dashed rounded px-2 py-1 ${
+                      t.esReimpresion
+                        ? 'text-amber-400 border-amber-400/40 hover:border-amber-400/70 hover:bg-amber-500/5'
+                        : 'text-muted-foreground border-border/50 hover:text-primary-400 hover:border-primary-400/50'
+                    }`}
+                    title={t.esReimpresion ? `Reimpresion: ${t.numeroTicket}` : `Ticket original: ${t.numeroTicket}`}
+                  >
+                    <Eye className="h-3 w-3" />
+                    {t.esReimpresion ? `Reimpr. ${i}` : 'Ticket'}
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {/* Deshacer Pago — solo Director, para filas PAID */}
+            {canUndoRow && (
+              <div className="ml-auto shrink-0">
+                {confirmUndoId === s.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-amber-400">¿Revertir?</span>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="h-6 px-2 text-xs"
+                      disabled={undoing}
+                      onClick={() => undoPayment(s)}
+                    >
+                      {undoing ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sí'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-xs"
+                      disabled={undoing}
+                      onClick={() => setConfirmUndoId(null)}
+                    >
+                      No
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmUndoId(s.id)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-amber-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-amber-400/50"
+                    title="Deshacer pago (Director)"
+                  >
+                    <Undo2 className="h-3 w-3" />
+                    Deshacer
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Panel de información de cobro — visible solo al hacer clic en ⓘ */}
+          {infoOpen && s.paymentInfo && (
+            <div className="ml-7 mt-1 mb-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 flex flex-col gap-0.5">
+              <p><span className="font-semibold">Registrado por:</span> {s.paymentInfo.quien} <span className="text-sky-600">({ROL_LABEL[s.paymentInfo.rol] ?? s.paymentInfo.rol})</span></p>
+              <p><span className="font-semibold">Fecha y hora:</span> {new Date(s.paymentInfo.cuando).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+            </div>
+          )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}

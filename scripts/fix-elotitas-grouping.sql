@@ -1,23 +1,28 @@
 -- One-off fix: LAS ELOTITAS — San Mateo Atenco (Ciclo 04)
 --
--- Context: the 5 SOLIDARIO loans of cycle 04 (disbursed 2026-04-14) were
--- created with loanGroupId = NULL instead of being attached to the real
--- group "LAS ELOTITAS" (id a29a2bd0-..44c8, created 2026-04-12).
+-- Two steps applied in sequence to leave the group view clean:
 --
--- A second row for "LAS ELOTITAS" exists (id 95ab9dab-..f50c, created
--- 2026-04-13) holding 5 REJECTED loan applications from the same clients
--- for higher amounts. That row is INTENTIONALLY left untouched to
--- preserve audit history; the duplication is an artifact of the new-loan
--- flow and will be addressed separately (unique constraint + group
--- selector in the form).
+-- 1. ATTACH the 5 SOLIDARIO loans of cycle 04 (disbursed 2026-04-14) to
+--    group a29a2bd0 — they had been created with loanGroupId = NULL.
 --
--- This script only attaches the 5 ACTIVE loans of cycle 04 to a29a2bd0.
--- It does not modify capital, tasa, pagoSemanal, PaymentSchedule,
--- LIQUIDATED loans from the previous cycle, REJECTED applications, nor
--- ROCIO's INDIVIDUAL loan.
+-- 2. DETACH the 5 LIQUIDATED loans from the previous cycle (on the same
+--    group) to avoid showing each client twice in
+--    /grupos/[groupId] "Calendarios por integrante". The LIQUIDATED
+--    loans themselves are preserved intact (capital, schedule, payments,
+--    tickets); only their loanGroupId is cleared. The coordinator will
+--    apply the "renovación anticipada" discount offline since the app
+--    has no UI to edit amounts on an existing loan.
+--
+-- NOT touched:
+--   - The duplicate group 95ab9dab (holds 5 REJECTED applications from
+--     the same clients for higher amounts). Preserved for audit.
+--   - ROCIO's INDIVIDUAL loan (2025-11-27).
+--   - Capital, tasa, pagoSemanal, PaymentSchedule, Payment, Ticket,
+--     LoanApproval, ScoreEvent — nothing else is modified.
 
 BEGIN;
 
+-- 1. Attach cycle 04 ACTIVE loans to the real group
 UPDATE "Loan"
 SET "loanGroupId" = 'a29a2bd0-f322-456e-bc32-d413eeff44c8'
 WHERE "id" IN (
@@ -31,11 +36,24 @@ AND "tipo" = 'SOLIDARIO'
 AND "estado" = 'ACTIVE'
 AND "loanGroupId" IS NULL;
 
--- Verification: should show 5 LIQUIDATED (previous cycle) + 5 ACTIVE (cycle 04)
+-- 2. Detach previous-cycle LIQUIDATED loans from the group (UI cleanup)
+UPDATE "Loan"
+SET "loanGroupId" = NULL
+WHERE "id" IN (
+  '49c86d22-f314-46e5-8927-10315cd3cbd1',  -- NICOLASA HERAZ CASTAÑEDA       LIQUIDATED  $8,000
+  '126ebdc8-2dbb-4a4a-9db1-48b2cb37b39d',  -- MARIA FERNANDA DE JESUS ROBLES LIQUIDATED  $8,000
+  'a97b9f5d-cdff-4d2d-9584-c30f6271103b',  -- JUAN JOEL DE JESUS ROBLES      LIQUIDATED  $10,000
+  'bd12c751-e44e-4304-81e1-f7eaad2b71bb',  -- YANET IRENE CASTAÑEDA          LIQUIDATED  $10,000
+  'bc27eeec-e4b6-4f73-a0de-e3a1a779d2c0'   -- ROCIO ROBLES PEREZ             LIQUIDATED  $6,000
+)
+AND "estado" = 'LIQUIDATED'
+AND "loanGroupId" = 'a29a2bd0-f322-456e-bc32-d413eeff44c8';
+
+-- Verification: the group should now hold only the 5 ACTIVE loans of cycle 04
 SELECT c."nombreCompleto", l."tipo", l."estado", l."capital", l."fechaDesembolso"
 FROM "Loan" l
 JOIN "Client" c ON c."id" = l."clientId"
 WHERE l."loanGroupId" = 'a29a2bd0-f322-456e-bc32-d413eeff44c8'
-ORDER BY l."fechaDesembolso" DESC NULLS LAST, c."nombreCompleto";
+ORDER BY c."nombreCompleto";
 
 COMMIT;

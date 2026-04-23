@@ -59,8 +59,16 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
 
   if (!grupo) notFound()
 
-  const totalPagos   = grupo.loans.flatMap((l) => l.schedule).length
-  const totalPagados = grupo.loans.flatMap((l) => l.schedule).filter((s) => s.estado === 'PAID').length
+  // Pagos grupales: N de plazo, contando pagos donde todos los integrantes pagaron
+  const plazo = grupo.loans[0]?.schedule.length ?? 0
+  const pagosCompletos = plazo > 0
+    ? Array.from({ length: plazo }, (_, i) => i + 1).filter((num) =>
+        grupo.loans.every((l) => {
+          const s = l.schedule.find((x) => x.numeroPago === num)
+          return s?.estado === 'PAID' || s?.estado === 'ADVANCE'
+        })
+      ).length
+    : 0
 
   // ── Eligibilidad de renovación grupal anticipada ──────────────────────
   const activeLoans = grupo.loans.filter((l) => l.estado === 'ACTIVE')
@@ -115,7 +123,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
             <h1 className="text-2xl font-bold truncate">{grupo.nombre}</h1>
           </div>
           <p className="text-muted-foreground text-sm">
-            {grupo.loans.length} integrantes · {totalPagados}/{totalPagos} pagos realizados
+            {grupo.loans.length} integrantes · {pagosCompletos}/{plazo} pagos realizados
           </p>
         </div>
         {/* Botón de captura grupal — solo para roles que cobran (no DG/DC/usuarios con permiso aplicar) */}
@@ -134,6 +142,8 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
           id:           loan.id,
           clientId:     loan.client.id,
           clientNombre: loan.client.nombreCompleto,
+          capital:      Number(loan.capital),
+          pagoSemanal:  loan.pagoSemanal !== null ? Number(loan.pagoSemanal) : null,
           schedule: loan.schedule.map((s) => ({
             id:               s.id,
             numeroPago:       s.numeroPago,

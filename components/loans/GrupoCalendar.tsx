@@ -25,6 +25,8 @@ interface LoanEntry {
   id: string
   clientId: string
   clientNombre: string
+  capital: number
+  pagoSemanal: number | null
   schedule: ScheduleItem[]
 }
 
@@ -434,8 +436,19 @@ export function GrupoCalendar({ groupId, loans, canActGroup, canRenewGroup, memb
                     ? <ChevronDown  className="h-4 w-4 shrink-0 text-muted-foreground" />
                     : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                   }
-                  <span className="font-medium flex-1">{loan.clientNombre}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{loan.clientNombre}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+                      <span>Monto: <span className="font-medium">{formatMoney(loan.capital)}</span></span>
+                      {loan.pagoSemanal !== null && (
+                        <>
+                          <span>·</span>
+                          <span>Pago: <span className="font-medium">{formatMoney(loan.pagoSemanal)}</span></span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">
                     {pagadosCount}/{loan.schedule.length} pagados
                   </span>
                 </button>

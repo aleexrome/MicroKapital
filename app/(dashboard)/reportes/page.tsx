@@ -10,12 +10,26 @@ export default async function ReportesPage() {
   const session = await getSession()
   if (!session?.user) redirect('/login')
 
-  const { rol, companyId } = session.user
+  const { rol, companyId, branchId } = session.user
   if (rol !== 'GERENTE' && rol !== 'SUPER_ADMIN') redirect('/dashboard')
+
+  const isGerente = rol === 'GERENTE'
+  if (isGerente && !branchId) redirect('/dashboard')
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+
+  const loanScope = isGerente
+    ? { companyId: companyId!, branchId: branchId! }
+    : { companyId: companyId! }
+
+  const branchName = isGerente
+    ? (await prisma.branch.findUnique({
+        where: { id: branchId! },
+        select: { nombre: true },
+      }))?.nombre ?? null
+    : null
 
   const [
     totalCartera,
@@ -24,13 +38,13 @@ export default async function ReportesPage() {
     liquidadosMes,
   ] = await Promise.all([
     prisma.loan.aggregate({
-      where: { companyId: companyId!, estado: 'ACTIVE' },
+      where: { ...loanScope, estado: 'ACTIVE' },
       _sum: { totalPago: true },
     }),
 
     prisma.payment.aggregate({
       where: {
-        loan: { companyId: companyId! },
+        loan: loanScope,
         fechaHora: { gte: startOfMonth },
       },
       _sum: { monto: true },
@@ -38,14 +52,14 @@ export default async function ReportesPage() {
 
     prisma.paymentSchedule.count({
       where: {
-        loan: { companyId: companyId! },
+        loan: loanScope,
         estado: 'OVERDUE',
       },
     }),
 
     prisma.loan.count({
       where: {
-        companyId: companyId!,
+        ...loanScope,
         estado: 'LIQUIDATED',
         updatedAt: { gte: startOfMonth },
       },
@@ -56,7 +70,11 @@ export default async function ReportesPage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Reportes</h1>
-        <p className="text-muted-foreground">Indicadores del mes en curso</p>
+        <p className="text-muted-foreground">
+          {isGerente
+            ? `Indicadores del mes en curso · Sucursal ${branchName ?? ''}`.trim()
+            : 'Indicadores del mes en curso'}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

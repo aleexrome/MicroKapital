@@ -7,19 +7,42 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { formatMoney } from '@/lib/utils'
 import { DollarSign, Users, TrendingDown, CheckCircle } from 'lucide-react'
+import { scopedLoanWhere, scopedCashRegisterWhere } from '@/lib/access'
+
+const ALLOWED_ROLES = [
+  'SUPER_ADMIN',
+  'DIRECTOR_GENERAL',
+  'DIRECTOR_COMERCIAL',
+  'GERENTE_ZONAL',
+  'GERENTE',
+  'COORDINADOR',
+  'COBRADOR',
+] as const
+
+const GLOBAL_ROLES = ['SUPER_ADMIN', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'] as const
+const BRANCH_ROLES = ['GERENTE_ZONAL', 'GERENTE'] as const
 
 export default async function ReportesPage() {
   const session = await getSession()
   if (!session?.user) redirect('/login')
 
   const { rol, companyId } = session.user
-  if (!['GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'].includes(rol)) redirect('/dashboard')
+  if (!ALLOWED_ROLES.includes(rol as typeof ALLOWED_ROLES[number])) redirect('/dashboard')
+
+  const accessUser = {
+    id: session.user.id,
+    rol,
+    branchId: session.user.branchId,
+    zonaBranchIds: session.user.zonaBranchIds,
+  }
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-
   const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+
+  const loanScope = scopedLoanWhere(accessUser)
+  const cashScope = scopedCashRegisterWhere(accessUser)
 
   const [
     totalCartera,
@@ -28,16 +51,15 @@ export default async function ReportesPage() {
     liquidadosMes,
   ] = await Promise.all([
     prisma.loan.aggregate({
-      where: { companyId: companyId!, estado: 'ACTIVE' },
+      where: { companyId: companyId!, estado: 'ACTIVE', ...loanScope },
       _sum: { totalPago: true },
     }),
 
-    // Usar CashRegister (fecha @db.Date, sin problemas de timezone).
-    // Suma los tres métodos de pago capturados en el mes actual.
     prisma.cashRegister.aggregate({
       where: {
         branch: { companyId: companyId! },
         fecha: { gte: startOfMonth, lt: endOfMonth },
+        ...cashScope,
       },
       _sum: {
         cobradoEfectivo:      true,
@@ -48,7 +70,7 @@ export default async function ReportesPage() {
 
     prisma.paymentSchedule.count({
       where: {
-        loan: { companyId: companyId!, estado: 'ACTIVE' },
+        loan: { companyId: companyId!, estado: 'ACTIVE', ...loanScope },
         estado: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] },
         fechaVencimiento: { lt: today },
       },
@@ -59,6 +81,7 @@ export default async function ReportesPage() {
         companyId: companyId!,
         estado: 'LIQUIDATED',
         updatedAt: { gte: startOfMonth },
+        ...loanScope,
       },
     }),
   ])
@@ -68,11 +91,19 @@ export default async function ReportesPage() {
     Number(cashMesAgg._sum.cobradoTarjeta       ?? 0) +
     Number(cashMesAgg._sum.cobradoTransferencia ?? 0)
 
+  const isGlobal = (GLOBAL_ROLES as readonly string[]).includes(rol)
+  const isBranch = (BRANCH_ROLES as readonly string[]).includes(rol)
+  const subtitulo = isGlobal
+    ? 'Indicadores del mes en curso · Toda la empresa'
+    : isBranch
+      ? 'Indicadores del mes en curso · Sucursal'
+      : 'Indicadores del mes en curso · Mis datos'
+
   return (
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Reportes</h1>
-        <p className="text-muted-foreground">Indicadores del mes en curso</p>
+        <p className="text-muted-foreground">{subtitulo}</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -88,6 +88,53 @@ export function scopedClientWhere(user: AccessUser): Prisma.ClientWhereInput {
   return { id: NO_MATCH }
 }
 
+/**
+ * Igual que `scopedLoanWhere` pero tipado para CashRegister. CashRegister
+ * tiene `branchId` y `cobradorId` a nivel raíz (igual que Loan), así que
+ * la lógica de scope es idéntica — sólo cambia el tipo de retorno.
+ */
+export function scopedCashRegisterWhere(user: AccessUser): Prisma.CashRegisterWhereInput {
+  const { rol, id: userId, branchId, zonaBranchIds } = user
+
+  if (rol === 'SUPER_ADMIN') return {}
+
+  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') return {}
+
+  if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
+    return {
+      cobradorId: userId,
+      ...(branchId ? { branchId } : {}),
+    }
+  }
+
+  if (rol === 'GERENTE') {
+    const branchIds = zonaBranchIds?.length
+      ? zonaBranchIds
+      : branchId
+        ? [branchId]
+        : []
+    if (!branchIds.length) return { id: NO_MATCH }
+    return {
+      OR: [
+        { branchId: { in: branchIds } },
+        { cobradorId: userId },
+      ],
+    }
+  }
+
+  if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = zonaBranchIds?.length
+      ? zonaBranchIds
+      : branchId
+        ? [branchId]
+        : []
+    if (!zoneIds.length) return { id: NO_MATCH }
+    return { branchId: { in: zoneIds } }
+  }
+
+  return { id: NO_MATCH }
+}
+
 /** Igual que `scopedClientWhere` pero tipado para Loan. */
 export function scopedLoanWhere(user: AccessUser): Prisma.LoanWhereInput {
   const { rol, id: userId, branchId, zonaBranchIds } = user

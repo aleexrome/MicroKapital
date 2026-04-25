@@ -113,10 +113,19 @@ export default async function CobranzaAnticipadaPage({
   })
 
   const cobrados   = schedule.filter((s) => s.payments.length > 0)
-  const pendientes = schedule.filter((s) => s.payments.length === 0)
+  // Solo PENDING/PARTIAL sin Payment cuentan como pendientes. Los PAID/ADVANCE
+  // sin Payment son schedules absorbidos por renovaciones legacy.
+  const pendientes = schedule.filter((s) =>
+    s.payments.length === 0 && (s.estado === 'PENDING' || s.estado === 'PARTIAL')
+  )
 
-  const totalEsperado = schedule.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
-  const totalCobrado  = cobrados.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
+  const totalCobrado   = cobrados.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
+  // "Por cobrar" = solo pendientes reales. Excluye PAID/ADVANCE/FINANCIADO sin
+  // Payment (legacy de renovaciones que dejaron schedules sin Payment record).
+  const totalPorCobrar = pendientes.reduce(
+    (sum, s) => sum + Math.max(0, Number(s.montoEsperado) - Number(s.montoPagado)),
+    0,
+  )
   const isHabil = esDiaHabil(selectedDate)
 
   // ── Datos para impresión ─────────────────────────────────────────────────────
@@ -188,7 +197,7 @@ export default async function CobranzaAnticipadaPage({
               Por cobrar
             </p>
             <p className={`text-lg font-bold ${pendientes.length > 0 ? 'text-amber-300' : 'text-muted-foreground'}`}>
-              {formatMoney(totalEsperado - totalCobrado)}
+              {formatMoney(totalPorCobrar)}
             </p>
             <p className={`text-xs ${pendientes.length > 0 ? 'text-amber-400/70' : 'text-muted-foreground'}`}>
               {pendientes.length} clientes
@@ -349,7 +358,7 @@ export default async function CobranzaAnticipadaPage({
             Programado
           </p>
           <p className={`text-lg font-bold ${pendientes.length > 0 ? 'text-amber-300' : 'text-muted-foreground'}`}>
-            {formatMoney(totalEsperado - totalCobrado)}
+            {formatMoney(totalPorCobrar)}
           </p>
           <p className={`text-xs ${pendientes.length > 0 ? 'text-amber-400/70' : 'text-muted-foreground'}`}>
             {pendientes.length} clientes

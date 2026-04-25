@@ -120,11 +120,20 @@ export default async function AgendaPage({
 
   const cobrados     = schedule.filter((s) => s.payments.length > 0 && !isPendingTransfer(s.payments[0]))
   const enValidacion = schedule.filter((s) => s.payments.length > 0 && isPendingTransfer(s.payments[0]))
-  const pendientes   = schedule.filter((s) => s.payments.length === 0)
+  // Solo PENDING/PARTIAL sin Payment cuentan como pendientes. Los PAID/ADVANCE
+  // sin Payment son schedules absorbidos por renovaciones legacy (no son mora).
+  const pendientes   = schedule.filter((s) =>
+    s.payments.length === 0 && (s.estado === 'PENDING' || s.estado === 'PARTIAL')
+  )
 
-  const totalEsperado      = schedule.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
   const totalCobrado       = cobrados.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
   const totalEnValidacion  = enValidacion.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
+  // "Sin cobrar" = solo pendientes reales (PENDING/PARTIAL sin Payment).
+  // Excluye explícitamente PAID/ADVANCE/FINANCIADO sin Payment (legacy).
+  const totalSinCobrar     = pendientes.reduce(
+    (sum, s) => sum + Math.max(0, Number(s.montoEsperado) - Number(s.montoPagado)),
+    0,
+  )
   const isHabil = esDiaHabil(selectedDate)
 
   // ── Datos para impresión ─────────────────────────────────────────────────────
@@ -201,7 +210,7 @@ export default async function AgendaPage({
               Sin cobrar
             </p>
             <p className={`text-lg font-bold ${pendientes.length > 0 ? 'text-red-300' : 'text-muted-foreground'}`}>
-              {formatMoney(totalEsperado - totalCobrado)}
+              {formatMoney(totalSinCobrar)}
             </p>
             <p className={`text-xs ${pendientes.length > 0 ? 'text-red-400/70' : 'text-muted-foreground'}`}>
               {pendientes.length} clientes
@@ -396,7 +405,7 @@ export default async function AgendaPage({
             {isToday ? 'Por cobrar' : 'Sin cobrar'}
           </p>
           <p className={`text-lg font-bold ${pendientes.length > 0 ? 'text-amber-300' : 'text-muted-foreground'}`}>
-            {formatMoney(totalEsperado - totalCobrado)}
+            {formatMoney(totalSinCobrar)}
           </p>
           <p className={`text-xs ${pendientes.length > 0 ? 'text-amber-400/70' : 'text-muted-foreground'}`}>
             {pendientes.length} clientes

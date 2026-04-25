@@ -128,7 +128,11 @@ export default async function PactadosDiaPage({
   const totalPactados      = schedules.length
   const cobradosRows       = schedules.filter((s) => s.payments.length > 0 && !isPendingTransfer(s.payments[0]))
   const enValidacionRows   = schedules.filter((s) => s.payments.length > 0 && isPendingTransfer(s.payments[0]))
-  const pendientesRows     = schedules.filter((s) => s.payments.length === 0)
+  // Solo PENDING/PARTIAL sin Payment cuentan como pendientes. Los PAID/ADVANCE
+  // sin Payment son schedules absorbidos por renovaciones legacy.
+  const pendientesRows     = schedules.filter((s) =>
+    s.payments.length === 0 && (s.estado === 'PENDING' || s.estado === 'PARTIAL')
+  )
   const montoCobrado       = cobradosRows.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
   const montoEnValidacion  = enValidacionRows.reduce((sum, s) => sum + Number(s.payments[0].monto), 0)
   const montoPendiente     = pendientesRows.reduce((sum, s) => sum + Number(s.montoEsperado), 0)

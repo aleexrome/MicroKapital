@@ -67,6 +67,7 @@ export default async function PactadosDiaPage({
       numeroPago: true,
       montoEsperado: true,
       estado: true,
+      fechaVencimiento: true,
       loan: {
         select: {
           id: true,

@@ -1,5 +1,7 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { scopedLoanWhere } from '@/lib/access'
+import { Prisma } from '@prisma/client'
 import Link from 'next/link'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -40,11 +42,10 @@ export default async function AgendaPage({
   const session = await getSession()
   if (!session?.user) return null
 
-  const { id: userId, rol, companyId } = session.user
+  const { rol, companyId } = session.user
 
-  const isDirector    = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
-  const isGerente     = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
-  const isCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
+  const isDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
+  const isGerente  = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
 
   const selectedDate = parseDate(searchParams.fecha)
   const fechaStr = toYMD(selectedDate)
@@ -65,26 +66,19 @@ export default async function AgendaPage({
   const now = nowMx()
   const yesterdayStr = toYMD(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
 
-  // ── Determine cobrador scope ─────────────────────────────────────────────────
-  let cobradorIds: string[] | undefined
-  if (isCoordinador) {
-    cobradorIds = [userId]
-  } else if (isGerente) {
-    const subordinates = await prisma.user.findMany({
-      where: { gerenteId: userId, activo: true },
-      select: { id: true },
-    })
-    cobradorIds = [userId, ...subordinates.map((s) => s.id)]
+  // ── Alcance unificado por rol/sucursal (vía scopedLoanWhere) ────────────────
+  // Mismo criterio que /cobros/pactados y /cartera para evitar inconsistencias.
+  // Los directores ven toda la empresa; gerente/zonal por sucursal/zona;
+  // coordinador/cobrador solo lo suyo.
+  const loanWhere: Prisma.LoanWhereInput = {
+    estado: 'ACTIVE',
+    companyId: companyId!,
+    AND: [scopedLoanWhere(session.user)],
   }
-  // Directors: cobradorIds = undefined → see all in company
 
   const schedule = await prisma.paymentSchedule.findMany({
     where: {
-      loan: {
-        estado: 'ACTIVE',
-        companyId: companyId!,
-        ...(cobradorIds ? { cobradorId: { in: cobradorIds } } : {}),
-      },
+      loan: loanWhere,
       fechaVencimiento: { gte: selectedDate, lt: endDate },
     },
     orderBy: [{ loan: { cobrador: { nombre: 'asc' } } }, { estado: 'asc' }, { montoEsperado: 'desc' }],

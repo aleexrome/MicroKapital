@@ -360,6 +360,110 @@ export async function loadLogoBitmap(
   return { pixels, widthPx, heightPx }
 }
 
+export interface PrintCorteCobradorOptions {
+  empresa: string
+  sucursal: string
+  fecha: string
+  cobrador: string
+  totalEfectivo: string
+  totalTarjeta: string
+  totalTransferencia: string
+  totalEnValidacion?: string
+  totalCambio?: string
+  totalGeneral: string
+  pagos: { cliente: string; monto: string; metodo: string }[]
+  logo?: { pixels: Uint8Array; widthPx: number; heightPx: number }
+}
+
+export function buildCorteCobradorBytes(opts: PrintCorteCobradorOptions): Uint8Array {
+  const W = 32
+  const bytes: number[] = [...CMD.INIT, ...CMD.ALIGN_CENTER]
+
+  if (opts.logo) {
+    bytes.push(...buildRasterBytes(opts.logo.pixels, opts.logo.widthPx, opts.logo.heightPx))
+    bytes.push(...CMD.LINE_FEED)
+  }
+
+  bytes.push(
+    ...CMD.BOLD_ON,
+    ...line(opts.empresa.slice(0, W)),
+    ...CMD.BOLD_OFF,
+    ...line(opts.sucursal.slice(0, W)),
+    ...CMD.BOLD_ON,
+    ...line(center('CORTE DEL DIA', W)),
+    ...CMD.BOLD_OFF,
+    ...CMD.ALIGN_LEFT,
+    ...divider('=', W),
+    ...line(`COBRADOR: ${opts.cobrador.slice(0, W - 10)}`),
+    ...line(`FECHA:    ${opts.fecha}`),
+    ...divider('-', W),
+    ...CMD.BOLD_ON,
+    ...line('POR METODO DE PAGO'),
+    ...CMD.BOLD_OFF,
+    ...line(padRight('Efectivo:',      opts.totalEfectivo, W)),
+    ...line(padRight('Tarjeta:',       opts.totalTarjeta, W)),
+    ...line(padRight('Transferencia:', opts.totalTransferencia, W)),
+  )
+
+  if (opts.totalEnValidacion) {
+    bytes.push(...line(padRight('  En validacion:', opts.totalEnValidacion, W)))
+  }
+
+  bytes.push(
+    ...divider('-', W),
+    ...CMD.BOLD_ON,
+    ...line(padRight('TOTAL COBRADO:', opts.totalGeneral, W)),
+    ...CMD.BOLD_OFF,
+  )
+
+  if (opts.totalCambio) {
+    bytes.push(
+      ...line(padRight('Cambio entregado:', opts.totalCambio, W)),
+      ...line('(informativo, no resta)'),
+    )
+  }
+
+  bytes.push(...divider('-', W))
+
+  if (opts.pagos.length > 0) {
+    bytes.push(
+      ...CMD.BOLD_ON,
+      ...line(`COBROS DEL DIA (${opts.pagos.length})`),
+      ...CMD.BOLD_OFF,
+    )
+    let i = 1
+    for (const p of opts.pagos) {
+      // Recorta el nombre del cliente para que el monto encaje en la línea (32 cols).
+      const idxStr = `${i}.`
+      const metMark =
+        p.metodo === 'CASH'     ? '$' :
+        p.metodo === 'CARD'     ? 'T' :
+        p.metodo === 'TRANSFER' ? 'B' : ' '
+      const prefix = `${idxStr.padEnd(3)}${metMark} `
+      const maxNameLen = W - prefix.length - p.monto.length - 1
+      const nombreCorto = p.cliente.length > maxNameLen ? p.cliente.slice(0, maxNameLen) : p.cliente
+      bytes.push(...line(padRight(prefix + nombreCorto, p.monto, W)))
+      i++
+    }
+    bytes.push(...divider('-', W))
+  }
+
+  bytes.push(
+    ...CMD.LINE_FEED,
+    ...line('Firma:'),
+    ...line(' _____________________________'),
+    ...CMD.LINE_FEED,
+    ...CMD.ALIGN_CENTER,
+    ...divider('=', W),
+    ...CMD.LINE_FEED,
+    ...CMD.LINE_FEED,
+    ...CMD.LINE_FEED,
+    ...CMD.CUT,
+  )
+
+  return new Uint8Array(bytes)
+}
+
 export async function printViaBluetooth(data: Uint8Array): Promise<void> {
   // @ts-expect-error Web Bluetooth API
   const bt = navigator.bluetooth

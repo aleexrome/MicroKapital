@@ -86,6 +86,7 @@ export default async function AgendaPage({
         ...(cobradorIds ? { cobradorId: { in: cobradorIds } } : {}),
       },
       fechaVencimiento: { gte: selectedDate, lt: endDate },
+      estado: { not: 'FINANCIADO' },
     },
     orderBy: [{ loan: { cobrador: { nombre: 'asc' } } }, { estado: 'asc' }, { montoEsperado: 'desc' }],
     include: {

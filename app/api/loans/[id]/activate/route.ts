@@ -292,13 +292,18 @@ export async function POST(
         })
       }
 
+      // Los pagos pendientes que NO fueron seleccionados explícitamente para
+      // financiar también quedan absorbidos por la renovación. Antes se marcaban
+      // como PAID, lo que inflaba la cobranza (aparecían como cobrados sin que
+      // entrara dinero). Ahora se marcan FINANCIADO igual que los demás —
+      // estado especial que las cobranzas filtran.
       await tx.paymentSchedule.updateMany({
         where: {
           loanId: loan.loanOriginalId,
           estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
           ...(idsFinanciados?.length ? { id: { notIn: idsFinanciados } } : {}),
         },
-        data: { estado: 'PAID', pagadoAt: new Date() },
+        data: { estado: 'FINANCIADO', pagadoAt: new Date() },
       })
 
       await tx.loan.update({

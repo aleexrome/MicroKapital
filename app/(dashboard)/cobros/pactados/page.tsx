@@ -60,6 +60,7 @@ export default async function PactadosDiaPage({
     where: {
       fechaVencimiento: { gte: selectedDate, lt: nextDay },
       loan: loanWhere,
+      estado: { not: 'FINANCIADO' },
     },
     select: {
       id: true,

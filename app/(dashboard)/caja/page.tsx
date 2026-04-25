@@ -34,7 +34,7 @@ export default async function CajaPage({
   const session = await getSession()
   if (!session?.user) redirect('/login')
 
-  const { companyId, rol } = session.user
+  const { companyId, rol, branchId: userBranchId, zonaBranchIds } = session.user
 
   const cobrador = await prisma.user.findFirst({
     where: { companyId: companyId!, email: session.user.email! },
@@ -42,9 +42,23 @@ export default async function CajaPage({
   })
   if (!cobrador) redirect('/login')
 
-  // Directores y super admin ven el corte de TODA la empresa.
-  // Trabajadores (cobrador/coordinador/gerente) ven su corte personal.
+  // Roles con vista agregada (sucursal → empleado):
+  //   - Directores y super admin → toda la empresa.
+  //   - Gerente → su sucursal asignada.
+  //   - Gerente Zonal → todas las sucursales de su zona.
+  // Trabajadores (cobrador/coordinador) → corte personal (solo sus cobros).
   const isDirectorView = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
+  const isGerenteView  = rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
+  const isAggregateView = isDirectorView || isGerenteView
+
+  // Sucursales que ve la vista agregada (solo para gerentes — directores ven todo)
+  const aggregateBranchIds: string[] | null = isDirectorView
+    ? null  // null = toda la empresa
+    : rol === 'GERENTE'
+      ? (userBranchId ? [userBranchId] : [])
+      : rol === 'GERENTE_ZONAL'
+        ? (zonaBranchIds?.length ? zonaBranchIds : (userBranchId ? [userBranchId] : []))
+        : []
 
   const selectedDate = parseFecha(searchParams.fecha)
   const fechaStr = toYMD(selectedDate)
@@ -55,10 +69,11 @@ export default async function CajaPage({
   const nextDay = new Date(selectedDate)
   nextDay.setDate(nextDay.getDate() + 1)
 
-  // Caja del día: solo aplica para trabajadores. Los directores no tienen caja
-  // personal porque no cobran directamente.
+  // Caja del día: solo aplica a trabajadores con corte personal.
+  // Vista agregada (director/gerente) no muestra "Estado de caja" porque
+  // representa muchas cajas a la vez.
   let caja: { estado: string; cobradoEfectivo: unknown; cobradoTarjeta: unknown; cambioEntregado: unknown } | null = null
-  if (!isDirectorView) {
+  if (!isAggregateView) {
     caja = await prisma.cashRegister.findFirst({
       where: { cobradorId: cobrador.id, fecha: selectedDate },
     })
@@ -82,13 +97,19 @@ export default async function CajaPage({
     }
   }
 
-  // Pagos del día seleccionado, con desglose por método de pago.
-  // Director/SuperAdmin: todos los cobros de la empresa. Trabajador: solo los suyos.
+  // Pagos del día seleccionado.
+  //   - Director/SuperAdmin: toda la empresa.
+  //   - Gerente / Gerente Zonal: pagos cuyas sucursales están en su scope.
+  //   - Trabajador: solo sus propios pagos (cobradorId).
   const pagosDia = await prisma.payment.findMany({
     where: {
       ...(isDirectorView
         ? { loan: { companyId: companyId! } }
-        : { cobradorId: cobrador.id }),
+        : isGerenteView
+          ? aggregateBranchIds && aggregateBranchIds.length > 0
+            ? { loan: { companyId: companyId!, branchId: { in: aggregateBranchIds } } }
+            : { id: '__no_branch__' }  // sin sucursal asignada → no resultados
+          : { cobradorId: cobrador.id }),
       fechaHora: { gte: selectedDate, lt: nextDay },
     },
     select: {
@@ -110,7 +131,7 @@ export default async function CajaPage({
     orderBy: { fechaHora: 'desc' },
   })
 
-  // Para directores: agrupar por sucursal → cobrador para mostrar desglose detallado.
+  // Para vista agregada: agrupar por sucursal → cobrador para mostrar desglose detallado.
   type PagoRow = (typeof pagosDia)[number]
   const branchMap: Record<string, {
     branchNombre: string
@@ -126,7 +147,7 @@ export default async function CajaPage({
     }>
   }> = {}
 
-  if (isDirectorView) {
+  if (isAggregateView) {
     for (const p of pagosDia) {
       const bId = p.loan.branch.id
       const cId = p.cobrador.id
@@ -181,14 +202,16 @@ export default async function CajaPage({
           <p className="text-muted-foreground">
             {formatDate(selectedDate, "EEEE d 'de' MMMM, yyyy")}
             {isDirectorView && ' · Empresa completa'}
+            {rol === 'GERENTE' && ' · Mi sucursal'}
+            {rol === 'GERENTE_ZONAL' && ' · Mi zona'}
           </p>
         </div>
         <AgendaDatePicker fecha={fechaStr} baseHref="/caja" maxDate={todayStr} />
       </div>
 
-      {/* Botón imprimir corte — solo trabajadores (su corte personal). El corte
-          del director es de toda la empresa y se imprime distinto (TODO PR-B). */}
-      {!isDirectorView && (
+      {/* Botón imprimir corte — solo trabajadores con corte personal. La vista
+          agregada (gerente/director) imprime distinto y aún no está hecha. */}
+      {!isAggregateView && (
         <div className="flex justify-end">
           <Button asChild>
             <Link href={`/caja/imprimir?fecha=${fechaStr}`}>
@@ -267,14 +290,14 @@ export default async function CajaPage({
         </Card>
       </div>
 
-      {/* Vista Director: desglose por sucursal → empleado */}
-      {isDirectorView ? (
+      {/* Vista agregada (Director/Gerente/GerenteZonal): desglose por sucursal → empleado */}
+      {isAggregateView ? (
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-gray-900">Desglose por sucursal y empleado</h2>
           {Object.keys(branchMap).length === 0 ? (
             <Card>
               <CardContent className="text-sm text-muted-foreground text-center py-6">
-                Sin cobros registrados en la empresa este día
+                Sin cobros registrados {isDirectorView ? 'en la empresa' : rol === 'GERENTE_ZONAL' ? 'en tu zona' : 'en tu sucursal'} este día
               </CardContent>
             </Card>
           ) : (

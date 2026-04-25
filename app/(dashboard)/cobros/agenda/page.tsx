@@ -80,6 +80,7 @@ export default async function AgendaPage({
     where: {
       loan: loanWhere,
       fechaVencimiento: { gte: selectedDate, lt: endDate },
+      estado: { not: 'FINANCIADO' },
     },
     orderBy: [{ loan: { cobrador: { nombre: 'asc' } } }, { estado: 'asc' }, { montoEsperado: 'desc' }],
     include: {

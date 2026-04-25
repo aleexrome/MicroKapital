@@ -45,7 +45,7 @@ export function ClientRenovacionButton({
   const [capital, setCapital] = useState('')
   const [notas, setNotas] = useState('')
   const [selectedPagos, setSelectedPagos] = useState<Set<string>>(
-    () => new Set(pagosPendientes.map((p) => p.id))
+    () => new Set()
   )
 
   const pagosSeleccionados = pagosPendientes.filter((p) => selectedPagos.has(p.id))

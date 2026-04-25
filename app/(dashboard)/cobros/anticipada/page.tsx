@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Calendar, ChevronRight, Users, CheckCircle2, XCircle, UserCheck, Building2 } from 'lucide-react'
+import { Calendar, ChevronRight, Users, CheckCircle2, XCircle, Clock, UserCheck, Building2 } from 'lucide-react'
 import { esDiaHabil } from '@/lib/business-days'
 import { AgendaDatePicker } from '@/components/cobros/AgendaDatePicker'
 import { ImprimirAgendaButton } from '@/components/cobros/ImprimirAgendaButton'
@@ -186,14 +186,14 @@ export default async function CobranzaAnticipadaPage({
             <p className="text-lg font-bold text-emerald-300">{formatMoney(totalCobrado)}</p>
             <p className="text-xs text-emerald-400/70">{cobrados.length} clientes</p>
           </div>
-          <div className={`rounded-lg p-3 border ${pendientes.length > 0 ? 'bg-red-500/10 border-red-500/20' : 'bg-muted border-border'}`}>
-            <p className={`text-xs font-medium ${pendientes.length > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>
-              Sin cobrar
+          <div className={`rounded-lg p-3 border ${pendientes.length > 0 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-muted border-border'}`}>
+            <p className={`text-xs font-medium ${pendientes.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>
+              Por cobrar
             </p>
-            <p className={`text-lg font-bold ${pendientes.length > 0 ? 'text-red-300' : 'text-muted-foreground'}`}>
+            <p className={`text-lg font-bold ${pendientes.length > 0 ? 'text-amber-300' : 'text-muted-foreground'}`}>
               {formatMoney(totalEsperado - totalCobrado)}
             </p>
-            <p className={`text-xs ${pendientes.length > 0 ? 'text-red-400/70' : 'text-muted-foreground'}`}>
+            <p className={`text-xs ${pendientes.length > 0 ? 'text-amber-400/70' : 'text-muted-foreground'}`}>
               {pendientes.length} clientes
             </p>
           </div>
@@ -241,7 +241,7 @@ export default async function CobranzaAnticipadaPage({
                         {cPendientes.length > 0 && (
                           <>
                             <span className="text-muted-foreground">·</span>
-                            <span className="text-red-600">{cPendientes.length} sin cobrar</span>
+                            <span className="text-amber-500">{cPendientes.length} por cobrar</span>
                           </>
                         )}
                       </div>
@@ -272,8 +272,8 @@ export default async function CobranzaAnticipadaPage({
                       )
                     })}
                     {cPendientes.map((row) => (
-                      <div key={row.id} className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-red-500/10 border border-red-500/15">
-                        <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                      <div key={row.id} className="flex items-center gap-3 py-2 px-3 rounded-lg text-sm bg-amber-500/10 border border-amber-500/15">
+                        <Clock className="h-4 w-4 text-amber-400 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <Link href={`/clientes/${row.loan.client.id}`} className="font-medium hover:underline truncate block">
                             {row.loan.client.nombreCompleto}
@@ -360,18 +360,18 @@ export default async function CobranzaAnticipadaPage({
         </div>
       </div>
 
-      {/* Sin cobrar / pendientes */}
+      {/* Por cobrar / pendientes — anticipada siempre es futuro, NUNCA mora */}
       {(gruposPendientes.length > 0 || individualesPendientes.length > 0) && (
         <section>
-          <h2 className={`text-sm font-semibold mb-2 ${isToday ? 'text-amber-400' : 'text-red-400'}`}>
-            {isToday ? '🟡 Pendientes' : '🔴 Sin cobrar'} ({pendientes.length})
+          <h2 className="text-sm font-semibold text-amber-400 mb-2">
+            🟡 Por cobrar ({pendientes.length})
           </h2>
           <div className="space-y-2">
             {gruposPendientes.map((g) => (
-              <GrupoCard key={g.groupId} {...g} variant={isToday ? 'pending' : 'uncollected'} isToday={isToday} />
+              <GrupoCard key={g.groupId} {...g} variant="pending" isToday={isToday} />
             ))}
             {individualesPendientes.map((s) => (
-              <AgendaItem key={s.id} schedule={s} variant={isToday ? 'pending' : 'uncollected'} isToday={isToday} />
+              <AgendaItem key={s.id} schedule={s} variant="pending" isToday={isToday} />
             ))}
           </div>
         </section>
@@ -503,8 +503,8 @@ function AgendaItem({
 
   const borderColor = variant === 'collected' ? 'border-l-green-500' : variant === 'pending' ? 'border-l-yellow-400' : 'border-l-red-500'
 
-  const StatusIcon = variant === 'collected' ? CheckCircle2 : variant === 'pending' ? null : XCircle
-  const iconColor  = variant === 'collected' ? 'text-emerald-400' : 'text-red-400'
+  const StatusIcon = variant === 'collected' ? CheckCircle2 : variant === 'pending' ? Clock : XCircle
+  const iconColor  = variant === 'collected' ? 'text-emerald-400' : variant === 'pending' ? 'text-amber-400' : 'text-red-400'
 
   const href = isToday && variant === 'pending' ? `/cobros/capturar/${schedule.id}` : '#'
 
@@ -512,10 +512,10 @@ function AgendaItem({
 
   return (
     <Link href={href}>
-      <Card className={`border-l-4 ${borderColor} ${variant === 'collected' ? 'bg-emerald-500/5' : ''}`}>
+      <Card className={`border-l-4 ${borderColor} ${variant === 'collected' ? 'bg-emerald-500/5' : variant === 'pending' ? 'bg-amber-500/5' : ''}`}>
         <CardContent className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            {StatusIcon && <StatusIcon className={`h-4 w-4 ${iconColor} shrink-0`} />}
+            <StatusIcon className={`h-4 w-4 ${iconColor} shrink-0`} />
             <div className="flex-1 min-w-0">
               <p className="font-medium text-gray-900 truncate">{schedule.loan.client.nombreCompleto}</p>
               <p className="text-xs text-muted-foreground mt-0.5">

@@ -54,11 +54,9 @@ export default async function CajaPage({
   // Sucursales que ve la vista agregada (solo para gerentes — directores ven todo)
   const aggregateBranchIds: string[] | null = isDirectorView
     ? null  // null = toda la empresa
-    : rol === 'GERENTE'
+    : isGerenteView
       ? (userBranchId ? [userBranchId] : [])
-      : rol === 'GERENTE_ZONAL'
-        ? (zonaBranchIds?.length ? zonaBranchIds : (userBranchId ? [userBranchId] : []))
-        : []
+      : []
 
   const selectedDate = parseFecha(searchParams.fecha)
   const fechaStr = toYMD(selectedDate)
@@ -202,8 +200,7 @@ export default async function CajaPage({
           <p className="text-muted-foreground">
             {formatDate(selectedDate, "EEEE d 'de' MMMM, yyyy")}
             {isDirectorView && ' · Empresa completa'}
-            {rol === 'GERENTE' && ' · Mi sucursal'}
-            {rol === 'GERENTE_ZONAL' && ' · Mi zona'}
+            {isGerenteView && ' · Mi sucursal'}
           </p>
         </div>
         <AgendaDatePicker fecha={fechaStr} baseHref="/caja" maxDate={todayStr} />
@@ -297,7 +294,7 @@ export default async function CajaPage({
           {Object.keys(branchMap).length === 0 ? (
             <Card>
               <CardContent className="text-sm text-muted-foreground text-center py-6">
-                Sin cobros registrados {isDirectorView ? 'en la empresa' : rol === 'GERENTE_ZONAL' ? 'en tu zona' : 'en tu sucursal'} este día
+                Sin cobros registrados {isDirectorView ? 'en la empresa' : 'en tu sucursal'} este día
               </CardContent>
             </Card>
           ) : (

@@ -156,7 +156,7 @@ export default function CreditoPdfPage() {
                     <td className="border px-2 py-1 text-center">{pago ? metodoLabel[pago.metodoPago] ?? pago.metodoPago : '—'}</td>
                     <td className="border px-2 py-1 font-mono text-xs">{pago?.tickets?.[0]?.numeroTicket ?? '—'}</td>
                     <td className="border px-2 py-1 text-center">
-                      {s.estado === 'PAID' ? '✅' : s.estado === 'OVERDUE' ? '🔴' : '⏳'}
+                      {s.estado === 'PAID' || s.estado === 'ADVANCE' ? '✅' : s.estado === 'FINANCIADO' ? '🟣' : '⏳'}
                     </td>
                   </tr>
                 )

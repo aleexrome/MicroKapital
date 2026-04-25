@@ -1,6 +1,7 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { scopedLoanWhere } from '@/lib/access'
+import { isOverdue } from '@/lib/schedule'
 import { Prisma } from '@prisma/client'
 import { redirect } from 'next/navigation'
 import { formatMoney } from '@/lib/utils'
@@ -359,18 +360,20 @@ export default async function PactadosDiaPage({
 
                   {/* No cobrados */}
                   {noPagados.map((row: ScheduleRow) => {
-                    const isOverdue = row.estado === 'OVERDUE'
+                    // En Pactados (HOY) un pago no es mora todavía — su vencimiento es hoy.
+                    // El helper isOverdue solo devuelve true si vencimiento < hoy 00:00.
+                    const vencido = isOverdue(row)
 
                     return (
                       <div
                         key={row.id}
                         className={`flex items-center gap-3 py-2 px-3 rounded-lg text-sm border ${
-                          !isToday || isOverdue
+                          !isToday || vencido
                             ? 'bg-red-500/10 border-red-500/15'
                             : 'bg-amber-500/10 border-amber-500/15'
                         }`}
                       >
-                        {!isToday || isOverdue
+                        {!isToday || vencido
                           ? <XCircle className="h-4 w-4 text-red-400 shrink-0" />
                           : <Clock className="h-4 w-4 text-amber-400 shrink-0" />
                         }
@@ -387,11 +390,11 @@ export default async function PactadosDiaPage({
                           </p>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className={`font-semibold ${!isToday || isOverdue ? 'text-red-300' : 'text-amber-300'}`}>
+                          <p className={`font-semibold ${!isToday || vencido ? 'text-red-300' : 'text-amber-300'}`}>
                             {formatMoney(Number(row.montoEsperado))}
                           </p>
                           <p className="text-[10px] text-muted-foreground">
-                            {!isToday ? 'No cobrado' : isOverdue ? 'Vencido' : 'Esperado'}
+                            {!isToday ? 'No cobrado' : vencido ? 'Vencido' : 'Esperado'}
                           </p>
                         </div>
                       </div>

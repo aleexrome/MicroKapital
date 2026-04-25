@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { isOverdue } from '@/lib/schedule'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -62,10 +63,13 @@ function calcCobranza(schedules: Array<{ montoEsperado: Prisma.Decimal; montoPag
 
 // ── status icon ───────────────────────────────────────────────────────────
 
-function StatusIcon({ estado }: { estado: ScheduleStatus | string }) {
+function StatusIcon({ schedule }: { schedule: { estado: ScheduleStatus | string; fechaVencimiento: Date | string } }) {
+  const { estado } = schedule
   if (estado === 'PAID' || estado === 'ADVANCE') return <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
   if (estado === 'PARTIAL') return <CircleDot className="h-4 w-4 text-amber-500 shrink-0" />
-  if (estado === 'OVERDUE') return <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+  if (isOverdue(schedule as { estado: ScheduleStatus; fechaVencimiento: Date | string })) {
+    return <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+  }
   return <Clock className="h-4 w-4 text-gray-400 shrink-0" />
 }
 
@@ -381,7 +385,7 @@ export default async function RutaDetallePage({
                     key={s.id}
                     className={`flex items-center gap-3 px-4 py-3 text-sm ${isCobrado ? 'opacity-60' : ''}`}
                   >
-                    <StatusIcon estado={s.estado as ScheduleStatus} />
+                    <StatusIcon schedule={s} />
                     <span className="flex-1 min-w-0 truncate font-medium">{s.loan.client.nombreCompleto}</span>
                     <Badge variant="outline" className="text-xs shrink-0">{TIPO_LABEL[s.loan.tipo] ?? s.loan.tipo}</Badge>
                     <span className="font-semibold w-20 text-right shrink-0">{formatMoney(Number(s.montoEsperado))}</span>

@@ -51,10 +51,14 @@ export default async function DashboardDetallePage({
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
 
   if (tipo === 'pagos_vencidos') {
+    // Mora = PENDING/PARTIAL con fechaVencimiento < hoy (ayer hacia atrás).
+    // No se filtra por estado='OVERDUE' porque ningún cron escribe ese
+    // estado en BD; se calcula sobre la marcha.
     const schedules = await prisma.paymentSchedule.findMany({
       where: {
         loan: { ...loanScope, estado: 'ACTIVE' },
-        estado: 'OVERDUE',
+        estado: { in: ['PENDING', 'PARTIAL'] },
+        fechaVencimiento: { lt: today },
       },
       orderBy: { fechaVencimiento: 'asc' },
       take: 200,
@@ -68,7 +72,10 @@ export default async function DashboardDetallePage({
       },
     })
 
-    const totalAdeudado = schedules.reduce((s, sc) => s + Number(sc.montoPagado), 0)
+    const totalAdeudado = schedules.reduce(
+      (s, sc) => s + Math.max(0, Number(sc.montoEsperado) - Number(sc.montoPagado)),
+      0,
+    )
 
     return (
       <div className="p-6 space-y-6 max-w-4xl mx-auto">

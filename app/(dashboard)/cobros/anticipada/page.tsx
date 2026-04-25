@@ -5,6 +5,7 @@ import { formatMoney, formatDate } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar, ChevronRight, Users, CheckCircle2, XCircle, Clock, UserCheck, Building2 } from 'lucide-react'
 import { esDiaHabil } from '@/lib/business-days'
+import { isOverdue } from '@/lib/schedule'
 import { AgendaDatePicker } from '@/components/cobros/AgendaDatePicker'
 import { ImprimirAgendaButton } from '@/components/cobros/ImprimirAgendaButton'
 
@@ -119,12 +120,8 @@ export default async function CobranzaAnticipadaPage({
   const isHabil = esDiaHabil(selectedDate)
 
   // ── Datos para impresión ─────────────────────────────────────────────────────
-  const today0 = new Date(); today0.setHours(0, 0, 0, 0)
   const printRows = schedule.map((s) => {
-    const _d     = new Date(s.fechaVencimiento)
-    const due    = new Date(_d.getUTCFullYear(), _d.getUTCMonth(), _d.getUTCDate())
-    const overdue = s.estado === 'OVERDUE' ||
-      ((s.estado === 'PENDING' || s.estado === 'PARTIAL') && due < today0)
+    const overdue = isOverdue(s)
     return {
       clientNombre:  s.loan.client.nombreCompleto,
       numeroPago:    s.numeroPago,

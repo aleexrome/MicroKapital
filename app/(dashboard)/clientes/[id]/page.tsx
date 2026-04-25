@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { isOverdue } from '@/lib/schedule'
 import { notFound } from 'next/navigation'
 import { ScoreBadge } from '@/components/clients/ScoreBadge'
 import { Badge } from '@/components/ui/badge'
@@ -115,13 +116,9 @@ export default async function ClienteExpedientePage({
 
   const puedeVerRenovacion = ROLES_RENOVACION.includes(rol)
 
-  const now = new Date()
   const overdueCount = client.loans
     .filter((l) => l.estado === 'ACTIVE')
-    .reduce((s, l) => s + l.schedule.filter((p) =>
-      p.estado === 'OVERDUE' ||
-      ((p.estado === 'PENDING' || p.estado === 'PARTIAL') && new Date(p.fechaVencimiento) < now)
-    ).length, 0)
+    .reduce((s, l) => s + l.schedule.filter((p) => isOverdue(p)).length, 0)
 
   return (
     <div className="p-6 space-y-6 max-w-3xl mx-auto">
@@ -279,7 +276,7 @@ export default async function ClienteExpedientePage({
                 const umbral = UMBRAL_RENOVACION[loan.tipo]
                 const pagados = loan.schedule.filter((s) => s.estado === 'PAID').length
                 const pagosPendientes = loan.schedule
-                  .filter((s) => s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL')
+                  .filter((s) => s.estado === 'PENDING' || s.estado === 'PARTIAL')
                   .map((s) => ({ id: s.id, numeroPago: s.numeroPago, montoEsperado: Number(s.montoEsperado) }))
                 const tieneRenovacionActiva = loan.loanRenovado.length > 0
                 const puedeRenovar =

@@ -84,7 +84,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
   const memberRenewalData = canRenewGroup
     ? activeLoans.map((l) => {
         const pagosPendientes = l.schedule.filter(
-          (s) => s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL'
+          (s) => s.estado === 'PENDING' || s.estado === 'PARTIAL'
         )
         const montoFinanciado = pagosPendientes
           .slice(0, SOLIDARIO_PAGOS_FINANCIADOS)

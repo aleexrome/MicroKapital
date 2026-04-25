@@ -56,14 +56,10 @@ export default async function ClientesPage({
           select: {
             id: true,
             schedule: {
+              // Mora calculada on-the-fly (estado='OVERDUE' nunca se escribe en BD).
               where: {
-                OR: [
-                  { estado: 'OVERDUE' },
-                  {
-                    estado: { in: ['PENDING', 'PARTIAL'] },
-                    fechaVencimiento: { lt: new Date() },
-                  },
-                ],
+                estado: { in: ['PENDING', 'PARTIAL'] },
+                fechaVencimiento: { lt: new Date() },
               },
               select: { id: true },
             },

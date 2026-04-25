@@ -4,6 +4,7 @@
  */
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { isOverdue } from '@/lib/schedule'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -64,7 +65,7 @@ export default async function CarteraMiosTipoPage({ params }: { params: { tipo: 
 
     const groupData: SolidarioGroup[] = groups.map((grupo) => {
       const totalCapital = grupo.loans.reduce((s, l) => s + Number(l.capital), 0)
-      const hasOverdue   = grupo.loans.some((l) => l.schedule[0]?.estado === 'OVERDUE')
+      const hasOverdue   = grupo.loans.some((l) => l.schedule[0] && isOverdue(l.schedule[0]))
       const nextPago     = grupo.loans
         .flatMap((l) => l.schedule)
         .sort((a, b) => new Date(a.fechaVencimiento).getTime() - new Date(b.fechaVencimiento).getTime())[0]
@@ -131,7 +132,7 @@ export default async function CarteraMiosTipoPage({ params }: { params: { tipo: 
   })
 
   const totalCapital = loans.reduce((s, l) => s + Number(l.capital), 0)
-  const vencidos = loans.filter((l) => l.schedule[0]?.estado === 'OVERDUE').length
+  const vencidos = loans.filter((l) => l.schedule[0] && isOverdue(l.schedule[0])).length
 
   return (
     <div className="p-6 space-y-5 max-w-3xl mx-auto">
@@ -158,7 +159,7 @@ export default async function CarteraMiosTipoPage({ params }: { params: { tipo: 
       <div className="space-y-2">
         {loans.map((loan) => {
           const pago = loan.schedule[0]
-          const overdue = pago?.estado === 'OVERDUE'
+          const overdue = pago ? isOverdue(pago) : false
           return (
             <Card key={loan.id} className={overdue ? 'border-red-200' : ''}>
               <CardContent className="p-4 flex items-center justify-between gap-3">

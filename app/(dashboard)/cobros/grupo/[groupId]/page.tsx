@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { ArrowLeft, Users, CreditCard, CheckCircle2, AlertCircle, ClipboardList } from 'lucide-react'
 import type { ScheduleStatus, Prisma } from '@prisma/client'
+import { isOverdue } from '@/lib/schedule'
 
 const STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'error' | 'info' | 'outline'> = {
   PAID: 'success',
@@ -76,7 +77,7 @@ export default async function GrupoCobroPage({ params }: { params: { groupId: st
   }, 0)
 
   const pagados  = grupo.loans.filter((l) => l.schedule[0] === undefined || l.schedule[0]?.estado === 'PAID').length
-  const vencidos = grupo.loans.filter((l) => l.schedule[0]?.estado === 'OVERDUE').length
+  const vencidos = grupo.loans.filter((l) => l.schedule[0] && isOverdue(l.schedule[0])).length
 
   return (
     <div className="p-4 max-w-lg mx-auto space-y-5">
@@ -147,16 +148,21 @@ export default async function GrupoCobroPage({ params }: { params: { groupId: st
                     {loan.client.telefono && (
                       <p className="text-xs text-muted-foreground ml-6">{loan.client.telefono}</p>
                     )}
-                    {pago && (
-                      <div className="flex items-center gap-2 mt-1 ml-6">
-                        <Badge variant={STATUS_VARIANT[pago.estado as ScheduleStatus]} className="text-xs">
-                          {STATUS_LABEL[pago.estado as ScheduleStatus]}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          Pago {pago.numeroPago} · vence {formatDate(pago.fechaVencimiento)}
-                        </span>
-                      </div>
-                    )}
+                    {pago && (() => {
+                      const overdue = isOverdue(pago)
+                      const variant = overdue ? 'error' : STATUS_VARIANT[pago.estado as ScheduleStatus]
+                      const label   = overdue ? 'Vencido' : STATUS_LABEL[pago.estado as ScheduleStatus]
+                      return (
+                        <div className="flex items-center gap-2 mt-1 ml-6">
+                          <Badge variant={variant} className="text-xs">
+                            {label}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            Pago {pago.numeroPago} · vence {formatDate(pago.fechaVencimiento)}
+                          </span>
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   <div className="flex flex-col items-end gap-2 shrink-0">

@@ -327,51 +327,24 @@ export default async function CajaPage({
                     {Object.entries(branch.cobradores)
                       .sort((a, b) => a[1].cobradorNombre.localeCompare(b[1].cobradorNombre))
                       .map(([cId, cob]) => (
-                        <details key={cId} className="py-3 first:pt-2 group">
-                          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-medium text-sm flex items-center gap-1.5">
-                                <span className="text-xs text-muted-foreground transition-transform group-open:rotate-90">▶</span>
-                                {cob.cobradorNombre}
-                              </span>
+                        <Link
+                          key={cId}
+                          href={`/caja/cobrador/${cId}?fecha=${fechaStr}`}
+                          className="block py-3 first:pt-2 hover:bg-primary-500/5 -mx-4 px-4 transition-colors"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium text-sm">{cob.cobradorNombre}</span>
+                            <div className="flex items-center gap-2">
                               <span className="font-semibold money">{formatMoney(cob.total)}</span>
+                              <span className="text-muted-foreground text-xs">›</span>
                             </div>
-                            <p className="text-xs text-muted-foreground ml-4">
-                              {cob.pagos.length} cobros · 💵 {formatMoney(cob.efectivo)} · 💳 {formatMoney(cob.tarjeta)} · 🏦 {formatMoney(cob.transferencia)}
-                              {cob.enValidacion > 0 && ` · ⏱ ${formatMoney(cob.enValidacion)} en validación`}
-                              {cob.cambio > 0 && ` · cambio ${formatMoney(cob.cambio)}`}
-                            </p>
-                          </summary>
-                          <div className="mt-3 ml-4 divide-y border-l-2 border-primary-500/20 pl-4">
-                            {cob.pagos.length === 0 ? (
-                              <p className="text-xs text-muted-foreground py-2">Sin cobros</p>
-                            ) : (
-                              cob.pagos
-                                .slice()
-                                .sort((a, b) => new Date(a.fechaHora).getTime() - new Date(b.fechaHora).getTime())
-                                .map((pago) => {
-                                  const enVal = pago.metodoPago === 'TRANSFER' && pago.statusTransferencia === 'PENDIENTE'
-                                  const metodoIcon = pago.metodoPago === 'CASH' ? '💵' : pago.metodoPago === 'CARD' ? '💳' : '🏦'
-                                  return (
-                                    <div key={pago.id} className="flex items-center justify-between py-2 text-sm gap-3">
-                                      <div className="flex-1 min-w-0">
-                                        <p className="font-medium truncate">{pago.client.nombreCompleto}</p>
-                                        <p className="text-[11px] text-muted-foreground">
-                                          {pago.loan.tipo} · {metodoIcon} {pago.metodoPago === 'CASH' ? 'Efectivo' : pago.metodoPago === 'CARD' ? 'Tarjeta' : 'Transferencia'} ·{' '}
-                                          {new Date(pago.fechaHora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                                          {enVal && ' · en validación'}
-                                          {Number(pago.cambioEntregado) > 0 && ` · cambio ${formatMoney(Number(pago.cambioEntregado))}`}
-                                        </p>
-                                      </div>
-                                      <span className={`font-semibold money shrink-0 ${enVal ? 'text-yellow-600' : ''}`}>
-                                        {formatMoney(Number(pago.monto))}
-                                      </span>
-                                    </div>
-                                  )
-                                })
-                            )}
                           </div>
-                        </details>
+                          <p className="text-xs text-muted-foreground">
+                            {cob.pagos.length} cobros · 💵 {formatMoney(cob.efectivo)} · 💳 {formatMoney(cob.tarjeta)} · 🏦 {formatMoney(cob.transferencia)}
+                            {cob.enValidacion > 0 && ` · ⏱ ${formatMoney(cob.enValidacion)} en validación`}
+                            {cob.cambio > 0 && ` · cambio ${formatMoney(cob.cambio)}`}
+                          </p>
+                        </Link>
                       ))}
                   </CardContent>
                 </Card>

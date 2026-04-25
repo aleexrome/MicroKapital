@@ -15,21 +15,41 @@ function parseFecha(dateStr?: string): Date {
 export default async function ImprimirCortePage({
   searchParams,
 }: {
-  searchParams: { fecha?: string }
+  searchParams: { fecha?: string; cobradorId?: string }
 }) {
   const session = await getSession()
   if (!session?.user) redirect('/login')
 
-  const { companyId } = session.user
+  const { companyId, rol, branchId: viewerBranchId } = session.user
 
-  const cobrador = await prisma.user.findFirst({
+  const viewer = await prisma.user.findFirst({
     where: { companyId: companyId!, email: session.user.email! },
     include: {
       company: { select: { nombre: true } },
       branch:  { select: { nombre: true } },
     },
   })
-  if (!cobrador) redirect('/login')
+  if (!viewer) redirect('/login')
+
+  // Si se pasa cobradorId, imprimir el corte de ESE cobrador (solo gerentes
+  // y directores). Si no, imprimir el corte personal del usuario logueado.
+  const isDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
+  const isGerente  = rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
+
+  let cobrador = viewer
+  if (searchParams.cobradorId && searchParams.cobradorId !== viewer.id) {
+    if (!isDirector && !isGerente) redirect('/caja')
+    const target = await prisma.user.findFirst({
+      where: { id: searchParams.cobradorId, companyId: companyId! },
+      include: {
+        company: { select: { nombre: true } },
+        branch:  { select: { nombre: true } },
+      },
+    })
+    if (!target) redirect('/caja')
+    if (isGerente && target.branchId !== viewerBranchId) redirect('/caja')
+    cobrador = target
+  }
 
   const selectedDate = parseFecha(searchParams.fecha)
   const nextDay = new Date(selectedDate)

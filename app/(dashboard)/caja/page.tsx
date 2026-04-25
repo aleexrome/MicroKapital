@@ -64,7 +64,9 @@ export default async function CajaPage() {
   const totalCobradoEfectivo = Number(caja.cobradoEfectivo)
   const totalCobradoTarjeta = Number(caja.cobradoTarjeta)
   const totalCambio = Number(caja.cambioEntregado)
-  const efectivoNeto = totalCobradoEfectivo - totalCambio
+  // El cambio entregado se repone con el mismo billete del cliente, así que
+  // no se resta del efectivo cobrado. Se muestra sólo como dato informativo.
+  const efectivoAEntregar = totalCobradoEfectivo
 
   return (
     <div className="p-6 space-y-6">
@@ -110,7 +112,8 @@ export default async function CajaPage() {
         <Card>
           <CardContent className="p-4">
             <span className="text-xs text-muted-foreground">Cambio entregado</span>
-            <p className="text-xl font-bold text-orange-600 money">- {formatMoney(totalCambio)}</p>
+            <p className="text-xl font-bold text-gray-700 money">{formatMoney(totalCambio)}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Informativo · no afecta el corte</p>
           </CardContent>
         </Card>
 
@@ -118,9 +121,9 @@ export default async function CajaPage() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="h-4 w-4 text-primary-700" />
-              <span className="text-xs text-primary-600 font-medium">Efectivo neto</span>
+              <span className="text-xs text-primary-600 font-medium">Efectivo a entregar</span>
             </div>
-            <p className="text-xl font-bold text-primary-800 money">{formatMoney(efectivoNeto)}</p>
+            <p className="text-xl font-bold text-primary-800 money">{formatMoney(efectivoAEntregar)}</p>
           </CardContent>
         </Card>
       </div>

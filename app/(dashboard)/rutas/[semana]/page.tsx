@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { isOverdue } from '@/lib/schedule'

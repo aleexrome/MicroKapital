@@ -160,3 +160,63 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   return NextResponse.json({ data: updated })
 }
+
+/**
+ * DELETE — soft-delete del cliente. Setea `eliminadoEn = now()`. El
+ * cliente desaparece de cartera, agenda, rutas, dashboard y de todas las
+ * cobranzas presentes (su historial pasado en /rutas/<semana> NO cambia).
+ *
+ * Reversible: mientras `eliminadoEn` no haya cumplido 14 días, basta
+ * con poner el campo en NULL para reactivarlo. Pasados los 14 días el
+ * cron `/api/cron/purge-deleted` hace hard delete.
+ *
+ * Solo DIRECTOR_GENERAL.
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const session = await getSession()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+
+  const { rol, companyId, id: userId } = session.user
+  if (rol !== 'DIRECTOR_GENERAL') {
+    return NextResponse.json(
+      { error: 'Solo Dirección General puede eliminar clientes' },
+      { status: 403 },
+    )
+  }
+
+  const existing = await prisma.client.findFirst({
+    where: { id: params.id, companyId: companyId! },
+    select: { id: true, nombreCompleto: true, eliminadoEn: true },
+  })
+  if (!existing) {
+    return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
+  }
+  if (existing.eliminadoEn) {
+    return NextResponse.json({ error: 'El cliente ya estaba eliminado' }, { status: 400 })
+  }
+
+  const now = new Date()
+  await prisma.client.update({
+    where: { id: params.id },
+    data: { eliminadoEn: now },
+  })
+
+  createAuditLog({
+    userId,
+    accion: 'DELETE_SOFT',
+    tabla: 'Client',
+    registroId: params.id,
+    valoresAnteriores: { nombreCompleto: existing.nombreCompleto, eliminadoEn: null },
+    valoresNuevos: { eliminadoEn: now.toISOString() },
+    ipAddress: req.headers.get('x-forwarded-for') ?? undefined,
+  })
+
+  return NextResponse.json({
+    message: 'Cliente eliminado. Se purgará automáticamente a los 14 días.',
+  })
+}

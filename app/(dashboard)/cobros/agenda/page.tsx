@@ -1,6 +1,6 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
-import { scopedLoanWhere } from '@/lib/access'
+import { scopedLoanWhere, loanNotDeletedWhere } from '@/lib/access'
 import { Prisma } from '@prisma/client'
 import Link from 'next/link'
 import { formatMoney, formatDate } from '@/lib/utils'
@@ -74,7 +74,7 @@ export default async function AgendaPage({
   const loanWhere: Prisma.LoanWhereInput = {
     estado: 'ACTIVE',
     companyId: companyId!,
-    AND: [scopedLoanWhere(session.user)],
+    AND: [scopedLoanWhere(session.user), loanNotDeletedWhere],
   }
 
   const schedule = await prisma.paymentSchedule.findMany({

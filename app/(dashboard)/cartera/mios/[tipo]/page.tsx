@@ -42,7 +42,15 @@ export default async function CarteraMiosTipoPage({ params }: { params: { tipo: 
       where: {
         cobradorId: userId,
         activo: true,
-        loans: { some: { tipo: 'SOLIDARIO', estado: 'ACTIVE', companyId: companyId! } },
+        eliminadoEn: null,
+        loans: {
+          some: {
+            tipo: 'SOLIDARIO',
+            estado: 'ACTIVE',
+            companyId: companyId!,
+            client: { eliminadoEn: null },
+          },
+        },
       },
       include: {
         loans: {
@@ -119,6 +127,7 @@ export default async function CarteraMiosTipoPage({ params }: { params: { tipo: 
       estado: 'ACTIVE',
       companyId: companyId!,
       cobradorId: userId,
+      client: { eliminadoEn: null },
     },
     orderBy: { createdAt: 'desc' },
     include: {

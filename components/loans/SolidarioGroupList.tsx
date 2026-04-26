@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, Users, Banknote } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 
 export interface SolidarioLoan {
   id: string
@@ -43,9 +44,13 @@ function fmtDate(s: string) {
 export function SolidarioGroupList({
   groups,
   mode = 'capturar',
+  // Solo Dirección General puede borrar grupos. La página padre decide
+  // si pasarlo o no según el rol.
+  canDelete = false,
 }: {
   groups: SolidarioGroup[]
   mode?: 'aplicar' | 'capturar'
+  canDelete?: boolean
 }) {
   const [openIds, setOpenIds] = useState<Set<string>>(new Set())
 
@@ -78,11 +83,21 @@ export function SolidarioGroupList({
               grupo.hasOverdue ? 'border-red-200' : 'border-border',
             )}
           >
-            {/* ── Header (always visible, click to toggle) ── */}
-            <button
-              type="button"
+            {/* ── Header (always visible, click to toggle) ──
+                Era un <button> pero se rompía al meter el botón de
+                eliminar (no se pueden anidar buttons). Ahora es un div
+                con role=button para conservar accesibilidad. */}
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => toggle(grupo.id)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toggle(grupo.id)
+                }
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors cursor-pointer"
             >
               {isOpen
                 ? <ChevronDown  className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -108,7 +123,16 @@ export function SolidarioGroupList({
                 </p>
               </div>
               <span className="text-sm font-semibold shrink-0">{fmtMoney(grupo.totalCapital)}</span>
-            </button>
+              {canDelete && (
+                <span className="shrink-0">
+                  <DeleteEntityButton
+                    endpoint={`/api/loan-groups/${grupo.id}`}
+                    entityName={grupo.nombre}
+                    entityKind="grupo"
+                  />
+                </span>
+              )}
+            </div>
 
             {/* ── Expanded: client list + botón por rol ── */}
             {isOpen && (

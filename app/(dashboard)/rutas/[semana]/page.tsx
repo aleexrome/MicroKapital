@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { loanNotDeletedWhere } from '@/lib/access'
 import { isOverdue } from '@/lib/schedule'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -301,6 +302,7 @@ export default async function RutaDetallePage({
             ...loanFilterBase,
             companyId: companyId!,
             estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
+            AND: [loanNotDeletedWhere],
           },
         },
         select: {
@@ -326,6 +328,7 @@ export default async function RutaDetallePage({
           companyId: companyId!,
           estado: { in: ['ACTIVE', 'LIQUIDATED'] },
           fechaDesembolso: { gte: saturday, lte: friday },
+          AND: [loanNotDeletedWhere],
         },
         select: {
           id: true,
@@ -566,6 +569,7 @@ export default async function RutaDetallePage({
           companyId: companyId!,
           estado: { in: ['ACTIVE', 'LIQUIDATED'] },
           fechaDesembolso: { gte: saturday, lte: friday },
+          AND: [loanNotDeletedWhere],
         },
         select: { capital: true, cobradorId: true },
       }),
@@ -724,6 +728,7 @@ export default async function RutaDetallePage({
           companyId: companyId!,
           estado: { in: ['ACTIVE', 'LIQUIDATED'] },
           fechaDesembolso: { gte: saturday, lte: friday },
+          AND: [loanNotDeletedWhere],
         },
         select: { capital: true, cobradorId: true, branchId: true },
       }),

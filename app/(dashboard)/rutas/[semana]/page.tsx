@@ -21,6 +21,16 @@ import type { ScheduleStatus, Prisma } from '@prisma/client'
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
+// Gerentes que no tienen clientes asignados como cobradores. Por decisión
+// de Dirección General, su tarjeta de "Rutas" y su drill-down muestran el
+// agregado de toda su sucursal en lugar de su (vacía) cobranza personal.
+// Edgar Solís Pérez y Héctor Eulises Rodríguez Guzmán son los únicos en
+// este caso; el resto de gerentes sí tiene cartera propia.
+const GERENTES_AGREGADOS_POR_SUCURSAL = new Set<string>([
+  '3d189694-644b-4b28-b28d-2762a8bad0fb', // Edgar Solís Pérez
+  'e31f210d-332a-40c8-81c2-fef20589cebc', // Héctor Eulises Rodríguez Guzmán
+])
+
 function calcPct(a: number, b: number) {
   return b > 0 ? Math.round((a / b) * 100) : 0
 }
@@ -236,6 +246,7 @@ export default async function RutaDetallePage({
   //   - Director/Super Admin: cualquier usuario de la empresa.
   let targetUserId: string = userId
   let targetUserName: string = session.user.name ?? 'Mi ruta'
+  let targetBranchId: string | null = branchId ?? null
   let isDrillDown = false
   if (searchParams?.u && (isGerente || isDG)) {
     const target = await prisma.user.findFirst({
@@ -255,23 +266,37 @@ export default async function RutaDetallePage({
       if (allowed) {
         targetUserId   = target.id
         targetUserName = target.nombre
+        targetBranchId = target.branchId ?? null
         isDrillDown    = true
       }
     }
   }
+
+  // Para los gerentes sin cartera propia, la vista detallada muestra
+  // todos los pagos y colocaciones de su sucursal en lugar de su ruta
+  // personal (que está vacía y daría 0% / $0). Aplica tanto cuando ellos
+  // mismos abren su /rutas como cuando alguien hace drill-down a su ficha.
+  const aggregateByBranch =
+    GERENTES_AGREGADOS_POR_SUCURSAL.has(targetUserId) && !!targetBranchId
 
   // ── COORDINADOR / COBRADOR view ─────────────────────────────────────
   // También usada en modo drill-down: cuando un Gerente o Director entra
   // con ?u=<userId>, renderizamos esta misma vista pero con los datos del
   // usuario seleccionado.
   if (isCoordinador || isDrillDown) {
+    // Para gerentes sin cartera propia el filtro pasa de cobradorId a
+    // branchId — así la "ruta" del gerente refleja toda su sucursal.
+    const loanFilterBase = aggregateByBranch && targetBranchId
+      ? { branchId: targetBranchId }
+      : { cobradorId: targetUserId }
+
     const [schedules, loans] = await Promise.all([
       prisma.paymentSchedule.findMany({
         where: {
           fechaVencimiento: { gte: saturday, lte: friday },
           estado: { not: 'FINANCIADO' },
           loan: {
-            cobradorId: targetUserId,
+            ...loanFilterBase,
             companyId: companyId!,
             estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
           },
@@ -295,7 +320,7 @@ export default async function RutaDetallePage({
       }),
       prisma.loan.findMany({
         where: {
-          cobradorId: targetUserId,
+          ...loanFilterBase,
           companyId: companyId!,
           estado: { in: ['ACTIVE', 'LIQUIDATED'] },
           fechaDesembolso: { gte: saturday, lte: friday },
@@ -551,8 +576,12 @@ export default async function RutaDetallePage({
     }
 
     const stats = allUsers.map((u) => {
-      const uSched  = wSchedules.filter((s) => s.loan.cobradorId === u.id)
-      const uLoans  = wLoans.filter((l) => l.cobradorId === u.id)
+      // Para los gerentes sin cartera propia su tarjeta refleja el total de
+      // toda la sucursal (todos los wSchedules / wLoans de la vista del
+      // gerente, que ya está acotada al alcance del logueado).
+      const aggregator = GERENTES_AGREGADOS_POR_SUCURSAL.has(u.id)
+      const uSched  = aggregator ? wSchedules : wSchedules.filter((s) => s.loan.cobradorId === u.id)
+      const uLoans  = aggregator ? wLoans     : wLoans.filter((l) => l.cobradorId === u.id)
       const { totalAPagar, totalCobrado, cobradosCount } = calcCobranza(uSched)
       const colocacion  = uLoans.reduce((s, l) => s + Number(l.capital), 0)
       const metaTarget  = totalAPagar * 0.7
@@ -568,15 +597,19 @@ export default async function RutaDetallePage({
       }
     })
 
-    // Aggregate totals
-    const aggAPagar    = stats.reduce((s, x) => s + x.totalAPagar, 0)
-    const aggCobrado   = stats.reduce((s, x) => s + x.totalCobrado, 0)
-    const aggColocacion = stats.reduce((s, x) => s + x.colocacion, 0)
+    // Total de la sucursal — calculado directamente sobre wSchedules/wLoans
+    // (no sumando las tarjetas) porque la tarjeta del gerente sin cartera
+    // propia ya contiene el total y duplicaría si se sumara.
+    const {
+      totalAPagar: aggAPagar,
+      totalCobrado: aggCobrado,
+      cobradosCount: aggCobradosCount,
+    } = calcCobranza(wSchedules)
+    const aggColocacion = wLoans.reduce((s, l) => s + Number(l.capital), 0)
     const aggMeta      = aggAPagar * 0.7
     const aggCobranzaPct = calcPct(aggCobrado, aggAPagar)
     const aggMetaPct     = calcPct(aggColocacion, aggMeta)
-    const aggCobradosCount = stats.reduce((s, x) => s + x.cobradosCount, 0)
-    const aggSchedCount    = stats.reduce((s, x) => s + x.scheduleCount, 0)
+    const aggSchedCount = wSchedules.length
 
     return (
       <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -678,7 +711,9 @@ export default async function RutaDetallePage({
           montoPagado: true,
           estado: true,
           payments: { select: { monto: true } },
-          loan: { select: { cobradorId: true } },
+          // branchId hace falta para que las tarjetas de gerentes sin
+          // cartera propia agreguen únicamente su sucursal.
+          loan: { select: { cobradorId: true, branchId: true } },
         },
       }),
       prisma.loan.findMany({
@@ -688,7 +723,7 @@ export default async function RutaDetallePage({
           estado: { in: ['ACTIVE', 'LIQUIDATED'] },
           fechaDesembolso: { gte: saturday, lte: friday },
         },
-        select: { capital: true, cobradorId: true },
+        select: { capital: true, cobradorId: true, branchId: true },
       }),
     ])
 
@@ -699,8 +734,15 @@ export default async function RutaDetallePage({
 
     // Per-user stats
     const userStats = allUsuarios.map((u) => {
-      const uSched = wSchedules.filter((s) => s.loan.cobradorId === u.id)
-      const uLoans = wLoans.filter((l) => l.cobradorId === u.id)
+      // Para los gerentes sin cartera propia la tarjeta refleja TODA su
+      // sucursal (no su filtro personal, que está vacío).
+      const aggregator = GERENTES_AGREGADOS_POR_SUCURSAL.has(u.id) && !!u.branchId
+      const uSched = aggregator
+        ? wSchedules.filter((s) => s.loan.branchId === u.branchId)
+        : wSchedules.filter((s) => s.loan.cobradorId === u.id)
+      const uLoans = aggregator
+        ? wLoans.filter((l) => l.branchId === u.branchId)
+        : wLoans.filter((l) => l.cobradorId === u.id)
       const { totalAPagar, totalCobrado, cobradosCount } = calcCobranza(uSched)
       const colocacion = uLoans.reduce((s, l) => s + Number(l.capital), 0)
       const metaTarget = totalAPagar * 0.7
@@ -709,6 +751,7 @@ export default async function RutaDetallePage({
         nombre: u.nombre,
         rolLabel: ROL_LABEL_MAP[u.rol] ?? u.rol,
         branchId: u.branchId ?? '',
+        aggregator,
         totalAPagar, totalCobrado, cobradosCount,
         colocacion, metaTarget,
         cobranzaPct: calcPct(totalCobrado, totalAPagar),
@@ -717,15 +760,18 @@ export default async function RutaDetallePage({
       }
     })
 
-    // Overall aggregate
-    const aggAPagar     = userStats.reduce((s, x) => s + x.totalAPagar, 0)
-    const aggCobrado    = userStats.reduce((s, x) => s + x.totalCobrado, 0)
-    const aggColocacion = userStats.reduce((s, x) => s + x.colocacion, 0)
+    // Total empresa — derivado directo del set completo, no de sumar
+    // tarjetas (las tarjetas-agregadoras duplicarían si se sumaran).
+    const {
+      totalAPagar: aggAPagar,
+      totalCobrado: aggCobrado,
+      cobradosCount: aggCobradosCount,
+    } = calcCobranza(wSchedules)
+    const aggColocacion = wLoans.reduce((s, l) => s + Number(l.capital), 0)
     const aggMeta       = aggAPagar * 0.7
     const aggCobranzaPct = calcPct(aggCobrado, aggAPagar)
     const aggMetaPct     = calcPct(aggColocacion, aggMeta)
-    const aggCobradosCount = userStats.reduce((s, x) => s + x.cobradosCount, 0)
-    const aggSchedCount    = userStats.reduce((s, x) => s + x.scheduleCount, 0)
+    const aggSchedCount = wSchedules.length
 
     return (
       <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -771,9 +817,13 @@ export default async function RutaDetallePage({
           const branchUsers = userStats.filter((u) => u.branchId === branch.id)
           if (branchUsers.length === 0) return null
 
-          const bAPagar     = branchUsers.reduce((s, x) => s + x.totalAPagar, 0)
-          const bCobrado    = branchUsers.reduce((s, x) => s + x.totalCobrado, 0)
-          const bColocacion = branchUsers.reduce((s, x) => s + x.colocacion, 0)
+          // Las tarjetas-agregadoras (gerentes sin cartera propia) ya
+          // contienen el total de la sucursal — excluirlas del reduce
+          // evita el doble conteo en el encabezado.
+          const branchUsersForSum = branchUsers.filter((u) => !u.aggregator)
+          const bAPagar     = branchUsersForSum.reduce((s, x) => s + x.totalAPagar, 0)
+          const bCobrado    = branchUsersForSum.reduce((s, x) => s + x.totalCobrado, 0)
+          const bColocacion = branchUsersForSum.reduce((s, x) => s + x.colocacion, 0)
           const bMeta       = bAPagar * 0.7
           const bCobranzaPct = calcPct(bCobrado, bAPagar)
           const bMetaPct     = calcPct(bColocacion, bMeta)

@@ -81,9 +81,12 @@ export default async function RutasPage() {
       },
       select: {
         montoEsperado: true,
+        montoPagado: true,
+        estado: true,
         fechaVencimiento: true,
-        // Cobranza efectiva = sum(Payment.monto) capeado a montoEsperado.
-        // Ver `calcCobranza` en /rutas/[semana]/page.tsx para la justificación.
+        // Cobranza efectiva (estricta) = sum(Payment.monto) capeado.
+        // Para semanas viejas (sin captura formal) caemos a una cobranza
+        // "preliminar" basada en estado del schedule — ver más abajo.
         payments: { select: { monto: true } },
       },
     }),
@@ -100,21 +103,41 @@ export default async function RutasPage() {
   ])
 
   // ── Calculate per-week stats (Sábado–Viernes) ────────────────────────
+  // La cobranza efectiva ESTRICTA (sum Payment.monto) solo aplica para la
+  // semana en curso y la inmediatamente anterior — son las dos donde
+  // sabemos que el equipo está capturando con el flujo nuevo. Para las
+  // semanas más viejas caemos al cálculo viejo (basado en
+  // PaymentSchedule.estado / montoPagado) y mostramos un badge
+  // "Preliminar" para que quede claro que NO es cobranza respaldada por
+  // Payment, solo el marcado de schedules. Sin esto las semanas viejas
+  // salían en 0%/1% porque casi nada quedó en Payment.
   const thisSat = getSaturday(new Date())
 
-  const weekData = semanas.map((saturday) => {
+  const weekData = semanas.map((saturday, idx) => {
     const friday     = getFriday(saturday)
     const isCurrent  = saturday.getTime() === thisSat.getTime()
+    // semanas[0] es la más reciente. Las dos primeras (en curso + previa)
+    // usan el cálculo estricto; el resto usa el preliminar.
+    const usaCalculoEstricto = idx <= 1
 
     const wSchedules = allSchedules.filter((s) => {
       const d = new Date(s.fechaVencimiento)
       return d >= saturday && d <= friday
     })
     const totalAPagar  = wSchedules.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
-    const totalCobrado = wSchedules.reduce((sum, s) => {
+
+    const totalCobradoEstricto = wSchedules.reduce((sum, s) => {
       const paid = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
       return sum + Math.min(paid, Number(s.montoEsperado))
     }, 0)
+
+    const totalCobradoPreliminar = wSchedules.reduce((sum, s) => {
+      if (s.estado === 'PAID' || s.estado === 'ADVANCE') return sum + Number(s.montoEsperado)
+      if (s.estado === 'PARTIAL')                        return sum + Number(s.montoPagado)
+      return sum
+    }, 0)
+
+    const totalCobrado = usaCalculoEstricto ? totalCobradoEstricto : totalCobradoPreliminar
 
     const colocacion = allLoans
       .filter((l) => l.fechaDesembolso && l.fechaDesembolso >= saturday && l.fechaDesembolso <= friday)
@@ -129,6 +152,7 @@ export default async function RutasPage() {
       weekId: saturdayToId(saturday),
       label: formatWeekLabelSatFri(saturday),
       isCurrent,
+      esPreliminar: !usaCalculoEstricto,
       totalAPagar,
       totalCobrado,
       cobranzaPct,
@@ -173,6 +197,14 @@ export default async function RutasPage() {
                     {w.isCurrent && (
                       <span className="text-[10px] font-bold uppercase tracking-wide bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
                         En curso
+                      </span>
+                    )}
+                    {w.esPreliminar && (
+                      <span
+                        className="text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full"
+                        title="Cifra basada en el estado del schedule, no en Payments respaldados. Es una aproximación de cobranza histórica."
+                      >
+                        Preliminar
                       </span>
                     )}
                   </div>

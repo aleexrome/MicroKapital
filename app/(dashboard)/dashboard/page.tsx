@@ -105,15 +105,18 @@ export default async function DashboardPage({
   ] = await Promise.all([
     prisma.client.count({ where: clientScope }),
     prisma.loan.count({ where: { ...loanScope, estado: 'ACTIVE' } }),
-    // Usar PaymentSchedule.pagadoAt cubre tanto cobros normales
-    // como los aplicados directamente por DG (que no crean registro Payment)
-    prisma.paymentSchedule.aggregate({
+    // Cobrado hoy = suma de Payment reales (efectivo, tarjeta y transferencia).
+    // Antes se sumaba PaymentSchedule.montoPagado de schedules PAID/ADVANCE,
+    // lo que contaba como cobrado cualquier schedule marcado a mano sin
+    // movimiento de caja real e inflaba el indicador. Ahora sólo cuenta lo
+    // respaldado por un Payment — que ya incluye los pagos aplicados por
+    // dirección/op. admin (el endpoint apply ahora siempre crea Payment).
+    prisma.payment.aggregate({
       where: {
         loan: loanScope,
-        estado: { in: ['PAID', 'ADVANCE'] },
-        pagadoAt: { gte: today, lt: tomorrow },
+        fechaHora: { gte: today, lt: tomorrow },
       },
-      _sum: { montoPagado: true },
+      _sum: { monto: true },
     }),
     prisma.paymentSchedule.count({
       where: {
@@ -146,7 +149,7 @@ export default async function DashboardPage({
       : Promise.resolve({ _sum: { comision: null } }),
   ])
 
-  const cobradoHoy     = Number(cobradoHoyAgg._sum.montoPagado ?? 0)
+  const cobradoHoy     = Number(cobradoHoyAgg._sum.monto ?? 0)
   const capitalActivo  = Number(capitalActivoAgg._sum.capital ?? 0)
   const totalSeguros   = Number((segurosAgg as { _sum: { seguro: unknown } })._sum.seguro ?? 0)
   const totalComisiones = Number((comisionesAgg as { _sum: { comision: unknown } })._sum.comision ?? 0)

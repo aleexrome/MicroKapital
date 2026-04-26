@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
@@ -77,9 +79,10 @@ export default async function RutasPage() {
       },
       select: {
         montoEsperado: true,
-        montoPagado:   true,
-        estado:        true,
         fechaVencimiento: true,
+        // Cobranza efectiva = sum(Payment.monto) capeado a montoEsperado.
+        // Ver `calcCobranza` en /rutas/[semana]/page.tsx para la justificación.
+        payments: { select: { monto: true } },
       },
     }),
     prisma.loan.findMany({
@@ -106,9 +109,8 @@ export default async function RutasPage() {
     })
     const totalAPagar  = wSchedules.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
     const totalCobrado = wSchedules.reduce((sum, s) => {
-      if (s.estado === 'PAID' || s.estado === 'ADVANCE') return sum + Number(s.montoEsperado)
-      if (s.estado === 'PARTIAL')                        return sum + Number(s.montoPagado)
-      return sum
+      const paid = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
+      return sum + Math.min(paid, Number(s.montoEsperado))
     }, 0)
 
     const colocacion = allLoans

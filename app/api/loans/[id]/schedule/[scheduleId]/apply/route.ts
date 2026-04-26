@@ -2,9 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
+import { z } from 'zod'
+
+// El "aplicar pago" lo usa Dirección/Op. Admin para registrar cobros que
+// llegaron por transferencia (default). Antes esto solo movía el schedule
+// a PAID y no creaba Payment ni movimiento en caja, por lo que la cobranza
+// efectiva e ingresos a caja no cuadraban. Ahora siempre se genera Payment
+// y se actualiza CashRegister para que la cobranza efectiva refleje únicamente
+// lo respaldado por un movimiento real.
+const schema = z.object({
+  metodoPago: z.enum(['CASH', 'CARD', 'TRANSFER']).optional(),
+}).optional()
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string; scheduleId: string } }
 ) {
   const session = await getSession()
@@ -23,6 +34,21 @@ export async function POST(
     return NextResponse.json({ error: 'No autorizado para aplicar pagos' }, { status: 403 })
   }
 
+  // Parseo del cuerpo (opcional). Default = TRANSFER porque el caso de uso
+  // típico es la dirección registrando un depósito/transferencia recibido.
+  let metodoPago: 'CASH' | 'CARD' | 'TRANSFER' = 'TRANSFER'
+  try {
+    const raw = await req.json().catch(() => null)
+    if (raw) {
+      const parsed = schema.safeParse(raw)
+      if (parsed.success && parsed.data?.metodoPago) {
+        metodoPago = parsed.data.metodoPago
+      }
+    }
+  } catch {
+    // body opcional — ignoramos errores de parseo y seguimos con TRANSFER
+  }
+
   // Usuarios con permiso: solo pueden actuar sobre préstamos de su sucursal
   const loanFilter = esOpAdmin
     ? { companyId: companyId! }
@@ -35,7 +61,15 @@ export async function POST(
       loan: loanFilter,
     },
     include: {
-      loan: { select: { id: true, estado: true } },
+      loan: {
+        select: {
+          id: true,
+          estado: true,
+          clientId: true,
+          branchId: true,
+          cobradorId: true,
+        },
+      },
     },
   })
 
@@ -47,6 +81,13 @@ export async function POST(
   }
 
   const now = new Date()
+  const monto = Number(schedule.montoEsperado)
+  // El movimiento de caja se registra contra el cobrador titular del crédito
+  // (no contra el director que aplica), así la caja diaria del cobrador
+  // refleja todo lo cobrado en su ruta — efectivo, tarjeta y transferencias.
+  const cobradorRegistroId = schedule.loan.cobradorId
+  const fechaCaja = new Date(now)
+  fechaCaja.setHours(0, 0, 0, 0)
 
   const snapshotAntes = {
     estado: schedule.estado,
@@ -66,7 +107,40 @@ export async function POST(
       },
     })
 
-    // 2. Si todos los pagos del crédito quedan PAID → liquidar el crédito
+    // 2. Crear el Payment de respaldo. Sin esto la cobranza efectiva quedaba
+    //    "marcada como pagada" pero sin movimiento real, y caja no cuadraba.
+    await tx.payment.create({
+      data: {
+        loanId:     schedule.loan.id,
+        scheduleId: schedule.id,
+        cobradorId: cobradorRegistroId,
+        clientId:   schedule.loan.clientId,
+        monto,
+        metodoPago,
+        fechaHora:  now,
+        notas:      `Aplicado por ${esOpAdmin ? 'dirección' : 'op. admin'} (${metodoPago})`,
+      },
+    })
+
+    // 3. Sumar el movimiento al CashRegister del cobrador para el día
+    await tx.cashRegister.upsert({
+      where: { cobradorId_fecha: { cobradorId: cobradorRegistroId, fecha: fechaCaja } },
+      create: {
+        cobradorId:           cobradorRegistroId,
+        branchId:             schedule.loan.branchId,
+        fecha:                fechaCaja,
+        cobradoEfectivo:      metodoPago === 'CASH'     ? monto : 0,
+        cobradoTarjeta:       metodoPago === 'CARD'     ? monto : 0,
+        cobradoTransferencia: metodoPago === 'TRANSFER' ? monto : 0,
+      },
+      update: {
+        cobradoEfectivo:      metodoPago === 'CASH'     ? { increment: monto } : undefined,
+        cobradoTarjeta:       metodoPago === 'CARD'     ? { increment: monto } : undefined,
+        cobradoTransferencia: metodoPago === 'TRANSFER' ? { increment: monto } : undefined,
+      },
+    })
+
+    // 4. Si todos los pagos del crédito quedan PAID → liquidar el crédito
     const pendientes = await tx.paymentSchedule.count({
       where: {
         loanId: params.id,
@@ -93,6 +167,8 @@ export async function POST(
       estado:      'PAID',
       montoPagado: schedule.montoEsperado,
       pagadoAt:    now,
+      metodoPago,
+      monto,
     },
   })
 

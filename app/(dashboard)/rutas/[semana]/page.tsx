@@ -50,23 +50,44 @@ function textColor(p: number, type: 'cobranza' | 'meta') {
   return 'text-gray-500'
 }
 
-function calcCobranza(schedules: Array<{ montoEsperado: Prisma.Decimal; montoPagado: Prisma.Decimal; estado: string }>) {
+// La cobranza efectiva se calcula sumando los Payment reales asociados a
+// cada schedule de la semana. Antes se sumaba `montoEsperado` cuando el
+// schedule estaba marcado PAID/ADVANCE — eso permitía que un schedule sin
+// movimiento real (renovaciones liquidadas como FINANCIADO antes del fix,
+// pagos aplicados sin Payment, etc.) inflara el indicador. Ahora un
+// schedule solo aporta lo que esté respaldado por Payment.monto, capeado
+// al monto esperado para no dejar que sobre-pagos eleven el porcentaje
+// (los excedentes pertenecen al schedule siguiente como ADVANCE).
+function calcCobranza(
+  schedules: Array<{
+    montoEsperado: Prisma.Decimal
+    payments: Array<{ monto: Prisma.Decimal }>
+  }>
+) {
   const totalAPagar = schedules.reduce((s, r) => s + r.montoEsperado.toNumber(), 0)
   const totalCobrado = schedules.reduce((s, r) => {
-    if (r.estado === 'PAID' || r.estado === 'ADVANCE') return s + r.montoEsperado.toNumber()
-    if (r.estado === 'PARTIAL')                        return s + r.montoPagado.toNumber()
-    return s
+    const paid = r.payments.reduce((acc, p) => acc + p.monto.toNumber(), 0)
+    return s + Math.min(paid, r.montoEsperado.toNumber())
   }, 0)
-  const cobradosCount = schedules.filter((r) => r.estado === 'PAID' || r.estado === 'ADVANCE' || r.estado === 'PARTIAL').length
+  const cobradosCount = schedules.filter((r) => r.payments.length > 0).length
   return { totalAPagar, totalCobrado, cobradosCount }
 }
 
 // ── status icon ───────────────────────────────────────────────────────────
 
-function StatusIcon({ schedule }: { schedule: { estado: ScheduleStatus | string; fechaVencimiento: Date | string } }) {
-  const { estado } = schedule
-  if (estado === 'PAID' || estado === 'ADVANCE') return <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-  if (estado === 'PARTIAL') return <CircleDot className="h-4 w-4 text-amber-500 shrink-0" />
+// Estado visual basado en lo que efectivamente cobramos (Payment.monto),
+// no en el campo `estado` del schedule. Así la fila siempre concuerda con
+// el KPI superior.
+function StatusIcon({
+  schedule,
+  paidAmount,
+}: {
+  schedule: { estado: ScheduleStatus | string; fechaVencimiento: Date | string; montoEsperado: Prisma.Decimal }
+  paidAmount: number
+}) {
+  const expected = schedule.montoEsperado.toNumber()
+  if (paidAmount >= expected) return <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+  if (paidAmount > 0)         return <CircleDot className="h-4 w-4 text-amber-500 shrink-0" />
   if (isOverdue(schedule as { estado: ScheduleStatus; fechaVencimiento: Date | string })) {
     return <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
   }
@@ -262,6 +283,7 @@ export default async function RutaDetallePage({
           montoPagado:   true,
           estado:        true,
           fechaVencimiento: true,
+          payments: { select: { monto: true } },
           loan: {
             select: {
               tipo: true,
@@ -297,15 +319,17 @@ export default async function RutaDetallePage({
     const metaPct     = calcPct(colocacion, metaTarget)
 
     // ── Build print data ────────────────────────────────────────────────
+    // El monto cobrado por fila viene de los Payment reales — ver
+    // calcCobranza arriba para la justificación.
     const printCobros: RutaCobroRow[] = schedules.map((s) => {
-      const isCobrado = s.estado === 'PAID' || s.estado === 'ADVANCE'
-      const isPartial = s.estado === 'PARTIAL'
+      const paid = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
+      const montoCobrado = Math.min(paid, Number(s.montoEsperado))
       return {
         clientNombre:  s.loan.client.nombreCompleto,
         tipo:          s.loan.tipo,
         numeroPago:    s.numeroPago,
         montoEsperado: Number(s.montoEsperado),
-        montoCobrado:  isCobrado ? Number(s.montoEsperado) : isPartial ? Number(s.montoPagado) : 0,
+        montoCobrado,
         estado:        s.estado,
       }
     })
@@ -377,18 +401,22 @@ export default async function RutaDetallePage({
           ) : (
             <div className="border rounded-xl overflow-hidden divide-y bg-white">
               {schedules.map((s) => {
-                const isCobrado = s.estado === 'PAID' || s.estado === 'ADVANCE'
-                const isPartial = s.estado === 'PARTIAL'
-                const montoCobrado = isCobrado ? Number(s.montoEsperado) : isPartial ? Number(s.montoPagado) : 0
+                // El indicador visual también deriva de los Payment reales,
+                // para que la lista refleje la misma verdad que el KPI.
+                const paid = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
+                const expected = Number(s.montoEsperado)
+                const isCobrado = paid >= expected
+                const isPartial = !isCobrado && paid > 0
+                const montoCobrado = Math.min(paid, expected)
                 return (
                   <div
                     key={s.id}
                     className={`flex items-center gap-3 px-4 py-3 text-sm ${isCobrado ? 'opacity-60' : ''}`}
                   >
-                    <StatusIcon schedule={s} />
+                    <StatusIcon schedule={s} paidAmount={paid} />
                     <span className="flex-1 min-w-0 truncate font-medium">{s.loan.client.nombreCompleto}</span>
                     <Badge variant="outline" className="text-xs shrink-0">{TIPO_LABEL[s.loan.tipo] ?? s.loan.tipo}</Badge>
-                    <span className="font-semibold w-20 text-right shrink-0">{formatMoney(Number(s.montoEsperado))}</span>
+                    <span className="font-semibold w-20 text-right shrink-0">{formatMoney(expected)}</span>
                     <span className={`text-xs w-20 text-right shrink-0 ${isCobrado ? 'text-green-600 font-medium' : isPartial ? 'text-amber-600 font-medium' : 'text-muted-foreground'}`}>
                       {isCobrado || isPartial ? formatMoney(montoCobrado) : ESTADO_LABEL[s.estado] ?? s.estado}
                     </span>
@@ -497,7 +525,13 @@ export default async function RutaDetallePage({
             estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
           },
         },
-        select: { montoEsperado: true, montoPagado: true, estado: true, loan: { select: { cobradorId: true } } },
+        select: {
+          montoEsperado: true,
+          montoPagado: true,
+          estado: true,
+          payments: { select: { monto: true } },
+          loan: { select: { cobradorId: true } },
+        },
       }),
       prisma.loan.findMany({
         where: {
@@ -639,7 +673,13 @@ export default async function RutaDetallePage({
             estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
           },
         },
-        select: { montoEsperado: true, montoPagado: true, estado: true, loan: { select: { cobradorId: true } } },
+        select: {
+          montoEsperado: true,
+          montoPagado: true,
+          estado: true,
+          payments: { select: { monto: true } },
+          loan: { select: { cobradorId: true } },
+        },
       }),
       prisma.loan.findMany({
         where: {

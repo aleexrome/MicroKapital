@@ -57,11 +57,13 @@ export default async function CarteraTipoPage({
       where: {
         branchId,
         activo: true,
+        eliminadoEn: null,
         loans: {
           some: {
             tipo: 'SOLIDARIO',
             estado: 'ACTIVE',
             companyId: companyId!,
+            client: { eliminadoEn: null },
             ...((!isDirector && !isGerente) ? { cobradorId: userId } : {}),
           },
         },
@@ -134,6 +136,7 @@ export default async function CarteraTipoPage({
               ? 'aplicar'
               : 'capturar'
           }
+          canDelete={rol === 'DIRECTOR_GENERAL'}
         />
       </div>
     )
@@ -146,6 +149,7 @@ export default async function CarteraTipoPage({
       tipo: tipo as 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
       estado: 'ACTIVE',
       companyId: companyId!,
+      client: { eliminadoEn: null },
       ...((!isDirector && !isGerente) ? { cobradorId: userId } : {}),
     },
     orderBy: [{ cobrador: { nombre: 'asc' } }, { client: { nombreCompleto: 'asc' } }],

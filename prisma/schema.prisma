@@ -220,6 +220,9 @@ model Client {
   fotoUrl            String?
   score              Int       @default(500)
   activo             Boolean   @default(true)
+  // Soft delete: si DG borra al cliente se setea esta fecha. El cliente
+  // queda invisible en cartera/agenda/rutas. Cron purga a los 14 días.
+  eliminadoEn        DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -250,6 +253,8 @@ model LoanGroup {
   cobrador   User     @relation(fields: [cobradorId], references: [id])
   nombre     String
   activo     Boolean  @default(true)
+  // Soft delete (mismo patrón que Client). Cron purga a los 14 días.
+  eliminadoEn DateTime?
   createdAt  DateTime @default(now())
 
   loans Loan[]

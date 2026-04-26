@@ -178,3 +178,19 @@ export function scopedLoanWhere(user: AccessUser): Prisma.LoanWhereInput {
 
   return { id: NO_MATCH }
 }
+
+/**
+ * Filtro para Loan que excluye préstamos cuyo cliente o grupo (si tiene)
+ * fueron soft-deleted vía botón eliminar de DG. Aplicar dentro del
+ * `where` de cualquier consulta de Loan, o anidado bajo `loan: {...}`
+ * para filtrar PaymentSchedule / Payment del mismo modo. Sin esto,
+ * borrar un cliente / grupo no los hace invisibles en cobranza, rutas,
+ * agenda, etc. — sus loans aún aparecerían.
+ */
+export const loanNotDeletedWhere: Prisma.LoanWhereInput = {
+  client: { eliminadoEn: null },
+  OR: [
+    { loanGroupId: null },
+    { loanGroup: { eliminadoEn: null } },
+  ],
+}

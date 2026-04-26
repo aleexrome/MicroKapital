@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { loanNotDeletedWhere } from '@/lib/access'
 import Link from 'next/link'
 import { formatMoney } from '@/lib/utils'
 import { Navigation, ChevronRight, TrendingUp, Target } from 'lucide-react'
@@ -75,6 +76,7 @@ export default async function RutasPage() {
           cobradorId: { in: cobradorIds },
           companyId: companyId!,
           estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
+          AND: [loanNotDeletedWhere],
         },
       },
       select: {
@@ -91,6 +93,7 @@ export default async function RutasPage() {
         companyId: companyId!,
         estado: { in: ['ACTIVE', 'LIQUIDATED'] },
         fechaDesembolso: { gte: periodoStart, lte: periodoEnd },
+        AND: [loanNotDeletedWhere],
       },
       select: { capital: true, fechaDesembolso: true },
     }),

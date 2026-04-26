@@ -5,6 +5,7 @@ import { scopedClientWhere } from '@/lib/access'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ScoreBadge } from '@/components/clients/ScoreBadge'
+import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate } from '@/lib/utils'
 import { UserPlus, Search } from 'lucide-react'
@@ -27,7 +28,8 @@ export default async function ClientesPage({
   const session = await getSession()
   if (!session?.user) return null
 
-  const { companyId } = session.user
+  const { companyId, rol } = session.user
+  const isDG = rol === 'DIRECTOR_GENERAL'
 
   const page = Math.max(1, parseInt(searchParams.page ?? '1', 10))
 
@@ -38,6 +40,7 @@ export default async function ClientesPage({
   const where: Prisma.ClientWhereInput = {
     companyId: companyId!,
     activo: true,
+    eliminadoEn: null,
     AND: [scopedClientWhere(session.user)],
   }
 
@@ -115,34 +118,47 @@ export default async function ClientesPage({
           ) : (
             <div className="divide-y">
               {clientes.map((cliente) => (
-                <Link
+                <div
                   key={cliente.id}
-                  href={`/clientes/${cliente.id}`}
                   className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{cliente.nombreCompleto}</p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <p className="text-sm text-muted-foreground">{cliente.telefono ?? 'Sin teléfono'}</p>
-                      {cliente.cobrador && (
-                        <p className="text-xs text-muted-foreground">· {cliente.cobrador.nombre}</p>
-                      )}
+                  <Link
+                    href={`/clientes/${cliente.id}`}
+                    className="flex-1 min-w-0 flex items-center justify-between gap-3"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 truncate">{cliente.nombreCompleto}</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        <p className="text-sm text-muted-foreground">{cliente.telefono ?? 'Sin teléfono'}</p>
+                        {cliente.cobrador && (
+                          <p className="text-xs text-muted-foreground">· {cliente.cobrador.nombre}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3 ml-4">
-                    {cliente.loans.length > 0 && (
-                      <Badge variant="success" className="hidden sm:flex">
-                        {cliente.loans.length} activo{cliente.loans.length > 1 ? 's' : ''}
-                      </Badge>
-                    )}
-                    <ScoreBadge
-                      score={cliente.score}
-                      overdueCount={cliente.loans.reduce((s, l) => s + l.schedule.length, 0)}
-                      showLabel={false}
-                      size="sm"
-                    />
-                  </div>
-                </Link>
+                    <div className="flex items-center gap-3 ml-4">
+                      {cliente.loans.length > 0 && (
+                        <Badge variant="success" className="hidden sm:flex">
+                          {cliente.loans.length} activo{cliente.loans.length > 1 ? 's' : ''}
+                        </Badge>
+                      )}
+                      <ScoreBadge
+                        score={cliente.score}
+                        overdueCount={cliente.loans.reduce((s, l) => s + l.schedule.length, 0)}
+                        showLabel={false}
+                        size="sm"
+                      />
+                    </div>
+                  </Link>
+                  {isDG && (
+                    <div className="ml-2">
+                      <DeleteEntityButton
+                        endpoint={`/api/clients/${cliente.id}`}
+                        entityName={cliente.nombreCompleto}
+                        entityKind="cliente"
+                      />
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}

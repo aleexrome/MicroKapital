@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
-import { scopedClientWhere, scopedLoanWhere } from '@/lib/access'
+import { scopedClientWhere, scopedLoanWhere, loanNotDeletedWhere } from '@/lib/access'
 import { redirect } from 'next/navigation'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { formatMoney, formatDate } from '@/lib/utils'
@@ -72,7 +72,7 @@ export default async function DashboardPage({
 
   const loanScope: Prisma.LoanWhereInput = {
     companyId: companyId!,
-    AND: [scopedLoanWhere(session.user)],
+    AND: [scopedLoanWhere(session.user), loanNotDeletedWhere],
     ...(rol === 'SUPER_ADMIN' && superAdminBranchFilter
       ? { branchId: superAdminBranchFilter }
       : {}),
@@ -81,6 +81,7 @@ export default async function DashboardPage({
   const clientScope: Prisma.ClientWhereInput = {
     companyId: companyId!,
     activo: true,
+    eliminadoEn: null,
     AND: [scopedClientWhere(session.user)],
     ...(rol === 'SUPER_ADMIN' && superAdminBranchFilter
       ? { branchId: superAdminBranchFilter }

@@ -1,20 +1,34 @@
 -- =============================================================================
 -- Backfill — Payments retroactivos para cobranza histórica
 -- =============================================================================
--- Contexto:
--- Hasta el commit que introduce este backfill, los endpoints `apply` (DG /
--- op. admin) marcaban `PaymentSchedule` como PAID/ADVANCE/PARTIAL pero NO
--- creaban un registro `Payment`. La métrica de "Cobranza efectiva" en
--- /rutas se basaba en el estado del schedule, así que esos cobros se
--- contaban aunque no existiera Payment respaldando.
+-- ⚠️  EJECUTADO Y REVERTIDO. NO CORRER TAL CUAL.
 --
--- Tras tightear la métrica para exigir Payment respaldando (commit
--- 7d3106d), las semanas pasadas quedaron en 0%/1% porque toda la cobranza
--- histórica vivía solo en `PaymentSchedule.montoPagado`. Este script
--- crea un `Payment` por cada schedule huérfano para que la cobranza
--- histórica vuelva a verse.
+-- Se ejecutó el 2026-04-26 → creó 2,588 Payments por $2,566,575 cubriendo
+-- de dic 2025 a may 2026, intentando "recuperar" la cobranza histórica
+-- que quedó invisible al tightear /rutas para exigir Payment respaldando
+-- (commit 7d3106d).
 --
--- Pegar en Supabase → SQL Editor. Correr POR BLOQUES, en orden.
+-- Se revirtió ese mismo día porque el filtro
+--     ps.estado IN ('PAID','ADVANCE','PARTIAL') AND ps.montoPagado > 0
+-- era demasiado laxo: capturó schedules marcados como pagados por imports
+-- históricos (Tenancingo / San Mateo Atenco), por group-apply viejos sin
+-- captura real, y por marcados manuales no respaldados por movimiento de
+-- caja. Convirtió toda esa basura en "cobranza", inflando los indicadores
+-- (caso testigo: Miguel Ángel salía con cobros que DG confirmó = $0
+-- reales).
+--
+-- Rollback ejecutado:
+--     DELETE FROM "Payment" WHERE notas LIKE 'Backfill: cobranza histórica%';
+--
+-- Lección: para reintentar un backfill correctamente habría que
+-- distinguir, schedule por schedule, qué fue cobro real vs. qué fue
+-- marcado-como-pagado-pero-sin-respaldo. La data histórica no lo permite
+-- de forma automática — requiere reconstruir contra extractos de caja /
+-- movimientos bancarios reales. Hasta que eso ocurra, las métricas
+-- históricas se quedan bajas y eso es la verdad.
+--
+-- Se conserva el SQL como referencia (preview, INSERT, rollback). NO
+-- ejecutar tal cual sin ajustar el filtro.
 -- =============================================================================
 
 

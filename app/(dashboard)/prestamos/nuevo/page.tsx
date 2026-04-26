@@ -282,8 +282,9 @@ export default function NuevaSolicitudPage() {
                   <Label>Nombre del grupo (opcional)</Label>
                   <Input
                     value={nombreGrupo}
-                    onChange={(e) => setNombreGrupo(e.target.value)}
-                    placeholder="Ej: Las Flores, Grupo Esperanza..."
+                    onChange={(e) => setNombreGrupo(e.target.value.toUpperCase())}
+                    style={{ textTransform: 'uppercase' }}
+                    placeholder="EJ: LAS FLORES, GRUPO ESPERANZA..."
                   />
                 </div>
 

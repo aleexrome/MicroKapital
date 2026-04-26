@@ -6,7 +6,7 @@ import { calcLoan } from '@/lib/financial-formulas'
 import { createAuditLog } from '@/lib/audit'
 
 const schema = z.object({
-  nombre: z.string().min(2, 'Nombre del grupo requerido'),
+  nombre: z.string().min(2, 'Nombre del grupo requerido').transform((s) => s.trim().toUpperCase()),
   clientIds: z.array(z.string().uuid()).min(4, 'Mínimo 4 integrantes').max(5, 'Máximo 5 integrantes'),
   capitales: z.array(z.number().positive()).min(4, 'Mínimo 4 capitales').max(5, 'Máximo 5 capitales'),
   tipoGrupo: z.enum(['REGULAR', 'RESCATE']).default('REGULAR'),

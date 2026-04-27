@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 // Logo de la empresa (PNG transparente, subido a Cloudinary como
 // "MicroKapital_Logo"). Cloudinary resuelve a la versión más reciente
 // sin necesidad de hardcodear `v<timestamp>`.
-const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/MicroKapital_Logo.png'
+const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/v1777329446/PHOTO-2026-04-27-16-21-06-removebg-preview_fczmpb.png'
 
 export interface RutaCobroRow {
   clientNombre: string

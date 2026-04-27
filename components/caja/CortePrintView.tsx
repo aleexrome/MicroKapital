@@ -12,7 +12,7 @@ import { buildCorteCobradorBytes, printViaBluetooth, loadLogoBitmap } from '@/li
 // Logo principal del sistema (PNG transparente). Mismo asset que las
 // listas impresas. Para Bluetooth térmico se usa la versión rasterizada
 // vía loadLogoBitmap.
-const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/MicroKapital_Logo.png'
+const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/v1777329446/PHOTO-2026-04-27-16-21-06-removebg-preview_fczmpb.png'
 
 interface PagoItem {
   cliente: string

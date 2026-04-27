@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 
 // Logo de la empresa (PNG transparente, "MicroKapital_Logo" en
 // Cloudinary). Cloudinary resuelve a la última versión sin v<id>.
-const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/MicroKapital_Logo.png'
+const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/v1777329446/PHOTO-2026-04-27-16-21-06-removebg-preview_fczmpb.png'
 
 interface PrintRow {
   clientNombre: string

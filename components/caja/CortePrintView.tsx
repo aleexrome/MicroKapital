@@ -96,9 +96,28 @@ export function CortePrintView({ empresa, sucursal, cobrador, fecha, pagos, tota
           .no-print { display: none !important; }
           .corte-preview { border: none !important; box-shadow: none !important; }
         }
+        /* Logo morado solo visible al imprimir (PDF), esquina superior
+           derecha de la primera página. En la vista normal no estorba
+           con la pantalla del ticket térmico. */
+        .brand-print-only { display: none; }
+        @media print {
+          .brand-print-only {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 8px;
+          }
+          .brand-print-only img {
+            height: 48px;
+            filter: invert(48%) sepia(74%) saturate(2287%) hue-rotate(232deg) brightness(102%) contrast(102%);
+          }
+        }
       `}</style>
 
       <div className="p-4 space-y-4 max-w-sm mx-auto">
+        <div className="brand-print-only">
+          <img src={LOGO_URL} alt="Logo" />
+        </div>
+
         <div className="flex items-center gap-3 no-print">
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4" />

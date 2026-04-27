@@ -358,6 +358,9 @@ export default async function RutaDetallePage({
         clientNombre:  s.loan.client.nombreCompleto,
         tipo:          s.loan.tipo,
         numeroPago:    s.numeroPago,
+        // ISO string para que el componente formatee fecha+día sin caer
+        // en sorpresas de zona horaria del navegador.
+        fechaVencimiento: new Date(s.fechaVencimiento).toISOString(),
         montoEsperado: Number(s.montoEsperado),
         montoCobrado,
         estado:        s.estado,

@@ -3,10 +3,10 @@
 import { Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-// Logo de la empresa para encabezado de impresiones — mismo asset que
-// usamos en tickets. El filter CSS lo tiñe del morado primario de la
-// app (#7B6FFF) sin importar el color original del PNG.
-const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/v1776487061/ddcb6871-4cff-422e-9a00-67d62aa6243f.png'
+// Logo de la empresa (PNG transparente, subido a Cloudinary como
+// "MicroKapital_Logo"). Cloudinary resuelve a la versión más reciente
+// sin necesidad de hardcodear `v<timestamp>`.
+const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/MicroKapital_Logo.png'
 
 export interface RutaCobroRow {
   clientNombre: string
@@ -89,13 +89,12 @@ const ESTADO_LABEL: Record<string, string> = {
 
 const BASE_STYLE = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 20px; }
-  /* Logo en la primera hoja, esquina superior derecha. Como vive al
-     inicio del flujo del documento sólo aparece en la página 1
-     automáticamente — no es header fijo. Se muestra tal cual, sin
-     teñidos. */
-  .brand-header { display: flex; justify-content: flex-end; margin-bottom: 12px; }
-  .brand-logo { height: 90px; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 20px; position: relative; }
+  /* Logo posicionado absolutamente para no consumir espacio en el
+     flujo del documento — el contenido arranca pegado arriba sin
+     margen extra. Sólo aparece en la primera página porque está
+     anclado al body. PNG transparente, se muestra tal cual. */
+  .brand-logo { position: absolute; top: 8px; right: 20px; height: 140px; }
   h2  { font-size: 17px; margin-bottom: 6px; }
   h3  { font-size: 13px; margin: 20px 0 8px; color: #1a3a5c; border-bottom: 1px solid #c7d8e8; padding-bottom: 4px; }
   .meta { display: flex; flex-wrap: wrap; gap: 16px; font-size: 11px; color: #444; margin-bottom: 16px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
@@ -171,7 +170,7 @@ export function ImprimirRutaButton({
       ).join('')
 
       body = `
-        <div class="brand-header"><img class="brand-logo" src="${LOGO_URL}" alt="Logo" /></div>
+        <img class="brand-logo" src="${LOGO_URL}" alt="Logo" />
         <h2>Ruta Semanal</h2>
         <div class="meta">
           <span><strong>Semana:</strong> ${weekLabel}</span>
@@ -281,7 +280,7 @@ export function ImprimirRutaButton({
       const extraCols = showBranch ? 1 : 0
 
       body = `
-        <div class="brand-header"><img class="brand-logo" src="${LOGO_URL}" alt="Logo" /></div>
+        <img class="brand-logo" src="${LOGO_URL}" alt="Logo" />
         <h2>Ruta Semanal — ${scopeLabel}</h2>
         <div class="meta">
           <span><strong>Semana:</strong> ${weekLabel}</span>

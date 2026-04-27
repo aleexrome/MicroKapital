@@ -3,9 +3,9 @@
 import { Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-// Logo de la empresa para encabezado de impresiones (mismo asset que
-// los tickets). El filter CSS lo tiñe del morado primario de la app.
-const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/v1776487061/ddcb6871-4cff-422e-9a00-67d62aa6243f.png'
+// Logo de la empresa (PNG transparente, "MicroKapital_Logo" en
+// Cloudinary). Cloudinary resuelve a la última versión sin v<id>.
+const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/MicroKapital_Logo.png'
 
 interface PrintRow {
   clientNombre: string
@@ -87,12 +87,9 @@ export function ImprimirAgendaButton({ rows, fechaLabel, branchNombre, cobradorN
   <title>Agenda de Cobranza — ${fechaLabel}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 20px; }
-    /* Logo en la primera hoja, esquina superior derecha. Vive al
-       inicio del flujo del documento → solo aparece en página 1.
-       Se muestra tal cual, sin teñidos. */
-    .brand-header { display: flex; justify-content: flex-end; margin-bottom: 12px; }
-    .brand-logo { height: 90px; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 20px; position: relative; }
+    /* Logo absoluto, no consume espacio en el flujo. Solo página 1. */
+    .brand-logo { position: absolute; top: 8px; right: 20px; height: 140px; }
     h2 { font-size: 17px; margin-bottom: 6px; }
     .meta { display: flex; flex-wrap: wrap; gap: 16px; font-size: 11px; color: #444; margin-bottom: 16px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
     .meta strong { color: #000; }
@@ -110,7 +107,7 @@ export function ImprimirAgendaButton({ rows, fechaLabel, branchNombre, cobradorN
   </style>
 </head>
 <body>
-  <div class="brand-header"><img class="brand-logo" src="${LOGO_URL}" alt="Logo" /></div>
+  <img class="brand-logo" src="${LOGO_URL}" alt="Logo" />
   <h2>Agenda de Cobranza</h2>
   <div class="meta">
     <span><strong>Fecha:</strong> ${fechaLabel}</span>

@@ -132,7 +132,7 @@ export default async function CarteraTipoPage({
         <SolidarioGroupList
           groups={groupData}
           mode={
-            rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN' || session.user.permisoAplicarPagos
+            rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN' || session.user.permisoAplicarPagos
               ? 'aplicar'
               : 'capturar'
           }

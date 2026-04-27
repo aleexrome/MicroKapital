@@ -16,7 +16,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
   if (!session?.user) return null
 
   const { companyId, rol, branchId, id: userId } = session.user
-  const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
+  const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
   // Usuarios con permiso especial pueden actuar en grupos de su propia sucursal
   const tienePermisoAplicar = session.user.permisoAplicarPagos === true
   const rolCobra = rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL'

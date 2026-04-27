@@ -3,6 +3,10 @@
 import { Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
+// Logo de la empresa para encabezado de impresiones (mismo asset que
+// los tickets). El filter CSS lo tiñe del morado primario de la app.
+const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/v1776487061/ddcb6871-4cff-422e-9a00-67d62aa6243f.png'
+
 interface PrintRow {
   clientNombre: string
   numeroPago: number
@@ -84,6 +88,11 @@ export function ImprimirAgendaButton({ rows, fechaLabel, branchNombre, cobradorN
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 20px; }
+    /* Logo en la primera hoja, esquina superior derecha. Vive al
+       inicio del flujo del documento → solo aparece en página 1.
+       El filter tiñe el PNG al morado primario (#7B6FFF). */
+    .brand-header { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+    .brand-logo { height: 56px; filter: invert(48%) sepia(74%) saturate(2287%) hue-rotate(232deg) brightness(102%) contrast(102%); }
     h2 { font-size: 17px; margin-bottom: 6px; }
     .meta { display: flex; flex-wrap: wrap; gap: 16px; font-size: 11px; color: #444; margin-bottom: 16px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
     .meta strong { color: #000; }
@@ -101,6 +110,7 @@ export function ImprimirAgendaButton({ rows, fechaLabel, branchNombre, cobradorN
   </style>
 </head>
 <body>
+  <div class="brand-header"><img class="brand-logo" src="${LOGO_URL}" alt="Logo" /></div>
   <h2>Agenda de Cobranza</h2>
   <div class="meta">
     <span><strong>Fecha:</strong> ${fechaLabel}</span>

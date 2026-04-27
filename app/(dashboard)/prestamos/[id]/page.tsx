@@ -491,27 +491,34 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         </CardContent>
       </Card>
 
-      {/* Renovación anticipada */}
-      {puedeRenovar && pagosFinanciados && (
-        <LoanRenewButton
-          loanId={loan.id}
-          tipo={loan.tipo as LoanType}
-          pagosRealizados={pagados}
-          umbral={umbral}
-          pagosFinanciados={pagosFinanciados}
-          montoFinanciado={
-            loan.tipo === 'AGIL'
-              ? Number(loan.pagoDiario) * pagosFinanciados
-              : loan.tipo === 'FIDUCIARIO'
-              ? Number(loan.pagoQuincenal) * pagosFinanciados
-              : Number(loan.pagoSemanal) * pagosFinanciados
-          }
-          clientId={loan.client.id}
-          clientNombre={loan.client.nombreCompleto}
-          cobradorId={loan.cobradorId}
-          branchId={loan.branchId}
-        />
-      )}
+      {/* Renovación anticipada — los últimos N pagos pendientes son los
+          financiables. El componente los muestra con checkboxes para que
+          el coordinador elija cuáles financiar (default: todos). */}
+      {puedeRenovar && pagosFinanciados && (() => {
+        const pendientesOrdenados = loan.schedule
+          .filter((s) => s.estado === 'PENDING' || s.estado === 'PARTIAL' || s.estado === 'OVERDUE')
+          .sort((a, b) => a.numeroPago - b.numeroPago)
+        // Tomar los ÚLTIMOS N (los de mayor numeroPago) — esos son los
+        // que la empresa financia.
+        const ultimosN = pendientesOrdenados.slice(-pagosFinanciados)
+        return (
+          <LoanRenewButton
+            loanId={loan.id}
+            tipo={loan.tipo as LoanType}
+            pagosRealizados={pagados}
+            umbral={umbral}
+            pagosFinanciables={ultimosN.map((s) => ({
+              id: s.id,
+              numeroPago: s.numeroPago,
+              montoEsperado: Number(s.montoEsperado),
+            }))}
+            clientId={loan.client.id}
+            clientNombre={loan.client.nombreCompleto}
+            cobradorId={loan.cobradorId}
+            branchId={loan.branchId}
+          />
+        )
+      })()}
 
       {/* Checklist de documentos */}
       <DocumentChecklist

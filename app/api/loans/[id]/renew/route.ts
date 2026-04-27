@@ -86,8 +86,10 @@ export async function POST(
   const data = parsed.data
 
   // Calcular monto financiado
-  // — Si el coordinador seleccionó pagos específicos, usar esos
-  // — Si no, usar la regla automática (últimos N pagos pendientes)
+  // — Si el coordinador seleccionó pagos específicos (incluso array
+  //   vacío = no financiar nada), respetamos la selección.
+  // — Si el campo no viene del cliente (compatibilidad), caemos a la
+  //   regla automática (últimos N pagos pendientes).
   let montoFinanciado: number
   let pagosFinanciadosIds: string[] | null = null
 
@@ -95,7 +97,7 @@ export async function POST(
     (s) => s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL'
   )
 
-  if (data.pagosFinanciadosIds && data.pagosFinanciadosIds.length > 0) {
+  if (Array.isArray(data.pagosFinanciadosIds)) {
     const loanPendingIds = new Set(pagosPendientes.map((s) => s.id))
     const invalidos = data.pagosFinanciadosIds.filter((id) => !loanPendingIds.has(id))
     if (invalidos.length > 0) {

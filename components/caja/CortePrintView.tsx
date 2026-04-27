@@ -107,8 +107,7 @@ export function CortePrintView({ empresa, sucursal, cobrador, fecha, pagos, tota
             margin-bottom: 8px;
           }
           .brand-print-only img {
-            height: 48px;
-            filter: invert(48%) sepia(74%) saturate(2287%) hue-rotate(232deg) brightness(102%) contrast(102%);
+            height: 80px;
           }
         }
       `}</style>

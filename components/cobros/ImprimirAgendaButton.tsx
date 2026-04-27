@@ -90,9 +90,9 @@ export function ImprimirAgendaButton({ rows, fechaLabel, branchNombre, cobradorN
     body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 20px; }
     /* Logo en la primera hoja, esquina superior derecha. Vive al
        inicio del flujo del documento → solo aparece en página 1.
-       El filter tiñe el PNG al morado primario (#7B6FFF). */
+       Se muestra tal cual, sin teñidos. */
     .brand-header { display: flex; justify-content: flex-end; margin-bottom: 12px; }
-    .brand-logo { height: 56px; filter: invert(48%) sepia(74%) saturate(2287%) hue-rotate(232deg) brightness(102%) contrast(102%); }
+    .brand-logo { height: 90px; }
     h2 { font-size: 17px; margin-bottom: 6px; }
     .meta { display: flex; flex-wrap: wrap; gap: 16px; font-size: 11px; color: #444; margin-bottom: 16px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
     .meta strong { color: #000; }

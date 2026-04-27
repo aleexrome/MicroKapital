@@ -9,7 +9,10 @@ import { format } from 'date-fns'
 import { formatMoney } from '@/lib/utils'
 import { buildCorteCobradorBytes, printViaBluetooth, loadLogoBitmap } from '@/lib/escpos'
 
-const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/v1776487061/ddcb6871-4cff-422e-9a00-67d62aa6243f.png'
+// Logo principal del sistema (PNG transparente). Mismo asset que las
+// listas impresas. Para Bluetooth térmico se usa la versión rasterizada
+// vía loadLogoBitmap.
+const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/MicroKapital_Logo.png'
 
 interface PagoItem {
   cliente: string
@@ -96,18 +99,21 @@ export function CortePrintView({ empresa, sucursal, cobrador, fecha, pagos, tota
           .no-print { display: none !important; }
           .corte-preview { border: none !important; box-shadow: none !important; }
         }
-        /* Logo morado solo visible al imprimir (PDF), esquina superior
-           derecha de la primera página. En la vista normal no estorba
-           con la pantalla del ticket térmico. */
+        /* Logo solo visible al imprimir (PDF). Posición absoluta en la
+           esquina superior derecha → no consume espacio en el flujo,
+           el ticket térmico arranca pegado arriba. Sólo aparece en la
+           primera página. */
         .brand-print-only { display: none; }
         @media print {
           .brand-print-only {
-            display: flex;
-            justify-content: flex-end;
-            margin-bottom: 8px;
+            display: block;
+            position: absolute;
+            top: 8px;
+            right: 20px;
+            margin: 0;
           }
           .brand-print-only img {
-            height: 80px;
+            height: 120px;
           }
         }
       `}</style>

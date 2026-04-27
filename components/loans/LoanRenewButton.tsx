@@ -130,8 +130,8 @@ export function LoanRenewButton({
                 <div className="space-y-0.5 text-blue-700">
                   <p>Capital solicitado: <strong>{formatMoney(parseFloat(capital))}</strong></p>
                   <p>Monto financiado (descuento): <strong className="text-orange-600">-{formatMoney(montoFinanciado)}</strong></p>
-                  <p>Entregado al cliente: <strong>{formatMoney(Math.max(0, parseFloat(capital) * 0.83 - montoFinanciado))}</strong>*</p>
-                  <p className="text-xs text-muted-foreground mt-1">* Estimado antes de comisión. El monto exacto se calcula al enviar.</p>
+                  <p>Entregado al cliente: <strong>{formatMoney(Math.max(0, parseFloat(capital) - montoFinanciado))}</strong>*</p>
+                  <p className="text-xs text-muted-foreground mt-1">* La comisión exacta se descuenta al activar el crédito.</p>
                 </div>
               </div>
             )}

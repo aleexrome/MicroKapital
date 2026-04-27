@@ -20,7 +20,7 @@ export async function POST(
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const esOpAdmin = session.user.rol === 'DIRECTOR_GENERAL' || session.user.rol === 'SUPER_ADMIN'
+  const esOpAdmin = session.user.rol === 'DIRECTOR_GENERAL' || session.user.rol === 'DIRECTOR_COMERCIAL' || session.user.rol === 'SUPER_ADMIN'
   const tienePermiso = esOpAdmin || session.user.permisoAplicarPagos === true
   if (!tienePermiso) {
     return NextResponse.json({ error: 'No autorizado para aplicar pagos grupales' }, { status: 403 })

@@ -8,7 +8,9 @@ import { z } from 'zod'
 const renewSchema = z.object({
   capital: z.number().positive(),
   tipo: z.enum(['SOLIDARIO', 'INDIVIDUAL', 'AGIL', 'FIDUCIARIO']).optional(),
-  pagosFinanciadosIds: z.array(z.string()).min(1).optional(),
+  // Array vacío = el coordinador eligió financiar 0 pagos. Si el
+  // campo no llega, el handler cae a la regla automática (últimos N).
+  pagosFinanciadosIds: z.array(z.string()).optional(),
   notas: z.string().optional(),
   tasaInteres: z.number().positive().optional(),
   ciclo: z.number().int().min(1).optional(),

@@ -21,7 +21,7 @@ export async function POST(
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const esOpAdmin = session.user.rol === 'DIRECTOR_GENERAL' || session.user.rol === 'SUPER_ADMIN'
+  const esOpAdmin = session.user.rol === 'DIRECTOR_GENERAL' || session.user.rol === 'DIRECTOR_COMERCIAL' || session.user.rol === 'SUPER_ADMIN'
   const { companyId, id: userId, branchId: userBranchId } = session.user
 
   // Leer permiso directo de BD para evitar problemas de caché en el JWT

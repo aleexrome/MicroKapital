@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Calendar, Filter, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -30,7 +30,19 @@ const TIPO_LABEL: Record<LoanType, string> = {
   FIDUCIARIO: 'Fiduciario',
 }
 
-export function FiltrosBar({ branches, cobradores, hidePeriodo = false }: FiltrosBarProps) {
+/**
+ * Wrapper con Suspense — useSearchParams en Next.js 14 requiere boundary
+ * de Suspense para no romper el SSR de la página padre.
+ */
+export function FiltrosBar(props: FiltrosBarProps) {
+  return (
+    <Suspense fallback={<div className="h-10" />}>
+      <FiltrosBarInner {...props} />
+    </Suspense>
+  )
+}
+
+function FiltrosBarInner({ branches, cobradores, hidePeriodo = false }: FiltrosBarProps) {
   const router = useRouter()
   const params = useSearchParams()
   const [pending, startTransition] = useTransition()
@@ -197,31 +209,6 @@ export function FiltrosBar({ branches, cobradores, hidePeriodo = false }: Filtro
   )
 }
 
-/**
- * Helper para que los page server components parseen los searchParams a
- * los tipos esperados por las queries.
- */
-export function parseFiltrosFromSearchParams(sp: Record<string, string | string[] | undefined>) {
-  const periodo = (typeof sp.periodo === 'string' ? sp.periodo : 'mes') as
-    'hoy' | 'semana' | 'semanaAnterior' | 'mes' | 'mesAnterior' | 'trimestre' | 'año'
-
-  function parseList(key: string): string[] {
-    const v = sp[key]
-    if (!v) return []
-    if (Array.isArray(v)) return v
-    return v.split(',').filter(Boolean)
-  }
-
-  const branchIds = parseList('branchIds')
-  const cobradorIds = parseList('cobradorIds')
-  const loanTypes = parseList('loanTypes') as LoanType[]
-
-  return {
-    periodo,
-    filtros: {
-      branchIds: branchIds.length ? branchIds : undefined,
-      cobradorIds: cobradorIds.length ? cobradorIds : undefined,
-      loanTypes: loanTypes.length ? loanTypes : undefined,
-    },
-  }
-}
+// El helper `parseFiltrosFromSearchParams` vive en `lib/reportes/filterParse.ts`
+// (server-safe). Esto permite que los page server components lo importen
+// sin arrastrar este archivo 'use client' al bundle del servidor.

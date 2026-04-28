@@ -117,6 +117,7 @@ model Company {
   notifications Notification[]
   settings      CompanySetting[]
   bankAccounts  CompanyBankAccount[]
+  goals         Goal[]
 }
 
 model License {
@@ -527,6 +528,52 @@ model AuditLog {
   ipAddress         String?
   userAgent         String?
   createdAt         DateTime @default(now())
+}
+
+// ─────────────────────────────────────────
+// METAS — Reportes / cumplimiento semanal
+// ─────────────────────────────────────────
+//
+// Una Goal define KPIs esperados para un periodo semanal. Definida por
+// DG/DC (en /reportes/metas), evaluada en /reportes/cumplimiento contra
+// datos reales (loans, payments, cartera).
+//
+// Granularidad: branchId/cobradorId/loanType opcionales.
+//   - Todos null    → meta global de empresa
+//   - branchId set  → meta por sucursal
+//   - cobradorId    → meta individual del cobrador
+//   - loanType set  → meta acotada al producto (SOLIDARIO/AGIL/etc.)
+//
+// Todos los campos meta* son opcionales: si no se define, ese KPI no se
+// evalúa en cumplimiento (no penaliza).
+model Goal {
+  id           String    @id @default(uuid())
+  companyId    String
+  company      Company   @relation(fields: [companyId], references: [id])
+  branchId     String?
+  cobradorId   String?
+  loanType     LoanType?
+
+  // Periodo (semanal). semanaInicio = lunes 00:00, semanaFin = domingo 23:59
+  semanaInicio DateTime  @db.Date
+  semanaFin    DateTime  @db.Date
+
+  // KPIs (todos opcionales — si null no se evalúa)
+  metaCapitalColocado    Decimal? @db.Decimal(14, 2)
+  metaCreditosColocados  Int?
+  metaCobranzaEsperada   Decimal? @db.Decimal(14, 2)
+  metaCobranzaEfectiva   Decimal? @db.Decimal(14, 2)
+  metaMoraMaxima         Decimal? @db.Decimal(5, 2)   // % (ej: 5.00 = 5%)
+  metaCrecimiento        Decimal? @db.Decimal(5, 2)   // % cartera vs semana anterior
+
+  notas        String?
+  creadoPorId  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([companyId, semanaInicio])
+  @@index([branchId])
+  @@index([cobradorId])
 }
 
 model Notification {

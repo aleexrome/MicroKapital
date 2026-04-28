@@ -14,12 +14,22 @@ interface Props {
  * Permite pausar/reanudar y muestra cuándo fue el último refresh.
  *
  * Pensado para `/reportes/cumplimiento` y demás dashboards en tiempo real.
+ *
+ * Importante: el componente NO usa `new Date()` durante el render inicial
+ * porque el server renderiza una hora y el cliente otra → hydration
+ * mismatch (errores React #418/#423/#425). El timestamp aparece después
+ * de montar, vía useEffect.
  */
 export function AutoRefresh({ intervalMs = 60_000 }: Props) {
   const router = useRouter()
   const [paused, setPaused] = useState(false)
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [secondsLeft, setSecondsLeft] = useState(Math.floor(intervalMs / 1000))
+
+  // Set initial timestamp solo en cliente, después de montar
+  useEffect(() => {
+    setLastRefresh(new Date())
+  }, [])
 
   useEffect(() => {
     if (paused) return
@@ -64,7 +74,9 @@ export function AutoRefresh({ intervalMs = 60_000 }: Props) {
         {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
       </button>
       <span className="font-mono opacity-60">
-        Última: {lastRefresh.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        Última: {lastRefresh
+          ? lastRefresh.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          : '—'}
       </span>
     </div>
   )

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import {
   ResponsiveContainer,
   BarChart, Bar,
@@ -24,6 +25,19 @@ const TOOLTIP_STYLE = {
   itemStyle: { color: '#E6E4F8' },
 }
 
+/**
+ * recharts depende de medir el DOM (ResizeObserver, dimensiones del padre)
+ * y renderiza HTML distinto en server vs client → produce hydration
+ * mismatch (errores React #418, #423, #425). Skipear el SSR del chart
+ * con un mount-gate: server render = placeholder vacío, client monta
+ * el chart real después de hidratar.
+ */
+function useMounted() {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  return mounted
+}
+
 export interface BarSeries {
   dataKey: string
   name: string
@@ -43,6 +57,8 @@ interface BarChartProps {
 export function ReportBarChart({
   data, xKey, series, height = 280, showLegend = true, tickFormatter,
 }: BarChartProps) {
+  const mounted = useMounted()
+  if (!mounted) return <div style={{ height }} aria-hidden />
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
@@ -81,6 +97,8 @@ interface LineChartProps {
 export function ReportLineChart({
   data, xKey, series, height = 280, showLegend = true, tickFormatter,
 }: LineChartProps) {
+  const mounted = useMounted()
+  if (!mounted) return <div style={{ height }} aria-hidden />
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
@@ -126,6 +144,8 @@ interface PieChartProps {
 export function ReportPieChart({
   data, height = 280, innerRadius = 60, outerRadius = 100, tickFormatter,
 }: PieChartProps) {
+  const mounted = useMounted()
+  if (!mounted) return <div style={{ height }} aria-hidden />
   return (
     <ResponsiveContainer width="100%" height={height}>
       <PieChart>

@@ -166,7 +166,7 @@ export default async function CarteraReportePage({
               <CardContent>
                 <ReportPieChart
                   data={dataPorTipo}
-                  tickFormatter={(v) => formatMoney(v)}
+                  formatter="money"
                 />
               </CardContent>
             </Card>
@@ -177,7 +177,7 @@ export default async function CarteraReportePage({
                   data={dataPorSucursal}
                   xKey="nombre"
                   series={[{ dataKey: 'capital', name: 'Capital', color: '#7B6FFF' }]}
-                  tickFormatter={(v) => formatMoney(v)}
+                  formatter="money"
                 />
               </CardContent>
             </Card>
@@ -190,7 +190,7 @@ export default async function CarteraReportePage({
                 data={dataPorCobrador}
                 xKey="nombre"
                 series={[{ dataKey: 'capital', name: 'Capital', color: '#22d3ee' }]}
-                tickFormatter={(v) => formatMoney(v)}
+                formatter="money"
               />
             </CardContent>
           </Card>

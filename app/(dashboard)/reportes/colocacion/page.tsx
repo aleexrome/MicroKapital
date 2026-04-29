@@ -165,7 +165,7 @@ export default async function ColocacionReportePage({
             <Card>
               <CardHeader><CardTitle className="text-base">Por producto</CardTitle></CardHeader>
               <CardContent>
-                <ReportPieChart data={dataPorTipo} tickFormatter={(v) => formatMoney(v)} />
+                <ReportPieChart data={dataPorTipo} formatter="money" />
               </CardContent>
             </Card>
             <Card>
@@ -175,7 +175,7 @@ export default async function ColocacionReportePage({
                   data={dataPorSucursal}
                   xKey="nombre"
                   series={[{ dataKey: 'capital', name: 'Capital', color: '#34d399' }]}
-                  tickFormatter={(v) => formatMoney(v)}
+                  formatter="money"
                 />
               </CardContent>
             </Card>

@@ -184,7 +184,7 @@ export default async function CobranzaReportePage({
                 { dataKey: 'tarjeta',       name: 'Tarjeta',       color: '#22d3ee' },
                 { dataKey: 'transferencia', name: 'Transferencia', color: '#7B6FFF' },
               ]}
-              tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+              formatter="currencyK"
             />
           </CardContent>
         </Card>
@@ -193,7 +193,7 @@ export default async function CobranzaReportePage({
           <CardContent>
             {dataMetodo.length === 0
               ? <p className="text-sm text-muted-foreground p-6 text-center">Sin pagos en el periodo.</p>
-              : <ReportPieChart data={dataMetodo} tickFormatter={(v) => formatMoney(v)} />}
+              : <ReportPieChart data={dataMetodo} formatter="money" />}
           </CardContent>
         </Card>
       </div>

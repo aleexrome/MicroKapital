@@ -153,7 +153,7 @@ export default async function MoraReportePage({
             <Card>
               <CardHeader><CardTitle className="text-base">Mora por edad</CardTitle></CardHeader>
               <CardContent>
-                <ReportPieChart data={dataBuckets} tickFormatter={(v) => formatMoney(v)} />
+                <ReportPieChart data={dataBuckets} formatter="money" />
               </CardContent>
             </Card>
             <Card>
@@ -163,7 +163,7 @@ export default async function MoraReportePage({
                   data={dataPorSucursal}
                   xKey="nombre"
                   series={[{ dataKey: 'monto', name: 'Mora', color: '#f43f5e' }]}
-                  tickFormatter={(v) => formatMoney(v)}
+                  formatter="money"
                 />
               </CardContent>
             </Card>

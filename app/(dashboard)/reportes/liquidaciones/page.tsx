@@ -164,7 +164,7 @@ export default async function LiquidacionesReportePage({
             <Card>
               <CardHeader><CardTitle className="text-base">Liquidaciones por producto</CardTitle></CardHeader>
               <CardContent>
-                <ReportPieChart data={dataPorTipo} tickFormatter={(v) => v.toString()} />
+                <ReportPieChart data={dataPorTipo} formatter="count" />
               </CardContent>
             </Card>
             <Card>

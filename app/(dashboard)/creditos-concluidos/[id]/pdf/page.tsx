@@ -41,6 +41,8 @@ interface LoanReport {
     fechaHora: string
     tickets: { numeroTicket: string }[]
   }[]
+  /** Marca del API: true si el rol del usuario no puede ver desglose de interés */
+  _interestHidden?: boolean
 }
 
 export default function CreditoPdfPage() {
@@ -123,8 +125,12 @@ export default function CreditoPdfPage() {
             <div><span className="text-gray-500">Capital: </span><span className="font-bold">{formatMoney(loan.capital)}</span></div>
             {loan.comision > 0 && <div><span className="text-gray-500">Comisión: </span><span>-{formatMoney(loan.comision)}</span></div>}
             <div><span className="text-gray-500">Entregado: </span><span className="font-bold">{formatMoney(loan.montoReal)}</span></div>
-            <div><span className="text-gray-500">Interés: </span><span>{formatMoney(loan.interes)}</span></div>
-            <div><span className="text-gray-500">Total pactado: </span><span className="font-bold">{formatMoney(loan.totalPago)}</span></div>
+            {!loan._interestHidden && (
+              <>
+                <div><span className="text-gray-500">Interés: </span><span>{formatMoney(loan.interes)}</span></div>
+                <div><span className="text-gray-500">Total pactado: </span><span className="font-bold">{formatMoney(loan.totalPago)}</span></div>
+              </>
+            )}
             <div><span className="text-gray-500">Total cobrado: </span><span className="font-bold text-green-700">{formatMoney(totalPagado)}</span></div>
           </div>
         </section>

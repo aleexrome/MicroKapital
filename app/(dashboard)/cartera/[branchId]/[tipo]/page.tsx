@@ -75,7 +75,6 @@ export default async function CarteraTipoPage({
           select: {
             id: true,
             capital: true,
-            totalPago: true,
             schedule: {
               where: { estado: { not: 'PAID' } },
               orderBy: { numeroPago: 'asc' },

@@ -614,7 +614,6 @@ export default function NuevaSolicitudPage() {
                       <div className="grid grid-cols-2 gap-x-4 mt-1 text-xs">
                         <span className="text-gray-500">Capital:</span><span className="font-medium money">{formatMoney(c.capital)}</span>
                         <span className="text-gray-500">Monto a entregar:</span><span className="money">{formatMoney(c.montoReal)}</span>
-                        <span className="text-gray-500">Total a pagar:</span><span className="font-semibold money">{formatMoney(c.totalPago)}</span>
                         <span className="text-gray-500">Pago semanal:</span><span className="font-semibold text-primary-700 money">{formatMoney(c.pagoSemanal ?? 0)}</span>
                       </div>
                     </div>

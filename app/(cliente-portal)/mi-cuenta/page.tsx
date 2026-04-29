@@ -19,10 +19,10 @@ export default async function MiCuentaPage() {
       loans: {
         where: { estado: 'ACTIVE' },
         include: {
+          // Schedules pendientes para próximo pago + saldo total pendiente
           schedule: {
-            where: { estado: { in: ['PENDING', 'OVERDUE'] } },
+            where: { estado: { not: 'PAID' } },
             orderBy: { numeroPago: 'asc' },
-            take: 1,
           },
         },
       },
@@ -70,7 +70,12 @@ export default async function MiCuentaPage() {
         ) : (
           <div className="space-y-3">
             {clienteUser.loans.map((loan) => {
-              const proxPago = loan.schedule[0]
+              const proxPago = loan.schedule.find((s) => s.estado === 'PENDING' || s.estado === 'OVERDUE')
+              // Saldo pendiente: suma de schedules no pagados (no expone "interés")
+              const saldoPendiente = loan.schedule.reduce(
+                (sum, s) => sum + Number(s.montoEsperado) - Number(s.montoPagado),
+                0,
+              )
               return (
                 <Card key={loan.id}>
                   <CardContent className="p-4">
@@ -87,8 +92,8 @@ export default async function MiCuentaPage() {
                         <p className="font-semibold money">{formatMoney(Number(loan.capital))}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground text-xs">Total a pagar</p>
-                        <p className="font-semibold money">{formatMoney(Number(loan.totalPago))}</p>
+                        <p className="text-muted-foreground text-xs">Saldo pendiente</p>
+                        <p className="font-semibold money">{formatMoney(saldoPendiente)}</p>
                       </div>
                     </div>
                     {proxPago && (

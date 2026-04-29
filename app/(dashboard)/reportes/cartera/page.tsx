@@ -13,6 +13,7 @@ import { parseFiltrosFromSearchParams } from '@/lib/reportes/filterParse'
 import { ReportBarChart, ReportPieChart } from '@/components/reportes/Charts'
 import { ImprimirReporteButton, type SeccionReporte } from '@/components/reportes/ImprimirReporteButton'
 import { getCarteraSnapshot, getFiltrosOpciones } from '@/lib/reportes/queries'
+import { canViewInterestData } from '@/lib/access'
 
 const ALLOWED_ROLES = [
   'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE_ZONAL', 'GERENTE',
@@ -47,6 +48,9 @@ export default async function CarteraReportePage({
     prisma.company.findUnique({ where: { id: companyId! }, select: { nombre: true } }),
   ])
 
+  // Solo DG/DC/SA pueden ver el "Saldo teórico" (capital + interés).
+  const verInteres = canViewInterestData(rol)
+
   // Datos para gráficas
   const dataPorTipo = snapshot.porTipo.map((t) => ({
     name: TIPO_LABEL[t.tipo] ?? t.tipo,
@@ -68,7 +72,9 @@ export default async function CarteraReportePage({
       titulo: 'Resumen',
       items: [
         { label: 'Capital activo', valor: formatMoney(snapshot.totalCapital) },
-        { label: 'Saldo teórico (capital + interés)', valor: formatMoney(snapshot.totalSaldoTeorico) },
+        ...(verInteres
+          ? [{ label: 'Saldo teórico (capital + interés)', valor: formatMoney(snapshot.totalSaldoTeorico) }]
+          : []),
         { label: 'Créditos activos', valor: snapshot.numCreditos.toLocaleString('es-MX') },
       ],
     },
@@ -133,19 +139,21 @@ export default async function CarteraReportePage({
 
       <FiltrosBar branches={opciones.branches} cobradores={opciones.cobradores} hidePeriodo />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 ${verInteres ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
         <MetricCard
           title="Capital activo"
           value={formatMoney(snapshot.totalCapital)}
           icon={DollarSign}
           color="blue"
         />
-        <MetricCard
-          title="Saldo teórico"
-          value={formatMoney(snapshot.totalSaldoTeorico)}
-          icon={Layers}
-          color="purple"
-        />
+        {verInteres && (
+          <MetricCard
+            title="Saldo teórico"
+            value={formatMoney(snapshot.totalSaldoTeorico)}
+            icon={Layers}
+            color="purple"
+          />
+        )}
         <MetricCard
           title="Créditos activos"
           value={snapshot.numCreditos.toLocaleString('es-MX')}

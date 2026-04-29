@@ -15,10 +15,16 @@ interface LoanCalculatorProps {
   clienteIrregular?: boolean
   tipoGrupo?: 'REGULAR' | 'RESCATE'
   onCalc?: (calc: LoanCalculation) => void
+  /**
+   * Si false, oculta el desglose del interés y el total a pagar (solo
+   * Dirección General/Comercial/Super Admin lo ven). Default: false.
+   */
+  showInterest?: boolean
 }
 
 export function LoanCalculator({
   tipo, capital, tasaInteres, ciclo, tuvoAtraso, clienteIrregular, tipoGrupo, onCalc,
+  showInterest = false,
 }: LoanCalculatorProps) {
   const [calc, setCalc] = useState<LoanCalculation | null>(null)
 
@@ -52,8 +58,10 @@ export function LoanCalculator({
       value: formatMoney(calc.montoReal),
       highlight: true,
     }] : []),
-    { label: 'Interés', value: formatMoney(calc.interes) },
-    { label: 'Total a pagar', value: formatMoney(calc.totalPago), bold: true },
+    ...(showInterest ? [
+      { label: 'Interés', value: formatMoney(calc.interes) },
+      { label: 'Total a pagar', value: formatMoney(calc.totalPago), bold: true },
+    ] : []),
     { label: 'Plazo', value: `${calc.plazo} ${plazoLabel}` },
     ...(calc.pagoSemanal ? [{ label: 'Pago semanal', value: formatMoney(calc.pagoSemanal), highlight: true }] : []),
     ...(calc.pagoDiario ? [{ label: 'Pago diario', value: formatMoney(calc.pagoDiario), highlight: true }] : []),

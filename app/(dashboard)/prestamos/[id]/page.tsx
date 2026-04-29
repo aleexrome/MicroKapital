@@ -18,6 +18,7 @@ import Link from 'next/link'
 import type { LoanStatus, LoanType, ScheduleStatus, Prisma } from '@prisma/client'
 import { findAvalMatches, getAvalRiskLevel } from '@/lib/aval-check'
 import { calcTarifaApertura } from '@/lib/financial-formulas'
+import { canViewInterestData } from '@/lib/access'
 
 // Umbral de pagos para renovación anticipada por producto
 const UMBRAL_RENOVACION: Record<string, number> = {
@@ -245,6 +246,11 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   // incluyendo filas PAID, y pueden deshacer pagos.
   const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN'
 
+  // Visibilidad del desglose de interés: DG, DC, SA. El resto ve solo
+  // capital, monto entregado y pago periódico (sin "Total a pagar"
+  // ni "Interés" ni "Tasa").
+  const verInteres = canViewInterestData(rol)
+
   // Leer permiso directo de BD (no del JWT) para evitar problemas de caché
   const tienePermisoAplicar = userPermisos?.permisoAplicarPagos === true
 
@@ -412,11 +418,11 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             <div><p className="text-muted-foreground">Descuento renovación</p><p className="font-bold text-orange-600 money">-{formatMoney(Number(loan.descuentoRenovacion))}</p></div>
           )}
           <div><p className="text-muted-foreground">Monto entregado</p><p className="font-bold money">{formatMoney(Number(loan.montoReal))}</p></div>
-          {esOpAdmin && (
+          {verInteres && (
             <div><p className="text-muted-foreground">Interés</p><p className="font-bold money">{formatMoney(Number(loan.interes))}</p></div>
           )}
-          {/* Interés por período (ganancia semanal/diaria/quincenal) — solo DG y SA */}
-          {esOpAdmin && (
+          {/* Interés por período (ganancia semanal/diaria/quincenal) — solo DG/DC/SA */}
+          {verInteres && (
             <div>
               <p className="text-muted-foreground">
                 {loan.tipo === 'AGIL' ? 'Interés diario' : loan.tipo === 'FIDUCIARIO' ? 'Interés quincenal' : 'Interés semanal'}
@@ -437,7 +443,9 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 : formatMoney(Number(loan.pagoSemanal))}
             </p>
           </div>
-          <div><p className="text-muted-foreground">Total a pagar</p><p className="font-bold text-primary-700 money">{formatMoney(Number(loan.totalPago))}</p></div>
+          {verInteres && (
+            <div><p className="text-muted-foreground">Total a pagar</p><p className="font-bold text-primary-700 money">{formatMoney(Number(loan.totalPago))}</p></div>
+          )}
           {/* Saldo vigente: suma de pagos pendientes */}
           {loan.schedule.some((s) => s.estado !== 'PAID') && (
             <div>
@@ -451,8 +459,8 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               </p>
             </div>
           )}
-          {/* Tasa (pago_por_mil / xc_por_mil) — solo DG y SA */}
-          {esOpAdmin && Number(loan.tasaInteres) > 0 && (
+          {/* Tasa (pago_por_mil / xc_por_mil) — solo DG/DC/SA */}
+          {verInteres && Number(loan.tasaInteres) > 0 && (
             <div>
               <p className="text-muted-foreground">Tasa</p>
               <p className="font-semibold">{Number(loan.tasaInteres).toFixed(4)} x/mil</p>

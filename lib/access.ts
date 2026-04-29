@@ -194,3 +194,21 @@ export const loanNotDeletedWhere: Prisma.LoanWhereInput = {
     { loanGroup: { eliminadoEn: null } },
   ],
 }
+
+/**
+ * Visibilidad del desglose de interés.
+ *
+ * Solo Dirección General, Dirección Comercial y Super Admin pueden ver
+ * datos como `tasaInteres`, `interes` y el `totalPago` desglosado como
+ * "capital + interés". El resto de roles (gerentes zonales, gerentes,
+ * coordinadores, cobradores y clientes) ven únicamente el monto a
+ * cobrar/pagar sin exponer cuánto es interés.
+ *
+ * Aplica a la UI — las queries pueden seguir devolviendo el campo, lo
+ * que se controla es qué se renderiza al usuario.
+ */
+export function canViewInterestData(rol: UserRole): boolean {
+  return rol === 'DIRECTOR_GENERAL'
+    || rol === 'DIRECTOR_COMERCIAL'
+    || rol === 'SUPER_ADMIN'
+}

@@ -79,7 +79,21 @@ export async function POST(req: NextRequest) {
   await prisma.$transaction(async (tx) => {
     const now = new Date()
 
-    // 1. Marcar pago como verificado
+    // ¿El schedule ya fue contabilizado por el flujo viejo (apply endpoint)?
+    // Antes del fix de transferencias, los apply marcaban schedule.estado=PAID
+    // y sumaban a CashRegister al instante. El backfill puso esos Payments
+    // en PENDIENTE para que aparezcan en /transferencias y el Gerente Zonal
+    // pueda cerrar el ciclo. Cuando ese gerente le da "Verificar":
+    //   - Schedule ya está PAID y montoPagado cubre lo esperado → solo
+    //     marcamos VERIFICADO. NO incrementamos caja/montoPagado de nuevo
+    //     (sería doble conteo) ni creamos score/ticket (la cobranza ya pasó).
+    //   - Schedule está PENDING/PARTIAL → flujo nuevo: verify es lo que
+    //     contabiliza por primera vez (caja, score, ticket).
+    const yaContabilizado =
+      schedule.estado === 'PAID' &&
+      Number(schedule.montoPagado) >= Number(schedule.montoEsperado)
+
+    // 1. Marcar pago como verificado (siempre)
     await tx.payment.update({
       where: { id: payment.id },
       data: {
@@ -88,6 +102,11 @@ export async function POST(req: NextRequest) {
         verificadoAt: now,
       },
     })
+
+    if (yaContabilizado) {
+      // Backfilled / contabilizado previamente → fin del flujo
+      return
+    }
 
     // 2. Actualizar estado del schedule (PAID/PARTIAL)
     const nuevoEstado = monto >= Number(schedule.montoEsperado) ? 'PAID' : 'PARTIAL'

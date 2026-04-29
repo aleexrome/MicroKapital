@@ -68,22 +68,15 @@ export async function POST(
   const fechaCaja = new Date(now)
   fechaCaja.setHours(0, 0, 0, 0)
 
+  const esTransferencia = metodoPago === 'TRANSFER'
+
   await prisma.$transaction(async (tx) => {
     for (const schedule of schedules) {
       const monto = Number(schedule.montoEsperado)
 
-      await tx.paymentSchedule.update({
-        where: { id: schedule.id },
-        data: {
-          estado:      'PAID',
-          montoPagado: schedule.montoEsperado,
-          pagadoAt:    now,
-        },
-      })
-
-      // Cada schedule genera su propio Payment + entrada en caja del cobrador
-      // titular. La caja diaria queda en sus tres rubros: efectivo, tarjeta y
-      // transferencias.
+      // Crear Payment con statusTransferencia=PENDIENTE si es TRANSFER —
+      // queda esperando verificación del gerente zonal antes de mover
+      // schedule a PAID y sumar a caja. CASH/CARD aplican al instante.
       await tx.payment.create({
         data: {
           loanId:     schedule.loan.id,
@@ -94,6 +87,20 @@ export async function POST(
           metodoPago,
           fechaHora:  now,
           notas:      `Aplicado grupal pago ${numeroPago} (${metodoPago})`,
+          ...(esTransferencia ? { statusTransferencia: 'PENDIENTE' as const } : {}),
+        },
+      })
+
+      // TRANSFER → no toca schedule ni caja, espera a verify-transfer
+      if (esTransferencia) continue
+
+      // CASH / CARD → flujo directo
+      await tx.paymentSchedule.update({
+        where: { id: schedule.id },
+        data: {
+          estado:      'PAID',
+          montoPagado: schedule.montoEsperado,
+          pagadoAt:    now,
         },
       })
 
@@ -103,14 +110,13 @@ export async function POST(
           cobradorId:           schedule.loan.cobradorId,
           branchId:             schedule.loan.branchId,
           fecha:                fechaCaja,
-          cobradoEfectivo:      metodoPago === 'CASH'     ? monto : 0,
-          cobradoTarjeta:       metodoPago === 'CARD'     ? monto : 0,
-          cobradoTransferencia: metodoPago === 'TRANSFER' ? monto : 0,
+          cobradoEfectivo:      metodoPago === 'CASH' ? monto : 0,
+          cobradoTarjeta:       metodoPago === 'CARD' ? monto : 0,
+          cobradoTransferencia: 0,
         },
         update: {
-          cobradoEfectivo:      metodoPago === 'CASH'     ? { increment: monto } : undefined,
-          cobradoTarjeta:       metodoPago === 'CARD'     ? { increment: monto } : undefined,
-          cobradoTransferencia: metodoPago === 'TRANSFER' ? { increment: monto } : undefined,
+          cobradoEfectivo: metodoPago === 'CASH' ? { increment: monto } : undefined,
+          cobradoTarjeta:  metodoPago === 'CARD' ? { increment: monto } : undefined,
         },
       })
 
@@ -133,14 +139,22 @@ export async function POST(
 
   createAuditLog({
     userId,
-    accion: 'DG_APPLY_PAYMENT_GRUPO',
+    accion: esTransferencia ? 'DG_APPLY_PAYMENT_GRUPO_PENDING' : 'DG_APPLY_PAYMENT_GRUPO',
     tabla: 'LoanGroup',
     registroId: params.groupId,
-    valoresNuevos: { numeroPago, schedulesAplicados: schedules.length, metodoPago },
+    valoresNuevos: {
+      numeroPago,
+      schedulesAplicados: schedules.length,
+      metodoPago,
+      ...(esTransferencia ? { statusTransferencia: 'PENDIENTE' } : {}),
+    },
   })
 
   return NextResponse.json({
-    message: `Pago ${numeroPago} aplicado a ${schedules.length} integrante(s)`,
+    message: esTransferencia
+      ? `Transferencia grupal registrada en ${schedules.length} integrante(s). Pendiente de verificación del gerente zonal.`
+      : `Pago ${numeroPago} aplicado a ${schedules.length} integrante(s)`,
     aplicados: schedules.length,
+    pendingVerification: esTransferencia,
   })
 }

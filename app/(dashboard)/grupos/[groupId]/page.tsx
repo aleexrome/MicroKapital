@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Users, Banknote } from 'lucide-react'
 import { GrupoCalendar } from '@/components/loans/GrupoCalendar'
+import { EditGroupNameButton } from '@/components/loans/EditGroupNameButton'
 import { type Prisma } from '@prisma/client'
 
 const SOLIDARIO_UMBRAL             = 6
@@ -121,6 +122,13 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary-600 shrink-0" />
             <h1 className="text-2xl font-bold truncate">{grupo.nombre}</h1>
+            {esOpAdmin && (
+              <EditGroupNameButton
+                groupId={grupo.id}
+                currentName={grupo.nombre}
+                iconSize={16}
+              />
+            )}
           </div>
           <p className="text-muted-foreground text-sm">
             {grupo.loans.length} integrantes · {pagosCompletos}/{plazo} pagos realizados

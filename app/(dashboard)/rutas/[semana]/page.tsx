@@ -172,6 +172,14 @@ function CobradorCard({
   const cbText = textColor(cobranzaPct, 'cobranza')
   const mtText = textColor(metaPct, 'meta')
 
+  // Caso "coordinadora nueva": ya colocó pero todavía no le vence ningún
+  // pago esta semana → totalAPagar = 0 → metaTarget = 0 → la fórmula
+  // colocacion/meta da 0% aunque sí hubo trabajo. Cuando eso pasa,
+  // mostramos el monto colocado de manera absoluta y un guion en el %
+  // para no ensuciar el indicador. La próxima semana, cuando ya tenga
+  // primera cuota vencida, vuelve a la métrica normal.
+  const colocacionSinMeta = metaTarget === 0 && colocacion > 0
+
   return (
     <div className="bg-white border rounded-xl p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -199,12 +207,23 @@ function CobradorCard({
         <div>
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-muted-foreground">Colocación</span>
-            <span className={`text-sm font-bold ${mtText}`}>{metaPct}%</span>
+            <span className={`text-sm font-bold ${colocacionSinMeta ? 'text-emerald-600' : mtText}`}>
+              {colocacionSinMeta ? '—' : `${metaPct}%`}
+            </span>
           </div>
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className={`h-full ${mtBar} rounded-full`} style={{ width: `${Math.min(100, metaPct)}%` }} />
+            <div
+              className={`h-full ${colocacionSinMeta ? 'bg-emerald-500' : mtBar} rounded-full`}
+              style={{ width: colocacionSinMeta ? '100%' : `${Math.min(100, metaPct)}%` }}
+            />
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1">{formatMoney(colocacion)} / {formatMoney(metaTarget)}</p>
+          {colocacionSinMeta ? (
+            <p className="text-[11px] text-muted-foreground mt-1">
+              <span className="font-semibold text-emerald-600 money">{formatMoney(colocacion)}</span> colocados · sin meta esta semana
+            </p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground mt-1">{formatMoney(colocacion)} / {formatMoney(metaTarget)}</p>
+          )}
         </div>
       </div>
     </div>
@@ -843,9 +862,13 @@ export default async function RutaDetallePage({
               <div className="flex items-center gap-2 pb-1 border-b">
                 <Building2 className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-base font-semibold text-gray-900">{branch.nombre}</h2>
-                {bAPagar > 0 && (
+                {bAPagar > 0 ? (
                   <span className="text-xs text-muted-foreground ml-auto">
                     Cobranza {bCobranzaPct}% · Colocación {bMetaPct}%
+                  </span>
+                ) : bColocacion > 0 && (
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    <span className="font-semibold text-emerald-600">{formatMoney(bColocacion)}</span> colocados · sin meta esta semana
                   </span>
                 )}
               </div>

@@ -35,6 +35,33 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
           token.branchId = u.branchId ?? null
           token.zonaBranchIds = u.zonaBranchIds ?? null
           token.permisoAplicarPagos = u.permisoAplicarPagos ?? false
+        } else if (token.id) {
+          // En cada request (no solo el login), refresca de BD los campos
+          // que cambian sin esperar a que el usuario re-loguee:
+          //  - zonaBranchIds (Gerente Zonal puede ganar/perder sucursales)
+          //  - branchId (puede reasignarse de sucursal)
+          //  - rol (puede cambiar de rol)
+          //  - permisoAplicarPagos
+          // Sin esto, un cambio en BD requería logout+login para que la
+          // app respete las sucursales nuevas (caso Edgar Solís).
+          const fresh = await prisma.user.findUnique({
+            where: { id: token.id as string },
+            select: {
+              rol: true,
+              branchId: true,
+              zonaBranchIds: true,
+              permisoAplicarPagos: true,
+              activo: true,
+            },
+          })
+          if (fresh && fresh.activo) {
+            token.rol = fresh.rol
+            token.branchId = fresh.branchId
+            token.zonaBranchIds = Array.isArray(fresh.zonaBranchIds)
+              ? (fresh.zonaBranchIds as string[])
+              : null
+            token.permisoAplicarPagos = fresh.permisoAplicarPagos
+          }
         }
       } catch (e) {
         console.error('[AUTH JWT CALLBACK ERROR]', e)

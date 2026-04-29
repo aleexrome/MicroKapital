@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
+import { EditGroupNameButton } from '@/components/loans/EditGroupNameButton'
 
 export interface SolidarioLoan {
   id: string
@@ -47,10 +48,14 @@ export function SolidarioGroupList({
   // Solo Dirección General puede borrar grupos. La página padre decide
   // si pasarlo o no según el rol.
   canDelete = false,
+  // DG, DC y SUPER_ADMIN pueden editar el nombre del grupo (corregir
+  // typos / faltas de ortografía dejadas por los coordinadores).
+  canEditName = false,
 }: {
   groups: SolidarioGroup[]
   mode?: 'aplicar' | 'capturar'
   canDelete?: boolean
+  canEditName?: boolean
 }) {
   const [openIds, setOpenIds] = useState<Set<string>>(new Set())
 
@@ -112,6 +117,11 @@ export function SolidarioGroupList({
                   >
                     {grupo.nombre}
                   </Link>
+                  {canEditName && (
+                    <span onClick={(e) => e.stopPropagation()} className="shrink-0">
+                      <EditGroupNameButton groupId={grupo.id} currentName={grupo.nombre} />
+                    </span>
+                  )}
                   {grupo.hasOverdue && (
                     <Badge variant="error" className="text-xs shrink-0">Con vencidos</Badge>
                   )}

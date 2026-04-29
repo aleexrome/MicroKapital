@@ -136,6 +136,7 @@ export default async function CarteraTipoPage({
               : 'capturar'
           }
           canDelete={rol === 'DIRECTOR_GENERAL'}
+          canEditName={rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'}
         />
       </div>
     )

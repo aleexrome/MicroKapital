@@ -1,7 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
+
+const ROLES_EDITAN_NOMBRE = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'] as const
+
+const patchSchema = z.object({
+  nombre: z.string().trim().min(1, 'Nombre requerido').max(120, 'Máximo 120 caracteres'),
+})
+
+/**
+ * PATCH — editar el nombre del grupo solidario.
+ *
+ * Solo DIRECTOR_GENERAL, DIRECTOR_COMERCIAL y SUPER_ADMIN. Pensado para
+ * corregir typos / nombres mal escritos por los coordinadores al crear
+ * el grupo. No toca tipoGrupo, miembros ni loans — solo el nombre.
+ *
+ * El nombre se guarda en MAYÚSCULAS (consistente con cómo se captura
+ * en el formulario de creación).
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { groupId: string } }
+) {
+  const session = await getSession()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+
+  const { rol, companyId, id: userId } = session.user
+  if (!ROLES_EDITAN_NOMBRE.includes(rol as typeof ROLES_EDITAN_NOMBRE[number])) {
+    return NextResponse.json(
+      { error: 'Solo Dirección General o Comercial pueden editar nombres de grupos' },
+      { status: 403 },
+    )
+  }
+
+  const body = await req.json().catch(() => null)
+  const parsed = patchSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' },
+      { status: 400 },
+    )
+  }
+
+  const nombreNormalizado = parsed.data.nombre.toUpperCase().trim()
+
+  const group = await prisma.loanGroup.findFirst({
+    where: {
+      id: params.groupId,
+      branch: { companyId: companyId! },
+    },
+    select: { id: true, nombre: true, eliminadoEn: true },
+  })
+  if (!group) {
+    return NextResponse.json({ error: 'Grupo no encontrado' }, { status: 404 })
+  }
+  if (group.eliminadoEn) {
+    return NextResponse.json({ error: 'El grupo está eliminado' }, { status: 400 })
+  }
+  if (group.nombre === nombreNormalizado) {
+    return NextResponse.json({ message: 'El nombre no cambió', nombre: group.nombre })
+  }
+
+  await prisma.loanGroup.update({
+    where: { id: params.groupId },
+    data: { nombre: nombreNormalizado },
+  })
+
+  createAuditLog({
+    userId,
+    accion: 'UPDATE',
+    tabla: 'LoanGroup',
+    registroId: params.groupId,
+    valoresAnteriores: { nombre: group.nombre },
+    valoresNuevos: { nombre: nombreNormalizado },
+    ipAddress: req.headers.get('x-forwarded-for') ?? undefined,
+  })
+
+  return NextResponse.json({
+    message: 'Nombre actualizado',
+    nombre: nombreNormalizado,
+  })
+}
 
 /**
  * DELETE — soft-delete del grupo solidario. Setea `eliminadoEn = now()`.

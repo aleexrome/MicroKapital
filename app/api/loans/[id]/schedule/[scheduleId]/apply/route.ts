@@ -97,18 +97,15 @@ export async function POST(
   }
 
   await prisma.$transaction(async (tx) => {
-    // 1. Marcar el pago como PAID con el monto esperado completo
-    await tx.paymentSchedule.update({
-      where: { id: schedule.id },
-      data: {
-        estado:      'PAID',
-        montoPagado: schedule.montoEsperado,
-        pagadoAt:    now,
-      },
-    })
+    const esTransferencia = metodoPago === 'TRANSFER'
 
-    // 2. Crear el Payment de respaldo. Sin esto la cobranza efectiva quedaba
+    // 1. Crear el Payment de respaldo. Sin esto la cobranza efectiva quedaba
     //    "marcada como pagada" pero sin movimiento real, y caja no cuadraba.
+    //
+    //    TRANSFER siempre nace en `PENDIENTE` — incluso aplicada por DG, DC o
+    //    Cristina (con permisoAplicarPagos). El gerente zonal debe verificar
+    //    en /transferencias que el dinero llegó al banco antes de marcar el
+    //    schedule como PAID y sumar a caja. CASH/CARD se aplican al instante.
     await tx.payment.create({
       data: {
         loanId:     schedule.loan.id,
@@ -119,24 +116,37 @@ export async function POST(
         metodoPago,
         fechaHora:  now,
         notas:      `Aplicado por ${esOpAdmin ? 'dirección' : 'op. admin'} (${metodoPago})`,
+        ...(esTransferencia ? { statusTransferencia: 'PENDIENTE' as const } : {}),
       },
     })
 
-    // 3. Sumar el movimiento al CashRegister del cobrador para el día
+    // 2. TRANSFER → no se toca el schedule ni la caja: queda esperando
+    //    verificación del gerente zonal en /api/payments/verify-transfer.
+    if (esTransferencia) return
+
+    // 3. CASH / CARD → flujo directo: schedule PAID, caja del cobrador
+    await tx.paymentSchedule.update({
+      where: { id: schedule.id },
+      data: {
+        estado:      'PAID',
+        montoPagado: schedule.montoEsperado,
+        pagadoAt:    now,
+      },
+    })
+
     await tx.cashRegister.upsert({
       where: { cobradorId_fecha: { cobradorId: cobradorRegistroId, fecha: fechaCaja } },
       create: {
         cobradorId:           cobradorRegistroId,
         branchId:             schedule.loan.branchId,
         fecha:                fechaCaja,
-        cobradoEfectivo:      metodoPago === 'CASH'     ? monto : 0,
-        cobradoTarjeta:       metodoPago === 'CARD'     ? monto : 0,
-        cobradoTransferencia: metodoPago === 'TRANSFER' ? monto : 0,
+        cobradoEfectivo:      metodoPago === 'CASH' ? monto : 0,
+        cobradoTarjeta:       metodoPago === 'CARD' ? monto : 0,
+        cobradoTransferencia: 0,
       },
       update: {
-        cobradoEfectivo:      metodoPago === 'CASH'     ? { increment: monto } : undefined,
-        cobradoTarjeta:       metodoPago === 'CARD'     ? { increment: monto } : undefined,
-        cobradoTransferencia: metodoPago === 'TRANSFER' ? { increment: monto } : undefined,
+        cobradoEfectivo:      metodoPago === 'CASH' ? { increment: monto } : undefined,
+        cobradoTarjeta:       metodoPago === 'CARD' ? { increment: monto } : undefined,
       },
     })
 
@@ -159,18 +169,19 @@ export async function POST(
 
   createAuditLog({
     userId,
-    accion: 'DG_APPLY_PAYMENT',
+    accion: metodoPago === 'TRANSFER' ? 'DG_APPLY_PAYMENT_PENDING' : 'DG_APPLY_PAYMENT',
     tabla:  'PaymentSchedule',
     registroId: schedule.id,
     valoresAnteriores: snapshotAntes,
-    valoresNuevos: {
-      estado:      'PAID',
-      montoPagado: schedule.montoEsperado,
-      pagadoAt:    now,
-      metodoPago,
-      monto,
-    },
+    valoresNuevos: metodoPago === 'TRANSFER'
+      ? { metodoPago, monto, statusTransferencia: 'PENDIENTE' }
+      : { estado: 'PAID', montoPagado: schedule.montoEsperado, pagadoAt: now, metodoPago, monto },
   })
 
-  return NextResponse.json({ message: 'Pago aplicado correctamente' })
+  return NextResponse.json({
+    message: metodoPago === 'TRANSFER'
+      ? 'Transferencia registrada. Pendiente de verificación del gerente zonal.'
+      : 'Pago aplicado correctamente',
+    pendingVerification: metodoPago === 'TRANSFER',
+  })
 }

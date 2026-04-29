@@ -126,25 +126,26 @@ export async function POST(
 
   // ── Transacción: crear Payments + schedule updates + ticket por integrante
   const tickets: { id: string; numeroTicket: string; clienteNombre: string; monto: number }[] = []
+  const esTransferencia = data.metodoPago === 'TRANSFER'
 
   try {
     await prisma.$transaction(async (tx) => {
     let breakdownAdjuntado = false
 
-    // Leemos el contador UNA vez dentro de la transacción para poder seguir
-    // incrementándolo localmente mientras creamos los N tickets. Las consultas
-    // dentro del mismo $transaction SÍ ven los inserts de iteraciones previas,
-    // pero hacemos el bump en memoria para evitar queries extra.
-    const lastTicket = await tx.ticket.findFirst({
-      where: { numeroTicket: { startsWith: prefix } },
-      orderBy: { numeroTicket: 'desc' },
-      select: { numeroTicket: true },
-    })
+    // El contador de tickets solo se necesita para CASH/CARD (TRANSFER se
+    // ticketiza al verificar). Lo leemos solo cuando aplica.
     let nextNum = 1
-    if (lastTicket) {
-      const parts = lastTicket.numeroTicket.split('-')
-      const lastNum = parseInt(parts[parts.length - 1] ?? '', 10)
-      if (!isNaN(lastNum)) nextNum = lastNum + 1
+    if (!esTransferencia) {
+      const lastTicket = await tx.ticket.findFirst({
+        where: { numeroTicket: { startsWith: prefix } },
+        orderBy: { numeroTicket: 'desc' },
+        select: { numeroTicket: true },
+      })
+      if (lastTicket) {
+        const parts = lastTicket.numeroTicket.split('-')
+        const lastNum = parseInt(parts[parts.length - 1] ?? '', 10)
+        if (!isNaN(lastNum)) nextNum = lastNum + 1
+      }
     }
 
     for (let i = 0; i < loansPagables.length; i++) {
@@ -152,7 +153,11 @@ export async function POST(
       const sched = loan.schedule[0]!
       const montoBase = Number(sched.montoEsperado)
 
-      // 1. Crear Payment
+      // 1. Crear Payment.
+      //    TRANSFER → statusTransferencia=PENDIENTE; el resto del flujo
+      //    (schedule PAID, score, caja, ticket) se hace en verify-transfer
+      //    cuando el gerente zonal confirme el ingreso al banco.
+      //    CASH/CARD → flujo directo como antes.
       const payment = await tx.payment.create({
         data: {
           loanId:     loan.id,
@@ -163,13 +168,16 @@ export async function POST(
           metodoPago: data.metodoPago,
           cambioEntregado: 0,
           fechaHora:  now,
-          ...(data.metodoPago === 'TRANSFER' ? {
+          ...(esTransferencia ? {
             cuentaDestinoId:     data.cuentaDestinoId ?? null,
             idTransferencia:     data.idTransferencia ?? null,
             statusTransferencia: 'PENDIENTE',
           } : {}),
         },
       })
+
+      // TRANSFER: nada más por hacer en este integrante. Sigue el siguiente.
+      if (esTransferencia) continue
 
       // 2. Cash breakdown — se adjunta al PRIMER payment del grupo solamente,
       //    representando el efectivo total recibido por el cobrador.
@@ -268,25 +276,27 @@ export async function POST(
       })
     }
 
-    // 7. Caja del cobrador (una sola vez con el total del grupo)
-    await tx.cashRegister.upsert({
-      where:  { cobradorId_fecha: { cobradorId: userId, fecha: fechaDia } },
-      create: {
-        cobradorId:           userId,
-        branchId:             targetBranch!,
-        fecha:                fechaDia,
-        cobradoEfectivo:      data.metodoPago === 'CASH'     ? totalEsperado : 0,
-        cobradoTarjeta:       data.metodoPago === 'CARD'     ? totalEsperado : 0,
-        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? totalEsperado : 0,
-        cambioEntregado:      data.cambioEntregado,
-      },
-      update: {
-        cobradoEfectivo:      data.metodoPago === 'CASH'     ? { increment: totalEsperado } : undefined,
-        cobradoTarjeta:       data.metodoPago === 'CARD'     ? { increment: totalEsperado } : undefined,
-        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? { increment: totalEsperado } : undefined,
-        cambioEntregado:      data.cambioEntregado > 0 ? { increment: data.cambioEntregado } : undefined,
-      },
-    })
+    // 7. Caja del cobrador. Solo CASH/CARD suman aquí. TRANSFER suma cuando
+    //    el gerente verifica.
+    if (!esTransferencia) {
+      await tx.cashRegister.upsert({
+        where:  { cobradorId_fecha: { cobradorId: userId, fecha: fechaDia } },
+        create: {
+          cobradorId:           userId,
+          branchId:             targetBranch!,
+          fecha:                fechaDia,
+          cobradoEfectivo:      data.metodoPago === 'CASH' ? totalEsperado : 0,
+          cobradoTarjeta:       data.metodoPago === 'CARD' ? totalEsperado : 0,
+          cobradoTransferencia: 0,
+          cambioEntregado:      data.cambioEntregado,
+        },
+        update: {
+          cobradoEfectivo: data.metodoPago === 'CASH' ? { increment: totalEsperado } : undefined,
+          cobradoTarjeta:  data.metodoPago === 'CARD' ? { increment: totalEsperado } : undefined,
+          cambioEntregado: data.cambioEntregado > 0 ? { increment: data.cambioEntregado } : undefined,
+        },
+      })
+    }
     }, { timeout: 20000 })
   } catch (e) {
     console.error('[group-pay] transacción falló', e)

@@ -104,15 +104,26 @@ interface MemberRenewalData {
   montoFinanciado: number
 }
 
+/** Para el ícono "i" de quién/cuándo se aplicó cada pago. Viene del
+ *  server component (solo se construye para DG/DC/SA). */
+interface PaymentInfo {
+  quien: string
+  rol: string
+  cuando: string
+}
+
 interface Props {
   groupId: string
   loans: LoanEntry[]
   canActGroup: boolean   // DIRECTOR_GENERAL / SUPER_ADMIN
   canRenewGroup?: boolean
   memberRenewalData?: MemberRenewalData[]
+  paymentInfoMap?: Record<string, PaymentInfo>
 }
 
-export function GrupoCalendar({ groupId, loans, canActGroup, canRenewGroup, memberRenewalData }: Props) {
+export function GrupoCalendar({
+  groupId, loans, canActGroup, canRenewGroup, memberRenewalData, paymentInfoMap,
+}: Props) {
   const router    = useRouter()
   const { toast } = useToast()
 
@@ -464,6 +475,7 @@ export function GrupoCalendar({ groupId, loans, canActGroup, canRenewGroup, memb
                         montoEsperado:    s.montoEsperado,
                         estado:           s.estado,
                         pagadoAt:         s.pagadoAt ?? null,
+                        paymentInfo:      paymentInfoMap?.[s.id],
                       }))}
                       canCapture={false}
                       canEditDates={canActGroup}

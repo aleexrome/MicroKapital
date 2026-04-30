@@ -2,6 +2,7 @@ import type { Prisma, LoanType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { loanNotDeletedWhere, scopedLoanWhere, type AccessUser } from '@/lib/access'
 import { overdueWhere } from '@/lib/schedule'
+import { todayMx, startOfDayMx } from '@/lib/timezone'
 import { dailyBuckets, type DateRange } from './dateRanges'
 
 /**
@@ -278,8 +279,7 @@ export async function getMoraSnapshot(
   companyId: string,
   filtros: ReporteFiltros = {},
 ): Promise<MoraSnapshot> {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = todayMx()
   const loanWhere = buildLoanWhere(user, companyId, filtros)
 
   const overdues = await prisma.paymentSchedule.findMany({
@@ -319,8 +319,7 @@ export async function getMoraSnapshot(
   let total = 0
 
   for (const s of overdues) {
-    const dueDate = new Date(s.fechaVencimiento)
-    dueDate.setHours(0, 0, 0, 0)
+    const dueDate = startOfDayMx(new Date(s.fechaVencimiento))
     const diasAtraso = Math.floor((today.getTime() - dueDate.getTime()) / 86_400_000)
     const pendiente = Number(s.montoEsperado) - Number(s.montoPagado)
     if (pendiente <= 0) continue

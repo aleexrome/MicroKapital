@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, AlertTriangle, ShieldCheck, Percent } from 'lucide-react'
 import Link from 'next/link'
 import { Prisma } from '@prisma/client'
+import { todayMx } from '@/lib/timezone'
 
 type TipoDetalle = 'pagos_vencidos' | 'seguros_mes' | 'comisiones_mes'
 
@@ -46,9 +47,9 @@ export default async function DashboardDetallePage({
     loanScope.cobradorId = userId
   }
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+  const today = todayMx()
+  const firstOfMonth = new Date(today)
+  firstOfMonth.setUTCDate(1)
 
   if (tipo === 'pagos_vencidos') {
     // Mora = PENDING/PARTIAL con fechaVencimiento < hoy (ayer hacia atrás).

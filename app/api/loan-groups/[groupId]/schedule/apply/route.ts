@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
+import { todayMx } from '@/lib/timezone'
 import { z } from 'zod'
 
 // Aplicar pago grupal genera un Payment + movimiento de caja por cada
@@ -65,8 +66,7 @@ export async function POST(
   }
 
   const now = new Date()
-  const fechaCaja = new Date(now)
-  fechaCaja.setHours(0, 0, 0, 0)
+  const fechaCaja = todayMx()
 
   const esTransferencia = metodoPago === 'TRANSFER'
 

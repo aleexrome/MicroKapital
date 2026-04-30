@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
+import { todayMx } from '@/lib/timezone'
 import { z } from 'zod'
 
 // El "aplicar pago" lo usa Dirección/Op. Admin para registrar cobros que
@@ -86,8 +87,7 @@ export async function POST(
   // (no contra el director que aplica), así la caja diaria del cobrador
   // refleja todo lo cobrado en su ruta — efectivo, tarjeta y transferencias.
   const cobradorRegistroId = schedule.loan.cobradorId
-  const fechaCaja = new Date(now)
-  fechaCaja.setHours(0, 0, 0, 0)
+  const fechaCaja = todayMx()
 
   const snapshotAntes = {
     estado: schedule.estado,

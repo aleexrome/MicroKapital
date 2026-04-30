@@ -2,13 +2,12 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { CortePrintView } from '@/components/caja/CortePrintView'
+import { todayMx, parseMxYMD } from '@/lib/timezone'
 
 function parseFecha(dateStr?: string): Date {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = todayMx()
   if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return today
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const date = new Date(y, m - 1, d)
+  const date = parseMxYMD(dateStr)
   return date > today ? today : date
 }
 

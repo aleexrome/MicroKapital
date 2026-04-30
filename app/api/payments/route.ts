@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
 import { createAuditLog } from '@/lib/audit'
 import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioScore } from '@/lib/score-calculator'
+import { todayMx } from '@/lib/timezone'
 
 const cashBreakdownSchema = z.object({
   denominacion: z.number().int().positive(),
@@ -248,9 +249,8 @@ export async function POST(req: NextRequest) {
       data: { score: nuevoScore },
     })
 
-    // 6. Actualizar caja del cobrador
-    const fecha = new Date()
-    fecha.setHours(0, 0, 0, 0)
+    // 6. Actualizar caja del cobrador (día CDMX, no UTC)
+    const fecha = todayMx()
 
     await tx.cashRegister.upsert({
       where: { cobradorId_fecha: { cobradorId: cobrador.id, fecha } },

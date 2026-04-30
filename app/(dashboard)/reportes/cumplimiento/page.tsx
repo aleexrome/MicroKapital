@@ -7,6 +7,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { weekRange, formatSemanaTitle } from '@/lib/reportes/dateRanges'
 import { evaluarCumplimientoSemanal } from '@/lib/reportes/cumplimiento'
+import { todayMx } from '@/lib/timezone'
 import { CumplimientoCard, CumplimientoSummary } from '@/components/reportes/CumplimientoCard'
 import { AutoRefresh } from '@/components/reportes/AutoRefresh'
 import { Card, CardContent } from '@/components/ui/card'
@@ -40,8 +41,8 @@ export default async function CumplimientoPage({
     zonaBranchIds: session.user.zonaBranchIds,
   }
 
-  // Semana a evaluar (lunes ISO o esta semana)
-  let ref = new Date()
+  // Semana a evaluar (lunes ISO o esta semana CDMX)
+  let ref = todayMx()
   if (searchParams.semanaInicio && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.semanaInicio)) {
     const [y, m, d] = searchParams.semanaInicio.split('-').map(Number)
     ref = new Date(Date.UTC(y, m - 1, d, 12)) // medio día UTC para evitar bordes de TZ

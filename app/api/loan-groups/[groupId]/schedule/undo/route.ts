@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
+import { startOfDayMx } from '@/lib/timezone'
 import { z } from 'zod'
 
 const schema = z.object({ numeroPago: z.number().int().positive() })
@@ -61,8 +62,8 @@ export async function POST(
   await prisma.$transaction(async (tx) => {
     for (const schedule of schedules) {
       for (const pago of schedule.payments) {
-        const fechaCaja = new Date(pago.fechaHora)
-        fechaCaja.setHours(0, 0, 0, 0)
+        // Día CDMX en que se hizo el Payment (caja del día correspondiente)
+        const fechaCaja = startOfDayMx(new Date(pago.fechaHora))
 
         await tx.cashRegister.updateMany({
           where: { cobradorId: pago.cobradorId, fecha: fechaCaja },

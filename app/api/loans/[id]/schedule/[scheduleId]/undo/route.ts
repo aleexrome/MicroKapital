@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
+import { startOfDayMx } from '@/lib/timezone'
 
 export async function POST(
   _req: NextRequest,
@@ -66,8 +67,8 @@ export async function POST(
   await prisma.$transaction(async (tx) => {
     // 1. Revertir cada Payment asociado y ajustar CashRegister
     for (const pago of schedule.payments) {
-      const fechaCaja = new Date(pago.fechaHora)
-      fechaCaja.setHours(0, 0, 0, 0)
+      // Día CDMX en que se hizo el Payment (caja del día correspondiente)
+      const fechaCaja = startOfDayMx(new Date(pago.fechaHora))
 
       // Reducir el total de la caja del cobrador ese día
       await tx.cashRegister.updateMany({

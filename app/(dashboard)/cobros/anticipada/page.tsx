@@ -10,29 +10,26 @@ import { esDiaHabil } from '@/lib/business-days'
 import { isOverdue } from '@/lib/schedule'
 import { AgendaDatePicker } from '@/components/cobros/AgendaDatePicker'
 import { ImprimirAgendaButton } from '@/components/cobros/ImprimirAgendaButton'
-
-function toYMD(d: Date) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
+import { todayMx, parseMxYMD, toMxYMD } from '@/lib/timezone'
 
 function nowMx() {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }))
+  return todayMx()
 }
 
 function parseDate(dateStr?: string): Date {
-  const now = nowMx()
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  const today = todayMx()
+  // Mañana en CDMX
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000)
 
   if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return tomorrow
   }
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const date = new Date(y, m - 1, d)
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const date = parseMxYMD(dateStr)
   return date > today ? date : tomorrow
+}
+
+function toYMD(d: Date) {
+  return toMxYMD(d)
 }
 
 export default async function CobranzaAnticipadaPage({

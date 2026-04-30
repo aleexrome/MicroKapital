@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { generateTicketQrData } from '@/lib/ticket-generator'
 import { createAuditLog } from '@/lib/audit'
 import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioScore } from '@/lib/score-calculator'
+import { todayMx } from '@/lib/timezone'
 
 const cashBreakdownSchema = z.object({
   denominacion: z.number().int().positive(),
@@ -106,7 +107,9 @@ export async function POST(
   }
 
   const now = new Date()
-  const fechaDia = new Date(now); fechaDia.setHours(0, 0, 0, 0)
+  // Caja del día = inicio del día CDMX (UTC-6). Antes era setHours(0,0,0,0)
+  // que daba medianoche UTC y desfasaba 6h respecto a México.
+  const fechaDia = todayMx()
   const cobradorDb = await prisma.user.findUnique({
     where: { id: userId },
     select: { nombre: true },

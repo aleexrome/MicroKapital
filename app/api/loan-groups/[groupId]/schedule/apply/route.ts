@@ -74,9 +74,11 @@ export async function POST(
     for (const schedule of schedules) {
       const monto = Number(schedule.montoEsperado)
 
-      // Crear Payment con statusTransferencia=PENDIENTE si es TRANSFER —
-      // queda esperando verificación del gerente zonal antes de mover
-      // schedule a PAID y sumar a caja. CASH/CARD aplican al instante.
+      // /apply lo usa DG/DC/SA o un usuario con permisoAplicarPagos
+      // (Cristina). Todos son autoridad para validar transferencias —
+      // no requieren paso adicional por /transferencias.
+      // Por eso: TRANSFER aquí queda VERIFICADO directo + schedule PAID
+      // + caja al día (igual que CASH/CARD).
       await tx.payment.create({
         data: {
           loanId:     schedule.loan.id,
@@ -87,14 +89,14 @@ export async function POST(
           metodoPago,
           fechaHora:  now,
           notas:      `Aplicado grupal pago ${numeroPago} (${metodoPago})`,
-          ...(esTransferencia ? { statusTransferencia: 'PENDIENTE' as const } : {}),
+          ...(esTransferencia ? {
+            statusTransferencia: 'VERIFICADO' as const,
+            verificadoPorId:     userId,
+            verificadoAt:        now,
+          } : {}),
         },
       })
 
-      // TRANSFER → no toca schedule ni caja, espera a verify-transfer
-      if (esTransferencia) continue
-
-      // CASH / CARD → flujo directo
       await tx.paymentSchedule.update({
         where: { id: schedule.id },
         data: {
@@ -110,13 +112,14 @@ export async function POST(
           cobradorId:           schedule.loan.cobradorId,
           branchId:             schedule.loan.branchId,
           fecha:                fechaCaja,
-          cobradoEfectivo:      metodoPago === 'CASH' ? monto : 0,
-          cobradoTarjeta:       metodoPago === 'CARD' ? monto : 0,
-          cobradoTransferencia: 0,
+          cobradoEfectivo:      metodoPago === 'CASH'     ? monto : 0,
+          cobradoTarjeta:       metodoPago === 'CARD'     ? monto : 0,
+          cobradoTransferencia: metodoPago === 'TRANSFER' ? monto : 0,
         },
         update: {
-          cobradoEfectivo: metodoPago === 'CASH' ? { increment: monto } : undefined,
-          cobradoTarjeta:  metodoPago === 'CARD' ? { increment: monto } : undefined,
+          cobradoEfectivo:      metodoPago === 'CASH'     ? { increment: monto } : undefined,
+          cobradoTarjeta:       metodoPago === 'CARD'     ? { increment: monto } : undefined,
+          cobradoTransferencia: metodoPago === 'TRANSFER' ? { increment: monto } : undefined,
         },
       })
 
@@ -139,14 +142,14 @@ export async function POST(
 
   createAuditLog({
     userId,
-    accion: esTransferencia ? 'DG_APPLY_PAYMENT_GRUPO_PENDING' : 'DG_APPLY_PAYMENT_GRUPO',
+    accion: 'DG_APPLY_PAYMENT_GRUPO',
     tabla: 'LoanGroup',
     registroId: params.groupId,
     valoresNuevos: {
       numeroPago,
       schedulesAplicados: schedules.length,
       metodoPago,
-      ...(esTransferencia ? { statusTransferencia: 'PENDIENTE' } : {}),
+      ...(esTransferencia ? { statusTransferencia: 'VERIFICADO' } : {}),
     },
   })
 

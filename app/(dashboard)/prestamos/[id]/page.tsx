@@ -92,36 +92,70 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     RESTRUCTURED: 'Reestructurado',
   }
 
-  // Construir paymentInfoMap para TODOS los roles (quien cobró / aplicó)
+  // Construir paymentInfoMap solo para DG/DC/SA — son los únicos que ven
+  // el ícono "i" con quién registró cada pago. Coordinadores y gerentes
+  // no necesitan ese trazado de auditoría en pantalla.
   // Mapa de scheduleId → tickets (original + reimpresiones) para mostrar botones "Ver ticket"
   type TicketItem = { numeroTicket: string; esReimpresion: boolean; impresoAt: string }
   const ticketMap: Record<string, TicketItem[]> = {}
 
+  const puedeVerInfoPago = canViewInterestData(rol)
+
   if (loan.schedule.length > 0) {
     const scheduleIds = loan.schedule.map((s) => s.id)
 
-    // Pagos capturados por coordinador/cobrador (crean un registro Payment)
-    const pagos = await prisma.payment.findMany({
-      where: { scheduleId: { in: scheduleIds } },
-      select: {
-        id: true,
-        scheduleId: true,
-        fechaHora: true,
-        cobrador: { select: { nombre: true, rol: true } },
-      },
-      orderBy: { fechaHora: 'desc' },
-    })
-    for (const p of pagos) {
-      if (p.scheduleId && !paymentInfoMap[p.scheduleId]) {
-        paymentInfoMap[p.scheduleId] = {
-          quien: p.cobrador.nombre,
-          rol: p.cobrador.rol,
-          cuando: p.fechaHora.toISOString(),
+    if (puedeVerInfoPago) {
+      // Primero AuditLog DG_APPLY_PAYMENT / DG_APPLY_PAYMENT_GRUPO — refleja
+      // a quien realmente hizo click en "Aplicar" (DG/DC/Cristina). Si no
+      // hay audit, caemos al Payment (cobrador que capturó normalmente).
+      const audits = await prisma.auditLog.findMany({
+        where: {
+          accion: { in: ['DG_APPLY_PAYMENT', 'DG_APPLY_PAYMENT_GRUPO'] },
+          registroId: { in: scheduleIds },
+        },
+        select: {
+          registroId: true,
+          createdAt: true,
+          user: { select: { nombre: true, rol: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+      for (const a of audits) {
+        if (a.registroId && !paymentInfoMap[a.registroId] && a.user) {
+          paymentInfoMap[a.registroId] = {
+            quien: a.user.nombre,
+            rol: a.user.rol,
+            cuando: a.createdAt.toISOString(),
+          }
+        }
+      }
+
+      // Pagos capturados por coordinador/cobrador (Payment record).
+      const pagosInfo = await prisma.payment.findMany({
+        where: { scheduleId: { in: scheduleIds } },
+        select: {
+          scheduleId: true,
+          fechaHora: true,
+          cobrador: { select: { nombre: true, rol: true } },
+        },
+        orderBy: { fechaHora: 'desc' },
+      })
+      for (const p of pagosInfo) {
+        if (p.scheduleId && !paymentInfoMap[p.scheduleId]) {
+          paymentInfoMap[p.scheduleId] = {
+            quien: p.cobrador.nombre,
+            rol: p.cobrador.rol,
+            cuando: p.fechaHora.toISOString(),
+          }
         }
       }
     }
 
-    // Tickets asociados a los payments — incluye original + reimpresiones
+    // Tickets — independiente del rol, todos los ven en sus filas
+    const pagos = await prisma.payment.findMany({
+      where: { scheduleId: { in: scheduleIds } },
+      select: { id: true, scheduleId: true },
+    })
     const paymentIds = pagos.map((p) => p.id)
     if (paymentIds.length > 0) {
       const tickets = await prisma.ticket.findMany({
@@ -141,30 +175,6 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       for (const p of pagos) {
         if (p.scheduleId && paymentToTickets[p.id]) {
           ticketMap[p.scheduleId] = paymentToTickets[p.id]
-        }
-      }
-    }
-
-    // Pagos aplicados manualmente por DG (sin Payment record — solo AuditLog)
-    const audits = await prisma.auditLog.findMany({
-      where: {
-        tabla: 'PaymentSchedule',
-        accion: 'DG_APPLY_PAYMENT',
-        registroId: { in: scheduleIds },
-      },
-      select: {
-        registroId: true,
-        createdAt: true,
-        user: { select: { nombre: true, rol: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
-    for (const a of audits) {
-      if (a.registroId && !paymentInfoMap[a.registroId] && a.user) {
-        paymentInfoMap[a.registroId] = {
-          quien: a.user.nombre,
-          rol: a.user.rol,
-          cuando: a.createdAt.toISOString(),
         }
       }
     }

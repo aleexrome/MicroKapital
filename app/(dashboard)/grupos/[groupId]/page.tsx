@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, Users, Banknote } from 'lucide-react'
 import { GrupoCalendar } from '@/components/loans/GrupoCalendar'
 import { EditGroupNameButton } from '@/components/loans/EditGroupNameButton'
+import { canViewInterestData } from '@/lib/access'
 import { type Prisma } from '@prisma/client'
 
 const SOLIDARIO_UMBRAL             = 6
@@ -100,6 +101,61 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
       })
     : undefined
 
+  // ── PaymentInfoMap (quién/cuándo registró cada pago) — solo DG/DC/SA ───
+  // Se construye por scheduleId y se pasa a GrupoCalendar para mostrar
+  // el ícono "i" en cada fila pagada.
+  type PaymentInfo = { quien: string; rol: string; cuando: string }
+  const paymentInfoMap: Record<string, PaymentInfo> = {}
+
+  if (canViewInterestData(rol) && grupo.loans.length > 0) {
+    const scheduleIds = grupo.loans.flatMap((l) => l.schedule.map((s) => s.id))
+
+    if (scheduleIds.length > 0) {
+      // Audit primero (refleja quién dio click en Aplicar — DG/DC/Cristina)
+      const audits = await prisma.auditLog.findMany({
+        where: {
+          accion: { in: ['DG_APPLY_PAYMENT', 'DG_APPLY_PAYMENT_GRUPO'] },
+          registroId: { in: scheduleIds },
+        },
+        select: {
+          registroId: true,
+          createdAt: true,
+          user: { select: { nombre: true, rol: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+      for (const a of audits) {
+        if (a.registroId && !paymentInfoMap[a.registroId] && a.user) {
+          paymentInfoMap[a.registroId] = {
+            quien: a.user.nombre,
+            rol: a.user.rol,
+            cuando: a.createdAt.toISOString(),
+          }
+        }
+      }
+
+      // Pagos capturados normalmente — fallback si no hay audit
+      const pagosInfo = await prisma.payment.findMany({
+        where: { scheduleId: { in: scheduleIds } },
+        select: {
+          scheduleId: true,
+          fechaHora: true,
+          cobrador: { select: { nombre: true, rol: true } },
+        },
+        orderBy: { fechaHora: 'desc' },
+      })
+      for (const p of pagosInfo) {
+        if (p.scheduleId && !paymentInfoMap[p.scheduleId]) {
+          paymentInfoMap[p.scheduleId] = {
+            quien: p.cobrador.nombre,
+            rol: p.cobrador.rol,
+            cuando: p.fechaHora.toISOString(),
+          }
+        }
+      }
+    }
+  }
+
   // Calcular href de regreso según rol
   const loanBranchId = grupo.loans[0]?.branchId
   const backHref =
@@ -165,6 +221,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
         canActGroup={esOpAdmin || tienePermisoAplicar}
         canRenewGroup={canRenewGroup}
         memberRenewalData={memberRenewalData}
+        paymentInfoMap={paymentInfoMap}
       />
     </div>
   )

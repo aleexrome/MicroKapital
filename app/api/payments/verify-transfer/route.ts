@@ -17,11 +17,15 @@ export async function POST(req: NextRequest) {
 
   const { rol, companyId, id: userId } = session.user
 
-  // Solo Gerente Zonal/Gerente y Super Admin pueden verificar transferencias
-  // Los directores y coordinadores NO pueden aprobar
-  const rolesPermitidos = ['GERENTE_ZONAL', 'GERENTE', 'SUPER_ADMIN']
+  // Quiénes pueden verificar transferencias:
+  //   - DIRECTOR_GENERAL / DIRECTOR_COMERCIAL: autoridad máxima, sin
+  //     restricción de sucursal.
+  //   - GERENTE_ZONAL / GERENTE: solo en las sucursales de su zona.
+  //   - SUPER_ADMIN: técnico.
+  // Coordinadores y cobradores NO pueden verificar (capturan, no aprueban).
+  const rolesPermitidos = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE_ZONAL', 'GERENTE', 'SUPER_ADMIN']
   if (!rolesPermitidos.includes(rol)) {
-    return NextResponse.json({ error: 'Sin permisos — solo el Gerente y el Super Admin pueden verificar transferencias' }, { status: 403 })
+    return NextResponse.json({ error: 'Sin permisos para verificar transferencias' }, { status: 403 })
   }
 
   const body = await req.json()

@@ -99,13 +99,14 @@ export async function POST(
   await prisma.$transaction(async (tx) => {
     const esTransferencia = metodoPago === 'TRANSFER'
 
-    // 1. Crear el Payment de respaldo. Sin esto la cobranza efectiva quedaba
-    //    "marcada como pagada" pero sin movimiento real, y caja no cuadraba.
+    // 1. Crear el Payment de respaldo.
     //
-    //    TRANSFER siempre nace en `PENDIENTE` — incluso aplicada por DG, DC o
-    //    Cristina (con permisoAplicarPagos). El gerente zonal debe verificar
-    //    en /transferencias que el dinero llegó al banco antes de marcar el
-    //    schedule como PAID y sumar a caja. CASH/CARD se aplican al instante.
+    //    Para TRANSFER aplicado vía este endpoint: queda VERIFICADO directo
+    //    porque quien usa /apply es DG/DC/SA o un usuario con
+    //    permisoAplicarPagos (Cristina) — todos ellos son la autoridad
+    //    final para validar transferencias. El flujo de "Validar en
+    //    /transferencias" es para cobros capturados por cobradores
+    //    regulares, no para los aplicados por dirección.
     await tx.payment.create({
       data: {
         loanId:     schedule.loan.id,
@@ -116,15 +117,16 @@ export async function POST(
         metodoPago,
         fechaHora:  now,
         notas:      `Aplicado por ${esOpAdmin ? 'dirección' : 'op. admin'} (${metodoPago})`,
-        ...(esTransferencia ? { statusTransferencia: 'PENDIENTE' as const } : {}),
+        ...(esTransferencia ? {
+          statusTransferencia: 'VERIFICADO' as const,
+          verificadoPorId:     userId,
+          verificadoAt:        now,
+        } : {}),
       },
     })
 
-    // 2. TRANSFER → no se toca el schedule ni la caja: queda esperando
-    //    verificación del gerente zonal en /api/payments/verify-transfer.
-    if (esTransferencia) return
-
-    // 3. CASH / CARD → flujo directo: schedule PAID, caja del cobrador
+    // 2. Schedule pasa a PAID y caja del cobrador suma — siempre, porque
+    //    quien aplicó tiene autoridad para confirmar el cobro al instante.
     await tx.paymentSchedule.update({
       where: { id: schedule.id },
       data: {
@@ -140,17 +142,18 @@ export async function POST(
         cobradorId:           cobradorRegistroId,
         branchId:             schedule.loan.branchId,
         fecha:                fechaCaja,
-        cobradoEfectivo:      metodoPago === 'CASH' ? monto : 0,
-        cobradoTarjeta:       metodoPago === 'CARD' ? monto : 0,
-        cobradoTransferencia: 0,
+        cobradoEfectivo:      metodoPago === 'CASH'     ? monto : 0,
+        cobradoTarjeta:       metodoPago === 'CARD'     ? monto : 0,
+        cobradoTransferencia: metodoPago === 'TRANSFER' ? monto : 0,
       },
       update: {
-        cobradoEfectivo:      metodoPago === 'CASH' ? { increment: monto } : undefined,
-        cobradoTarjeta:       metodoPago === 'CARD' ? { increment: monto } : undefined,
+        cobradoEfectivo:      metodoPago === 'CASH'     ? { increment: monto } : undefined,
+        cobradoTarjeta:       metodoPago === 'CARD'     ? { increment: monto } : undefined,
+        cobradoTransferencia: metodoPago === 'TRANSFER' ? { increment: monto } : undefined,
       },
     })
 
-    // 4. Si todos los pagos del crédito quedan PAID → liquidar el crédito
+    // 3. Si todos los pagos del crédito quedan PAID → liquidar el crédito
     const pendientes = await tx.paymentSchedule.count({
       where: {
         loanId: params.id,
@@ -169,19 +172,21 @@ export async function POST(
 
   createAuditLog({
     userId,
-    accion: metodoPago === 'TRANSFER' ? 'DG_APPLY_PAYMENT_PENDING' : 'DG_APPLY_PAYMENT',
+    accion: 'DG_APPLY_PAYMENT',
     tabla:  'PaymentSchedule',
     registroId: schedule.id,
     valoresAnteriores: snapshotAntes,
-    valoresNuevos: metodoPago === 'TRANSFER'
-      ? { metodoPago, monto, statusTransferencia: 'PENDIENTE' }
-      : { estado: 'PAID', montoPagado: schedule.montoEsperado, pagadoAt: now, metodoPago, monto },
+    valoresNuevos: {
+      estado:      'PAID',
+      montoPagado: schedule.montoEsperado,
+      pagadoAt:    now,
+      metodoPago,
+      monto,
+      ...(metodoPago === 'TRANSFER' ? { statusTransferencia: 'VERIFICADO' } : {}),
+    },
   })
 
   return NextResponse.json({
-    message: metodoPago === 'TRANSFER'
-      ? 'Transferencia registrada. Pendiente de verificación del gerente zonal.'
-      : 'Pago aplicado correctamente',
-    pendingVerification: metodoPago === 'TRANSFER',
+    message: 'Pago aplicado correctamente',
   })
 }

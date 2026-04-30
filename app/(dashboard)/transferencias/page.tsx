@@ -52,7 +52,12 @@ export default async function TransferenciasPage() {
     loan: p.loan,
   }))
 
-  const puedeVerificar = rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN'
+  const puedeVerificar =
+    rol === 'DIRECTOR_GENERAL' ||
+    rol === 'DIRECTOR_COMERCIAL' ||
+    rol === 'GERENTE_ZONAL' ||
+    rol === 'GERENTE' ||
+    rol === 'SUPER_ADMIN'
 
   return <TransferenciasView rows={rows} puedeVerificar={puedeVerificar} rol={rol} />
 }

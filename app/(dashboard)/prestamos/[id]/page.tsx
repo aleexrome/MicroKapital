@@ -105,12 +105,11 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     const scheduleIds = loan.schedule.map((s) => s.id)
 
     if (puedeVerInfoPago) {
-      // Primero AuditLog DG_APPLY_PAYMENT / DG_APPLY_PAYMENT_GRUPO — refleja
-      // a quien realmente hizo click en "Aplicar" (DG/DC/Cristina). Si no
-      // hay audit, caemos al Payment (cobrador que capturó normalmente).
+      // 1. AuditLog individual (DG_APPLY_PAYMENT) — registroId = scheduleId.
+      //    Refleja "Aplicar pago" en un solo schedule.
       const audits = await prisma.auditLog.findMany({
         where: {
-          accion: { in: ['DG_APPLY_PAYMENT', 'DG_APPLY_PAYMENT_GRUPO'] },
+          accion: 'DG_APPLY_PAYMENT',
           registroId: { in: scheduleIds },
         },
         select: {
@@ -130,7 +129,40 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         }
       }
 
-      // Pagos capturados por coordinador/cobrador (Payment record).
+      // 2. AuditLog grupal (DG_APPLY_PAYMENT_GRUPO / GROUP_PAYMENT_BATCH)
+      //    — registroId = loanGroupId, valoresNuevos.numeroPago indica el
+      //    pago. Mapeamos a los schedules de ESTE préstamo por numeroPago.
+      if (loan.loanGroupId) {
+        const numeroToScheduleId: Record<number, string> = {}
+        for (const s of loan.schedule) numeroToScheduleId[s.numeroPago] = s.id
+
+        const groupAudits = await prisma.auditLog.findMany({
+          where: {
+            registroId: loan.loanGroupId,
+            accion: { in: ['DG_APPLY_PAYMENT_GRUPO', 'GROUP_PAYMENT_BATCH'] },
+          },
+          select: {
+            createdAt: true,
+            valoresNuevos: true,
+            user: { select: { nombre: true, rol: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+        for (const a of groupAudits) {
+          const numeroPago = (a.valoresNuevos as { numeroPago?: number } | null)?.numeroPago
+          if (typeof numeroPago !== 'number' || !a.user) continue
+          const sId = numeroToScheduleId[numeroPago]
+          if (sId && !paymentInfoMap[sId]) {
+            paymentInfoMap[sId] = {
+              quien: a.user.nombre,
+              rol: a.user.rol,
+              cuando: a.createdAt.toISOString(),
+            }
+          }
+        }
+      }
+
+      // 3. Fallback: Payment.cobrador (cobrador que capturó normalmente).
       const pagosInfo = await prisma.payment.findMany({
         where: { scheduleId: { in: scheduleIds } },
         select: {

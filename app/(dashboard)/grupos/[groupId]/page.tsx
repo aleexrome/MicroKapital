@@ -102,10 +102,11 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
     : undefined
 
   // ── PaymentInfoMap (quién/cuándo registró cada pago) — solo DG/DC/SA ───
-  // Se construye por scheduleId y se pasa a GrupoCalendar para mostrar
-  // el ícono "i" en cada fila pagada.
+  // Se construye por scheduleId (info por integrante) y por numeroPago
+  // (info de las acciones grupales: "aplicar todos" / "deshacer grupo").
   type PaymentInfo = { quien: string; rol: string; cuando: string }
   const paymentInfoMap: Record<string, PaymentInfo> = {}
+  const groupPaymentInfoMap: Record<number, PaymentInfo> = {}
 
   if (canViewInterestData(rol) && grupo.loans.length > 0) {
     const scheduleIds = grupo.loans.flatMap((l) => l.schedule.map((s) => s.id))
@@ -151,6 +152,61 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
             rol: p.cobrador.rol,
             cuando: p.fechaHora.toISOString(),
           }
+        }
+      }
+    }
+
+    // ── groupPaymentInfoMap: acciones a nivel grupo (numeroPago) ─────────
+    // Lee AuditLog donde el registroId es el groupId. Cubre tanto el
+    // "Aplicar todos" de DG/Cristina (DG_APPLY_PAYMENT_GRUPO) como la
+    // captura grupal del cobrador (GROUP_PAYMENT_BATCH).
+    const groupAudits = await prisma.auditLog.findMany({
+      where: {
+        registroId: params.groupId,
+        accion: { in: ['DG_APPLY_PAYMENT_GRUPO', 'GROUP_PAYMENT_BATCH'] },
+      },
+      select: {
+        createdAt: true,
+        valoresNuevos: true,
+        user: { select: { nombre: true, rol: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    for (const a of groupAudits) {
+      const numeroPago = (a.valoresNuevos as { numeroPago?: number } | null)?.numeroPago
+      if (typeof numeroPago === 'number' && !groupPaymentInfoMap[numeroPago] && a.user) {
+        groupPaymentInfoMap[numeroPago] = {
+          quien: a.user.nombre,
+          rol: a.user.rol,
+          cuando: a.createdAt.toISOString(),
+        }
+      }
+    }
+
+    // Fallback: si no hubo "Aplicar todos" para algún numeroPago, usar
+    // el Payment más reciente de cualquier integrante de ese pago.
+    // (GROUP_PAYMENT_BATCH no guarda numeroPago en valoresNuevos.)
+    const scheduleIdToNumero: Record<string, number> = {}
+    for (const l of grupo.loans) {
+      for (const s of l.schedule) scheduleIdToNumero[s.id] = s.numeroPago
+    }
+    const pagosGrupales = await prisma.payment.findMany({
+      where: { scheduleId: { in: scheduleIds } },
+      select: {
+        scheduleId: true,
+        fechaHora: true,
+        cobrador: { select: { nombre: true, rol: true } },
+      },
+      orderBy: { fechaHora: 'desc' },
+    })
+    for (const p of pagosGrupales) {
+      if (!p.scheduleId) continue
+      const num = scheduleIdToNumero[p.scheduleId]
+      if (num && !groupPaymentInfoMap[num]) {
+        groupPaymentInfoMap[num] = {
+          quien: p.cobrador.nombre,
+          rol: p.cobrador.rol,
+          cuando: p.fechaHora.toISOString(),
         }
       }
     }
@@ -222,6 +278,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
         canRenewGroup={canRenewGroup}
         memberRenewalData={memberRenewalData}
         paymentInfoMap={paymentInfoMap}
+        groupPaymentInfoMap={groupPaymentInfoMap}
       />
     </div>
   )

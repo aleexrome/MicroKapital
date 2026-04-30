@@ -11,6 +11,16 @@ import { formatMoney, formatDate } from '@/lib/utils'
 import { ChevronDown, ChevronRight, Loader2, Undo2, CheckCircle2, AlertCircle, RefreshCw, Info } from 'lucide-react'
 import type { ScheduleStatus } from '@prisma/client'
 
+const ROL_LABEL: Record<string, string> = {
+  DIRECTOR_GENERAL:   'Director General',
+  DIRECTOR_COMERCIAL: 'Director Comercial',
+  GERENTE_ZONAL:      'Gerente Zonal',
+  GERENTE:            'Gerente',
+  COORDINADOR:        'Coordinador',
+  COBRADOR:           'Cobrador',
+  SUPER_ADMIN:        'Super Admin',
+}
+
 interface ScheduleItem {
   id: string
   numeroPago: number
@@ -119,10 +129,16 @@ interface Props {
   canRenewGroup?: boolean
   memberRenewalData?: MemberRenewalData[]
   paymentInfoMap?: Record<string, PaymentInfo>
+  /**
+   * Quién/cuándo aplicó cada pago grupal (numeroPago → info). Solo
+   * llega lleno para DG/DC/SA — controla la visibilidad del ícono "i"
+   * en el Calendario grupal.
+   */
+  groupPaymentInfoMap?: Record<number, PaymentInfo>
 }
 
 export function GrupoCalendar({
-  groupId, loans, canActGroup, canRenewGroup, memberRenewalData, paymentInfoMap,
+  groupId, loans, canActGroup, canRenewGroup, memberRenewalData, paymentInfoMap, groupPaymentInfoMap,
 }: Props) {
   const router    = useRouter()
   const { toast } = useToast()
@@ -132,6 +148,8 @@ export function GrupoCalendar({
   const [confirmUndo,  setConfirmUndo]        = useState<number | null>(null)
   const [loadingApply, setLoadingApply]       = useState(false)
   const [loadingUndo,  setLoadingUndo]        = useState(false)
+  /** Para abrir/cerrar el detalle del ícono "i" en cada fila grupal. */
+  const [openGroupInfo, setOpenGroupInfo]     = useState<number | null>(null)
 
   const [renewOpen,    setRenewOpen]    = useState(false)
   const [renewLoading, setRenewLoading] = useState(false)
@@ -246,12 +264,15 @@ export function GrupoCalendar({
               const canApplyRow = canActGroup && row.estado !== 'PAID'
               const canUndoRow  = canActGroup && row.estado === 'PAID'
               const isOverdue   = row.estado === 'OVERDUE'
+              const groupInfo   = groupPaymentInfoMap?.[row.numeroPago]
+              const infoOpen    = openGroupInfo === row.numeroPago
 
               return (
                 <div
                   key={row.numeroPago}
-                  className={`px-4 py-3 text-sm flex items-center gap-2 flex-wrap ${isOverdue ? 'bg-red-500/5' : ''}`}
+                  className={isOverdue ? 'bg-red-500/5' : ''}
                 >
+                  <div className="px-4 py-3 text-sm flex items-center gap-2 flex-wrap">
                   <span className={`w-7 shrink-0 font-medium ${isOverdue ? 'text-red-400' : 'text-muted-foreground'}`}>
                     {row.numeroPago}.
                   </span>
@@ -275,6 +296,18 @@ export function GrupoCalendar({
                       <> · <span className="text-emerald-400">{formatMoney(row.montoPagadoGrupal)}</span> de {formatMoney(row.montoGrupal)}</>
                     )}
                   </span>
+
+                  {/* Ícono "i": quién aplicó este pago grupal — solo cuando llegó info (DG/DC/SA) */}
+                  {row.estado === 'PAID' && groupInfo && (
+                    <button
+                      type="button"
+                      onClick={() => setOpenGroupInfo(infoOpen ? null : row.numeroPago)}
+                      title="Ver quién aplicó este pago grupal"
+                      className="shrink-0 rounded-full p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  )}
 
                   {/* Aplicar todos */}
                   {canApplyRow && (
@@ -343,6 +376,25 @@ export function GrupoCalendar({
                           Deshacer grupo
                         </button>
                       )}
+                    </div>
+                  )}
+                  </div>
+
+                  {/* Panel de info: quién/cuándo aplicó el pago grupal */}
+                  {infoOpen && groupInfo && (
+                    <div className="mx-4 mb-3 rounded-md bg-sky-500/10 border border-sky-500/20 px-3 py-2 text-xs space-y-1">
+                      <p>
+                        <span className="font-semibold">Registrado por:</span>{' '}
+                        {groupInfo.quien}{' '}
+                        <span className="text-sky-300">({ROL_LABEL[groupInfo.rol] ?? groupInfo.rol})</span>
+                      </p>
+                      <p>
+                        <span className="font-semibold">Fecha y hora:</span>{' '}
+                        {new Date(groupInfo.cuando).toLocaleString('es-MX', {
+                          day: '2-digit', month: '2-digit', year: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </p>
                     </div>
                   )}
                 </div>

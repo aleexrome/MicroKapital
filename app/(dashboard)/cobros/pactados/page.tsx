@@ -10,9 +10,7 @@ import { CheckCircle2, Clock, CalendarDays, Building2, UserCheck, XCircle } from
 import Link from 'next/link'
 import { ImprimirPactadosButton } from '@/components/cobros/ImprimirPactadosButton'
 import type { PactadosPrintRow } from '@/components/cobros/ImprimirPactadosButton'
-function toYMD(d: Date) {
-  return d.toISOString().split('T')[0]
-}
+import { todayMx, toMxYMD } from '@/lib/timezone'
 
 export default async function PactadosDiaPage({
   searchParams,
@@ -28,12 +26,11 @@ export default async function PactadosDiaPage({
   const isGerente     = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
   const isCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
 
-  // ── Date: always TODAY ───────────────────────────────────────────────────────
-  const selectedDate = new Date()
-  selectedDate.setHours(0, 0, 0, 0)
+  // ── Date: always TODAY (CDMX) ────────────────────────────────────────────────
+  const selectedDate = todayMx()
   const nextDay = new Date(selectedDate)
-  nextDay.setDate(nextDay.getDate() + 1)
-  const fechaStr = toYMD(selectedDate)
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1)
+  const fechaStr = toMxYMD(selectedDate)
   const isToday = true
 
   const selectedBranch = isDirector ? (searchParams.branchId || null) : (myBranchId || null)
@@ -299,7 +296,7 @@ export default async function PactadosDiaPage({
                   {pagados.map((row: ScheduleRow) => {
                     const pago = row.payments[0]
                     const pagoDate = new Date(pago.fechaHora)
-                    const pagoFechaStr = toYMD(pagoDate)
+                    const pagoFechaStr = toMxYMD(pagoDate)
                     const cobroTardio = pagoFechaStr !== fechaStr
 
                     return (

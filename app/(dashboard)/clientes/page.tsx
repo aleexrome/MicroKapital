@@ -8,6 +8,7 @@ import { ScoreBadge } from '@/components/clients/ScoreBadge'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate } from '@/lib/utils'
+import { todayMx } from '@/lib/timezone'
 import { UserPlus, Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -62,7 +63,7 @@ export default async function ClientesPage({
               // Mora calculada on-the-fly (estado='OVERDUE' nunca se escribe en BD).
               where: {
                 estado: { in: ['PENDING', 'PARTIAL'] },
-                fechaVencimiento: { lt: new Date() },
+                fechaVencimiento: { lt: todayMx() },
               },
               select: { id: true },
             },

@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Prisma, type UserRole } from '@prisma/client'
 import { LoanStatusChart, MonthPaymentsChart, LoanTypeChart, BranchCapitalChart } from '@/components/dashboard/DashboardCharts'
 import { BranchFilter } from '@/components/dashboard/BranchFilter'
+import { todayMx } from '@/lib/timezone'
 
 const ESTADO_LABEL: Record<string, string> = {
   ACTIVE: 'Activo',
@@ -53,12 +54,8 @@ export default async function DashboardPage({
   // SUPER_ADMIN puede filtrar por sucursal vía ?sucursal=
   const superAdminBranchFilter = rol === 'SUPER_ADMIN' ? (searchParams.sucursal ?? null) : null
 
-  // Compute today's boundaries in Mexico City timezone (UTC-5 CDT / UTC-6 CST)
-  const _now = new Date()
-  const _mexicoDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(_now)
-  const _mxOffsetH = (_now.getUTCMonth() + 1) >= 4 && (_now.getUTCMonth() + 1) <= 10 ? 5 : 6
-  const today = new Date(`${_mexicoDate}T00:00:00.000Z`)
-  today.setUTCHours(_mxOffsetH, 0, 0, 0)
+  // Inicio del día y día siguiente en CDMX (UTC-6, sin DST desde 2022)
+  const today = todayMx()
   const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000)
 
   const isDirector    = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
@@ -90,8 +87,10 @@ export default async function DashboardPage({
 
   // ── Common KPIs ───────────────────────────────────────────────────────────────
 
-  // First day of current month
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+  // First day of current month — en CDMX (mantiene la lógica con `today`
+  // que ya está alineado a inicio del día CDMX expresado en UTC).
+  const firstOfMonth = new Date(today)
+  firstOfMonth.setUTCDate(1)
 
   const [
     totalClientes,
@@ -222,7 +221,9 @@ export default async function DashboardPage({
     : []
 
   // ── Chart data ───────────────────────────────────────────────────────────────
-  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+  const endOfMonth = new Date(today)
+  endOfMonth.setUTCDate(1)
+  endOfMonth.setUTCMonth(endOfMonth.getUTCMonth() + 1)
 
   const [loanStatusDist, loanTypeDist, schedPagados, schedVencidos, schedPorCobrar] = await Promise.all([
     // Donut 1: loan distribution by estado

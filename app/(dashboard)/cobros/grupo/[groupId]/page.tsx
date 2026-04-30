@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { ArrowLeft, Users, CreditCard, CheckCircle2, AlertCircle, ClipboardList } from 'lucide-react'
 import type { ScheduleStatus, Prisma } from '@prisma/client'
+import { todayMx } from '@/lib/timezone'
 import { isOverdue } from '@/lib/schedule'
 
 const STATUS_VARIANT: Record<ScheduleStatus, 'success' | 'warning' | 'error' | 'info' | 'outline'> = {
@@ -67,8 +68,7 @@ export default async function GrupoCobroPage({ params }: { params: { groupId: st
 
   if (!grupo) notFound()
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = todayMx()
 
   // Total esperado del grupo en esta reunión
   const totalEsperado = grupo.loans.reduce((sum, loan) => {

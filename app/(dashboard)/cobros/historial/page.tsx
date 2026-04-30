@@ -7,25 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { DollarSign, Banknote, CreditCard, Users, Clock } from 'lucide-react'
 
+import { todayMx } from '@/lib/timezone'
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n: number) {
   return formatMoney(n)
 }
 
-/** Compute start-of-day and start-of-next-day in Mexico City timezone (UTC-5 CDT / UTC-6 CST) */
+/** Inicio del día y día siguiente en zona horaria de CDMX. */
 function getMexicoTodayBounds(): { today: Date; tomorrow: Date } {
-  const now = new Date()
-  // Get the current date string in Mexico City timezone (YYYY-MM-DD)
-  const mexicoDateStr = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Mexico_City',
-  }).format(now)
-  // Mexico CDT (Apr-Oct) = UTC-5 → offset 5h; CST (Nov-Mar) = UTC-6 → offset 6h
-  const month = now.getUTCMonth() + 1
-  const offsetHours = month >= 4 && month <= 10 ? 5 : 6
-  // midnight Mexico = `mexicoDateStr` 00:00 UTC + offsetHours
-  const today = new Date(`${mexicoDateStr}T00:00:00.000Z`)
-  today.setUTCHours(offsetHours, 0, 0, 0)
+  const today = todayMx()
   const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000)
   return { today, tomorrow }
 }

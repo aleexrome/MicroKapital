@@ -8,20 +8,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Wallet, TrendingUp, CreditCard, Banknote, Printer, Clock } from 'lucide-react'
 import { AgendaDatePicker } from '@/components/cobros/AgendaDatePicker'
-
-function toYMD(d: Date) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
+import { todayMx, parseMxYMD, toMxYMD } from '@/lib/timezone'
 
 function parseFecha(dateStr?: string): Date {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = todayMx()
   if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return today
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const date = new Date(y, m - 1, d)
+  const date = parseMxYMD(dateStr)
   // No permitir fechas futuras — el corte solo aplica a hoy o días pasados.
   return date > today ? today : date
 }
@@ -59,10 +51,10 @@ export default async function CajaPage({
       : []
 
   const selectedDate = parseFecha(searchParams.fecha)
-  const fechaStr = toYMD(selectedDate)
-  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const fechaStr = toMxYMD(selectedDate)
+  const today = todayMx()
   const isToday = selectedDate.getTime() === today.getTime()
-  const todayStr = toYMD(today)
+  const todayStr = toMxYMD(today)
 
   const nextDay = new Date(selectedDate)
   nextDay.setDate(nextDay.getDate() + 1)

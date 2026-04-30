@@ -9,6 +9,7 @@ import {
 import { createAuditLog } from '@/lib/audit'
 import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
 import { calcTarifaApertura } from '@/lib/financial-formulas'
+import { todayMx } from '@/lib/timezone'
 import { z } from 'zod'
 
 const activateSchema = z.object({
@@ -315,8 +316,7 @@ export async function POST(
     // 6. Actualizar caja y generar ticket (solo si hay pago real, no financiado)
     let ticket = null
     if (data.metodoPago && data.metodoPago !== 'FINANCIADO' && payment) {
-      const fechaCaja = new Date()
-      fechaCaja.setHours(0, 0, 0, 0)
+      const fechaCaja = todayMx()
       const targetBranchId = session.user.branchId ?? loan.branchId
 
       await tx.cashRegister.upsert({

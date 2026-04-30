@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
 import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
 import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioScore } from '@/lib/score-calculator'
+import { todayMx } from '@/lib/timezone'
 
 const schema = z.object({
   paymentId: z.string().uuid(),
@@ -152,9 +153,8 @@ export async function POST(req: NextRequest) {
       data: { score: nuevoScore },
     })
 
-    // 5. Caja del cobrador original (a la fecha de verificación)
-    const fecha = new Date()
-    fecha.setHours(0, 0, 0, 0)
+    // 5. Caja del cobrador original (a la fecha de verificación, día CDMX)
+    const fecha = todayMx()
 
     await tx.cashRegister.upsert({
       where: { cobradorId_fecha: { cobradorId: payment.cobradorId, fecha } },

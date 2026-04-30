@@ -154,10 +154,7 @@ export async function POST(
   })
 
   return NextResponse.json({
-    message: esTransferencia
-      ? `Transferencia grupal registrada en ${schedules.length} integrante(s). Pendiente de verificación del gerente zonal.`
-      : `Pago ${numeroPago} aplicado a ${schedules.length} integrante(s)`,
+    message: `Pago ${numeroPago} aplicado a ${schedules.length} integrante(s)`,
     aplicados: schedules.length,
-    pendingVerification: esTransferencia,
   })
 }

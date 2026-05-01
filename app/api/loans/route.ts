@@ -3,7 +3,6 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { calcLoan } from '@/lib/financial-formulas'
-import { generarFechasSemanales, generarFechasHabiles } from '@/lib/business-days'
 import { createAuditLog } from '@/lib/audit'
 
 const createLoanSchema = z.object({

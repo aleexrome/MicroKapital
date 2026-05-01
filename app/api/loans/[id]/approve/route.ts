@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { generarFechasSemanales, generarFechasHabiles } from '@/lib/business-days'
+import { generarFechasSemanales, generarFechasLunesViernes } from '@/lib/business-days'
 import { createAuditLog } from '@/lib/audit'
 import { z } from 'zod'
 
@@ -64,7 +64,7 @@ export async function POST(
     // Generar calendario de pagos
     let fechas: Date[]
     if (loan.tipo === 'AGIL') {
-      fechas = generarFechasHabiles(fechaDesembolso, 24)
+      fechas = generarFechasLunesViernes(fechaDesembolso, 24)
     } else {
       fechas = generarFechasSemanales(fechaDesembolso, loan.plazo)
     }

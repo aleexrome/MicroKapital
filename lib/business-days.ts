@@ -86,6 +86,26 @@ export function generarFechasHabiles(fechaInicio: Date, cantidad: number): Date[
 }
 
 /**
+ * Genera `cantidad` fechas consecutivas saltando sólo sábados y domingos.
+ * Los días festivos SÍ se consideran días de cobro (para préstamos AGIL).
+ * La fecha de inicio NO se incluye en el resultado.
+ */
+export function generarFechasLunesViernes(fechaInicio: Date, cantidad: number): Date[] {
+  const fechas: Date[] = []
+  let actual = new Date(fechaInicio)
+
+  while (fechas.length < cantidad) {
+    actual = addDays(actual, 1)
+    const diaSemana = getDay(actual)
+    if (diaSemana !== 0 && diaSemana !== 6) {
+      fechas.push(new Date(actual))
+    }
+  }
+
+  return fechas
+}
+
+/**
  * Genera N fechas semanales a partir de fechaInicio
  * (para préstamos SOLIDARIO e INDIVIDUAL)
  */

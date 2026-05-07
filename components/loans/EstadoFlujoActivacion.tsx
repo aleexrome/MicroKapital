@@ -1,7 +1,7 @@
 import { CheckCircle2, Clock, Circle } from 'lucide-react'
 
 interface EstadoFlujoActivacionProps {
-  loanEstado: string                  // 'APPROVED' | 'ACTIVE' (otros estados también aceptados)
+  loanEstado: string                  // 'APPROVED' | 'IN_ACTIVATION' | 'ACTIVE' (otros estados también aceptados)
   contratoFirmadoSubido: boolean
   seguroPagado: boolean               // ya hay un Payment de apertura cobrado y no pendiente
   fotoDesembolsoSubida: boolean       // loan.desembolsoFotoUrl no null
@@ -35,7 +35,10 @@ export function EstadoFlujoActivacion({
   fotoDesembolsoSubida,
   contractsRequired,
 }: EstadoFlujoActivacionProps) {
-  const isApproved = loanEstado === 'APPROVED'
+  // En sub-fase 6a, APPROVED y IN_ACTIVATION conviven. La UI los trata igual:
+  // ambos son "el préstamo aún no se activó". La sub-fase 6b refactorizará
+  // este componente con candados secuenciales y trato distinto por estado.
+  const isApproved = loanEstado === 'APPROVED' || loanEstado === 'IN_ACTIVATION'
   const isActive   = loanEstado === 'ACTIVE'
 
   // ── Chip 1 — Contrato firmado por el cliente ─────────────────────────────

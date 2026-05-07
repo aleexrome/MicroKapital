@@ -14,8 +14,10 @@ const TABS: { label: string; value: string | null }[] = [
   { label: 'Todos', value: null },
   { label: 'Pendientes', value: 'PENDING_APPROVAL' },
   { label: 'Aprobados', value: 'APPROVED' },
+  { label: 'En activación', value: 'IN_ACTIVATION' },
   { label: 'Activos', value: 'ACTIVE' },
   { label: 'Rechazados', value: 'REJECTED' },
+  { label: 'Cancelados', value: 'DECLINED' },
 ]
 
 const PAGE_SIZE = 50

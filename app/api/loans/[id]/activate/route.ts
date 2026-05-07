@@ -62,34 +62,38 @@ export async function POST(
   })
 
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
-  if (loan.estado !== 'APPROVED') {
+  // Endpoint legacy: sigue aceptando APPROVED (preserva UI vieja entre sub-fases 6a y 6b).
+  // Cuando la sub-fase 6b reemplace la UI con el flujo secuencial de candados, este
+  // endpoint dejará de invocarse desde el front.
+  if (loan.estado !== 'APPROVED' && loan.estado !== 'IN_ACTIVATION') {
     return NextResponse.json({ error: 'El crédito debe estar aprobado por el Director General antes de activarse' }, { status: 400 })
   }
 
-  // FEATURE FLAG: contratos firmados requeridos para activar (Fase 5).
-  // Cuando CONTRACTS_REQUIRED=true, exige que exista un Contract con
-  // loanDocumentFirmadoId no null (cubre tanto al loan directo — caso
-  // individual/ágil — como a los integrantes de un grupo solidario, vía
-  // ContractGroupMember). Si está false, el activate procede como antes.
-  const contractsRequired = process.env.CONTRACTS_REQUIRED === 'true'
-  if (contractsRequired) {
-    const contract = await prisma.contract.findFirst({
-      where: {
-        companyId: companyId!,
-        loanDocumentFirmadoId: { not: null },
-        OR: [
-          { loanId: loan.id },
-          { groupMembers: { some: { loanId: loan.id } } },
-        ],
-      },
-      select: { id: true },
-    })
-    if (!contract) {
-      return NextResponse.json(
-        { error: 'Para activar este préstamo primero hay que generar y subir el contrato firmado por el cliente.' },
-        { status: 400 }
-      )
-    }
+  // ENDPOINT LEGACY — Fase 6 movió el flujo de activación a:
+  //   /api/loans/[id]/start-activation   → APPROVED → IN_ACTIVATION
+  //   /api/loans/[id]/register-payment   → candado 2 (cobro de comisión)
+  //   /api/loans/[id]/disbursement-photo → candado 3 (foto + activación + calendario)
+  //
+  // Este endpoint se mantiene como override administrativo y para que la UI
+  // antigua siga funcionando mientras se completa el refactor (fase 6b).
+  // El feature flag CONTRACTS_REQUIRED se eliminó: el contrato firmado es
+  // siempre requisito (gate consistente con el nuevo flujo).
+  const contract = await prisma.contract.findFirst({
+    where: {
+      companyId: companyId!,
+      loanDocumentFirmadoId: { not: null },
+      OR: [
+        { loanId: loan.id },
+        { groupMembers: { some: { loanId: loan.id } } },
+      ],
+    },
+    select: { id: true },
+  })
+  if (!contract) {
+    return NextResponse.json(
+      { error: 'Para activar este préstamo primero hay que generar y subir el contrato firmado por el cliente.' },
+      { status: 400 }
+    )
   }
 
   // Si el DG solicitó documentación, verificar que los docs requeridos estén subidos

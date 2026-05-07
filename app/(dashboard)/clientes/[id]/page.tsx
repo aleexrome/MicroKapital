@@ -66,7 +66,7 @@ export default async function ClienteExpedientePage({
           schedule: { orderBy: { numeroPago: 'asc' } },
           // Verificar si ya existe una renovación pendiente o aprobada
           loanRenovado: {
-            where: { estado: { in: ['PENDING_APPROVAL', 'APPROVED'] } },
+            where: { estado: { in: ['PENDING_APPROVAL', 'APPROVED', 'IN_ACTIVATION'] } },
             select: { id: true },
           },
           documents: {

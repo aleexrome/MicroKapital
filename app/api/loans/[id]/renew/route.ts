@@ -57,7 +57,7 @@ export async function POST(
   const renovacionExistente = await prisma.loan.findFirst({
     where: {
       loanOriginalId: loanOriginal.id,
-      estado: { in: ['PENDING_APPROVAL', 'APPROVED'] },
+      estado: { in: ['PENDING_APPROVAL', 'APPROVED', 'IN_ACTIVATION'] },
     },
   })
   if (renovacionExistente) {

@@ -30,7 +30,7 @@ interface GenerarContratoButtonProps {
  * Botón de "Generar contrato" / "Descargar" / "Subir firmado".
  *
  * Estados visuales:
- *   - estado !== APPROVED                       → no muestra nada
+ *   - estado !== APPROVED|IN_ACTIVATION         → no muestra nada
  *   - sin contrato                              → botón "Generar contrato"
  *   - contrato sin firmar subido                → "Descargar sin firmar" + "Subir firmado"
  *   - contrato firmado ya subido                → "✓ Contrato firmado" + "Ver firmado"
@@ -54,7 +54,7 @@ export function GenerarContratoButton({
   const [generating, setGenerating] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
 
-  if (estado !== 'APPROVED') return null
+  if (estado !== 'APPROVED' && estado !== 'IN_ACTIVATION') return null
 
   // ── Permisos ──────────────────────────────────────────────────────────────
   const esCobradorDelLoan = loanCobradorId === userId

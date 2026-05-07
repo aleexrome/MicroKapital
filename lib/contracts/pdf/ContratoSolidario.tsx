@@ -151,44 +151,54 @@ export function ContratoSolidario(props: ContratoSolidarioProps) {
       {/* ── SECCIÓN 8 — Cláusulas ───────────────────────────────────────── */}
       <Text style={styles.sectionTitle}>CLAUSULAS</Text>
 
-      <Text style={styles.upper}>
-        <Text style={styles.bold}>PRIMERA: OBJETO DEL CONTRATO </Text>
-        &quot;{RL}&quot; OTORGA UN CRÉDITO GRUPAL A FAVOR DEL &quot;CLIENTE&quot; POR LA CANTIDAD
-        QUE SE INDICA EN LA LISTA DE INTEGRANTES DEL &quot;GRUPO&quot;, ASCIENDE A LA CANTIDAD
-        DE {MONTO} ({montoLetras}). CONVENIDAS EN ESTE CONTRATO, OBLIGÁNDOSE A RESTITUIR A
-        &quot;{RL}&quot;. EL IMPORTE DEL CRÉDITO MÁS IMPUESTOS, INTERESES Y GASTOS QUE SE
-        ESTIPULEN O GENEREN HASTA EL DÍA DE LIQUIDACIÓN TOTAL DEL CRÉDITO.
-      </Text>
+      <View style={{ marginBottom: 6 }}>
+        <Text style={[styles.upper, styles.bold, { marginBottom: 0 }]}>PRIMERA: OBJETO DEL CONTRATO </Text>
+        <Text style={[styles.upper, { marginBottom: 0 }]}>
+          &quot;{RL}&quot; OTORGA UN CRÉDITO GRUPAL A FAVOR DEL &quot;CLIENTE&quot; POR LA CANTIDAD
+          QUE SE INDICA EN LA LISTA DE INTEGRANTES DEL &quot;GRUPO&quot;, ASCIENDE A LA CANTIDAD
+          DE {MONTO} ({montoLetras}). CONVENIDAS EN ESTE CONTRATO, OBLIGÁNDOSE A RESTITUIR A
+          &quot;{RL}&quot;. EL IMPORTE DEL CRÉDITO MÁS IMPUESTOS, INTERESES Y GASTOS QUE SE
+          ESTIPULEN O GENEREN HASTA EL DÍA DE LIQUIDACIÓN TOTAL DEL CRÉDITO.
+        </Text>
+      </View>
 
-      <Text style={styles.upper}>
-        <Text style={styles.bold}>SEGUNDA: DESTINO DEL CRÉDITO. </Text>
-        &quot;EL CLIENTE&quot; SE OBLIGAN A DESTINAR EL IMPORTE DE CRÉDITO, APARA AQUELLA
-        ACTIVIDAD ECONÓMICA ESTABLECIDA EN EL DOCUMENTO DENOMINADO SOLICITUD DE CRÉDITO.
-      </Text>
+      <View style={{ marginBottom: 6 }}>
+        <Text style={[styles.upper, styles.bold, { marginBottom: 0 }]}>SEGUNDA: DESTINO DEL CRÉDITO. </Text>
+        <Text style={[styles.upper, { marginBottom: 0 }]}>
+          &quot;EL CLIENTE&quot; SE OBLIGAN A DESTINAR EL IMPORTE DE CRÉDITO, APARA AQUELLA
+          ACTIVIDAD ECONÓMICA ESTABLECIDA EN EL DOCUMENTO DENOMINADO SOLICITUD DE CRÉDITO.
+        </Text>
+      </View>
 
-      <Text style={styles.upper}>
-        <Text style={styles.bold}>TERCERA: DURACIÓN DEL CONTRATO. - </Text>
-        EL PRESENTE CONTRATO TENDRÁ COMO PLAZO 8 SEMANAS, DENTRO DEL CUAL &quot;EL CLIENTE&quot;
-        DEBERÁN LIQUIDAR A &quot;{RL}&quot; EL CRÉDITO O ANTES DEL PLAZO SI INCURREN EN
-        CUALQUIERA DE LAS CAUSALES DE VENCIMIENTO ANTICIPADO ESTABLECIDAS; NO OBSTANTE, SU
-        TERMINACIÓN, ESTE CONTRATO PRODUCIRÁ TODOS SUS EFECTOS LEGALES, HASTA QUE LOS CLIENTES
-        HAYAN LIQUIDADO EN SU TOTALIDAD TODAS LAS CANTIDADES ADECUADAS QUE EXISTAN A SU CARGO.
-      </Text>
+      <View style={{ marginBottom: 6 }}>
+        <Text style={[styles.upper, styles.bold, { marginBottom: 0 }]}>TERCERA: DURACIÓN DEL CONTRATO. - </Text>
+        <Text style={[styles.upper, { marginBottom: 0 }]}>
+          EL PRESENTE CONTRATO TENDRÁ COMO PLAZO 8 SEMANAS, DENTRO DEL CUAL &quot;EL CLIENTE&quot;
+          DEBERÁN LIQUIDAR A &quot;{RL}&quot; EL CRÉDITO O ANTES DEL PLAZO SI INCURREN EN
+          CUALQUIERA DE LAS CAUSALES DE VENCIMIENTO ANTICIPADO ESTABLECIDAS; NO OBSTANTE, SU
+          TERMINACIÓN, ESTE CONTRATO PRODUCIRÁ TODOS SUS EFECTOS LEGALES, HASTA QUE LOS CLIENTES
+          HAYAN LIQUIDADO EN SU TOTALIDAD TODAS LAS CANTIDADES ADECUADAS QUE EXISTAN A SU CARGO.
+        </Text>
+      </View>
 
-      <Text style={styles.upper}>
-        <Text style={styles.bold}>CUARTA: DISPOSICIÓN DEL CRÉDITO. - </Text>
-        LOS &quot;CLIENTES&quot; DISPONDRÁN DEL CRÉDITO EN UNA SOLA EXHIBICIÓN, MEDIANTE LA
-        ENTREGA DE ÓRDENES DE PAGO O POR CUALQUIER OTRO MEDIO INCLUSO ELECTRÓNICO QUE
-        CONSIDERE &quot;{RL}&quot;, A FAVOR DE CADA UNO DE LOS CLIENTES POR LA CANTIDAD
-        PACTADA. POR VIRTUD DE LA FIRMA DEL PRESENTE CONTRATO. &quot;EL CLIENTE&quot; EXTIENDEN
-        EL RECIBO MÁS AMPLIO Y SUFICIENTE QUE EN DERECHO PROCEDAN &quot;EL CLIENTE&quot; PODRÁN
-        DISPONER DE SU CRÉDITO A LA VISTA.
-      </Text>
+      <View style={{ marginBottom: 6 }}>
+        <Text style={[styles.upper, styles.bold, { marginBottom: 0 }]}>CUARTA: DISPOSICIÓN DEL CRÉDITO. - </Text>
+        <Text style={[styles.upper, { marginBottom: 0 }]}>
+          LOS &quot;CLIENTES&quot; DISPONDRÁN DEL CRÉDITO EN UNA SOLA EXHIBICIÓN, MEDIANTE LA
+          ENTREGA DE ÓRDENES DE PAGO O POR CUALQUIER OTRO MEDIO INCLUSO ELECTRÓNICO QUE
+          CONSIDERE &quot;{RL}&quot;, A FAVOR DE CADA UNO DE LOS CLIENTES POR LA CANTIDAD
+          PACTADA. POR VIRTUD DE LA FIRMA DEL PRESENTE CONTRATO. &quot;EL CLIENTE&quot; EXTIENDEN
+          EL RECIBO MÁS AMPLIO Y SUFICIENTE QUE EN DERECHO PROCEDAN &quot;EL CLIENTE&quot; PODRÁN
+          DISPONER DE SU CRÉDITO A LA VISTA.
+        </Text>
+      </View>
 
-      <Text style={styles.upper}>
-        <Text style={styles.bold}>QUINTA: FORMA DE PAGO, TASA DE INTERÉS Y PLAZO. - </Text>
-        LOS CLIENTES SE OBLIGAN A PAGAR A &quot;{RL}&quot;:
-      </Text>
+      <View style={{ marginBottom: 6 }}>
+        <Text style={[styles.upper, styles.bold, { marginBottom: 0 }]}>QUINTA: FORMA DE PAGO, TASA DE INTERÉS Y PLAZO. - </Text>
+        <Text style={[styles.upper, { marginBottom: 0 }]}>
+          LOS CLIENTES SE OBLIGAN A PAGAR A &quot;{RL}&quot;:
+        </Text>
+      </View>
 
       <Text style={styles.upper}>
         A). - EL MONTO PRINCIPAL DEL CRÉDITO CONFORME A LA CLÁUSULA PRIMERA DE ESTE CONTRATO,
@@ -223,41 +233,49 @@ export function ContratoSolidario(props: ContratoSolidarioProps) {
         MODIFICADA SEGÚN LO CONSIDERE &quot;{RL}&quot;
       </Text>
 
-      <Text style={styles.upper}>
-        <Text style={styles.bold}>SEXTA: CAT.- </Text>
-        PARA FINES INFORMATIVOS Y DE COMPARACIÓN, EL COSTO TOTAL ANUAL (EN DELANTE CAT) DEL
-        CRÉDITO ES EL {cat.toFixed(0)}% POR CAT.- SE ENTIENDE EL COSTO ANUAL TOTAL DE
-        FINANCIAMIENTO EL CUAL ES EXPRESADO EN TÉRMINOS PORCENTUALES ANUALES PARA FINES
-        INFORMATIVOS Y DE COMPARACIÓN E INCORPORA LA TOTALIDAD DE LOS COSTOS Y GASTOS
-        INHERENTES AL CRÉDITO.
-      </Text>
+      <View style={{ marginBottom: 6 }}>
+        <Text style={[styles.upper, styles.bold, { marginBottom: 0 }]}>SEXTA: CAT.- </Text>
+        <Text style={[styles.upper, { marginBottom: 0 }]}>
+          PARA FINES INFORMATIVOS Y DE COMPARACIÓN, EL COSTO TOTAL ANUAL (EN DELANTE CAT) DEL
+          CRÉDITO ES EL {cat.toFixed(0)}% POR CAT.- SE ENTIENDE EL COSTO ANUAL TOTAL DE
+          FINANCIAMIENTO EL CUAL ES EXPRESADO EN TÉRMINOS PORCENTUALES ANUALES PARA FINES
+          INFORMATIVOS Y DE COMPARACIÓN E INCORPORA LA TOTALIDAD DE LOS COSTOS Y GASTOS
+          INHERENTES AL CRÉDITO.
+        </Text>
+      </View>
 
-      <Text style={styles.upper}>
-        <Text style={styles.bold}>SÉPTIMA: SALDOS Y ESTADOS DE CUENTA. - </Text>
-        LOS CLIENTES PODRÁN SOLICITAR UN ESTADO DE CUENTA O BIEN REALIZAR MOVIMIENTOS SOBRE EL
-        MISMO, DEBIENDO PARA TAL PROPORCIONAR SU NOMBRE, NUMERO DE CLIENTE O NÚMERO DE CRÉDITO
-        &quot;{RL}&quot;
-      </Text>
+      <View style={{ marginBottom: 6 }}>
+        <Text style={[styles.upper, styles.bold, { marginBottom: 0 }]}>SÉPTIMA: SALDOS Y ESTADOS DE CUENTA. - </Text>
+        <Text style={[styles.upper, { marginBottom: 0 }]}>
+          LOS CLIENTES PODRÁN SOLICITAR UN ESTADO DE CUENTA O BIEN REALIZAR MOVIMIENTOS SOBRE EL
+          MISMO, DEBIENDO PARA TAL PROPORCIONAR SU NOMBRE, NUMERO DE CLIENTE O NÚMERO DE CRÉDITO
+          &quot;{RL}&quot;
+        </Text>
+      </View>
 
-      <Text style={styles.upper}>
-        <Text style={styles.bold}>OCTAVA: RELACIÓN DE PAGO </Text>
-        &quot;{RL}&quot; APLICARA LAS CANTIDADES QUE RECIBA EN PAGO POR ÓRDENES DE VENCIMIENTO,
-        CONFORME AL SIGUIENTE ORDEN: IMPUESTOS, GASTO DE COBRANZA, INTERESES MORATORIOS,
-        INTERESES ORDINARIOS Y EL PRINCIPAL PARA QUE EL CASO DE QUE {RL} HUBIERA TENIDO QUE
-        DEMANDAR A &quot;EL CLIENTE&quot; POR INCUMPLIMIENTO, LOS PAGOS QUE REALICEN SE
-        APLICARÁN EN PRIMER LUGAR A LOS GASTOS Y COSTAS DEL JUICIO Y DESPUÉS SE SEGUIRÁ EL
-        ORDEN ESTABLECIDO EN LA PRESENTE CLAUSULA.
-      </Text>
+      <View style={{ marginBottom: 6 }}>
+        <Text style={[styles.upper, styles.bold, { marginBottom: 0 }]}>OCTAVA: RELACIÓN DE PAGO </Text>
+        <Text style={[styles.upper, { marginBottom: 0 }]}>
+          &quot;{RL}&quot; APLICARA LAS CANTIDADES QUE RECIBA EN PAGO POR ÓRDENES DE VENCIMIENTO,
+          CONFORME AL SIGUIENTE ORDEN: IMPUESTOS, GASTO DE COBRANZA, INTERESES MORATORIOS,
+          INTERESES ORDINARIOS Y EL PRINCIPAL PARA QUE EL CASO DE QUE {RL} HUBIERA TENIDO QUE
+          DEMANDAR A &quot;EL CLIENTE&quot; POR INCUMPLIMIENTO, LOS PAGOS QUE REALICEN SE
+          APLICARÁN EN PRIMER LUGAR A LOS GASTOS Y COSTAS DEL JUICIO Y DESPUÉS SE SEGUIRÁ EL
+          ORDEN ESTABLECIDO EN LA PRESENTE CLAUSULA.
+        </Text>
+      </View>
 
-      <Text style={styles.upper}>
-        <Text style={styles.bold}>NOVENA: INCUMPLIMIENTO DE CONTRATO Y VENCIMIENTO ANTICIPADO. - </Text>
-        EL CLIENTE RECONOCE Y ACEPTA QUE, EN CASO DE INCUMPLIMIENTO DE CUALQUIERA DE LAS
-        OBLIGACIONES ESTABLECIDAS EN EL PRESENTE CONTRATO, ASÍ COMO SEA ANEXOS SERÁ CAUSA
-        SUFICIENTE PARA QUE OPERE DE PLENO DERECHO Y SIN DECLARACIÓN LOS CASOS PREVISTOS POR EL
-        ARTÍCULO 301 DE LA LEY GENERAL DE TÍTULOS Y OPERACIONES DE CRÉDITO DE CUALQUIER O
-        CUALQUIER LEGISLACIÓN APLICABLE. LOS &quot;CLIENTES&quot; Y &quot;{RL}&quot; PODRÁN
-        DAR POR TERMINADO ANTICIPADAMENTE EL CONTRATO DE ACUERDO A LO SIGUIENTE:
-      </Text>
+      <View style={{ marginBottom: 6 }}>
+        <Text style={[styles.upper, styles.bold, { marginBottom: 0 }]}>NOVENA: INCUMPLIMIENTO DE CONTRATO Y VENCIMIENTO ANTICIPADO. - </Text>
+        <Text style={[styles.upper, { marginBottom: 0 }]}>
+          EL CLIENTE RECONOCE Y ACEPTA QUE, EN CASO DE INCUMPLIMIENTO DE CUALQUIERA DE LAS
+          OBLIGACIONES ESTABLECIDAS EN EL PRESENTE CONTRATO, ASÍ COMO SEA ANEXOS SERÁ CAUSA
+          SUFICIENTE PARA QUE OPERE DE PLENO DERECHO Y SIN DECLARACIÓN LOS CASOS PREVISTOS POR EL
+          ARTÍCULO 301 DE LA LEY GENERAL DE TÍTULOS Y OPERACIONES DE CRÉDITO DE CUALQUIER O
+          CUALQUIER LEGISLACIÓN APLICABLE. LOS &quot;CLIENTES&quot; Y &quot;{RL}&quot; PODRÁN
+          DAR POR TERMINADO ANTICIPADAMENTE EL CONTRATO DE ACUERDO A LO SIGUIENTE:
+        </Text>
+      </View>
 
       <Text style={styles.upper}>
         1.- EL CLIENTE QUE SE ENCUENTREN AL CORRIENTE CON SUS PAGOS Y QUE DECIDAN LIQUIDAR
@@ -273,27 +291,31 @@ export function ContratoSolidario(props: ContratoSolidarioProps) {
         ADEUDOS DERIVADOS DE DICHA RELACIÓN.
       </Text>
 
-      <Text style={styles.upper}>
-        <Text style={styles.bold}>DECIMA: PAGARE. - </Text>
-        DEL CLIENTE SUSCRIBIRÁ A LA ORDEN DE &quot;{RL}&quot; UN PAGARE INDIVIDUAL QUE DOCUMENTE
-        LA DISPOSICIÓN DEL CRÉDITO OTORGADO. ESTOS TÍTULOS SE CONSIDERARÁN PAGADEROS A LA VISTA
-        Y EN CASO DE CUMPLIMIENTO NORMAL Y PUNTUAL DE LOS &quot;CLIENTES&quot; SERÁN
-        CANCELADOS: POR LO QUE UNA VEZ LIQUIDADO EN SU TOTALIDAD LOS IMPUESTOS, INTERESES SOBRE
-        SALDOS INSOLUTOS, GASTOS Y EL PRINCIPAL POR PARTE DE LOS &quot;CLIENTES&quot;
-        &quot;{RL}&quot; DEVOLVERÁ LOS PAGARÉS A LOS &quot;CLIENTES&quot; LO QUE SERÁ PRUEBA
-        SUFICIENTE DE LA CANCELACIÓN DEL CRÉDITO. LOS PAGARÉS TAMBIÉN DEBERÁN SER SUSCRITOS POR
-        UNO O DOS AVALES CONFORME A LAS POLÍTICAS DE &quot;{RL}&quot;
-      </Text>
+      <View style={{ marginBottom: 6 }}>
+        <Text style={[styles.upper, styles.bold, { marginBottom: 0 }]}>DECIMA: PAGARE. - </Text>
+        <Text style={[styles.upper, { marginBottom: 0 }]}>
+          DEL CLIENTE SUSCRIBIRÁ A LA ORDEN DE &quot;{RL}&quot; UN PAGARE INDIVIDUAL QUE DOCUMENTE
+          LA DISPOSICIÓN DEL CRÉDITO OTORGADO. ESTOS TÍTULOS SE CONSIDERARÁN PAGADEROS A LA VISTA
+          Y EN CASO DE CUMPLIMIENTO NORMAL Y PUNTUAL DE LOS &quot;CLIENTES&quot; SERÁN
+          CANCELADOS: POR LO QUE UNA VEZ LIQUIDADO EN SU TOTALIDAD LOS IMPUESTOS, INTERESES SOBRE
+          SALDOS INSOLUTOS, GASTOS Y EL PRINCIPAL POR PARTE DE LOS &quot;CLIENTES&quot;
+          &quot;{RL}&quot; DEVOLVERÁ LOS PAGARÉS A LOS &quot;CLIENTES&quot; LO QUE SERÁ PRUEBA
+          SUFICIENTE DE LA CANCELACIÓN DEL CRÉDITO. LOS PAGARÉS TAMBIÉN DEBERÁN SER SUSCRITOS POR
+          UNO O DOS AVALES CONFORME A LAS POLÍTICAS DE &quot;{RL}&quot;
+        </Text>
+      </View>
 
-      <Text style={styles.upper}>
-        <Text style={styles.bold}>DECIMA PRIMERA: CESIÓN DE DERECHOS. - </Text>
-        LOS &quot;CLIENTES AUTORIZAN DESDE ESTE MOMENTO Y EXPRESAMENTE A &quot;{RL}&quot; PARA
-        QUE PUEDA CEDER O DESCONTAR, GRAVAR, ENAJENAR O TRANSMITIR, AUN ANTES DE SU VENCIMIENTO
-        DEL PRESENTE CONTRATO LOS DERECHOS DE CRÉDITO, SIN QUE ELLO IMPLIQUE UNA RENOVACIÓN
-        DEL MISMO. LOS CLIENTES&quot; NO PODRÁN CEDER SUS DERECHOS Y OBLIGACIONES DERIVADOS DEL
-        PRESENTE CONTRATO SI NO MEDIANTE PREVIO CONSENTIMIENTO ESCRITO Y FIRMADO POR
-        &quot;{RL}&quot;
-      </Text>
+      <View style={{ marginBottom: 6 }}>
+        <Text style={[styles.upper, styles.bold, { marginBottom: 0 }]}>DECIMA PRIMERA: CESIÓN DE DERECHOS. - </Text>
+        <Text style={[styles.upper, { marginBottom: 0 }]}>
+          LOS &quot;CLIENTES AUTORIZAN DESDE ESTE MOMENTO Y EXPRESAMENTE A &quot;{RL}&quot; PARA
+          QUE PUEDA CEDER O DESCONTAR, GRAVAR, ENAJENAR O TRANSMITIR, AUN ANTES DE SU VENCIMIENTO
+          DEL PRESENTE CONTRATO LOS DERECHOS DE CRÉDITO, SIN QUE ELLO IMPLIQUE UNA RENOVACIÓN
+          DEL MISMO. LOS CLIENTES&quot; NO PODRÁN CEDER SUS DERECHOS Y OBLIGACIONES DERIVADOS DEL
+          PRESENTE CONTRATO SI NO MEDIANTE PREVIO CONSENTIMIENTO ESCRITO Y FIRMADO POR
+          &quot;{RL}&quot;
+        </Text>
+      </View>
 
       {/* ── SECCIÓN 9 — Cierre del contrato ─────────────────────────────── */}
       <Text style={[styles.upper, { marginTop: 12 }]}>

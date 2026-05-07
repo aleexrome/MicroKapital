@@ -8,7 +8,8 @@ export interface SolicitudCreditoIntegrante {
   numero: number
   nombre: string
   montoAnterior?: number
-  montoSolicitado: number
+  // Opcional: el aval no recibe dinero, así que se omite. Si no viene se renderiza "—".
+  montoSolicitado?: number
 }
 
 export interface SolicitudCreditoProps {
@@ -103,7 +104,7 @@ export function SolicitudCredito(props: SolicitudCreditoProps) {
                 {i.montoAnterior !== undefined ? formatCurrency(i.montoAnterior) : '—'}
               </Text>
               <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'right' }]}>
-                {formatCurrency(i.montoSolicitado)}
+                {i.montoSolicitado !== undefined ? formatCurrency(i.montoSolicitado) : '—'}
               </Text>
               <Text style={[styles.tableCell, { flex: 2 }]}> </Text>
             </View>

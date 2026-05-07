@@ -1,7 +1,7 @@
 import { View, Text } from '@react-pdf/renderer'
 import { BaseTemplatePage } from './BaseTemplate'
 import { styles } from './styles'
-import { formatCurrency, formatDateContrato } from '../formatters'
+import { formatCurrency, formatDateLong } from '../formatters'
 import { convertirMontoALetras } from '../numerosEnLetras'
 
 export interface ContratoAgilProps {
@@ -31,7 +31,7 @@ export function ContratoAgil(props: ContratoAgilProps) {
     fechaFirma, representanteLegal, ciudadFirma, cat, interesMoratorio,
   } = props
 
-  const fechaDesembolso = formatDateContrato(fechaFirma)
+  const fechaDesembolso = formatDateLong(fechaFirma)
   const lugarFirma = `${ciudadFirma}, MÉX.`
   const montoLetras = convertirMontoALetras(montoTotal)
   const RL = representanteLegal.toUpperCase()
@@ -51,7 +51,7 @@ export function ContratoAgil(props: ContratoAgilProps) {
       <View style={{ position: 'relative', minHeight: 80, marginBottom: 8 }}>
         <View style={styles.buenoPorBox}>
           <Text style={styles.buenoPorLabel}>BUENO POR:</Text>
-          <Text style={styles.buenoPorAmount}>{MONTO}.°°</Text>
+          <Text style={styles.buenoPorAmount}>{MONTO}</Text>
         </View>
 
         {/* ── SECCIÓN 2 — Título del pagaré ──────────────────────────────── */}

@@ -10,6 +10,8 @@ import { LoanRenewButton } from '@/components/loans/LoanRenewButton'
 import { DocumentChecklist } from '@/components/loans/DocumentChecklist'
 import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
 import { ScheduleDateEditor } from '@/components/loans/ScheduleDateEditor'
+import { GenerarContratoButton } from '@/components/loans/GenerarContratoButton'
+import { EstadoFlujoActivacion } from '@/components/loans/EstadoFlujoActivacion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatMoney, formatDate } from '@/lib/utils'
@@ -78,6 +80,75 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   type ChecklistItem = { id: string; label: string; checked: boolean }
 
   if (!loan) notFound()
+
+  // ── Contrato del préstamo (Fase 5 — módulo de contratos) ──────────────────
+  // Busca el Contract por `loanId` directo (caso individual/ágil o coordinadora
+  // del solidario) o vía ContractGroupMember para integrantes del solidario.
+  // Cargamos también la URL del LoanDocument firmado para mostrar el "Ver firmado".
+  const contratoRow = await prisma.contract.findFirst({
+    where: {
+      companyId: companyId!,
+      OR: [
+        { loanId: loan.id },
+        { groupMembers: { some: { loanId: loan.id } } },
+      ],
+    },
+    select: {
+      id: true,
+      numeroContrato: true,
+      pdfGeneradoUrl: true,
+      loanDocumentFirmadoId: true,
+    },
+  })
+
+  let contratoFirmadoUrl: string | null = null
+  if (contratoRow?.loanDocumentFirmadoId) {
+    const doc = await prisma.loanDocument.findUnique({
+      where: { id: contratoRow.loanDocumentFirmadoId },
+      select: { archivoUrl: true },
+    })
+    contratoFirmadoUrl = doc?.archivoUrl ?? null
+  }
+
+  const contratoExistente = contratoRow
+    ? {
+        id: contratoRow.id,
+        numeroContrato: contratoRow.numeroContrato,
+        pdfGeneradoUrl: contratoRow.pdfGeneradoUrl,
+        loanDocumentFirmadoId: contratoRow.loanDocumentFirmadoId,
+        loanDocumentFirmadoUrl: contratoFirmadoUrl,
+      }
+    : null
+
+  // ── Estado del flujo de activación (Fase 5) ───────────────────────────────
+  // Chip 1 — contrato firmado: existe Contract con loanDocumentFirmadoId.
+  const contratoFirmadoSubido = !!contratoRow?.loanDocumentFirmadoId
+
+  // Chip 2 — pago de comisión/seguro: existe Payment de tarifa de apertura ya
+  // cobrado y no en estado PENDIENTE de verificación. Lo distinguimos de las
+  // cuotas regulares por `scheduleId === null` (no liga a una cuota) y por
+  // las notas que el endpoint activate genera ("Seguro de apertura" /
+  // "Comisión de apertura"). Si el préstamo ya pasó a ACTIVE, asumimos que
+  // el activate completó la cobranza con éxito.
+  const seguroPagado = loan.estado === 'ACTIVE'
+    || (await prisma.payment.count({
+      where: {
+        loanId: loan.id,
+        scheduleId: null,
+        OR: [
+          { notas: { contains: 'apertura', mode: 'insensitive' } },
+          { notas: { contains: 'seguro',   mode: 'insensitive' } },
+          { notas: { contains: 'comisi',   mode: 'insensitive' } },
+        ],
+        NOT: { statusTransferencia: 'PENDIENTE' },
+      },
+    })) > 0
+
+  // Chip 3 — foto del desembolso: subida al endpoint disbursement-photo
+  // (ocurre después de activar, por eso en APPROVED queda gris/LATER).
+  const fotoDesembolsoSubida = !!loan.desembolsoFotoUrl
+
+  const contractsRequired = process.env.CONTRACTS_REQUIRED === 'true'
 
   // Check if the client applying for this loan is a guarantor (aval) for someone else
   const avalMatches = loan.estado === 'PENDING_APPROVAL'
@@ -346,6 +417,31 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               tasaInteres={loan.tasaInteres ? Number(loan.tasaInteres) : undefined}
               grupoMiembros={grupoMiembros}
             />
+          )}
+
+          {/* Estado del flujo — visible en APPROVED y ACTIVE para que se vea cómo evolucionan los chips */}
+          {(loan.estado === 'APPROVED' || loan.estado === 'ACTIVE') && (
+            <div className="pt-1 space-y-3">
+              <EstadoFlujoActivacion
+                loanEstado={loan.estado}
+                contratoFirmadoSubido={contratoFirmadoSubido}
+                seguroPagado={seguroPagado}
+                fotoDesembolsoSubida={fotoDesembolsoSubida}
+                contractsRequired={contractsRequired}
+              />
+              {loan.estado === 'APPROVED' && (
+                <GenerarContratoButton
+                  loanId={loan.id}
+                  estado={loan.estado}
+                  userRole={rol}
+                  userId={userId}
+                  loanCobradorId={loan.cobradorId}
+                  loanGerenteZonalIds={session.user.zonaBranchIds ?? undefined}
+                  loanBranchId={loan.branchId}
+                  contratoExistente={contratoExistente}
+                />
+              )}
+            </div>
           )}
 
           {/* Coordinador / Gerente Zonal: activar crédito ya aprobado o registrar rechazo del cliente */}

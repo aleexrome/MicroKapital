@@ -66,6 +66,32 @@ export async function POST(
     return NextResponse.json({ error: 'El crédito debe estar aprobado por el Director General antes de activarse' }, { status: 400 })
   }
 
+  // FEATURE FLAG: contratos firmados requeridos para activar (Fase 5).
+  // Cuando CONTRACTS_REQUIRED=true, exige que exista un Contract con
+  // loanDocumentFirmadoId no null (cubre tanto al loan directo — caso
+  // individual/ágil — como a los integrantes de un grupo solidario, vía
+  // ContractGroupMember). Si está false, el activate procede como antes.
+  const contractsRequired = process.env.CONTRACTS_REQUIRED === 'true'
+  if (contractsRequired) {
+    const contract = await prisma.contract.findFirst({
+      where: {
+        companyId: companyId!,
+        loanDocumentFirmadoId: { not: null },
+        OR: [
+          { loanId: loan.id },
+          { groupMembers: { some: { loanId: loan.id } } },
+        ],
+      },
+      select: { id: true },
+    })
+    if (!contract) {
+      return NextResponse.json(
+        { error: 'Para activar este préstamo primero hay que generar y subir el contrato firmado por el cliente.' },
+        { status: 400 }
+      )
+    }
+  }
+
   // Si el DG solicitó documentación, verificar que los docs requeridos estén subidos
   if (loan.requiereDocumentos) {
     const REQUERIDOS: Record<string, string[]> = {

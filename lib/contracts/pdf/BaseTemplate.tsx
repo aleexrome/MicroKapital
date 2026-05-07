@@ -1,5 +1,17 @@
-import { Document, Page, View, Text, Image } from '@react-pdf/renderer'
+import { Document, Page, View, Text, Image, Font } from '@react-pdf/renderer'
 import { styles, PAGE_SIZE } from './styles'
+
+// Desactiva la hyphenation automática de @react-pdf/renderer.
+//
+// Por default la biblioteca puede insertar guiones de continuación al
+// hacer line-break en texto justificado (`textAlign: 'justify'`). Eso
+// produce artefactos visuales como `Y "-IXMEL STEPHANIE..."` cuando en
+// realidad el dato es `IXMEL STEPHANIE...` sin guión.
+//
+// Registrar este callback que retorna `[word]` (la palabra completa,
+// sin partir) le dice al motor: nunca rompas palabras, prefiere no
+// justificar antes que insertar un guión inventado.
+Font.registerHyphenationCallback((word) => [word])
 
 export const MICROKAPITAL_LOGO_URL =
   'https://res.cloudinary.com/djs8dtzrq/image/upload/v1777329446/PHOTO-2026-04-27-16-21-06-removebg-preview_fczmpb.png'

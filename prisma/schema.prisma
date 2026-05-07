@@ -591,3 +591,78 @@ model Notification {
   enviadoAt  DateTime?
   createdAt  DateTime @default(now())
 }
+
+// ─────────────────────────────────────────
+// MÓDULO DE CONTRATOS (Fase 1)
+// Aditivo: no modifica modelos ni enums existentes
+// ─────────────────────────────────────────
+
+model Contract {
+  id             String   @id @default(uuid())
+  loanId         String   @unique
+  numeroContrato String   @unique
+
+  // Snapshot al momento de generación
+  representanteLegal String
+  lugarFirma         String
+  diaCobro           String
+  horaLimiteCobro    String
+  fechaFirma         DateTime
+
+  // PDF generado (sin firmar)
+  pdfGeneradoUrl String
+  generadoAt     DateTime
+  generadoPorId  String
+
+  // Vínculo al LoanDocument cuando se sube el firmado
+  loanDocumentFirmadoId String? @unique
+
+  companyId String
+  branchId  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  groupMembers ContractGroupMember[]
+
+  @@index([companyId])
+  @@index([branchId])
+}
+
+model ContractGroupMember {
+  id               String   @id @default(uuid())
+  contractId       String
+  contract         Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  loanId           String   @unique
+  esCoordinadora   Boolean  @default(false)
+  ordenLista       Int
+  nombreIntegrante String
+  montoIntegrante  Decimal  @db.Decimal(12, 2)
+
+  @@unique([contractId, loanId])
+  @@unique([contractId, ordenLista])
+  @@index([loanId])
+}
+
+model CompanyContractConfig {
+  id                 String   @id @default(uuid())
+  companyId          String   @unique
+  representanteLegal String
+  cat                Decimal  @default(100.00) @db.Decimal(5, 2)
+  interesMoratorio   Decimal  @default(10.00) @db.Decimal(5, 2)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model BranchContractConfig {
+  id              String   @id @default(uuid())
+  branchId        String   @unique
+  codigoSucursal  String   @unique
+  ciudad          String
+  diaCobro        String
+  horaLimiteCobro String
+  folioYear       Int      @default(2026)
+  folioLastNumber Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

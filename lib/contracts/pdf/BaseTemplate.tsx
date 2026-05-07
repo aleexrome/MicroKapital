@@ -12,15 +12,12 @@ interface BaseTemplateProps {
 }
 
 /**
- * Plantilla base para todos los PDFs del módulo de contratos.
+ * Plantilla base — wrapper standalone que devuelve un <Document>
+ * completo. Útil para PDFs de un solo documento (ej. test-pdf).
  *
- * Renderiza un <Document> con una <Page> que tiene header y footer
- * fijos (en cada página). El contenido del documento se pasa como
- * `children` y se renderiza entre el header y el footer, respetando
- * los márgenes definidos en `styles.page`.
- *
- * El footer muestra:
- *   [folio]  ·  Página X de Y  ·  [lugar, fecha]
+ * Si quieres componer varias secciones en un PDF único, usa
+ * `BaseTemplatePage` que devuelve solo `<Page>` y deja que el caller
+ * envuelva todas las páginas en un `<Document>`.
  */
 export function BaseTemplate({
   numeroContrato,
@@ -30,32 +27,54 @@ export function BaseTemplate({
 }: BaseTemplateProps) {
   return (
     <Document>
-      <Page size={PAGE_SIZE} style={styles.page}>
-        {/* Header — fijo en cada página */}
-        <View style={styles.header} fixed>
-          <Text style={styles.headerTitle}>MICROKAPITAL FINANCIERA</Text>
-          <Image src={MICROKAPITAL_LOGO_URL} style={styles.headerLogo} />
-        </View>
-
-        {/* Contenido del documento */}
+      <BaseTemplatePage
+        numeroContrato={numeroContrato}
+        lugarFirma={lugarFirma}
+        fechaFirma={fechaFirma}
+      >
         {children}
-
-        {/* Footer — fijo en cada página, con paginación dinámica */}
-        <View style={styles.footer} fixed>
-          <View style={styles.footerCol}>
-            <Text>Folio: {numeroContrato}</Text>
-          </View>
-          <Text
-            style={styles.footerColCenter}
-            render={({ pageNumber, totalPages }) =>
-              `Página ${pageNumber} de ${totalPages}`
-            }
-          />
-          <Text style={styles.footerColRight}>
-            {lugarFirma}, {fechaFirma}
-          </Text>
-        </View>
-      </Page>
+      </BaseTemplatePage>
     </Document>
+  )
+}
+
+/**
+ * Versión "Page" de la plantilla — devuelve solo `<Page>` con header
+ * y footer fijos. Permite composición de múltiples secciones en un
+ * mismo Document desde un caller externo.
+ */
+export function BaseTemplatePage({
+  numeroContrato,
+  lugarFirma,
+  fechaFirma,
+  children,
+}: BaseTemplateProps) {
+  return (
+    <Page size={PAGE_SIZE} style={styles.page}>
+      {/* Header — fijo en cada página */}
+      <View style={styles.header} fixed>
+        <Text style={styles.headerTitle}>MICROKAPITAL FINANCIERA</Text>
+        <Image src={MICROKAPITAL_LOGO_URL} style={styles.headerLogo} />
+      </View>
+
+      {/* Contenido del documento */}
+      {children}
+
+      {/* Footer — fijo en cada página, con paginación dinámica */}
+      <View style={styles.footer} fixed>
+        <View style={styles.footerCol}>
+          <Text>Folio: {numeroContrato}</Text>
+        </View>
+        <Text
+          style={styles.footerColCenter}
+          render={({ pageNumber, totalPages }) =>
+            `Página ${pageNumber} de ${totalPages}`
+          }
+        />
+        <Text style={styles.footerColRight}>
+          {lugarFirma}, {fechaFirma}
+        </Text>
+      </View>
+    </Page>
   )
 }

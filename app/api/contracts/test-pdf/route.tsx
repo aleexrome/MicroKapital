@@ -17,7 +17,7 @@ export async function GET() {
   if (!session?.user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
-  if (session.user.rol !== 'SUPER_ADMIN') {
+  if (session.user.rol !== 'SUPER_ADMIN' && session.user.rol !== 'DIRECTOR_GENERAL') {
     return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
   }
 

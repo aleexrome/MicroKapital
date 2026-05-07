@@ -51,7 +51,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
           client:   { select: { id: true, nombreCompleto: true } },
           schedule: { orderBy: { numeroPago: 'asc' } },
           loanRenovado: {
-            where: { estado: { in: ['PENDING_APPROVAL', 'APPROVED'] } },
+            where: { estado: { in: ['PENDING_APPROVAL', 'APPROVED', 'IN_ACTIVATION'] } },
             select: { id: true },
           },
         },

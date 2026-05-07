@@ -75,9 +75,9 @@ export async function POST(req: NextRequest) {
   if (!loan) {
     return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
   }
-  if (loan.estado !== 'APPROVED') {
+  if (loan.estado !== 'APPROVED' && loan.estado !== 'IN_ACTIVATION') {
     return NextResponse.json(
-      { error: 'El préstamo debe estar en estado APPROVED para generar contrato' },
+      { error: 'El préstamo debe estar en APPROVED o IN_ACTIVATION para generar contrato' },
       { status: 400 }
     )
   }
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
     groupLoans = await prisma.loan.findMany({
       where: {
         loanGroupId: loan.loanGroupId,
-        estado: { in: ['APPROVED', 'ACTIVE'] },
+        estado: { in: ['APPROVED', 'IN_ACTIVATION', 'ACTIVE'] },
       },
       include: { client: { select: { id: true, nombreCompleto: true } } },
       orderBy: { createdAt: 'asc' },

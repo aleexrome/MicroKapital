@@ -148,7 +148,9 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   // (ocurre después de activar, por eso en APPROVED queda gris/LATER).
   const fotoDesembolsoSubida = !!loan.desembolsoFotoUrl
 
-  const contractsRequired = process.env.CONTRACTS_REQUIRED === 'true'
+  // Fase 6: el contrato firmado siempre es requisito de activación. El feature
+  // flag CONTRACTS_REQUIRED queda obsoleto (su gate vive ahora en disbursement-photo).
+  const contractsRequired = true
 
   // Check if the client applying for this loan is a guarantor (aval) for someone else
   const avalMatches = loan.estado === 'PENDING_APPROVAL'
@@ -312,8 +314,11 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE')
 
   // Roles que pueden activar un crédito APPROVED — coordinador, gerente (tienen clientes propios) y SUPER_ADMIN
+  // En sub-fase 6a se aceptan tanto APPROVED como IN_ACTIVATION para que la
+  // UI legacy (botón "Activar crédito") siga funcionando hasta que la
+  // sub-fase 6b refactorice la pantalla con candados secuenciales.
   const puedeActivar =
-    loan.estado === 'APPROVED' &&
+    (loan.estado === 'APPROVED' || loan.estado === 'IN_ACTIVATION') &&
     (rol === 'COORDINADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN')
 
   // Tarifa de apertura (seguro o comisión según tipo)
@@ -419,8 +424,8 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             />
           )}
 
-          {/* Estado del flujo — visible en APPROVED y ACTIVE para que se vea cómo evolucionan los chips */}
-          {(loan.estado === 'APPROVED' || loan.estado === 'ACTIVE') && (
+          {/* Estado del flujo — visible en APPROVED, IN_ACTIVATION y ACTIVE para que se vea cómo evolucionan los chips */}
+          {(loan.estado === 'APPROVED' || loan.estado === 'IN_ACTIVATION' || loan.estado === 'ACTIVE') && (
             <div className="pt-1 space-y-3">
               <EstadoFlujoActivacion
                 loanEstado={loan.estado}
@@ -429,7 +434,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 fotoDesembolsoSubida={fotoDesembolsoSubida}
                 contractsRequired={contractsRequired}
               />
-              {loan.estado === 'APPROVED' && (
+              {(loan.estado === 'APPROVED' || loan.estado === 'IN_ACTIVATION') && (
                 <GenerarContratoButton
                   loanId={loan.id}
                   estado={loan.estado}

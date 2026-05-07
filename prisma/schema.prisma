@@ -41,11 +41,13 @@ enum LoanType {
 enum LoanStatus {
   PENDING_APPROVAL
   APPROVED         // Aprobado por Director General — pendiente de activación
+  IN_ACTIVATION    // Cliente aceptó condiciones — coordinador transita los 3 candados
   ACTIVE
   LIQUIDATED
   REJECTED
   RESTRUCTURED
   DEFAULTED
+  DECLINED         // Activación cancelada antes de completar (después de IN_ACTIVATION)
 }
 
 enum ScheduleStatus {
@@ -324,6 +326,11 @@ model Loan {
   rechazadoPor   User?     @relation("RejectedLoans", fields: [rechazadoPorId], references: [id])
   razonRechazo   String?
   notas          String?
+  // Flujo secuencial de activación (Fase 6 — 3 candados)
+  activationStartedAt    DateTime?
+  activationCanceledAt   DateTime?
+  activationCanceledBy   String?
+  activationCancelReason String?
   // Renovación anticipada
   loanOriginalId       String?            // ID del crédito que se está renovando
   loanOriginal         Loan?              @relation("LoanRenewal", fields: [loanOriginalId], references: [id])
@@ -399,6 +406,8 @@ model Payment {
   notas           String?
   fechaHora       DateTime         @default(now())
   createdAt       DateTime         @default(now())
+  // Cancelación (Fase 6 — botón "Atrás" del candado 2 de activación)
+  canceledAt      DateTime?
   // Transferencia bancaria
   cuentaDestinoId     String?
   cuentaDestino       CompanyBankAccount? @relation(fields: [cuentaDestinoId], references: [id])

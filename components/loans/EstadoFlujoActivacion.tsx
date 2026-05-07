@@ -8,6 +8,7 @@ import { RegistrarPagoDialog } from './RegistrarPagoDialog'
 import { CapturarFotoDesembolsoDialog } from './CapturarFotoDesembolsoDialog'
 import { CancelarActivacionDialog } from './CancelarActivacionDialog'
 import { ConfirmarAtrasDialog } from './ConfirmarAtrasDialog'
+import { VolverAtrasDialog } from './VolverAtrasDialog'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/use-toast'
 import { Loader2 } from 'lucide-react'
@@ -78,6 +79,7 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
   const [openPago, setOpenPago] = useState(false)
   const [openFoto, setOpenFoto] = useState(false)
   const [openCancelar, setOpenCancelar] = useState(false)
+  const [openVolverAtras, setOpenVolverAtras] = useState(false)
   const [openAtrasContrato, setOpenAtrasContrato] = useState(false)
   const [openAtrasPago, setOpenAtrasPago] = useState(false)
 
@@ -118,6 +120,16 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
 
   // Cuántos chips cumplidos para la barra de progreso
   const cumplidos = [chip1Status, chip2Status, chip3Status].filter((s) => s === 'OK').length
+
+  // Footer condicional:
+  //  - Sin avance: botón "Volver atrás" (regresa a APPROVED, sin razón)
+  //  - Con avance parcial: botón "Cancelar activación" (DECLINED, con razón obligatoria)
+  // El chip 2 PENDING_TRANSFER cuenta como "con avance" porque ya se intentó cobrar
+  // y deshacer requiere cancelar el Payment vía /cancel-activation.
+  const hayAvance =
+    chip1Status === 'OK' || chip2Status === 'OK' || chip2Status === 'PENDING_TRANSFER' || chip3Status === 'OK'
+  const showVolverAtras = isInActivation && !hayAvance && puedeActuar
+  const showCancelarActivacion = isInActivation && hayAvance && chip3Status !== 'OK' && puedeActuar
 
   // ── Acción del chip 1: generar contrato → subir firmado ──────────────────
   async function handleGenerarContrato() {
@@ -251,18 +263,31 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
         atras={null}  // Chip 3 es irrevocable: subir la foto activa el préstamo
       />
 
-      {/* ── Footer: Cancelar activación ─────────────────────────────────── */}
-      {isInActivation && chip3Status !== 'OK' && puedeActuar && (
+      {/* ── Footer: "Volver atrás" o "Cancelar activación" según avance ── */}
+      {(showVolverAtras || showCancelarActivacion) && (
         <div className="pt-2 border-t border-border/40">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setOpenCancelar(true)}
-            className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-          >
-            <XOctagon className="h-3.5 w-3.5" />
-            Cancelar activación
-          </Button>
+          {showVolverAtras && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setOpenVolverAtras(true)}
+              className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+              Volver atrás
+            </Button>
+          )}
+          {showCancelarActivacion && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setOpenCancelar(true)}
+              className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+            >
+              <XOctagon className="h-3.5 w-3.5" />
+              Cancelar activación
+            </Button>
+          )}
         </div>
       )}
 
@@ -295,6 +320,12 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
         loanId={loanId}
         open={openCancelar}
         onClose={() => setOpenCancelar(false)}
+      />
+
+      <VolverAtrasDialog
+        loanId={loanId}
+        open={openVolverAtras}
+        onClose={() => setOpenVolverAtras(false)}
       />
 
       {contrato && (

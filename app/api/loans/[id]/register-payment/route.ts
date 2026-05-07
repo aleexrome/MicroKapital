@@ -136,14 +136,31 @@ export async function POST(
   // ── FINANCIADO ──────────────────────────────────────────────────────────
   if (data.metodoPago === 'FINANCIADO') {
     const nuevoMontoReal = Number(loan.montoReal) - feeMonto
-    await prisma.loan.update({
-      where: { id: loan.id },
-      data: {
-        montoReal: nuevoMontoReal,
-        ...(esFeeSeguro ? { seguro: feeMonto } : {}),
-        seguroMetodoPago: 'CASH',  // por convención, FINANCIADO se asienta como CASH descontado
-        seguroPendiente: false,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.loan.update({
+        where: { id: loan.id },
+        data: {
+          montoReal: nuevoMontoReal,
+          ...(esFeeSeguro ? { seguro: feeMonto } : {}),
+          seguroMetodoPago: 'CASH',  // por convención, FINANCIADO se asienta como CASH descontado
+          seguroPendiente: false,
+        },
+      })
+      // Payment ficticio (monto 0) para que el candado 2 quede registrado de
+      // forma consistente con CASH/CARD/TRANSFER. Permite que cancel-payment
+      // y cancel-start-activation detecten el avance vía la búsqueda por notas.
+      await tx.payment.create({
+        data: {
+          loanId: loan.id,
+          cobradorId: userId,
+          clientId: loan.clientId,
+          monto: 0,
+          metodoPago: 'CASH',
+          cambioEntregado: 0,
+          notas: `FINANCIADO - apertura registrada (${feeConcepto}: $${feeMonto.toFixed(2)})`,
+          fechaHora: new Date(),
+        },
+      })
     })
     createAuditLog({
       userId,

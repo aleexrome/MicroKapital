@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
-import { type Prisma } from '@prisma/client'
 import { createAuditLog } from '@/lib/audit'
 import { v2 as cloudinary } from 'cloudinary'
 import {
@@ -45,27 +44,31 @@ export async function POST(
     return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
   }
 
-  const loanWhere: Prisma.LoanWhereInput = {
-    id: params.id,
-    companyId: companyId!,
-    estado: 'IN_ACTIVATION',
-  }
-  if (rol === 'COORDINADOR' || rol === 'GERENTE') {
-    loanWhere.cobradorId = userId
-  } else if (rol === 'GERENTE_ZONAL') {
-    const zoneIds = session.user.zonaBranchIds
-    if (zoneIds?.length) {
-      loanWhere.branchId = { in: zoneIds }
-    } else {
-      loanWhere.cobradorId = userId
-    }
+  const loan = await prisma.loan.findFirst({
+    where: { id: params.id, companyId: companyId! },
+  })
+  if (!loan) {
+    return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
   }
 
-  const loan = await prisma.loan.findFirst({ where: loanWhere })
-  if (!loan) {
+  // Permisos por rol
+  let allowed = false
+  if (rol === 'SUPER_ADMIN') {
+    allowed = true
+  } else if (rol === 'COORDINADOR' || rol === 'GERENTE') {
+    allowed = loan.cobradorId === userId
+  } else if (rol === 'GERENTE_ZONAL') {
+    const zoneIds = session.user.zonaBranchIds
+    allowed = (Array.isArray(zoneIds) && zoneIds.includes(loan.branchId)) || loan.cobradorId === userId
+  }
+  if (!allowed) {
+    return NextResponse.json({ error: 'Sin permisos sobre este préstamo' }, { status: 403 })
+  }
+
+  if (loan.estado !== 'IN_ACTIVATION') {
     return NextResponse.json(
-      { error: 'Préstamo no encontrado o no está en IN_ACTIVATION' },
-      { status: 404 }
+      { error: 'El préstamo no está en flujo de activación' },
+      { status: 400 }
     )
   }
 

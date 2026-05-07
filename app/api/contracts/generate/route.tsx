@@ -5,6 +5,12 @@ import { Document, renderToBuffer } from '@react-pdf/renderer'
 import { v2 as cloudinary } from 'cloudinary'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
+import {
+  generarFechasSemanales,
+  generarFechasSemanalesDesde,
+  generarFechasHabiles,
+  generarFechasHabilesDesde,
+} from '@/lib/business-days'
 
 import { ContratoSolidario }   from '@/lib/contracts/pdf/ContratoSolidario'
 import { ContratoIndividual }  from '@/lib/contracts/pdf/ContratoIndividual'
@@ -175,10 +181,30 @@ export async function POST(req: NextRequest) {
   const numeroContrato = `MK-${nuevoFolio.codigoSucursal}-${nuevoFolio.year}-${String(nuevoFolio.number).padStart(5, '0')}`
 
   // ── 6. Construir datos del PDF ────────────────────────────────────────────
-  const fechaFirma  = new Date()
-  const fechaInicio = loan.fechaPrimerPago ?? loan.schedule[0]?.fechaVencimiento ?? loan.fechaDesembolso ?? fechaFirma
-  const fechaTermino = loan.schedule[loan.schedule.length - 1]?.fechaVencimiento ?? fechaInicio
-  const fechasPagos  = loan.schedule.map((s) => s.fechaVencimiento)
+  const fechaFirma = new Date()
+
+  // Fechas de pago: si el préstamo ya tiene PaymentSchedule (ACTIVE) las usamos
+  // tal cual. Si no (APPROVED, sin activar), las calculamos a partir de
+  // fechaPrimerPago (anclado, P1 = fechaPrimerPago) o fechaDesembolso (sin
+  // ancla, P1 = primer día hábil/semana después). Mismo patrón que activate.
+  const plazo = Number(loan.plazo)
+  let fechasPagos: Date[]
+  if (loan.schedule.length > 0) {
+    fechasPagos = loan.schedule.map((s) => s.fechaVencimiento)
+  } else if (loan.fechaPrimerPago) {
+    fechasPagos = loan.tipo === 'AGIL'
+      ? generarFechasHabilesDesde(loan.fechaPrimerPago, plazo)
+      : generarFechasSemanalesDesde(loan.fechaPrimerPago, plazo)
+  } else if (loan.fechaDesembolso) {
+    fechasPagos = loan.tipo === 'AGIL'
+      ? generarFechasHabiles(loan.fechaDesembolso, plazo)
+      : generarFechasSemanales(loan.fechaDesembolso, plazo)
+  } else {
+    fechasPagos = []
+  }
+
+  const fechaInicio = fechasPagos[0] ?? loan.fechaDesembolso ?? fechaFirma
+  const fechaTermino = fechasPagos[fechasPagos.length - 1] ?? fechaInicio
 
   // Datos para Solicitud
   let solicitudIntegrantes: SolicitudCreditoIntegrante[] = []
@@ -202,7 +228,7 @@ export async function POST(req: NextRequest) {
     const avalNombre = loan.avalNombre ?? 'POR DEFINIR'
     solicitudIntegrantes = [
       { rol: 'Cliente', numero: 1, nombre: loan.client.nombreCompleto, montoSolicitado: Number(loan.capital) },
-      { rol: 'Aval',    numero: 2, nombre: avalNombre, montoSolicitado: 0 },
+      { rol: 'Aval',    numero: 2, nombre: avalNombre },  // sin monto: el aval no recibe dinero
     ]
     solicitudTotal   = Number(loan.capital)
     if (loan.tipo === 'AGIL') {
@@ -217,7 +243,11 @@ export async function POST(req: NextRequest) {
   // ── 7. Render del PDF compuesto ──────────────────────────────────────────
   const cat = Number(companyConfig.cat)
   const interesMoratorio = Number(companyConfig.interesMoratorio)
+  // Sanitizar: limpiar guiones / caracteres no alfanuméricos al inicio del nombre
+  // del representante legal por si la captura quedó con basura ("-IXMEL ..." → "IXMEL ...")
   const representanteLegal = companyConfig.representanteLegal
+    .trim()
+    .replace(/^[^A-Za-zÀ-ÿ0-9]+/, '')
   const ciudadFirma = branchConfig.ciudad
   const diaCobro = branchConfig.diaCobro
   const horaLimiteCobro = branchConfig.horaLimiteCobro

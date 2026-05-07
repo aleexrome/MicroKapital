@@ -351,12 +351,15 @@ export async function POST(req: NextRequest) {
 
   const pdfBuffer = await renderToBuffer(pdfDocument)
 
-  // ── 8. Subir a Cloudinary con public_id = numeroContrato ─────────────────
+  // ── 8. Subir a Cloudinary con public_id = numeroContrato.pdf ─────────────
+  // La extensión .pdf en el public_id es necesaria para que Cloudinary
+  // sirva el archivo con Content-Type: application/pdf. Sin ella, los
+  // navegadores reciben el binario como texto plano al abrir la URL.
   const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
         folder: 'microkapital/contratos',
-        public_id: numeroContrato,
+        public_id: `${numeroContrato}.pdf`,
         resource_type: 'raw',  // PDF se sube como raw
         type: 'upload',
       },
@@ -367,6 +370,11 @@ export async function POST(req: NextRequest) {
     )
     stream.end(pdfBuffer)
   })
+
+  // Guardia: asegurar que la URL termine en .pdf por si Cloudinary la regresa sin extensión
+  const pdfUrl = uploadResult.secure_url.endsWith('.pdf')
+    ? uploadResult.secure_url
+    : `${uploadResult.secure_url}.pdf`
 
   // ── 9. Persistir Contract + ContractGroupMember[] ────────────────────────
   const contract = await prisma.$transaction(async (tx) => {
@@ -379,7 +387,7 @@ export async function POST(req: NextRequest) {
         diaCobro,
         horaLimiteCobro,
         fechaFirma,
-        pdfGeneradoUrl: uploadResult.secure_url,
+        pdfGeneradoUrl: pdfUrl,
         generadoAt: fechaFirma,
         generadoPorId: userId,
         companyId: companyId!,
@@ -419,7 +427,7 @@ export async function POST(req: NextRequest) {
     {
       contractId: contract.id,
       numeroContrato,
-      pdfUrl: uploadResult.secure_url,
+      pdfUrl,
     },
     { status: 201 }
   )

@@ -22,6 +22,7 @@ import {
   ArrowLeftRight,
   Archive,
   Shield,
+  FileText,
   ChevronDown,
   ChevronRight,
   Layers,
@@ -131,6 +132,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Administración',
     icon: <Shield className="h-5 w-5" />,
     roles: ['SUPER_ADMIN'],
+  },
+  {
+    href: '/admin/contratos-config',
+    label: 'Config. Contratos',
+    icon: <FileText className="h-5 w-5" />,
+    roles: ['SUPER_ADMIN', 'DIRECTOR_GENERAL'],
   },
 ]
 

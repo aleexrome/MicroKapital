@@ -10,8 +10,8 @@ import { LoanRenewButton } from '@/components/loans/LoanRenewButton'
 import { DocumentChecklist } from '@/components/loans/DocumentChecklist'
 import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
 import { ScheduleDateEditor } from '@/components/loans/ScheduleDateEditor'
-import { GenerarContratoButton } from '@/components/loans/GenerarContratoButton'
 import { EstadoFlujoActivacion } from '@/components/loans/EstadoFlujoActivacion'
+import { ComenzarActivacionButton } from '@/components/loans/ComenzarActivacionButton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatMoney, formatDate } from '@/lib/utils'
@@ -125,16 +125,17 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   const contratoFirmadoSubido = !!contratoRow?.loanDocumentFirmadoId
 
   // Chip 2 — pago de comisión/seguro: existe Payment de tarifa de apertura ya
-  // cobrado y no en estado PENDIENTE de verificación. Lo distinguimos de las
-  // cuotas regulares por `scheduleId === null` (no liga a una cuota) y por
-  // las notas que el endpoint activate genera ("Seguro de apertura" /
-  // "Comisión de apertura"). Si el préstamo ya pasó a ACTIVE, asumimos que
-  // el activate completó la cobranza con éxito.
+  // cobrado, NO cancelado (canceledAt null) y NO pendiente de verificación.
+  // Lo distinguimos de las cuotas regulares por `scheduleId === null` (no
+  // liga a una cuota) y por las notas que el endpoint genera ("Seguro de
+  // apertura" / "Comisión de apertura"). Si el préstamo ya pasó a ACTIVE,
+  // asumimos que el flujo completó la cobranza con éxito.
   const seguroPagado = loan.estado === 'ACTIVE'
     || (await prisma.payment.count({
       where: {
         loanId: loan.id,
         scheduleId: null,
+        canceledAt: null,
         OR: [
           { notas: { contains: 'apertura', mode: 'insensitive' } },
           { notas: { contains: 'seguro',   mode: 'insensitive' } },
@@ -147,10 +148,6 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   // Chip 3 — foto del desembolso: subida al endpoint disbursement-photo
   // (ocurre después de activar, por eso en APPROVED queda gris/LATER).
   const fotoDesembolsoSubida = !!loan.desembolsoFotoUrl
-
-  // Fase 6: el contrato firmado siempre es requisito de activación. El feature
-  // flag CONTRACTS_REQUIRED queda obsoleto (su gate vive ahora en disbursement-photo).
-  const contractsRequired = true
 
   // Check if the client applying for this loan is a guarantor (aval) for someone else
   const avalMatches = loan.estado === 'PENDING_APPROVAL'
@@ -313,14 +310,6 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     pagados >= umbral &&
     (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE')
 
-  // Roles que pueden activar un crédito APPROVED — coordinador, gerente (tienen clientes propios) y SUPER_ADMIN
-  // En sub-fase 6a se aceptan tanto APPROVED como IN_ACTIVATION para que la
-  // UI legacy (botón "Activar crédito") siga funcionando hasta que la
-  // sub-fase 6b refactorice la pantalla con candados secuenciales.
-  const puedeActivar =
-    (loan.estado === 'APPROVED' || loan.estado === 'IN_ACTIVATION') &&
-    (rol === 'COORDINADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN')
-
   // Tarifa de apertura (seguro o comisión según tipo)
   const tarifaApertura = calcTarifaApertura(
     loan.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
@@ -424,36 +413,11 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             />
           )}
 
-          {/* Estado del flujo — visible en APPROVED, IN_ACTIVATION y ACTIVE para que se vea cómo evolucionan los chips */}
-          {(loan.estado === 'APPROVED' || loan.estado === 'IN_ACTIVATION' || loan.estado === 'ACTIVE') && (
-            <div className="pt-1 space-y-3">
-              <EstadoFlujoActivacion
-                loanEstado={loan.estado}
-                contratoFirmadoSubido={contratoFirmadoSubido}
-                seguroPagado={seguroPagado}
-                fotoDesembolsoSubida={fotoDesembolsoSubida}
-                contractsRequired={contractsRequired}
-              />
-              {(loan.estado === 'APPROVED' || loan.estado === 'IN_ACTIVATION') && (
-                <GenerarContratoButton
-                  loanId={loan.id}
-                  estado={loan.estado}
-                  userRole={rol}
-                  userId={userId}
-                  loanCobradorId={loan.cobradorId}
-                  loanGerenteZonalIds={session.user.zonaBranchIds ?? undefined}
-                  loanBranchId={loan.branchId}
-                  contratoExistente={contratoExistente}
-                />
-              )}
-            </div>
-          )}
-
-          {/* Coordinador / Gerente Zonal: activar crédito ya aprobado o registrar rechazo del cliente */}
-          {puedeActivar && !loan.seguroPendiente && (
+          {/* APPROVED — pre-flujo: presentar al cliente */}
+          {loan.estado === 'APPROVED' && (rol === 'COORDINADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN' || rol === 'DIRECTOR_GENERAL') && (
             <div className="pt-1 space-y-2">
-              <p className="text-sm text-blue-700 font-medium">
-                Crédito aprobado por el Director General. Preséntalo al cliente y actívalo si acepta.
+              <p className="text-sm text-blue-400 font-medium">
+                Crédito aprobado por el Director General. Preséntalo al cliente y comienza la activación si acepta.
               </p>
               {loan.requiereDocumentos && (
                 <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-300 flex items-start gap-2">
@@ -462,22 +426,38 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
-                <LoanActivateButton
-                  loanId={loan.id}
-                  fechaDesembolsoDG={loan.fechaDesembolso ? loan.fechaDesembolso.toISOString().slice(0, 10) : null}
-                  fechaPrimerPagoDG={loan.fechaPrimerPago ? loan.fechaPrimerPago.toISOString().slice(0, 10) : null}
-                  feeConcepto={tarifaApertura.concepto}
-                  feeMonto={tarifaApertura.monto}
-                  capital={Number(loan.capital)}
-                  descuentoRenovacion={loan.descuentoRenovacion ? Number(loan.descuentoRenovacion) : 0}
-                />
+                <ComenzarActivacionButton loanId={loan.id} />
                 <LoanClientRejectButton loanId={loan.id} />
               </div>
             </div>
           )}
 
-          {/* Gerente: verificar transferencia del seguro y activar */}
-          {loan.seguroPendiente && (rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN') && (
+          {/* Estado del flujo — visible en APPROVED, IN_ACTIVATION y ACTIVE */}
+          {(loan.estado === 'APPROVED' || loan.estado === 'IN_ACTIVATION' || loan.estado === 'ACTIVE' || loan.estado === 'DECLINED') && (
+            <div className="pt-1 space-y-3">
+              <EstadoFlujoActivacion
+                loanId={loan.id}
+                loanEstado={loan.estado}
+                contratoFirmadoSubido={contratoFirmadoSubido}
+                seguroPagado={seguroPagado}
+                seguroPendienteTransfer={loan.seguroPendiente}
+                fotoDesembolsoSubida={fotoDesembolsoSubida}
+                contrato={contratoExistente}
+                feeConcepto={tarifaApertura.concepto}
+                feeMonto={tarifaApertura.monto}
+                capital={Number(loan.capital)}
+                descuentoRenovacion={loan.descuentoRenovacion ? Number(loan.descuentoRenovacion) : 0}
+                userRole={rol}
+                userId={userId}
+                loanCobradorId={loan.cobradorId}
+                loanGerenteZonalIds={session.user.zonaBranchIds ?? undefined}
+                loanBranchId={loan.branchId}
+              />
+            </div>
+          )}
+
+          {/* Gerente verificando transferencia pendiente — flujo legacy del activate */}
+          {loan.estado === 'IN_ACTIVATION' && loan.seguroPendiente && (rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN') && (
             <div className="pt-1">
               <LoanActivateButton
                 loanId={loan.id}
@@ -485,7 +465,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 feeConcepto={tarifaApertura.concepto}
                 feeMonto={tarifaApertura.monto}
                 capital={Number(loan.capital)}
-                  descuentoRenovacion={loan.descuentoRenovacion ? Number(loan.descuentoRenovacion) : 0}
+                descuentoRenovacion={loan.descuentoRenovacion ? Number(loan.descuentoRenovacion) : 0}
               />
             </div>
           )}

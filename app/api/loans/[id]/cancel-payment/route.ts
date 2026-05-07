@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
 import { todayMx } from '@/lib/timezone'
+import { calcTarifaApertura } from '@/lib/financial-formulas'
 
 /**
  * POST /api/loans/[id]/cancel-payment
@@ -36,6 +37,7 @@ export async function POST(
       id: true, estado: true, cobradorId: true, branchId: true,
       desembolsoFotoUrl: true, montoReal: true,
       seguroMetodoPago: true, seguro: true,
+      tipo: true, capital: true, comision: true,
     },
   })
   if (!loan) {
@@ -137,6 +139,20 @@ export async function POST(
       }
     }
 
+    // Si el Payment era el ficticio de FINANCIADO, restaurar el montoReal:
+    // register-payment lo había decrementado por la tarifa de apertura.
+    const esFinanciado = (payment.notas ?? '').toUpperCase().includes('FINANCIADO')
+    const montoRealRestoreData = esFinanciado
+      ? (() => {
+          const tarifa = calcTarifaApertura(
+            loan.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
+            Number(loan.capital),
+            Number(loan.comision)
+          )
+          return { montoReal: Number(loan.montoReal) + tarifa.monto }
+        })()
+      : {}
+
     // Limpiar seguroMetodoPago / seguroPendiente / seguro en el Loan
     await tx.loan.update({
       where: { id: loan.id },
@@ -144,6 +160,7 @@ export async function POST(
         seguro: null,
         seguroMetodoPago: null,
         seguroPendiente: false,
+        ...montoRealRestoreData,
       },
     })
   })

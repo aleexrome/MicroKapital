@@ -633,8 +633,10 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
       />
 
-      {/* Evidencia de desembolso */}
-      {loan.estado === 'ACTIVE' && (
+      {/* Evidencia de desembolso (legacy) — solo cuando el préstamo ya está
+          ACTIVE y aún no tiene foto subida. En IN_ACTIVATION el upload se
+          hace desde el chip 3 de EstadoFlujoActivacion. */}
+      {loan.estado === 'ACTIVE' && !loan.desembolsoFotoUrl && (
         <DisbursementPhoto
           loanId={loan.id}
           fotoUrl={loan.desembolsoFotoUrl}

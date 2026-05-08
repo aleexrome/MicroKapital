@@ -80,6 +80,11 @@ export async function POST(
         },
       })
 
+      // Borrar hijos del Payment antes del Payment mismo (no hay onDelete: Cascade
+      // en el schema, así que hay que hacerlo a mano para evitar 23503).
+      await tx.cashBreakdown.deleteMany({ where: { paymentId: pago.id } })
+      await tx.ticket.deleteMany({ where: { paymentId: pago.id } })
+
       // Eliminar el registro del pago
       await tx.payment.delete({ where: { id: pago.id } })
     }

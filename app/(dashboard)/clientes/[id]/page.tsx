@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
 import { ClientRenovacionButton } from '@/components/loans/ClientRenovacionButton'
+import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 import { formatDate, formatMoney } from '@/lib/utils'
 import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2, FolderOpen, Users, Pencil, ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
@@ -115,6 +116,12 @@ export default async function ClienteExpedientePage({
   }
 
   const puedeVerRenovacion = ROLES_RENOVACION.includes(rol)
+
+  // Anti-fraude: bloqueo por limbo > 72h aplica al cobrador del cliente.
+  const cobradorIdEfectivo = client.cobradorId ?? userId
+  const limboCheck = (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL')
+    ? await tienePrestamosEnLimbo72h(cobradorIdEfectivo, prisma)
+    : { bloqueado: false, prestamosEnLimbo: [] }
 
   const overdueCount = client.loans
     .filter((l) => l.estado === 'ACTIVE')
@@ -328,6 +335,11 @@ export default async function ClienteExpedientePage({
                             pagosRealizados={pagados}
                             umbral={umbral}
                             pagosPendientes={pagosPendientes}
+                            bloqueoLimbo={
+                              limboCheck.bloqueado
+                                ? { bloqueado: true, prestamosCount: limboCheck.prestamosEnLimbo.length }
+                                : undefined
+                            }
                           />
                         </div>
                       </div>

@@ -25,6 +25,8 @@ import { Prisma, type UserRole } from '@prisma/client'
 import { LoanStatusChart, MonthPaymentsChart, LoanTypeChart, BranchCapitalChart } from '@/components/dashboard/DashboardCharts'
 import { BranchFilter } from '@/components/dashboard/BranchFilter'
 import { todayMx } from '@/lib/timezone'
+import { BannerLimbo } from '@/components/BannerLimbo'
+import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 
 const ESTADO_LABEL: Record<string, string> = {
   ACTIVE: 'Activo',
@@ -288,8 +290,19 @@ export default async function DashboardPage({
     },
   })
 
+  // Anti-fraude: si la cobradora tiene préstamos > 72h en limbo, mostrar
+  // banner rojo arriba del dashboard. Solo aplica a roles que crean
+  // solicitudes (COORDINADOR/GERENTE/GERENTE_ZONAL — los DG/DC no se
+  // bloquean a sí mismos por esta vía).
+  const limboStatus = (rol === 'COORDINADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL')
+    ? await tienePrestamosEnLimbo72h(userId, prisma)
+    : { bloqueado: false, prestamosEnLimbo: [] }
+
   return (
     <div className="p-6 space-y-6">
+      {/* Banner anti-fraude — préstamos en limbo > 72h */}
+      {limboStatus.bloqueado && <BannerLimbo prestamosEnLimbo={limboStatus.prestamosEnLimbo} />}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>

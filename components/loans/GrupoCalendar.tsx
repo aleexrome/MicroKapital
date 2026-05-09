@@ -119,10 +119,12 @@ interface Props {
   canRenewGroup?: boolean
   memberRenewalData?: MemberRenewalData[]
   paymentInfoMap?: Record<string, PaymentInfo>
+  /** Si la cobradora del grupo tiene préstamos en limbo > 72h. */
+  bloqueoLimbo?: { bloqueado: boolean; prestamosCount: number }
 }
 
 export function GrupoCalendar({
-  groupId, loans, canActGroup, canRenewGroup, memberRenewalData, paymentInfoMap,
+  groupId, loans, canActGroup, canRenewGroup, memberRenewalData, paymentInfoMap, bloqueoLimbo,
 }: Props) {
   const router    = useRouter()
   const { toast } = useToast()
@@ -409,12 +411,19 @@ export function GrupoCalendar({
                 ))}
               </div>
 
+              {bloqueoLimbo?.bloqueado && (
+                <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 mb-2">
+                  <strong>Bloqueado:</strong> tienes {bloqueoLimbo.prestamosCount} préstamo(s) pendiente(s) de activar por más de 72 horas. Activa o cancela esos antes de renovar al grupo.
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <Button
                   size="sm"
                   className="bg-green-600 hover:bg-green-700 text-white"
-                  disabled={renewLoading}
+                  disabled={renewLoading || bloqueoLimbo?.bloqueado === true}
                   onClick={handleGroupRenew}
+                  title={bloqueoLimbo?.bloqueado ? `Bloqueado por ${bloqueoLimbo.prestamosCount} préstamo(s) en limbo > 72h` : undefined}
                 >
                   {renewLoading
                     ? <Loader2 className="h-3 w-3 animate-spin" />

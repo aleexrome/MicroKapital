@@ -131,6 +131,7 @@ export default async function DashboardLayout({
   return (
     <>
       <DashboardShell
+        userId={session.user.id}
         userRole={rol}
         userName={session.user.name ?? ''}
         companyName={company?.nombre ?? ''}

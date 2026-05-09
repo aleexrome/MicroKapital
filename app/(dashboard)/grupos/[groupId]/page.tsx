@@ -8,6 +8,7 @@ import { GrupoCalendar } from '@/components/loans/GrupoCalendar'
 import { EditGroupNameButton } from '@/components/loans/EditGroupNameButton'
 import { canViewInterestData } from '@/lib/access'
 import { type Prisma } from '@prisma/client'
+import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 
 const SOLIDARIO_UMBRAL             = 6
 const SOLIDARIO_PAGOS_FINANCIADOS  = 2
@@ -82,6 +83,12 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
     })
 
   const canRenewGroup = allEligible && ROLES_PUEDEN_RENOVAR.includes(rol)
+
+  // Anti-fraude: verificar limbo del usuario actual para deshabilitar
+  // "Solicitar renovación grupal".
+  const limboCheck = (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL')
+    ? await tienePrestamosEnLimbo72h(userId, prisma)
+    : { bloqueado: false, prestamosEnLimbo: [] }
 
   const memberRenewalData = canRenewGroup
     ? activeLoans.map((l) => {
@@ -220,6 +227,11 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
         }))}
         canActGroup={esOpAdmin || tienePermisoAplicar}
         canRenewGroup={canRenewGroup}
+        bloqueoLimbo={
+          limboCheck.bloqueado
+            ? { bloqueado: true, prestamosCount: limboCheck.prestamosEnLimbo.length }
+            : undefined
+        }
         memberRenewalData={memberRenewalData}
         paymentInfoMap={paymentInfoMap}
       />

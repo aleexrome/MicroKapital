@@ -136,12 +136,24 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         loanId: loan.id,
         scheduleId: null,
         canceledAt: null,
-        OR: [
-          { notas: { contains: 'apertura', mode: 'insensitive' } },
-          { notas: { contains: 'seguro',   mode: 'insensitive' } },
-          { notas: { contains: 'comisi',   mode: 'insensitive' } },
+        AND: [
+          {
+            OR: [
+              { notas: { contains: 'apertura', mode: 'insensitive' } },
+              { notas: { contains: 'seguro',   mode: 'insensitive' } },
+              { notas: { contains: 'comisi',   mode: 'insensitive' } },
+            ],
+          },
+          {
+            // statusTransferencia es NULL para CASH/CARD/FINANCIADO. Un filtro
+            // `NOT: { statusTransferencia: 'PENDIENTE' }` los descartaba porque
+            // en SQL `NULL != 'PENDIENTE'` evalúa a NULL, no TRUE.
+            OR: [
+              { statusTransferencia: null },
+              { statusTransferencia: { not: 'PENDIENTE' } },
+            ],
+          },
         ],
-        NOT: { statusTransferencia: 'PENDIENTE' },
       },
     })) > 0
 

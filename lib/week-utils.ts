@@ -47,9 +47,15 @@ export function mondayToId(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** "YYYY-MM-DD" → Monday UTC Date */
+/**
+ * "YYYY-MM-DD" → Date a 06:00 UTC (= 00:00 CDMX) del lunes.
+ * El offset 06:00 mantiene simetría con `getMonday`, que también devuelve
+ * el inicio del día calendario CDMX. Importante para que comparaciones
+ * `idToMonday(id).getTime() === getMonday(new Date()).getTime()` sigan
+ * funcionando (ej. resaltar semana actual en /rutas/[semana]).
+ */
 export function idToMonday(id: string): Date {
-  return new Date(id + 'T00:00:00.000Z')
+  return new Date(id + 'T06:00:00.000Z')
 }
 
 // ── Semana de Sábado a Viernes — sólo para la sección Rutas ──────────────
@@ -99,7 +105,10 @@ export function saturdayToId(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** "YYYY-MM-DD" → Saturday UTC Date */
+/**
+ * "YYYY-MM-DD" → Date a 06:00 UTC (= 00:00 CDMX) del sábado.
+ * Ver nota en `idToMonday` sobre por qué 06:00 y no 00:00.
+ */
 export function idToSaturday(id: string): Date {
-  return new Date(id + 'T00:00:00.000Z')
+  return new Date(id + 'T06:00:00.000Z')
 }

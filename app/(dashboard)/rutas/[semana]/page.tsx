@@ -73,17 +73,29 @@ function textColor(p: number, type: 'cobranza' | 'meta') {
 // (los excedentes pertenecen al schedule siguiente como ADVANCE).
 function calcCobranza(
   schedules: Array<{
+    estado: string
     montoEsperado: Prisma.Decimal
     payments: Array<{ monto: Prisma.Decimal }>
   }>
 ) {
-  const totalAPagar = schedules.reduce((s, r) => s + r.montoEsperado.toNumber(), 0)
-  const totalCobrado = schedules.reduce((s, r) => {
+  // Schedules pre-pagados (PAID/ADVANCE pero con `payments` vacío después
+  // del filtro por fechaHora de esta semana) son cobros que ya entraron en
+  // semanas anteriores — típicamente cuando el cliente pagó por adelantado
+  // o cuando una renovación absorbió pagos del crédito viejo. No cuentan
+  // ni en totalAPagar (no hay nada que cobrar esta semana) ni en cobrado.
+  const activos = schedules.filter((r) => {
+    const sinPaymentEstaSemana = r.payments.length === 0
+    const yaCobradoAntes = r.estado === 'PAID' || r.estado === 'ADVANCE'
+    return !(sinPaymentEstaSemana && yaCobradoAntes)
+  })
+  const totalAPagar = activos.reduce((s, r) => s + r.montoEsperado.toNumber(), 0)
+  const totalCobrado = activos.reduce((s, r) => {
     const paid = r.payments.reduce((acc, p) => acc + p.monto.toNumber(), 0)
     return s + Math.min(paid, r.montoEsperado.toNumber())
   }, 0)
-  const cobradosCount = schedules.filter((r) => r.payments.length > 0).length
-  return { totalAPagar, totalCobrado, cobradosCount }
+  const cobradosCount = activos.filter((r) => r.payments.length > 0).length
+  const scheduleCount = activos.length
+  return { totalAPagar, totalCobrado, cobradosCount, scheduleCount }
 }
 
 // ── status icon ───────────────────────────────────────────────────────────
@@ -331,7 +343,14 @@ export default async function RutaDetallePage({
           montoPagado:   true,
           estado:        true,
           fechaVencimiento: true,
-          payments: { select: { monto: true } },
+          // Filtro por fechaHora: solo Payments hechos DENTRO de la semana
+          // del reporte. Antes traíamos todos los Payments del schedule y
+          // un cobro hecho en semana anterior (típico de renovación que
+          // absorbió el pago) inflaba la cobranza efectiva de esta semana.
+          payments: {
+            where: { fechaHora: { gte: saturday, lte: friday } },
+            select: { monto: true },
+          },
           loan: {
             select: {
               tipo: true,
@@ -361,7 +380,7 @@ export default async function RutaDetallePage({
       }),
     ])
 
-    const { totalAPagar, totalCobrado, cobradosCount } = calcCobranza(schedules)
+    const { totalAPagar, totalCobrado, cobradosCount, scheduleCount: pactadosCount } = calcCobranza(schedules)
     const colocacion = loans.reduce((s, l) => s + Number(l.capital), 0)
     const metaTarget = totalAPagar * 0.7
     const cobranzaPct = calcPct(totalCobrado, totalAPagar)
@@ -373,6 +392,13 @@ export default async function RutaDetallePage({
     const printCobros: RutaCobroRow[] = schedules.map((s) => {
       const paid = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
       const montoCobrado = Math.min(paid, Number(s.montoEsperado))
+      // prePagado: schedule está PAID/ADVANCE (cobro registrado en algún
+      // momento) pero no hay Payments dentro de esta semana — significa
+      // que el cobro fue en una semana anterior (renovación absorbida o
+      // cobro anticipado). El badge "Pre-pagado" avisa a la cobradora que
+      // no debe visitar al cliente, sin contarlo como cobranza efectiva
+      // de esta semana.
+      const prePagado = (s.estado === 'PAID' || s.estado === 'ADVANCE') && s.payments.length === 0
       return {
         clientNombre:  s.loan.client.nombreCompleto,
         tipo:          s.loan.tipo,
@@ -383,6 +409,7 @@ export default async function RutaDetallePage({
         montoEsperado: Number(s.montoEsperado),
         montoCobrado,
         estado:        s.estado,
+        prePagado,
       }
     })
     const printColocaciones: RutaColocacionRow[] = loans.map((l) => ({
@@ -423,7 +450,7 @@ export default async function RutaDetallePage({
         <div className="flex flex-col sm:flex-row gap-4">
           <KpiCard
             label="Cobranza Efectiva"
-            sublabel={`${cobradosCount} cobrados de ${schedules.length} pactados`}
+            sublabel={`${cobradosCount} cobrados de ${pactadosCount} pactados`}
             pctValue={cobranzaPct}
             actual={totalCobrado}
             target={totalAPagar}
@@ -444,8 +471,8 @@ export default async function RutaDetallePage({
           <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-3">
             <TrendingUp className="h-4 w-4 text-primary-600" />
             Cobros de la semana
-            {schedules.length > 0 && (
-              <span className="text-sm font-normal text-muted-foreground">({schedules.length} pactados)</span>
+            {pactadosCount > 0 && (
+              <span className="text-sm font-normal text-muted-foreground">({pactadosCount} pactados)</span>
             )}
           </h2>
           {schedules.length === 0 ? (
@@ -459,18 +486,22 @@ export default async function RutaDetallePage({
                 const expected = Number(s.montoEsperado)
                 const isCobrado = paid >= expected
                 const isPartial = !isCobrado && paid > 0
+                // Pre-pagado: schedule estaba PAID/ADVANCE de antes pero el
+                // Payment fue de semana previa (renovación absorbida o cobro
+                // anticipado). NO debe mostrarse como cobrado de esta semana.
+                const isPrePagado = !isCobrado && !isPartial && (s.estado === 'PAID' || s.estado === 'ADVANCE')
                 const montoCobrado = Math.min(paid, expected)
                 return (
                   <div
                     key={s.id}
-                    className={`flex items-center gap-3 px-4 py-3 text-sm ${isCobrado ? 'opacity-60' : ''}`}
+                    className={`flex items-center gap-3 px-4 py-3 text-sm ${isCobrado || isPrePagado ? 'opacity-60' : ''}`}
                   >
                     <StatusIcon schedule={s} paidAmount={paid} />
                     <span className="flex-1 min-w-0 truncate font-medium">{s.loan.client.nombreCompleto}</span>
                     <Badge variant="outline" className="text-xs shrink-0">{TIPO_LABEL[s.loan.tipo] ?? s.loan.tipo}</Badge>
                     <span className="font-semibold w-20 text-right shrink-0">{formatMoney(expected)}</span>
-                    <span className={`text-xs w-20 text-right shrink-0 ${isCobrado ? 'text-green-600 font-medium' : isPartial ? 'text-amber-600 font-medium' : 'text-muted-foreground'}`}>
-                      {isCobrado || isPartial ? formatMoney(montoCobrado) : ESTADO_LABEL[s.estado] ?? s.estado}
+                    <span className={`text-xs w-20 text-right shrink-0 ${isCobrado ? 'text-green-600 font-medium' : isPartial ? 'text-amber-600 font-medium' : isPrePagado ? 'italic text-muted-foreground' : 'text-muted-foreground'}`}>
+                      {isCobrado || isPartial ? formatMoney(montoCobrado) : isPrePagado ? 'Pre-pagado' : ESTADO_LABEL[s.estado] ?? s.estado}
                     </span>
                   </div>
                 )
@@ -581,7 +612,10 @@ export default async function RutaDetallePage({
           montoEsperado: true,
           montoPagado: true,
           estado: true,
-          payments: { select: { monto: true } },
+          payments: {
+            where: { fechaHora: { gte: saturday, lte: friday } },
+            select: { monto: true },
+          },
           loan: { select: { cobradorId: true } },
         },
       }),
@@ -610,7 +644,7 @@ export default async function RutaDetallePage({
       const aggregator = GERENTES_AGREGADOS_POR_SUCURSAL.has(u.id)
       const uSched  = aggregator ? wSchedules : wSchedules.filter((s) => s.loan.cobradorId === u.id)
       const uLoans  = aggregator ? wLoans     : wLoans.filter((l) => l.cobradorId === u.id)
-      const { totalAPagar, totalCobrado, cobradosCount } = calcCobranza(uSched)
+      const { totalAPagar, totalCobrado, cobradosCount, scheduleCount } = calcCobranza(uSched)
       const colocacion  = uLoans.reduce((s, l) => s + Number(l.capital), 0)
       const metaTarget  = totalAPagar * 0.7
       return {
@@ -621,7 +655,7 @@ export default async function RutaDetallePage({
         colocacion, metaTarget,
         cobranzaPct: calcPct(totalCobrado, totalAPagar),
         metaPct:     calcPct(colocacion, metaTarget),
-        scheduleCount: uSched.length,
+        scheduleCount,
       }
     })
 
@@ -738,7 +772,10 @@ export default async function RutaDetallePage({
           montoEsperado: true,
           montoPagado: true,
           estado: true,
-          payments: { select: { monto: true } },
+          payments: {
+            where: { fechaHora: { gte: saturday, lte: friday } },
+            select: { monto: true },
+          },
           // branchId hace falta para que las tarjetas de gerentes sin
           // cartera propia agreguen únicamente su sucursal.
           loan: { select: { cobradorId: true, branchId: true } },
@@ -772,7 +809,7 @@ export default async function RutaDetallePage({
       const uLoans = aggregator
         ? wLoans.filter((l) => l.branchId === u.branchId)
         : wLoans.filter((l) => l.cobradorId === u.id)
-      const { totalAPagar, totalCobrado, cobradosCount } = calcCobranza(uSched)
+      const { totalAPagar, totalCobrado, cobradosCount, scheduleCount } = calcCobranza(uSched)
       const colocacion = uLoans.reduce((s, l) => s + Number(l.capital), 0)
       const metaTarget = totalAPagar * 0.7
       return {
@@ -785,7 +822,7 @@ export default async function RutaDetallePage({
         colocacion, metaTarget,
         cobranzaPct: calcPct(totalCobrado, totalAPagar),
         metaPct:     calcPct(colocacion, metaTarget),
-        scheduleCount: uSched.length,
+        scheduleCount,
       }
     })
 

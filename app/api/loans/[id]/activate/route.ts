@@ -135,8 +135,10 @@ export async function POST(
 
   const data = parsed.data
 
+  // Fallback en CDMX (todayMx → 06:00 UTC del día calendario CDMX) para que
+  // los reportes semanales coloquen el préstamo en la semana correcta.
   const fechaDesembolso = loan.fechaDesembolso
-    ?? (data.fechaDesembolso ? new Date(data.fechaDesembolso) : new Date())
+    ?? (data.fechaDesembolso ? new Date(data.fechaDesembolso) : todayMx())
 
   // Gerente verifica transferencia pendiente: no tiene metodoPago, loan ya tiene seguroPendiente
   if (!data.metodoPago && loan.seguroPendiente) {
@@ -316,10 +318,11 @@ export async function POST(
         ? (loan.pagosFinanciadosIds as string[])
         : null
 
+      const pagadoAtMx = todayMx()
       if (idsFinanciados && idsFinanciados.length > 0) {
         await tx.paymentSchedule.updateMany({
           where: { id: { in: idsFinanciados } },
-          data: { estado: 'FINANCIADO', pagadoAt: new Date() },
+          data: { estado: 'FINANCIADO', pagadoAt: pagadoAtMx },
         })
       }
 
@@ -334,7 +337,7 @@ export async function POST(
           estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
           ...(idsFinanciados?.length ? { id: { notIn: idsFinanciados } } : {}),
         },
-        data: { estado: 'FINANCIADO', pagadoAt: new Date() },
+        data: { estado: 'FINANCIADO', pagadoAt: pagadoAtMx },
       })
 
       await tx.loan.update({

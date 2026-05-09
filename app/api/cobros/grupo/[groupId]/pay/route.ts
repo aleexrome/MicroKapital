@@ -106,7 +106,12 @@ export async function POST(
     }
   }
 
+  // `now` (UTC) para timestamps universales: Payment.fechaHora, prefijo de
+  // ticket, días de diferencia, response al cliente.
+  // `pagadoAtMx` (06:00 UTC del día CDMX) para PaymentSchedule.pagadoAt, que
+  // se cruza con rangos semanales en CDMX en los reportes.
   const now = new Date()
+  const pagadoAtMx = todayMx()
   // Caja del día = inicio del día CDMX (UTC-6). Antes era setHours(0,0,0,0)
   // que daba medianoche UTC y desfasaba 6h respecto a México.
   const fechaDia = todayMx()
@@ -208,7 +213,7 @@ export async function POST(
         data: {
           montoPagado: { increment: montoBase },
           estado:      'PAID',
-          pagadoAt:    now,
+          pagadoAt:    pagadoAtMx,
         },
       })
 

@@ -9,6 +9,7 @@ import { formatMoney, formatDate } from '@/lib/utils'
 import { Plus, CreditCard } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Prisma, type LoanStatus } from '@prisma/client'
+import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 
 const TABS: { label: string; value: string | null }[] = [
   { label: 'Todos', value: null },
@@ -30,7 +31,7 @@ export default async function PrestamosPage({
   const session = await getSession()
   if (!session?.user) return null
 
-  const { rol, companyId } = session.user
+  const { rol, companyId, id: userId } = session.user
 
   const estadoFiltro = searchParams.estado ?? null
   const page = Math.max(1, parseInt(searchParams.page ?? '1', 10))
@@ -77,6 +78,12 @@ export default async function PrestamosPage({
 
   const canCreate = ['COORDINADOR', 'COBRADOR', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN'].includes(rol)
 
+  // Si la cobradora está bloqueada por limbo > 72h, deshabilitamos el botón
+  // de crear con tooltip explicativo. DG/DC/SA no se autobloqquean.
+  const limboCheck = (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL')
+    ? await tienePrestamosEnLimbo72h(userId, prisma)
+    : { bloqueado: false, prestamosEnLimbo: [] }
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -88,12 +95,22 @@ export default async function PrestamosPage({
           </p>
         </div>
         {canCreate && (
-          <Button asChild>
-            <Link href="/prestamos/nuevo">
+          limboCheck.bloqueado ? (
+            <Button
+              disabled
+              title={`Bloqueado: ${limboCheck.prestamosEnLimbo.length} préstamo(s) pendiente(s) > 72h. Activa o cancela antes de crear nuevos.`}
+            >
               <Plus className="h-4 w-4 mr-1" />
               Nuevo crédito
-            </Link>
-          </Button>
+            </Button>
+          ) : (
+            <Button asChild>
+              <Link href="/prestamos/nuevo">
+                <Plus className="h-4 w-4 mr-1" />
+                Nuevo crédito
+              </Link>
+            </Button>
+          )
         )}
       </div>
 

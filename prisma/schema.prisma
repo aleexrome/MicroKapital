@@ -610,7 +610,13 @@ model Notification {
   // Notificaciones no críticas se descartan después de N días para no
   // ensuciar la bandeja. NULL = no expira (críticas).
   expiraAt   DateTime? @db.Timestamptz(3)
+  // Cuándo el usuario abrió/marcó la notificación. NULL = no leída.
+  // Las críticas (esCritica=true) NO pueden marcarse como leídas — siempre
+  // mantienen leidaAt=NULL hasta que se borren.
+  leidaAt    DateTime? @db.Timestamptz(3)
   createdAt  DateTime  @default(now())
+
+  @@index([userId, leidaAt])
 }
 
 // ─────────────────────────────────────────

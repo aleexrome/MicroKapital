@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { Menu } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import { Sidebar } from './Sidebar'
-import { MiKaChat } from '@/components/chat/MiKaChat'
+import { FloatingActionsCluster } from '@/components/FloatingActionsCluster'
 import type { BranchTreeData } from '@/types/tree'
 
 interface DashboardShellProps {
+  userId: string
   userRole: UserRole
   userName: string
   companyName?: string
@@ -17,6 +18,7 @@ interface DashboardShellProps {
 }
 
 export function DashboardShell({
+  userId,
   userRole,
   userName,
   companyName,
@@ -59,7 +61,7 @@ export function DashboardShell({
         </div>
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
-      <MiKaChat />
+      <FloatingActionsCluster userId={userId} />
     </div>
   )
 }

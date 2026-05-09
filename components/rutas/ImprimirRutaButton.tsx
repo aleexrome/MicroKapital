@@ -18,6 +18,11 @@ export interface RutaCobroRow {
   montoEsperado: number
   montoCobrado: number   // 0 si no cobrado
   estado: string
+  // true si el schedule ya está PAID/ADVANCE pero el Payment se hizo en
+  // una semana anterior (cobro anticipado o renovación absorbida). Se
+  // muestra como "Pre-pagado" para que la cobradora sepa que NO debe
+  // visitar al cliente esta semana, y no se cuenta en cobranza efectiva.
+  prePagado?: boolean
 }
 
 export interface RutaColocacionRow {
@@ -87,6 +92,8 @@ const ESTADO_LABEL: Record<string, string> = {
   PENDING: 'Pendiente', OVERDUE: 'Vencido',
 }
 
+const PRE_PAGADO_LABEL = 'Pre-pagado'
+
 const BASE_STYLE = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 20px; position: relative; }
@@ -114,6 +121,7 @@ const BASE_STYLE = `
   .parcial    { color: #92400e; font-weight: 600; }
   .vencido    { color: #b91c1c; font-weight: 600; }
   .pendiente  { color: #6b7280; }
+  .prepagado  { color: #6b7280; font-style: italic; }
   .nuevo      { color: #1d4ed8; }
   .renovacion { color: #7c3aed; }
   tfoot td { border-top: 2px solid #1a3a5c; font-weight: bold; background: #f0f4f8; padding: 6px 8px; }
@@ -138,15 +146,21 @@ export function ImprimirRutaButton({
 
     // ── COORDINADOR view ─────────────────────────────────────────────────
     if (cobros !== undefined) {
-      const cobradosCount  = cobros.filter((r) => r.estado === 'PAID' || r.estado === 'ADVANCE').length
-      const parcialesCount = cobros.filter((r) => r.estado === 'PARTIAL').length
+      // Los pre-pagados (schedule PAID/ADVANCE pero Payment de semana
+      // anterior — típico de renovaciones que absorben pagos del crédito
+      // viejo) no cuentan en cobrados/pendientes de esta semana.
+      const cobradosCount  = cobros.filter((r) => !r.prePagado && (r.estado === 'PAID' || r.estado === 'ADVANCE')).length
+      const parcialesCount = cobros.filter((r) => !r.prePagado && r.estado === 'PARTIAL').length
       const pendientesCount = cobros.filter((r) => r.estado === 'PENDING' || r.estado === 'OVERDUE').length
+      const prePagadosCount = cobros.filter((r) => r.prePagado).length
 
       const cobroRows = cobros.map((r, i) => {
-        const isCobrado = r.estado === 'PAID' || r.estado === 'ADVANCE'
-        const isPartial = r.estado === 'PARTIAL'
+        const isPrePagado = r.prePagado === true
+        const isCobrado = !isPrePagado && (r.estado === 'PAID' || r.estado === 'ADVANCE')
+        const isPartial = !isPrePagado && r.estado === 'PARTIAL'
         const isVencido = r.estado === 'OVERDUE'
-        const cls = isCobrado ? 'cobrado' : isPartial ? 'parcial' : isVencido ? 'vencido' : 'pendiente'
+        const cls = isPrePagado ? 'prepagado' : isCobrado ? 'cobrado' : isPartial ? 'parcial' : isVencido ? 'vencido' : 'pendiente'
+        const estadoLabel = isPrePagado ? PRE_PAGADO_LABEL : (ESTADO_LABEL[r.estado] ?? r.estado)
         return `
           <tr class="${i % 2 === 1 ? 'alt' : ''}">
             <td>${r.clientNombre}</td>
@@ -156,7 +170,7 @@ export function ImprimirRutaButton({
             <td class="center">${diaSemana(r.fechaVencimiento)}</td>
             <td class="right">${fmt(r.montoEsperado)}</td>
             <td class="right ${cls}">${r.montoCobrado > 0 ? fmt(r.montoCobrado) : '—'}</td>
-            <td class="center ${cls}">${ESTADO_LABEL[r.estado] ?? r.estado}</td>
+            <td class="center ${cls}">${estadoLabel}</td>
           </tr>`
       }).join('')
 
@@ -178,6 +192,7 @@ export function ImprimirRutaButton({
           <span><strong>Pactados:</strong> ${cobros.length}</span>
           <span class="cobrado"><strong>Cobrados:</strong> ${cobradosCount}</span>
           ${parcialesCount > 0 ? `<span class="parcial"><strong>Parciales:</strong> ${parcialesCount}</span>` : ''}
+          ${prePagadosCount > 0 ? `<span class="prepagado"><strong>Pre-pagados:</strong> ${prePagadosCount}</span>` : ''}
           ${pendientesCount > 0 ? `<span class="pendiente"><strong>Pendientes/Vencidos:</strong> ${pendientesCount}</span>` : ''}
         </div>
 

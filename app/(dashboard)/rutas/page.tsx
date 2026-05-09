@@ -84,10 +84,17 @@ export default async function RutasPage() {
         montoPagado: true,
         estado: true,
         fechaVencimiento: true,
-        // Cobranza efectiva (estricta) = sum(Payment.monto) capeado.
-        // Para semanas viejas (sin captura formal) caemos a una cobranza
-        // "preliminar" basada en estado del schedule — ver más abajo.
-        payments: { select: { monto: true } },
+        // Cobranza efectiva (estricta) = sum(Payment.monto) capeado, ATADA
+        // a la semana en que se hizo el Payment (fechaHora), no a la semana
+        // del schedule. Antes los cobros anticipados (típico de renovación
+        // que absorbe pagos del crédito viejo) se contaban como cobranza
+        // de la semana del fechaVencimiento, inflando reportes de semanas
+        // futuras. Para semanas viejas (sin captura formal) caemos a una
+        // cobranza "preliminar" basada en estado del schedule.
+        payments: {
+          where: { fechaHora: { gte: periodoStart, lte: periodoEnd } },
+          select: { monto: true, fechaHora: true },
+        },
       },
     }),
     prisma.loan.findMany({
@@ -124,10 +131,32 @@ export default async function RutasPage() {
       const d = new Date(s.fechaVencimiento)
       return d >= saturday && d <= friday
     })
-    const totalAPagar  = wSchedules.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
 
-    const totalCobradoEstricto = wSchedules.reduce((sum, s) => {
-      const paid = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
+    // Filtrar payments DEL schedule a los que se hicieron DENTRO de esta
+    // semana — un Payment hecho en semana previa (cobro anticipado o
+    // renovación absorbida) NO debe contar como cobranza de esta semana.
+    // Anotamos cada schedule con sus paymentsEnSemana para los cálculos.
+    const wSchedulesConPaymentsSemana = wSchedules.map((s) => {
+      const paymentsEnSemana = s.payments.filter((p) => {
+        const d = new Date(p.fechaHora)
+        return d >= saturday && d <= friday
+      })
+      return { ...s, paymentsEnSemana }
+    })
+
+    // Pre-pagados (PAID/ADVANCE sin Payment esta semana) salen del cálculo
+    // — el dinero ya entró en una semana anterior, esta semana no se
+    // cobra ni se debe.
+    const wSchedulesActivos = wSchedulesConPaymentsSemana.filter((s) => {
+      const sinPaymentEstaSemana = s.paymentsEnSemana.length === 0
+      const yaCobradoAntes = s.estado === 'PAID' || s.estado === 'ADVANCE'
+      return !(sinPaymentEstaSemana && yaCobradoAntes)
+    })
+
+    const totalAPagar  = wSchedulesActivos.reduce((sum, s) => sum + Number(s.montoEsperado), 0)
+
+    const totalCobradoEstricto = wSchedulesActivos.reduce((sum, s) => {
+      const paid = s.paymentsEnSemana.reduce((acc, p) => acc + Number(p.monto), 0)
       return sum + Math.min(paid, Number(s.montoEsperado))
     }, 0)
 

@@ -143,14 +143,14 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
             ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse'
             : hasUnread
               ? 'bg-amber-500 hover:bg-amber-400 text-white'
-              : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200'
+              : 'bg-primary-500 hover:bg-primary-400 text-white'
         }`}
         style={{
           boxShadow: hasCritical
             ? '0 4px 24px rgba(220,38,38,0.7)'
             : hasUnread
               ? '0 4px 20px rgba(245,158,11,0.5)'
-              : '0 6px 18px rgba(0,0,0,0.35)',
+              : '0 4px 20px rgba(123,111,255,0.55)',
         }}
         aria-label={`Notificaciones${hasUnread ? ` (${noLeidasCount} no leídas)` : ''}`}
       >

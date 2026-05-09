@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, Bell } from 'lucide-react'
+import { Plus, X, Bell } from 'lucide-react'
 import { CampanaNotificaciones } from '@/components/CampanaNotificaciones'
 import { MiKaChat } from '@/components/chat/MiKaChat'
 
@@ -13,16 +13,16 @@ interface Props {
 
 /**
  * Cluster flotante en la esquina inferior derecha que agrupa la campana
- * de notificaciones + MiKa. Maneja:
+ * de notificaciones (ARRIBA) + MiKa (abajo) en stack vertical.
  *
  *   - Estado expandido/colapsado por usuario (localStorage)
  *   - Default expandido en desktop, colapsado en móvil
- *   - Auto-expansión la primera vez que detecta una notificación crítica
- *   - Master button con badge cuando está colapsado
+ *   - Auto-expansión la primera vez que detecta una crítica activa
+ *   - Master button (+) con badge cuando colapsado
  *
- * El componente CampanaNotificaciones se mantiene montado siempre para
- * que su polling siga activo aún colapsado (así detectamos críticas que
- * disparan auto-expansión).
+ * CampanaNotificaciones se mantiene montada siempre para que su polling
+ * siga activo aún colapsado (así detectamos críticas que disparan
+ * auto-expansión).
  */
 export function FloatingActionsCluster({ userId }: Props) {
   const storageKey = `${STORAGE_KEY_PREFIX}:${userId}`
@@ -52,9 +52,6 @@ export function FloatingActionsCluster({ userId }: Props) {
   function onCriticaDetected() {
     if (autoExpanded) return
     setAutoExpanded(true)
-    // Si el usuario tenía colapsado, lo abrimos transitoriamente. NO
-    // persistimos en localStorage para respetar su preferencia: si vuelve
-    // a colapsar, se queda colapsado y solo el master button le avisa.
     if (collapsed === true) {
       setCollapsed(false)
     }
@@ -64,14 +61,27 @@ export function FloatingActionsCluster({ userId }: Props) {
 
   return (
     <>
-      {/* Cluster expandido — siempre montado, ocultado vía CSS para que
-          el polling de campana siga vivo y pueda gatillar auto-expansión. */}
+      {/* ── Cluster expandido — bell ARRIBA, MiKa abajo ──────────────────────
+          Siempre montado, se oculta vía CSS para que el polling de campana
+          siga vivo y pueda gatillar auto-expansión cuando llega una crítica. */}
       <div
         className={`transition-opacity duration-200 ${isCollapsed ? 'invisible opacity-0 pointer-events-none' : 'opacity-100'}`}
         aria-hidden={isCollapsed}
       >
-        <MiKaChat />
-        <div className="fixed bottom-5 right-24 z-50">
+        {/* Botón colapsar (×) — al LADO IZQUIERDO de MiKa, mismo nivel
+            (no arriba del bell, para que el dropdown del bell no lo tape) */}
+        <button
+          onClick={() => toggle(true)}
+          className="fixed bottom-5 right-32 z-50 w-9 h-9 rounded-full bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 shadow-lg flex items-center justify-center transition-all hover:scale-110"
+          aria-label="Cerrar acciones flotantes"
+          title="Cerrar"
+          style={{ boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        {/* Campana — ARRIBA de MiKa, mismo eje vertical (right-8) */}
+        <div className="fixed bottom-[88px] right-8 z-50">
           <CampanaNotificaciones
             onCountChange={(n, c) => {
               setNoLeidas(n)
@@ -80,38 +90,33 @@ export function FloatingActionsCluster({ userId }: Props) {
             onCriticaDetected={onCriticaDetected}
           />
         </div>
-        <button
-          onClick={() => toggle(true)}
-          className="fixed bottom-20 right-8 z-50 w-7 h-7 rounded-full bg-card hover:bg-card/80 text-muted-foreground border border-border flex items-center justify-center shadow-md transition-all hover:scale-105"
-          aria-label="Colapsar acciones flotantes"
-          title="Colapsar"
-        >
-          <ChevronDown className="h-3.5 w-3.5" />
-        </button>
+
+        {/* MiKa mantiene su posición original (bottom-5 right-8) */}
+        <MiKaChat />
       </div>
 
-      {/* Master button cuando está colapsado */}
+      {/* ── Master button (+) cuando está colapsado ──────────────────────── */}
       {isCollapsed && (
         <button
           onClick={() => toggle(false)}
-          className={`fixed bottom-5 right-8 z-50 w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 ${
+          className={`fixed bottom-5 right-8 z-50 w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110 ${
             criticas > 0
               ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse'
               : noLeidas > 0
                 ? 'bg-amber-500 hover:bg-amber-400 text-white'
-                : 'bg-card hover:bg-card/80 text-foreground border border-border'
+                : 'bg-orange-500 hover:bg-orange-400 text-white'
           }`}
           style={{
             boxShadow: criticas > 0
-              ? '0 4px 20px rgba(220,38,38,0.6)'
+              ? '0 4px 24px rgba(220,38,38,0.7)'
               : noLeidas > 0
                 ? '0 4px 20px rgba(245,158,11,0.5)'
-                : '0 4px 12px rgba(0,0,0,0.2)',
+                : '0 4px 20px rgba(249,115,22,0.5)',
           }}
-          aria-label={`Expandir acciones${noLeidas > 0 ? ` (${noLeidas} notificaciones)` : ''}`}
+          aria-label={`Abrir acciones${noLeidas > 0 ? ` (${noLeidas} notificaciones)` : ''}`}
           title="Mostrar campana y MiKa"
         >
-          <ChevronUp className="h-4 w-4" />
+          <Plus className="h-6 w-6" />
           {noLeidas > 0 && (
             <span className="absolute -top-1 -right-1 min-w-[22px] h-5 px-1 rounded-full bg-red-600 text-white text-xs font-bold flex items-center justify-center border-2 border-background gap-0.5">
               <Bell className="h-2.5 w-2.5" />

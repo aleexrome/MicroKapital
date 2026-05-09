@@ -18,16 +18,20 @@ cloudinary.config({
 /**
  * POST /api/loans/[id]/disbursement-photo
  *
- * Candado 3 del flujo de activación. Sube la foto del desembolso con GPS
- * y, en la misma transacción, cierra el flujo:
- *   - Cambia loan.estado de IN_ACTIVATION → ACTIVE
- *   - Genera PaymentSchedule (calendario de cuotas)
- *   - Si es renovación anticipada, liquida el crédito original
+ * Soporta dos flujos:
  *
- * Reglas:
- *   - Préstamo en IN_ACTIVATION
- *   - Candado 1 cumplido (contrato firmado)
- *   - Candado 2 cumplido (seguroMetodoPago set y NO seguroPendiente)
+ *  1) Flujo nuevo (Fase 6) — préstamo en IN_ACTIVATION:
+ *     candado 3 del flujo de activación. Sube la foto del desembolso con
+ *     GPS y, en la misma transacción, cierra el flujo:
+ *       - Cambia loan.estado de IN_ACTIVATION → ACTIVE
+ *       - Genera PaymentSchedule (calendario de cuotas)
+ *       - Si es renovación anticipada, liquida el crédito original
+ *     Requiere candados 1 (contrato firmado) y 2 (pago de comisión OK).
+ *
+ *  2) Flujo legacy — préstamo en ACTIVE sin foto:
+ *     préstamos viejos activados antes de Fase 6 que aún no tienen foto.
+ *     Solo sube la foto y guarda los metadatos (lat/lng/fotoAt). NO toca
+ *     estado, NO genera calendario, NO valida candados.
  *
  * Permisos: SUPER_ADMIN, COORDINADOR/GERENTE/GERENTE_ZONAL del préstamo.
  */
@@ -66,46 +70,53 @@ export async function POST(
     return NextResponse.json({ error: 'Sin permisos sobre este préstamo' }, { status: 403 })
   }
 
-  if (loan.estado !== 'IN_ACTIVATION') {
+  const esFlujoNuevo = loan.estado === 'IN_ACTIVATION'
+  const esLegacyActivePendiente = loan.estado === 'ACTIVE' && !loan.desembolsoFotoUrl
+
+  if (!esFlujoNuevo && !esLegacyActivePendiente) {
     return NextResponse.json(
-      { error: 'El préstamo no está en flujo de activación' },
+      { error: 'El préstamo no está en flujo de activación o ya tiene foto de desembolso' },
       { status: 400 }
     )
   }
 
-  if (loan.desembolsoFotoUrl) {
+  // Defensivo: en IN_ACTIVATION no debería haber foto previa, pero por si acaso.
+  if (esFlujoNuevo && loan.desembolsoFotoUrl) {
     return NextResponse.json({ error: 'Ya existe una foto de desembolso' }, { status: 400 })
   }
 
-  // ── Candado 1: contrato firmado ──────────────────────────────────────────
-  const contractWithSigned = await prisma.contract.findFirst({
-    where: {
-      companyId: companyId!,
-      loanDocumentFirmadoId: { not: null },
-      OR: [
-        { loanId: loan.id },
-        { groupMembers: { some: { loanId: loan.id } } },
-      ],
-    },
-    select: { id: true },
-  })
-  if (!contractWithSigned) {
-    return NextResponse.json(
-      { error: 'Falta el contrato firmado del cliente (candado 1)' },
-      { status: 400 }
-    )
+  // ── Validación de candados — solo flujo nuevo ────────────────────────────
+  if (esFlujoNuevo) {
+    // Candado 1: contrato firmado
+    const contractWithSigned = await prisma.contract.findFirst({
+      where: {
+        companyId: companyId!,
+        loanDocumentFirmadoId: { not: null },
+        OR: [
+          { loanId: loan.id },
+          { groupMembers: { some: { loanId: loan.id } } },
+        ],
+      },
+      select: { id: true },
+    })
+    if (!contractWithSigned) {
+      return NextResponse.json(
+        { error: 'Falta el contrato firmado del cliente (candado 1)' },
+        { status: 400 }
+      )
+    }
+
+    // Candado 2: pago de comisión completado
+    const candado2OK = loan.seguroMetodoPago !== null && !loan.seguroPendiente
+    if (!candado2OK) {
+      return NextResponse.json(
+        { error: 'Falta registrar el pago de comisión / seguro (candado 2) o aún está pendiente de verificación' },
+        { status: 400 }
+      )
+    }
   }
 
-  // ── Candado 2: pago de comisión completado ───────────────────────────────
-  const candado2OK = loan.seguroMetodoPago !== null && !loan.seguroPendiente
-  if (!candado2OK) {
-    return NextResponse.json(
-      { error: 'Falta registrar el pago de comisión / seguro (candado 2) o aún está pendiente de verificación' },
-      { status: 400 }
-    )
-  }
-
-  // ── Recibir foto + coordenadas ───────────────────────────────────────────
+  // ── Recibir foto + coordenadas (compartido) ──────────────────────────────
   const formData = await req.formData()
   const file = formData.get('foto') as File | null
   const lat = formData.get('lat') as string | null
@@ -141,7 +152,41 @@ export async function POST(
     stream.end(buffer)
   })
 
-  // ── Generar fechas del calendario ────────────────────────────────────────
+  // ── Flujo legacy — solo guardar foto, sin tocar estado ni calendario ─────
+  if (esLegacyActivePendiente) {
+    await prisma.loan.update({
+      where: { id: loan.id },
+      data: {
+        desembolsoFotoUrl: uploadResult.url,
+        desembolsoLat: lat ? parseFloat(lat) : null,
+        desembolsoLng: lng ? parseFloat(lng) : null,
+        desembolsoFotoAt: new Date(),
+      },
+    })
+
+    createAuditLog({
+      userId,
+      accion: 'UPLOAD_DISBURSEMENT_PHOTO_LEGACY',
+      tabla: 'Loan',
+      registroId: loan.id,
+      valoresNuevos: {
+        desembolsoFotoUrl: uploadResult.url,
+        lat: lat ? parseFloat(lat) : null,
+        lng: lng ? parseFloat(lng) : null,
+        modo: 'legacy',
+      },
+    })
+
+    return NextResponse.json({
+      ok: true,
+      modo: 'legacy',
+      message: 'Foto de desembolso registrada',
+      url: uploadResult.url,
+    })
+  }
+
+  // ── Flujo nuevo (IN_ACTIVATION) — calendario + activación ────────────────
+  // Generar fechas del calendario.
   // todayMx() devuelve 06:00 UTC del día calendario CDMX. Importante para
   // que la fecha caiga en la semana correcta de los reportes (sáb–vie CDMX).
   const fechaDesembolso = loan.fechaDesembolso ?? todayMx()
@@ -166,7 +211,7 @@ export async function POST(
     loan.tipo === 'FIDUCIARIO' ? Number(loan.pagoQuincenal) :
                                  Number(loan.pagoSemanal)
 
-  // ── Transacción: foto + activación + calendario + liquidación renovación ─
+  // Transacción: foto + activación + calendario + liquidación renovación
   await prisma.$transaction(async (tx) => {
     // 1. Guardar foto + GPS y cambiar estado a ACTIVE
     await tx.loan.update({

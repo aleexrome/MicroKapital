@@ -1,4 +1,4 @@
-import { startOfDayMx } from './timezone'
+import { startOfDayMx, MX_TZ } from './timezone'
 
 /**
  * Returns the Monday of the week containing d, anchored to the CDMX
@@ -16,12 +16,19 @@ export function getMonday(d: Date): Date {
   return date
 }
 
-/** Returns the Sunday (23:59:59.999 UTC) of the week starting on monday */
+/**
+ * Returns the end of Sunday CDMX of the week starting on monday — el último
+ * instante representable antes del próximo lunes 00:00 CDMX (= lun 06:00 UTC).
+ * Resultado: lunes siguiente 06:00 UTC menos 1 ms = lun 05:59:59.999 UTC =
+ * domingo 23:59:59.999 CDMX. Antes la función cortaba en `setUTCHours(23,...)`
+ * sobre el domingo UTC, perdiendo las últimas 6 horas del domingo CDMX
+ * (de 6 PM a medianoche) — schedules con `fechaVencimiento` ahí se caían
+ * del reporte.
+ */
 export function getWeekEnd(monday: Date): Date {
-  const d = new Date(monday)
-  d.setUTCDate(d.getUTCDate() + 6)
-  d.setUTCHours(23, 59, 59, 999)
-  return d
+  const nextMonday = new Date(monday)
+  nextMonday.setUTCDate(nextMonday.getUTCDate() + 7)
+  return new Date(nextMonday.getTime() - 1)
 }
 
 /** Returns the last `count` week Mondays, newest first (index 0 = current week) */
@@ -34,11 +41,17 @@ export function semanasRecientes(count: number): Date[] {
   })
 }
 
-/** "6 al 12 de abril de 2026" */
+/**
+ * "6 al 12 de abril de 2026". Formateo en CDMX (no UTC) porque el final de
+ * semana ahora es lun 05:59:59.999 UTC = dom 23:59 CDMX — con tz='UTC' se
+ * vería como el lunes siguiente. tz='America/Mexico_City' regresa el día
+ * calendario CDMX correcto. Para el inicio (mon a 06:00 UTC = 00:00 CDMX)
+ * el resultado es el mismo en ambas zonas.
+ */
 export function formatWeekLabel(monday: Date): string {
   const sunday = getWeekEnd(monday)
-  const mOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', timeZone: 'UTC' }
-  const sOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }
+  const mOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', timeZone: MX_TZ }
+  const sOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric', timeZone: MX_TZ }
   return `${monday.toLocaleDateString('es-MX', mOpts)} al ${sunday.toLocaleDateString('es-MX', sOpts)}`
 }
 
@@ -74,12 +87,20 @@ export function getSaturday(d: Date): Date {
   return date
 }
 
-/** Returns the Friday (23:59:59.999 UTC) that ends the Sat–Fri week starting on saturday */
+/**
+ * Returns the end of Friday CDMX of the Sat–Fri week starting on saturday —
+ * el último instante representable antes del próximo sábado 00:00 CDMX
+ * (= sáb 06:00 UTC). Resultado: sábado siguiente 06:00 UTC menos 1 ms =
+ * sáb 05:59:59.999 UTC = viernes 23:59:59.999 CDMX. Antes la función cortaba
+ * en `setUTCHours(23,...)` sobre el viernes UTC, perdiendo las últimas 6
+ * horas del viernes CDMX (de 6 PM a medianoche) — schedules con
+ * `fechaVencimiento` ahí se caían del reporte (caso de Hugo: 20 schedules
+ * de $25k perdidos por este corte).
+ */
 export function getFriday(saturday: Date): Date {
-  const d = new Date(saturday)
-  d.setUTCDate(d.getUTCDate() + 6)
-  d.setUTCHours(23, 59, 59, 999)
-  return d
+  const nextSaturday = new Date(saturday)
+  nextSaturday.setUTCDate(nextSaturday.getUTCDate() + 7)
+  return new Date(nextSaturday.getTime() - 1)
 }
 
 /** Returns the last `count` Sat–Fri week Saturdays, newest first (index 0 = current week) */
@@ -92,11 +113,11 @@ export function semanasRecientesSatFri(count: number): Date[] {
   })
 }
 
-/** "4 al 10 de abril de 2026" for a Sat–Fri week */
+/** "4 al 10 de abril de 2026" for a Sat–Fri week. Ver nota en formatWeekLabel. */
 export function formatWeekLabelSatFri(saturday: Date): string {
   const friday = getFriday(saturday)
-  const satOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', timeZone: 'UTC' }
-  const friOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }
+  const satOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', timeZone: MX_TZ }
+  const friOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric', timeZone: MX_TZ }
   return `${saturday.toLocaleDateString('es-MX', satOpts)} al ${friday.toLocaleDateString('es-MX', friOpts)}`
 }
 

@@ -6,6 +6,7 @@ import { createAuditLog } from '@/lib/audit'
 import { v2 as cloudinary } from 'cloudinary'
 import { extractPublicId } from '@/lib/cloudinary'
 import { todayMx } from '@/lib/timezone'
+import { notificarCancelacionLimbo } from '@/lib/limbo-notifications'
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -46,8 +47,9 @@ export async function POST(
   const loan = await prisma.loan.findFirst({
     where: { id: params.id, companyId: companyId! },
     select: {
-      id: true, estado: true, cobradorId: true, branchId: true,
-      desembolsoFotoUrl: true,
+      id: true, estado: true, cobradorId: true, branchId: true, companyId: true,
+      desembolsoFotoUrl: true, capital: true,
+      client: { select: { nombreCompleto: true } },
     },
   })
   if (!loan) {
@@ -212,6 +214,20 @@ export async function POST(
       paymentCanceled: payment?.id ?? null,
     },
   })
+
+  // Notificar a cobradora + GZ + DG/DC. Best-effort: si falla por algún motivo
+  // (ej. usuario sin company válida) no rompemos la cancelación que ya se
+  // ejecutó — solo loggeamos.
+  try {
+    await notificarCancelacionLimbo(prisma, {
+      loan,
+      motivo: reason,
+      canceladoPorUserId: userId,
+      accion: 'CANCEL_ACTIVATION',
+    })
+  } catch (e) {
+    console.error('[cancel-activation] notificarCancelacionLimbo failed:', e)
+  }
 
   return NextResponse.json({ ok: true, message: 'Activación cancelada' })
 }

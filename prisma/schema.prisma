@@ -14,10 +14,10 @@ datasource db {
 
 enum UserRole {
   SUPER_ADMIN
-  DIRECTOR_GENERAL   // Aprueba créditos, cambia fechas de pago
+  DIRECTOR_GENERAL // Aprueba créditos, cambia fechas de pago
   DIRECTOR_COMERCIAL // Visualización total, sin aprobación
-  GERENTE_ZONAL      // Verifica transferencias, activa créditos de su zona
-  COORDINADOR        // Asesor de campo — gestiona sus propios clientes
+  GERENTE_ZONAL // Verifica transferencias, activa créditos de su zona
+  COORDINADOR // Asesor de campo — gestiona sus propios clientes
   // Roles legacy (mantener hasta migración completa de datos)
   GERENTE
   COBRADOR
@@ -40,14 +40,14 @@ enum LoanType {
 
 enum LoanStatus {
   PENDING_APPROVAL
-  APPROVED         // Aprobado por Director General — pendiente de activación
-  IN_ACTIVATION    // Cliente aceptó condiciones — coordinador transita los 3 candados
+  APPROVED // Aprobado por Director General — pendiente de activación
+  IN_ACTIVATION // Cliente aceptó condiciones — coordinador transita los 3 candados
   ACTIVE
   LIQUIDATED
   REJECTED
   RESTRUCTURED
   DEFAULTED
-  DECLINED         // Activación cancelada antes de completar (después de IN_ACTIVATION)
+  DECLINED // Activación cancelada antes de completar (después de IN_ACTIVATION)
 }
 
 enum ScheduleStatus {
@@ -56,7 +56,7 @@ enum ScheduleStatus {
   OVERDUE
   PARTIAL
   ADVANCE
-  FINANCIADO  // Pago cubierto por renovación anticipada — se muestra en morado
+  FINANCIADO // Pago cubierto por renovación anticipada — se muestra en morado
 }
 
 enum PaymentMethod {
@@ -172,30 +172,33 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   // Jerarquía: COORDINADOR apunta a su GERENTE_ZONAL
-  gerenteId         String?
-  gerente           User?            @relation("GerenteCoordinadores", fields: [gerenteId], references: [id])
-  coordinadores     User[]           @relation("GerenteCoordinadores")
+  gerenteId           String?
+  gerente             User?   @relation("GerenteCoordinadores", fields: [gerenteId], references: [id])
+  coordinadores       User[]  @relation("GerenteCoordinadores")
   // GERENTE_ZONAL: lista de IDs de sucursales de su zona (JSON array de strings)
   zonaBranchIds       Json?
   // Permiso especial: puede aplicar / deshacer pagos en su sucursal (sin ser DG/SA)
-  permisoAplicarPagos Boolean  @default(false)
+  permisoAplicarPagos Boolean @default(false)
 
-  clientsManaged    Client[]         @relation("CobradoresClientes")
-  clientUser        Client?          @relation("ClienteUsuario")
-  payments          Payment[]
-  cashRegisters     CashRegister[]
-  ticketsPrinted    Ticket[]
-  auditLogs         AuditLog[]
-  loansApproved     Loan[]           @relation("ApprovedLoans")
-  loansRejected     Loan[]           @relation("RejectedLoans")
-  loansCobrador     Loan[]           @relation("CobradoresLoans")
-  loanGroups        LoanGroup[]
-  approvalReviewer  LoanApproval[]   @relation("ReviewerApprovals")
-  approvalRequest   LoanApproval[]   @relation("RequesterApprovals")
-  uploadedDocs      ClientDocument[]
-  loanDocuments     LoanDocument[]
-  scoreEvents       ScoreEvent[]
-  transfersVerified Payment[]        @relation("VerifiedTransfers")
+  clientsManaged              Client[]                    @relation("CobradoresClientes")
+  clientUser                  Client?                     @relation("ClienteUsuario")
+  payments                    Payment[]
+  cashRegisters               CashRegister[]
+  ticketsPrinted              Ticket[]
+  auditLogs                   AuditLog[]
+  loansApproved               Loan[]                      @relation("ApprovedLoans")
+  loansRejected               Loan[]                      @relation("RejectedLoans")
+  loansCobrador               Loan[]                      @relation("CobradoresLoans")
+  loanGroups                  LoanGroup[]
+  approvalReviewer            LoanApproval[]              @relation("ReviewerApprovals")
+  approvalRequest             LoanApproval[]              @relation("RequesterApprovals")
+  uploadedDocs                ClientDocument[]
+  loanDocuments               LoanDocument[]
+  scoreEvents                 ScoreEvent[]
+  transfersVerified           Payment[]                   @relation("VerifiedTransfers")
+  // Solicitudes de cancelación por limbo (anti-fraude)
+  solicitudesCancelacionLimbo SolicitudCancelacionLimbo[] @relation("SolicitanteCancelacion")
+  decisionesCancelacionLimbo  SolicitudCancelacionLimbo[] @relation("AprobadorCancelacion")
 
   @@unique([companyId, email])
 }
@@ -229,11 +232,11 @@ model Client {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  documents   ClientDocument[]
-  loans            Loan[]
-  payments         Payment[]
-  scoreEvents      ScoreEvent[]
-  coberturasOtras  Payment[]    @relation("CoberturaGrupal")
+  documents       ClientDocument[]
+  loans           Loan[]
+  payments        Payment[]
+  scoreEvents     ScoreEvent[]
+  coberturasOtras Payment[]        @relation("CoberturaGrupal")
 }
 
 model ClientDocument {
@@ -249,102 +252,105 @@ model ClientDocument {
 }
 
 model LoanGroup {
-  id         String   @id @default(uuid())
-  branchId   String
-  branch     Branch   @relation(fields: [branchId], references: [id])
-  cobradorId String
-  cobrador   User     @relation(fields: [cobradorId], references: [id])
-  nombre     String
-  activo     Boolean  @default(true)
+  id          String    @id @default(uuid())
+  branchId    String
+  branch      Branch    @relation(fields: [branchId], references: [id])
+  cobradorId  String
+  cobrador    User      @relation(fields: [cobradorId], references: [id])
+  nombre      String
+  activo      Boolean   @default(true)
   // Soft delete (mismo patrón que Client). Cron purga a los 14 días.
   eliminadoEn DateTime?
-  createdAt  DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   loans Loan[]
 }
 
 model Loan {
-  id            String     @id @default(uuid())
-  companyId     String
-  company       Company    @relation(fields: [companyId], references: [id])
-  branchId      String
-  branch        Branch     @relation(fields: [branchId], references: [id])
-  cobradorId    String
-  cobrador      User       @relation("CobradoresLoans", fields: [cobradorId], references: [id])
-  clientId      String
-  client        Client     @relation(fields: [clientId], references: [id])
-  loanGroupId   String?
-  loanGroup     LoanGroup? @relation(fields: [loanGroupId], references: [id])
-  tipo          LoanType
-  estado        LoanStatus @default(PENDING_APPROVAL)
+  id                     String         @id @default(uuid())
+  companyId              String
+  company                Company        @relation(fields: [companyId], references: [id])
+  branchId               String
+  branch                 Branch         @relation(fields: [branchId], references: [id])
+  cobradorId             String
+  cobrador               User           @relation("CobradoresLoans", fields: [cobradorId], references: [id])
+  clientId               String
+  client                 Client         @relation(fields: [clientId], references: [id])
+  loanGroupId            String?
+  loanGroup              LoanGroup?     @relation(fields: [loanGroupId], references: [id])
+  tipo                   LoanType
+  estado                 LoanStatus     @default(PENDING_APPROVAL)
   // Montos
-  capital       Decimal    @db.Decimal(12, 2)
-  comision      Decimal    @db.Decimal(12, 2) @default(0)
-  montoReal     Decimal    @db.Decimal(12, 2)
-  tasaInteres   Decimal    @db.Decimal(6, 4)
-  interes       Decimal    @db.Decimal(12, 2)
-  totalPago     Decimal    @db.Decimal(12, 2)
-  pagoSemanal   Decimal?   @db.Decimal(12, 2)
-  pagoDiario    Decimal?   @db.Decimal(12, 2)
-  pagoQuincenal Decimal?   @db.Decimal(12, 2)   // FIDUCIARIO: 12 quincenas
+  capital                Decimal        @db.Decimal(12, 2)
+  comision               Decimal        @default(0) @db.Decimal(12, 2)
+  montoReal              Decimal        @db.Decimal(12, 2)
+  tasaInteres            Decimal        @db.Decimal(6, 4)
+  interes                Decimal        @db.Decimal(12, 2)
+  totalPago              Decimal        @db.Decimal(12, 2)
+  pagoSemanal            Decimal?       @db.Decimal(12, 2)
+  pagoDiario             Decimal?       @db.Decimal(12, 2)
+  pagoQuincenal          Decimal?       @db.Decimal(12, 2) // FIDUCIARIO: 12 quincenas
   // Plazos
-  plazo         Int
-  fechaDesembolso DateTime?
-  fechaPrimerPago DateTime?                          // Fecha ancla del calendario — definida por DG en contrapropuesta
-  diaPago       String?                            // Día de cobro: "DOMINGO", "LUNES", etc.
+  plazo                  Int
+  fechaDesembolso        DateTime?
+  fechaPrimerPago        DateTime? // Fecha ancla del calendario — definida por DG en contrapropuesta
+  diaPago                String? // Día de cobro: "DOMINGO", "LUNES", etc.
   // Campos de comportamiento (para cálculo de comisiones y tasas)
-  ciclo            Int     @default(1)           // INDIVIDUAL: número de ciclo (1, 2, 3…)
-  tuvoAtraso       Boolean @default(false)       // INDIVIDUAL: afecta comisión de renovación
-  clienteIrregular Boolean @default(false)       // ÁGIL: determina tasa $65 o $75
-  tipoGrupo        String?                       // SOLIDARIO: "REGULAR" o "RESCATE"
+  ciclo                  Int            @default(1) // INDIVIDUAL: número de ciclo (1, 2, 3…)
+  tuvoAtraso             Boolean        @default(false) // INDIVIDUAL: afecta comisión de renovación
+  clienteIrregular       Boolean        @default(false) // ÁGIL: determina tasa $65 o $75
+  tipoGrupo              String? // SOLIDARIO: "REGULAR" o "RESCATE"
   // Campos FIDUCIARIO
-  tipoGarantia        String?                    // "MUEBLE" o "INMUEBLE"
-  descripcionGarantia String?
-  valorGarantia       Decimal? @db.Decimal(12, 2)
+  tipoGarantia           String? // "MUEBLE" o "INMUEBLE"
+  descripcionGarantia    String?
+  valorGarantia          Decimal?       @db.Decimal(12, 2)
   // Checklist de documentos (JSON array of {id, label, checked})
-  documentChecklist   Json?
+  documentChecklist      Json?
   // DG solicita documentación antes de activar
-  requiereDocumentos  Boolean        @default(false)
+  requiereDocumentos     Boolean        @default(false)
   // Seguro de apertura
-  seguro              Decimal?       @db.Decimal(12, 2)   // Monto del seguro cobrado
-  seguroMetodoPago    PaymentMethod?                      // CASH | TRANSFER
-  seguroPendiente     Boolean        @default(false)      // Seguro por transferencia pendiente de verificación por gerente
+  seguro                 Decimal?       @db.Decimal(12, 2) // Monto del seguro cobrado
+  seguroMetodoPago       PaymentMethod? // CASH | TRANSFER
+  seguroPendiente        Boolean        @default(false) // Seguro por transferencia pendiente de verificación por gerente
   // Evidencia de desembolso
-  desembolsoFotoUrl   String?        // URL de la foto (Cloudinary)
-  desembolsoLat       Float?         // Latitud GPS del desembolso
-  desembolsoLng       Float?         // Longitud GPS del desembolso
-  desembolsoFotoAt    DateTime?      // Cuándo se subió la evidencia
+  desembolsoFotoUrl      String? // URL de la foto (Cloudinary)
+  desembolsoLat          Float? // Latitud GPS del desembolso
+  desembolsoLng          Float? // Longitud GPS del desembolso
+  desembolsoFotoAt       DateTime? // Cuándo se subió la evidencia
   // Aval
-  avalNombre          String?
-  avalTelefono        String?
-  avalRelacion        String?        // "CONYUGE", "FAMILIAR", "CONOCIDO", etc.
+  avalNombre             String?
+  avalTelefono           String?
+  avalRelacion           String? // "CONYUGE", "FAMILIAR", "CONOCIDO", etc.
   // Aprobación
-  aprobadoPorId  String?
-  aprobadoPor    User?     @relation("ApprovedLoans", fields: [aprobadoPorId], references: [id])
-  aprobadoAt     DateTime?
-  rechazadoPorId String?
-  rechazadoPor   User?     @relation("RejectedLoans", fields: [rechazadoPorId], references: [id])
-  razonRechazo   String?
-  notas          String?
+  aprobadoPorId          String?
+  aprobadoPor            User?          @relation("ApprovedLoans", fields: [aprobadoPorId], references: [id])
+  aprobadoAt             DateTime?
+  rechazadoPorId         String?
+  rechazadoPor           User?          @relation("RejectedLoans", fields: [rechazadoPorId], references: [id])
+  razonRechazo           String?
+  notas                  String?
   // Flujo secuencial de activación (Fase 6 — 3 candados)
   activationStartedAt    DateTime?
   activationCanceledAt   DateTime?
   activationCanceledBy   String?
   activationCancelReason String?
   // Renovación anticipada
-  loanOriginalId       String?            // ID del crédito que se está renovando
-  loanOriginal         Loan?              @relation("LoanRenewal", fields: [loanOriginalId], references: [id])
-  loanRenovado         Loan[]             @relation("LoanRenewal")
-  descuentoRenovacion  Decimal?           @db.Decimal(12, 2) // Monto financiado descontado del nuevo crédito
-  pagosFinanciadosIds  Json?                                  // IDs de PaymentSchedule del crédito anterior que pasan a FINANCIADO al activar
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  loanOriginalId         String? // ID del crédito que se está renovando
+  loanOriginal           Loan?          @relation("LoanRenewal", fields: [loanOriginalId], references: [id])
+  loanRenovado           Loan[]         @relation("LoanRenewal")
+  descuentoRenovacion    Decimal?       @db.Decimal(12, 2) // Monto financiado descontado del nuevo crédito
+  pagosFinanciadosIds    Json? // IDs de PaymentSchedule del crédito anterior que pasan a FINANCIADO al activar
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
 
-  schedule    PaymentSchedule[]
-  payments    Payment[]
-  approvals   LoanApproval[]
-  scoreEvents ScoreEvent[]
-  documents   LoanDocument[]
+  schedule                  PaymentSchedule[]
+  payments                  Payment[]
+  approvals                 LoanApproval[]
+  scoreEvents               ScoreEvent[]
+  documents                 LoanDocument[]
+  // Anti-fraude: alertas escalonadas y solicitudes de cancelación
+  notificacionesLimbo       NotificacionLimbo[]
+  solicitudCancelacionLimbo SolicitudCancelacionLimbo?
 }
 
 model LoanDocument {
@@ -353,7 +359,7 @@ model LoanDocument {
   loan        Loan     @relation(fields: [loanId], references: [id])
   subidoPor   String
   uploadedBy  User     @relation(fields: [subidoPor], references: [id])
-  tipo        String   // "SOLICITUD", "INE_FRENTE", "INE_REVERSO", "COMPROBANTE_DOMICILIO", "CONTRATO", "PAGARE", "FOTO", "AVAL_INE", "OTRO"
+  tipo        String // "SOLICITUD", "INE_FRENTE", "INE_REVERSO", "COMPROBANTE_DOMICILIO", "CONTRATO", "PAGARE", "FOTO", "AVAL_INE", "OTRO"
   archivoUrl  String
   descripcion String?
   createdAt   DateTime @default(now())
@@ -380,7 +386,7 @@ model PaymentSchedule {
   numeroPago       Int
   fechaVencimiento DateTime
   montoEsperado    Decimal        @db.Decimal(12, 2)
-  montoPagado      Decimal        @db.Decimal(12, 2) @default(0)
+  montoPagado      Decimal        @default(0) @db.Decimal(12, 2)
   estado           ScheduleStatus @default(PENDING)
   pagadoAt         DateTime?
   createdAt        DateTime       @default(now())
@@ -391,37 +397,37 @@ model PaymentSchedule {
 }
 
 model Payment {
-  id              String           @id @default(uuid())
-  loanId          String
-  loan            Loan             @relation(fields: [loanId], references: [id])
-  scheduleId      String?
-  schedule        PaymentSchedule? @relation(fields: [scheduleId], references: [id])
-  cobradorId      String
-  cobrador        User             @relation(fields: [cobradorId], references: [id])
-  clientId        String
-  client          Client           @relation(fields: [clientId], references: [id])
-  monto           Decimal          @db.Decimal(12, 2)
-  metodoPago      PaymentMethod
-  cambioEntregado Decimal          @db.Decimal(12, 2) @default(0)
-  notas           String?
-  fechaHora       DateTime         @default(now())
-  createdAt       DateTime         @default(now())
+  id                  String              @id @default(uuid())
+  loanId              String
+  loan                Loan                @relation(fields: [loanId], references: [id])
+  scheduleId          String?
+  schedule            PaymentSchedule?    @relation(fields: [scheduleId], references: [id])
+  cobradorId          String
+  cobrador            User                @relation(fields: [cobradorId], references: [id])
+  clientId            String
+  client              Client              @relation(fields: [clientId], references: [id])
+  monto               Decimal             @db.Decimal(12, 2)
+  metodoPago          PaymentMethod
+  cambioEntregado     Decimal             @default(0) @db.Decimal(12, 2)
+  notas               String?
+  fechaHora           DateTime            @default(now())
+  createdAt           DateTime            @default(now())
   // Cancelación (Fase 6 — botón "Atrás" del candado 2 de activación)
-  canceledAt      DateTime?
+  canceledAt          DateTime?
   // Transferencia bancaria
   cuentaDestinoId     String?
   cuentaDestino       CompanyBankAccount? @relation(fields: [cuentaDestinoId], references: [id])
-  idTransferencia     String?            // Referencia/ID de la transferencia
-  statusTransferencia String?            // "PENDIENTE" | "VERIFICADO"
+  idTransferencia     String? // Referencia/ID de la transferencia
+  statusTransferencia String? // "PENDIENTE" | "VERIFICADO"
   verificadoPorId     String?
-  verificadoPor       User?              @relation("VerifiedTransfers", fields: [verificadoPorId], references: [id])
+  verificadoPor       User?               @relation("VerifiedTransfers", fields: [verificadoPorId], references: [id])
   verificadoAt        DateTime?
   // Cobertura solidaria (grupo Solidario)
-  esCoberturaGrupal   Boolean            @default(false)
+  esCoberturaGrupal   Boolean             @default(false)
   cubridoPorClienteId String?
-  cubridoPor          Client?            @relation("CoberturaGrupal", fields: [cubridoPorClienteId], references: [id])
-  montoPropio         Decimal?           @db.Decimal(12, 2) // su parte individual
-  montoCubierto       Decimal?           @db.Decimal(12, 2) // lo que cubrió de otra
+  cubridoPor          Client?             @relation("CoberturaGrupal", fields: [cubridoPorClienteId], references: [id])
+  montoPropio         Decimal?            @db.Decimal(12, 2) // su parte individual
+  montoCubierto       Decimal?            @db.Decimal(12, 2) // lo que cubrió de otra
 
   cashBreakdown CashBreakdown[]
   tickets       Ticket[]
@@ -473,25 +479,25 @@ model Ticket {
 }
 
 model CashRegister {
-  id              String         @id @default(uuid())
-  cobradorId      String
-  cobrador        User           @relation(fields: [cobradorId], references: [id])
-  branchId        String
-  branch          Branch         @relation(fields: [branchId], references: [id])
-  fecha           DateTime       @db.Date
-  efectivoInicial Decimal        @db.Decimal(12, 2) @default(0)
-  cobrosEsperados Decimal        @db.Decimal(12, 2) @default(0)
-  cobradoEfectivo Decimal        @db.Decimal(12, 2) @default(0)
-  cobradoTarjeta  Decimal        @db.Decimal(12, 2) @default(0)
-  cobradoTransferencia Decimal   @db.Decimal(12, 2) @default(0)
-  cambioEntregado Decimal        @db.Decimal(12, 2) @default(0)
-  efectivoFinal   Decimal?       @db.Decimal(12, 2)
-  diferencia      Decimal?       @db.Decimal(12, 2)
-  estado          RegisterStatus @default(OPEN)
-  notas           String?
-  cerradoAt       DateTime?
-  cerradoPorId    String?
-  createdAt       DateTime       @default(now())
+  id                   String         @id @default(uuid())
+  cobradorId           String
+  cobrador             User           @relation(fields: [cobradorId], references: [id])
+  branchId             String
+  branch               Branch         @relation(fields: [branchId], references: [id])
+  fecha                DateTime       @db.Date
+  efectivoInicial      Decimal        @default(0) @db.Decimal(12, 2)
+  cobrosEsperados      Decimal        @default(0) @db.Decimal(12, 2)
+  cobradoEfectivo      Decimal        @default(0) @db.Decimal(12, 2)
+  cobradoTarjeta       Decimal        @default(0) @db.Decimal(12, 2)
+  cobradoTransferencia Decimal        @default(0) @db.Decimal(12, 2)
+  cambioEntregado      Decimal        @default(0) @db.Decimal(12, 2)
+  efectivoFinal        Decimal?       @db.Decimal(12, 2)
+  diferencia           Decimal?       @db.Decimal(12, 2)
+  estado               RegisterStatus @default(OPEN)
+  notas                String?
+  cerradoAt            DateTime?
+  cerradoPorId         String?
+  createdAt            DateTime       @default(now())
 
   @@unique([cobradorId, fecha])
 }
@@ -556,29 +562,29 @@ model AuditLog {
 // Todos los campos meta* son opcionales: si no se define, ese KPI no se
 // evalúa en cumplimiento (no penaliza).
 model Goal {
-  id           String    @id @default(uuid())
-  companyId    String
-  company      Company   @relation(fields: [companyId], references: [id])
-  branchId     String?
-  cobradorId   String?
-  loanType     LoanType?
+  id         String    @id @default(uuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id])
+  branchId   String?
+  cobradorId String?
+  loanType   LoanType?
 
   // Periodo (semanal). semanaInicio = lunes 00:00, semanaFin = domingo 23:59
-  semanaInicio DateTime  @db.Date
-  semanaFin    DateTime  @db.Date
+  semanaInicio DateTime @db.Date
+  semanaFin    DateTime @db.Date
 
   // KPIs (todos opcionales — si null no se evalúa)
-  metaCapitalColocado    Decimal? @db.Decimal(14, 2)
-  metaCreditosColocados  Int?
-  metaCobranzaEsperada   Decimal? @db.Decimal(14, 2)
-  metaCobranzaEfectiva   Decimal? @db.Decimal(14, 2)
-  metaMoraMaxima         Decimal? @db.Decimal(5, 2)   // % (ej: 5.00 = 5%)
-  metaCrecimiento        Decimal? @db.Decimal(5, 2)   // % cartera vs semana anterior
+  metaCapitalColocado   Decimal? @db.Decimal(14, 2)
+  metaCreditosColocados Int?
+  metaCobranzaEsperada  Decimal? @db.Decimal(14, 2)
+  metaCobranzaEfectiva  Decimal? @db.Decimal(14, 2)
+  metaMoraMaxima        Decimal? @db.Decimal(5, 2) // % (ej: 5.00 = 5%)
+  metaCrecimiento       Decimal? @db.Decimal(5, 2) // % cartera vs semana anterior
 
-  notas        String?
-  creadoPorId  String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  notas       String?
+  creadoPorId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([companyId, semanaInicio])
   @@index([branchId])
@@ -586,9 +592,9 @@ model Goal {
 }
 
 model Notification {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   companyId  String
-  company    Company  @relation(fields: [companyId], references: [id])
+  company    Company   @relation(fields: [companyId], references: [id])
   userId     String?
   clientId   String?
   loanId     String?
@@ -596,9 +602,15 @@ model Notification {
   titulo     String
   mensaje    String
   enviadoVia String?
-  enviado    Boolean  @default(false)
+  enviado    Boolean   @default(false)
   enviadoAt  DateTime?
-  createdAt  DateTime @default(now())
+  // Notificaciones críticas (ej. préstamo en limbo > 72h) NO se pueden marcar
+  // como leídas ni ocultar — se mantienen hasta que la condición se resuelva.
+  esCritica  Boolean   @default(false)
+  // Notificaciones no críticas se descartan después de N días para no
+  // ensuciar la bandeja. NULL = no expira (críticas).
+  expiraAt   DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now())
 }
 
 // ─────────────────────────────────────────
@@ -607,9 +619,9 @@ model Notification {
 // ─────────────────────────────────────────
 
 model Contract {
-  id             String   @id @default(uuid())
-  loanId         String   @unique
-  numeroContrato String   @unique
+  id             String @id @default(uuid())
+  loanId         String @unique
+  numeroContrato String @unique
 
   // Snapshot al momento de generación
   representanteLegal String
@@ -674,4 +686,44 @@ model BranchContractConfig {
   folioLastNumber Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────
+// MÓDULO DE NOTIFICACIONES Y BLOQUEO POR LIMBO
+// Sistema anti-fraude: detecta préstamos APPROVED/IN_ACTIVATION
+// estancados y notifica/bloquea según horas transcurridas.
+// ─────────────────────────────────────────
+
+model NotificacionLimbo {
+  id               String   @id @default(uuid())
+  loanId           String
+  // '12h' | '24h' | '36h' | '48h' | '60h' | '72h' | 'cancelacion'
+  tipoNotificacion String
+  // IDs de Users a quienes se notificó. Para auditoría retro: si después
+  // cambia la jerarquía, sabemos a quién se avisó originalmente.
+  destinatariosIds String[]
+  enviadaAt        DateTime @default(now()) @db.Timestamptz(3)
+
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  // Garantiza que el cron NO duplique la misma alerta para el mismo loan.
+  @@unique([loanId, tipoNotificacion])
+  @@index([loanId])
+}
+
+model SolicitudCancelacionLimbo {
+  id                 String    @id @default(uuid())
+  loanId             String    @unique
+  solicitadoPor      String
+  motivo             String    @db.Text
+  // PENDIENTE | APROBADA | RECHAZADA
+  estado             String    @default("PENDIENTE")
+  aprobadoPor        String?
+  decididoAt         DateTime? @db.Timestamptz(3)
+  comentarioDecision String?   @db.Text
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+
+  loan        Loan  @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  solicitante User  @relation("SolicitanteCancelacion", fields: [solicitadoPor], references: [id])
+  aprobador   User? @relation("AprobadorCancelacion", fields: [aprobadoPor], references: [id])
 }

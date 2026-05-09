@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { calcLoan } from '@/lib/financial-formulas'
 import { generarFechasSemanales, generarFechasHabiles } from '@/lib/business-days'
 import { createAuditLog } from '@/lib/audit'
+import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 
 const createLoanSchema = z.object({
   clientId: z.string().uuid(),
@@ -113,6 +114,21 @@ export async function POST(req: NextRequest) {
     cobradorId = userId
   }
   if (!cobradorId) return NextResponse.json({ error: 'Cobrador requerido' }, { status: 400 })
+
+  // ── Anti-fraude: bloquear si la cobradora tiene préstamos en limbo > 72h ──
+  // Aplica para CUALQUIER usuario que esté creando solicitudes para una
+  // cobradora estancada — incluido SUPER_ADMIN — para evitar bypass.
+  const limbo = await tienePrestamosEnLimbo72h(cobradorId, prisma)
+  if (limbo.bloqueado) {
+    return NextResponse.json(
+      {
+        error: 'BLOQUEADO_POR_LIMBO',
+        message: 'No puedes crear nuevas solicitudes mientras tengas préstamos pendientes de activar por más de 72 horas',
+        prestamosEnLimbo: limbo.prestamosEnLimbo,
+      },
+      { status: 403 }
+    )
+  }
 
   const loan = await prisma.$transaction(async (tx) => {
     const newLoan = await tx.loan.create({

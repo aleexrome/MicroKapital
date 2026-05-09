@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
+import { notificarCancelacionLimbo } from '@/lib/limbo-notifications'
 
 /**
  * POST /api/loans/[id]/cancel-start-activation
@@ -33,8 +34,9 @@ export async function POST(
   const loan = await prisma.loan.findFirst({
     where: { id: params.id, companyId: companyId! },
     select: {
-      id: true, estado: true, cobradorId: true, branchId: true,
-      desembolsoFotoUrl: true,
+      id: true, estado: true, cobradorId: true, branchId: true, companyId: true,
+      desembolsoFotoUrl: true, capital: true,
+      client: { select: { nombreCompleto: true } },
     },
   })
   if (!loan) {
@@ -122,6 +124,18 @@ export async function POST(
     registroId: loan.id,
     valoresNuevos: { estado: 'APPROVED', motivo: 'Volver atrás antes de avance' },
   })
+
+  // Notificar a cobradora + GZ + DG/DC. Best-effort.
+  try {
+    await notificarCancelacionLimbo(prisma, {
+      loan,
+      motivo: 'Volver atrás antes de avance',
+      canceladoPorUserId: userId,
+      accion: 'CANCEL_START_ACTIVATION',
+    })
+  } catch (e) {
+    console.error('[cancel-start-activation] notificarCancelacionLimbo failed:', e)
+  }
 
   return NextResponse.json({ ok: true, message: 'Activación deshecha — préstamo regresó a aprobado' })
 }

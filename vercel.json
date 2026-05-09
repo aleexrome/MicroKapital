@@ -6,7 +6,6 @@
       "schedule": "0 4 * * *"
     },
     {
-      "_comment": "Hobby plan solo permite crons diarios. Pro permite expresiones más finas (ej. 0 * * * * cada hora) — al upgradear, cambiar a horario para detección más rápida del limbo.",
       "path": "/api/cron/check-prestamos-limbo",
       "schedule": "0 14 * * *"
     }

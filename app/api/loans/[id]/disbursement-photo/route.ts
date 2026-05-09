@@ -7,6 +7,7 @@ import {
   generarFechasSemanales, generarFechasHabiles, generarFechasQuincenales,
   generarFechasSemanalesDesde, generarFechasHabilesDesde,
 } from '@/lib/business-days'
+import { todayMx } from '@/lib/timezone'
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -141,7 +142,9 @@ export async function POST(
   })
 
   // ── Generar fechas del calendario ────────────────────────────────────────
-  const fechaDesembolso = loan.fechaDesembolso ?? new Date()
+  // todayMx() devuelve 06:00 UTC del día calendario CDMX. Importante para
+  // que la fecha caiga en la semana correcta de los reportes (sáb–vie CDMX).
+  const fechaDesembolso = loan.fechaDesembolso ?? todayMx()
   const fechaPrimerPagoRef = loan.fechaPrimerPago ?? null
   const plazo = Number(loan.plazo)
 
@@ -194,10 +197,11 @@ export async function POST(
         ? (loan.pagosFinanciadosIds as string[])
         : null
 
+      const pagadoAtMx = todayMx()
       if (idsFinanciados && idsFinanciados.length > 0) {
         await tx.paymentSchedule.updateMany({
           where: { id: { in: idsFinanciados } },
-          data: { estado: 'FINANCIADO', pagadoAt: new Date() },
+          data: { estado: 'FINANCIADO', pagadoAt: pagadoAtMx },
         })
       }
 
@@ -209,7 +213,7 @@ export async function POST(
           estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
           ...(idsFinanciados?.length ? { id: { notIn: idsFinanciados } } : {}),
         },
-        data: { estado: 'FINANCIADO', pagadoAt: new Date() },
+        data: { estado: 'FINANCIADO', pagadoAt: pagadoAtMx },
       })
 
       await tx.loan.update({

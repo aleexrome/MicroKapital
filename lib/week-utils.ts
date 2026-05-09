@@ -1,8 +1,16 @@
-/** Returns the Monday (00:00:00 UTC) of the week containing d */
+import { startOfDayMx } from './timezone'
+
+/**
+ * Returns the Monday of the week containing d, anchored to the CDMX
+ * calendar day. The returned Date sits at 06:00 UTC (= 00:00 CDMX) of the
+ * Monday calendar day in Mexico City. Anchoring to CDMX is required so the
+ * weekday calculation matches Mexico's local day, not the Vercel server's
+ * UTC day — otherwise a Friday 8 PM CDMX (= Saturday 02:00 UTC) gets read
+ * as already-Saturday and falls into the wrong week.
+ */
 export function getMonday(d: Date): Date {
-  const date = new Date(d)
-  date.setUTCHours(0, 0, 0, 0)
-  const day = date.getUTCDay() // 0 = Sunday
+  const date = startOfDayMx(d)
+  const day = date.getUTCDay() // weekday of the CDMX calendar day; 0 = Sunday
   const diff = day === 0 ? -6 : 1 - day
   date.setUTCDate(date.getUTCDate() + diff)
   return date
@@ -46,11 +54,15 @@ export function idToMonday(id: string): Date {
 
 // ── Semana de Sábado a Viernes — sólo para la sección Rutas ──────────────
 
-/** Returns the Saturday (00:00:00 UTC) of the Sat–Fri week containing d */
+/**
+ * Returns the Saturday of the Sat–Fri week containing d, anchored to the
+ * CDMX calendar day. The returned Date sits at 06:00 UTC (= 00:00 CDMX) of
+ * the Saturday calendar day in Mexico City. See `getMonday` for why we
+ * anchor to CDMX before computing the weekday.
+ */
 export function getSaturday(d: Date): Date {
-  const date = new Date(d)
-  date.setUTCHours(0, 0, 0, 0)
-  const day = date.getUTCDay() // 0=Sun … 5=Fri, 6=Sat
+  const date = startOfDayMx(d)
+  const day = date.getUTCDay() // weekday of the CDMX calendar day; 0=Sun … 5=Fri, 6=Sat
   const diff = day === 6 ? 0 : -(day + 1)
   date.setUTCDate(date.getUTCDate() + diff)
   return date

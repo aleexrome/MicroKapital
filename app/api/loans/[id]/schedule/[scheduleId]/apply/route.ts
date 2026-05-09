@@ -81,7 +81,11 @@ export async function POST(
     return NextResponse.json({ error: 'Este pago ya está marcado como pagado' }, { status: 400 })
   }
 
+  // `now` (UTC) para timestamps universales: Payment.fechaHora, verificadoAt.
+  // `pagadoAtMx` (06:00 UTC del día CDMX) para PaymentSchedule.pagadoAt, que
+  // representa fecha calendario y se cruza con rangos semanales en CDMX.
   const now = new Date()
+  const pagadoAtMx = todayMx()
   const monto = Number(schedule.montoEsperado)
   // El movimiento de caja se registra contra el cobrador titular del crédito
   // (no contra el director que aplica), así la caja diaria del cobrador
@@ -132,7 +136,7 @@ export async function POST(
       data: {
         estado:      'PAID',
         montoPagado: schedule.montoEsperado,
-        pagadoAt:    now,
+        pagadoAt:    pagadoAtMx,
       },
     })
 
@@ -179,7 +183,7 @@ export async function POST(
     valoresNuevos: {
       estado:      'PAID',
       montoPagado: schedule.montoEsperado,
-      pagadoAt:    now,
+      pagadoAt:    pagadoAtMx,
       metodoPago,
       monto,
       ...(metodoPago === 'TRANSFER' ? { statusTransferencia: 'VERIFICADO' } : {}),

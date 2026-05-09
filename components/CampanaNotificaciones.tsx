@@ -138,25 +138,25 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`relative flex items-center justify-center w-12 h-12 rounded-full shadow-lg transition-all hover:scale-105 ${
+        className={`relative flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all hover:scale-105 ${
           hasCritical
-            ? 'bg-red-600 hover:bg-red-500 text-white'
+            ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse'
             : hasUnread
               ? 'bg-amber-500 hover:bg-amber-400 text-white'
-              : 'bg-card hover:bg-card/80 text-foreground border border-border'
+              : 'bg-white hover:bg-gray-100 text-gray-800 border border-gray-200'
         }`}
         style={{
           boxShadow: hasCritical
-            ? '0 4px 20px rgba(220,38,38,0.6)'
+            ? '0 4px 24px rgba(220,38,38,0.7)'
             : hasUnread
               ? '0 4px 20px rgba(245,158,11,0.5)'
-              : '0 4px 12px rgba(0,0,0,0.2)',
+              : '0 6px 18px rgba(0,0,0,0.35)',
         }}
         aria-label={`Notificaciones${hasUnread ? ` (${noLeidasCount} no leídas)` : ''}`}
       >
-        {hasCritical ? <BellRing className="h-5 w-5" /> : <Bell className="h-5 w-5" />}
+        {hasCritical ? <BellRing className="h-6 w-6" /> : <Bell className="h-6 w-6" />}
         {hasUnread && (
-          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-600 text-white text-xs font-bold flex items-center justify-center border-2 border-background">
+          <span className="absolute -top-1 -right-1 min-w-[22px] h-5 px-1 rounded-full bg-red-600 text-white text-xs font-bold flex items-center justify-center border-2 border-background">
             {noLeidasCount > 99 ? '99+' : noLeidasCount}
           </span>
         )}
@@ -164,7 +164,7 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
 
       {open && (
         <div
-          className="absolute bottom-14 right-0 w-[360px] max-w-[calc(100vw-2rem)] max-h-[520px] flex flex-col rounded-2xl shadow-2xl overflow-hidden bg-card border border-border z-[60]"
+          className="absolute bottom-16 right-0 w-[360px] max-w-[calc(100vw-2rem)] max-h-[520px] flex flex-col rounded-2xl shadow-2xl overflow-hidden bg-card border border-border z-[60]"
           style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/80 backdrop-blur shrink-0">

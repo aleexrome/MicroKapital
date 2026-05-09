@@ -444,8 +444,14 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             </div>
           )}
 
-          {/* Estado del flujo — visible en APPROVED, IN_ACTIVATION y ACTIVE */}
-          {(loan.estado === 'APPROVED' || loan.estado === 'IN_ACTIVATION' || loan.estado === 'ACTIVE' || loan.estado === 'DECLINED') && (
+          {/* Estado del flujo — visible en APPROVED / IN_ACTIVATION / DECLINED
+              y en ACTIVE solo si el préstamo nació post-Fase 6 (tiene Contract).
+              Para préstamos ACTIVE pre-Fase 6 (sin Contract) no se renderiza
+              porque sus chips serían inconsistentes (nunca pasaron por candados). */}
+          {(loan.estado === 'APPROVED'
+            || loan.estado === 'IN_ACTIVATION'
+            || loan.estado === 'DECLINED'
+            || (loan.estado === 'ACTIVE' && !!contratoRow)) && (
             <div className="pt-1 space-y-3">
               <EstadoFlujoActivacion
                 loanId={loan.id}

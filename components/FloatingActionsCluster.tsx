@@ -68,11 +68,12 @@ export function FloatingActionsCluster({ userId }: Props) {
         className={`transition-opacity duration-200 ${isCollapsed ? 'invisible opacity-0 pointer-events-none' : 'opacity-100'}`}
         aria-hidden={isCollapsed}
       >
-        {/* Botón colapsar (×) — al LADO IZQUIERDO de MiKa, mismo nivel
-            (no arriba del bell, para que el dropdown del bell no lo tape) */}
+        {/* Botón colapsar (×) — al LADO IZQUIERDO de MiKa con buena separación.
+            Mismo gap visual (~24px) que la campana tiene respecto a MiKa para
+            mantener simetría. Outline naranja al presionar para feedback visual. */}
         <button
           onClick={() => toggle(true)}
-          className="fixed bottom-5 right-32 z-50 w-9 h-9 rounded-full bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 shadow-lg flex items-center justify-center transition-all hover:scale-110"
+          className="fixed bottom-5 right-[148px] z-50 w-10 h-10 rounded-full bg-white hover:bg-gray-100 text-gray-700 border-2 border-gray-300 hover:border-gray-400 active:border-orange-500 active:bg-orange-50 active:scale-95 shadow-lg flex items-center justify-center transition-all hover:scale-110"
           aria-label="Cerrar acciones flotantes"
           title="Cerrar"
           style={{ boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}

@@ -27,6 +27,10 @@ import { BranchFilter } from '@/components/dashboard/BranchFilter'
 import { todayMx } from '@/lib/timezone'
 import { BannerLimbo } from '@/components/BannerLimbo'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
+import { getLimboData, getSolicitudesCancelacionPendientes } from '@/lib/limbo-dashboard'
+import { PrestamosEnLimboWidget } from '@/components/dashboard/PrestamosEnLimboWidget'
+import { CobradorasBloqueadasWidget } from '@/components/dashboard/CobradorasBloqueadasWidget'
+import { SolicitudesCancelacionWidget, type SolicitudPendiente } from '@/components/dashboard/SolicitudesCancelacionWidget'
 
 const ESTADO_LABEL: Record<string, string> = {
   ACTIVE: 'Activo',
@@ -298,6 +302,30 @@ export default async function DashboardPage({
     ? await tienePrestamosEnLimbo72h(userId, prisma)
     : { bloqueado: false, prestamosEnLimbo: [] }
 
+  // Widgets de supervisión para DG/DC: vista agregada de préstamos en
+  // limbo, cobradoras bloqueadas y solicitudes de cancelación pendientes.
+  const limboDashboard = (isDirector || rol === 'SUPER_ADMIN') && companyId
+    ? await getLimboData(prisma, companyId)
+    : null
+  const solicitudesPendientes = (isDirector || rol === 'SUPER_ADMIN') && companyId
+    ? await getSolicitudesCancelacionPendientes(prisma, companyId)
+    : []
+  const solicitudesParaWidget: SolicitudPendiente[] = solicitudesPendientes.map((s) => ({
+    id: s.id,
+    loanId: s.loanId,
+    motivo: s.motivo,
+    createdAt: s.createdAt.toISOString(),
+    loan: {
+      estado: s.loan.estado,
+      capital: Number(s.loan.capital),
+      aprobadoAt: s.loan.aprobadoAt?.toISOString() ?? null,
+      cliente: s.loan.client.nombreCompleto,
+      cobrador: s.loan.cobrador.nombre,
+      branch: s.loan.branch.nombre,
+    },
+    solicitanteNombre: s.solicitante.nombre,
+  }))
+
   return (
     <div className="p-6 space-y-6">
       {/* Banner anti-fraude — préstamos en limbo > 72h */}
@@ -313,6 +341,18 @@ export default async function DashboardPage({
           <BranchFilter branches={allBranches} selected={superAdminBranchFilter} />
         )}
       </div>
+
+      {/* Widgets anti-fraude para DG/DC/SA */}
+      {limboDashboard && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <PrestamosEnLimboWidget
+            buckets={limboDashboard.buckets}
+            detalle={limboDashboard.detalle}
+          />
+          <CobradorasBloqueadasWidget cobradoras={limboDashboard.cobradorasBloqueadas} />
+          <SolicitudesCancelacionWidget solicitudes={solicitudesParaWidget} />
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

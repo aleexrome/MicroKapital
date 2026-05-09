@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { calcLoan } from '@/lib/financial-formulas'
 import { createAuditLog } from '@/lib/audit'
+import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 import { z } from 'zod'
 
 const renewSchema = z.object({
@@ -51,6 +52,21 @@ export async function POST(
 
   if (!loanOriginal) {
     return NextResponse.json({ error: 'Crédito no encontrado o no está activo' }, { status: 404 })
+  }
+
+  // ── Anti-fraude: bloquear si la cobradora del crédito original tiene
+  // préstamos en limbo > 72h. La renovación quedará asignada a esa misma
+  // cobradora, así que aplica el mismo criterio que en POST /loans.
+  const limbo = await tienePrestamosEnLimbo72h(loanOriginal.cobradorId, prisma)
+  if (limbo.bloqueado) {
+    return NextResponse.json(
+      {
+        error: 'BLOQUEADO_POR_LIMBO',
+        message: 'No puedes crear nuevas solicitudes mientras tengas préstamos pendientes de activar por más de 72 horas',
+        prestamosEnLimbo: limbo.prestamosEnLimbo,
+      },
+      { status: 403 }
+    )
   }
 
   // Verificar que no tenga ya una renovación pendiente

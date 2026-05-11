@@ -228,14 +228,14 @@ export function NotificacionesClient() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className={`text-sm font-semibold ${esCritica ? 'text-red-600 dark:text-red-400' : isUnread ? '' : 'text-muted-foreground'}`}>
+                    <p className={`text-sm font-semibold ${esCritica ? 'text-red-600 dark:text-red-400' : isUnread ? '' : 'text-foreground/70'}`}>
                       {n.titulo}
                     </p>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{n.tipo}</span>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1">{n.mensaje}</p>
-                  <p className="text-[11px] text-muted-foreground/70 mt-1">{fechaCompleta(n.createdAt)}</p>
+                  <p className="text-sm text-foreground/85 mt-1">{n.mensaje}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">{fechaCompleta(n.createdAt)}</p>
                 </div>
               </button>
             )

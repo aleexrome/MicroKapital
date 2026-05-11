@@ -207,15 +207,29 @@ export async function POST(req: Request) {
 
   const readable = new ReadableStream({
     async start(controller) {
+      const encoder = new TextEncoder()
       try {
+        let recibioTexto = false
         for await (const chunk of stream) {
           if (
             chunk.type === 'content_block_delta' &&
             chunk.delta.type === 'text_delta'
           ) {
-            controller.enqueue(new TextEncoder().encode(chunk.delta.text))
+            recibioTexto = true
+            controller.enqueue(encoder.encode(chunk.delta.text))
           }
         }
+        // Si el modelo no devolvió texto (caso raro), evitar dejar al
+        // cliente con un mensaje vacío que se ve como spinner eterno.
+        if (!recibioTexto) {
+          controller.enqueue(encoder.encode('No pude generar una respuesta. Intenta reformular tu pregunta.'))
+        }
+      } catch (e) {
+        // Errores de la API (key inválida, modelo no disponible, rate
+        // limit, red...) — mandar un mensaje legible al cliente en vez
+        // de cerrar el stream vacío (que dejaría el spinner para siempre).
+        console.error('[chat] stream error:', e)
+        controller.enqueue(encoder.encode('Lo siento, no pude conectar con el asistente en este momento. Intenta de nuevo en un momento.'))
       } finally {
         controller.close()
       }

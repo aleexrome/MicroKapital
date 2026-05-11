@@ -70,6 +70,15 @@ export function KapiChat() {
         full += decoder.decode(value, { stream: true })
         setMessages([...newMessages, { role: 'assistant', content: full }])
       }
+
+      // Si el stream terminó sin texto, no dejar el mensaje vacío (se
+      // vería como un spinner eterno) — mostrar un error legible.
+      if (!full.trim()) {
+        setMessages([...newMessages, {
+          role: 'assistant',
+          content: 'No recibí respuesta del asistente. Verifica tu conexión e intenta de nuevo.',
+        }])
+      }
     } catch {
       setMessages([...newMessages, {
         role: 'assistant',

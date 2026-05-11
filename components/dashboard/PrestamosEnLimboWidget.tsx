@@ -49,7 +49,11 @@ export function PrestamosEnLimboWidget({ buckets, detalle }: Props) {
               key={key}
               disabled={empty}
               onClick={() => setOpenBucket(isOpen ? null : key)}
-              className={`rounded-lg border ${empty ? 'border-border/40 opacity-50' : 'border-border hover:border-foreground/30'} ${meta.bg} p-3 text-left transition-all ${isOpen ? 'ring-2 ring-foreground/20' : ''}`}
+              className={`rounded-lg border p-3 text-left transition-all ${meta.bg} ${
+                empty
+                  ? 'border-border/40 opacity-50'
+                  : 'border-border hover:border-foreground/70 hover:ring-1 hover:ring-foreground/30 hover:shadow-md hover:scale-[1.02]'
+              } ${isOpen ? 'ring-2 ring-foreground/40 border-foreground/50' : ''}`}
             >
               <div className="flex items-center gap-1.5 text-xs font-medium">
                 <Icon className={`h-3.5 w-3.5 ${meta.color}`} />

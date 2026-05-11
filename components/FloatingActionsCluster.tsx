@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, X, Bell } from 'lucide-react'
 import { CampanaNotificaciones } from '@/components/CampanaNotificaciones'
-import { MiKaChat } from '@/components/chat/MiKaChat'
+import { KapiChat } from '@/components/chat/KapiChat'
 
 const STORAGE_KEY_PREFIX = 'mk-floating-cluster-collapsed'
 
@@ -13,7 +13,7 @@ interface Props {
 
 /**
  * Cluster flotante en la esquina inferior derecha que agrupa la campana
- * de notificaciones (ARRIBA) + MiKa (abajo) en stack vertical.
+ * de notificaciones (ARRIBA) + Kapi (abajo) en stack vertical.
  *
  *   - Estado expandido/colapsado por usuario (localStorage)
  *   - Default expandido en desktop, colapsado en móvil
@@ -61,15 +61,15 @@ export function FloatingActionsCluster({ userId }: Props) {
 
   return (
     <>
-      {/* ── Cluster expandido — bell ARRIBA, MiKa abajo ──────────────────────
+      {/* ── Cluster expandido — bell ARRIBA, Kapi abajo ──────────────────────
           Siempre montado, se oculta vía CSS para que el polling de campana
           siga vivo y pueda gatillar auto-expansión cuando llega una crítica. */}
       <div
         className={`transition-opacity duration-200 ${isCollapsed ? 'invisible opacity-0 pointer-events-none' : 'opacity-100'}`}
         aria-hidden={isCollapsed}
       >
-        {/* Botón colapsar (×) — al LADO IZQUIERDO de MiKa con buena separación
-            (~40px gap, comparable al gap vertical del bell sobre MiKa).
+        {/* Botón colapsar (×) — al LADO IZQUIERDO de Kapi con buena separación
+            (~40px gap, comparable al gap vertical del bell sobre Kapi).
             Outline naranja al presionar para feedback visual. */}
         <button
           onClick={() => toggle(true)}
@@ -81,7 +81,7 @@ export function FloatingActionsCluster({ userId }: Props) {
           <X className="h-4 w-4" />
         </button>
 
-        {/* Campana — ARRIBA de MiKa, mismo eje vertical (right-8) */}
+        {/* Campana — ARRIBA de Kapi, mismo eje vertical (right-8) */}
         <div className="fixed bottom-[88px] right-8 z-50">
           <CampanaNotificaciones
             onCountChange={(n, c) => {
@@ -92,8 +92,8 @@ export function FloatingActionsCluster({ userId }: Props) {
           />
         </div>
 
-        {/* MiKa mantiene su posición original (bottom-5 right-8) */}
-        <MiKaChat />
+        {/* Kapi mantiene su posición original (bottom-5 right-8) */}
+        <KapiChat />
       </div>
 
       {/* ── Master button (+) cuando está colapsado ──────────────────────── */}
@@ -115,7 +115,7 @@ export function FloatingActionsCluster({ userId }: Props) {
                 : '0 4px 20px rgba(249,115,22,0.5)',
           }}
           aria-label={`Abrir acciones${noLeidas > 0 ? ` (${noLeidas} notificaciones)` : ''}`}
-          title="Mostrar campana y MiKa"
+          title="Mostrar campana y Kapi"
         >
           <Plus className="h-6 w-6" />
           {noLeidas > 0 && (

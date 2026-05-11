@@ -121,10 +121,18 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+    // Si este crédito es una renovación (loanOriginalId != null), el grupo
+    // contiene tanto los créditos viejos (todavía ACTIVE hasta que se
+    // active el ciclo nuevo) como los nuevos de la renovación. El contrato
+    // debe cubrir SOLO los nuevos — si no, agarraría los viejos. Por eso
+    // filtramos por loanOriginalId según el caso.
+    const esRenovacion = loan.loanOriginalId !== null
     groupLoans = await prisma.loan.findMany({
       where: {
         loanGroupId: loan.loanGroupId,
-        estado: { in: ['APPROVED', 'IN_ACTIVATION', 'ACTIVE'] },
+        ...(esRenovacion
+          ? { loanOriginalId: { not: null }, estado: { in: ['APPROVED', 'IN_ACTIVATION'] } }
+          : { loanOriginalId: null, estado: { in: ['APPROVED', 'IN_ACTIVATION', 'ACTIVE'] } }),
       },
       include: { client: { select: { id: true, nombreCompleto: true } } },
       orderBy: { createdAt: 'asc' },

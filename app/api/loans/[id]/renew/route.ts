@@ -197,6 +197,11 @@ export async function POST(
         tuvoAtraso: data.tuvoAtraso ?? loanOriginal.tuvoAtraso,
         clienteIrregular: data.clienteIrregular ?? loanOriginal.clienteIrregular,
         tipoGrupo: data.tipoGrupo ?? loanOriginal.tipoGrupo ?? null,
+        // Si la renovación sigue siendo SOLIDARIA, hereda el grupo del
+        // crédito original — si no, el nuevo crédito quedaría huérfano de
+        // grupo y al generar el contrato saldría "Préstamo solidario sin
+        // grupo asignado". Si cambia de tipo (ej. a INDIVIDUAL), no grupo.
+        loanGroupId: nuevoTipo === 'SOLIDARIO' ? loanOriginal.loanGroupId : null,
         // Vínculo con el crédito anterior
         loanOriginalId: loanOriginal.id,
         descuentoRenovacion: montoFinanciado,

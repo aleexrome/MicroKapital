@@ -1,37 +1,49 @@
-import { startOfDayMx, MX_TZ } from './timezone'
+import { startOfDayMx } from './timezone'
 
 /**
- * Returns the Monday of the week containing d, anchored to the CDMX
- * calendar day. The returned Date sits at 06:00 UTC (= 00:00 CDMX) of the
- * Monday calendar day in Mexico City. Anchoring to CDMX is required so the
- * weekday calculation matches Mexico's local day, not the Vercel server's
- * UTC day — otherwise a Friday 8 PM CDMX (= Saturday 02:00 UTC) gets read
- * as already-Saturday and falls into the wrong week.
+ * # Semanas de cobranza — agrupación por FECHA CALENDARIO
+ *
+ * Los `PaymentSchedule.fechaVencimiento` (y `Loan.fechaDesembolso`) se
+ * guardan como timestamps "naive": muchos vienen de imports a medianoche
+ * UTC (`2026-05-16 00:00:00`), otros del flujo nuevo a 06:00 UTC
+ * (`todayMx()`), otros a mediodía UTC (imports viejos). El denominador
+ * común es la PARTE DE FECHA (el día calendario) — esa es la intención
+ * real ("el cobro vence el 16 de mayo").
+ *
+ * Por eso las semanas se construyen con límites de fecha calendario en
+ * UTC: inicio = `YYYY-MM-DD 00:00:00 UTC`, fin = `YYYY-MM-DD 23:59:59.999
+ * UTC` del último día. Así un schedule cuyo día calendario es el 16 de
+ * mayo cae en la semana que CONTIENE el 16 de mayo, sin importar la hora.
+ *
+ * La zona CDMX SOLO se usa para decidir EN QUÉ SEMANA estamos HOY
+ * (`getSaturday(new Date())` / `getMonday(new Date())`) — porque "hoy" sí
+ * depende del huso horario del usuario.
+ */
+
+// ── Semana Lunes–Domingo (reportes generales) ───────────────────────────
+
+/**
+ * Lunes (a 00:00:00 UTC de su día calendario) de la semana lun–dom que
+ * contiene a `d`, calculado según el día calendario CDMX de `d`.
  */
 export function getMonday(d: Date): Date {
-  const date = startOfDayMx(d)
-  const day = date.getUTCDay() // weekday of the CDMX calendar day; 0 = Sunday
+  const date = startOfDayMx(d) // 06:00 UTC del día calendario CDMX de d
+  const day = date.getUTCDay() // 0 = domingo
   const diff = day === 0 ? -6 : 1 - day
   date.setUTCDate(date.getUTCDate() + diff)
+  date.setUTCHours(0, 0, 0, 0) // → 00:00:00 UTC del día calendario del lunes
   return date
 }
 
-/**
- * Returns the end of Sunday CDMX of the week starting on monday — el último
- * instante representable antes del próximo lunes 00:00 CDMX (= lun 06:00 UTC).
- * Resultado: lunes siguiente 06:00 UTC menos 1 ms = lun 05:59:59.999 UTC =
- * domingo 23:59:59.999 CDMX. Antes la función cortaba en `setUTCHours(23,...)`
- * sobre el domingo UTC, perdiendo las últimas 6 horas del domingo CDMX
- * (de 6 PM a medianoche) — schedules con `fechaVencimiento` ahí se caían
- * del reporte.
- */
+/** Fin del domingo (23:59:59.999 UTC) de la semana que arranca en `monday`. */
 export function getWeekEnd(monday: Date): Date {
-  const nextMonday = new Date(monday)
-  nextMonday.setUTCDate(nextMonday.getUTCDate() + 7)
-  return new Date(nextMonday.getTime() - 1)
+  const d = new Date(monday)
+  d.setUTCDate(d.getUTCDate() + 6)
+  d.setUTCHours(23, 59, 59, 999)
+  return d
 }
 
-/** Returns the last `count` week Mondays, newest first (index 0 = current week) */
+/** Últimos `count` lunes, más reciente primero (índice 0 = semana actual). */
 export function semanasRecientes(count: number): Date[] {
   const thisMonday = getMonday(new Date())
   return Array.from({ length: count }, (_, i) => {
@@ -41,69 +53,49 @@ export function semanasRecientes(count: number): Date[] {
   })
 }
 
-/**
- * "6 al 12 de abril de 2026". Formateo en CDMX (no UTC) porque el final de
- * semana ahora es lun 05:59:59.999 UTC = dom 23:59 CDMX — con tz='UTC' se
- * vería como el lunes siguiente. tz='America/Mexico_City' regresa el día
- * calendario CDMX correcto. Para el inicio (mon a 06:00 UTC = 00:00 CDMX)
- * el resultado es el mismo en ambas zonas.
- */
+/** "6 al 12 de abril de 2026". Formateo en UTC porque los límites son
+ *  fechas calendario expresadas en UTC. */
 export function formatWeekLabel(monday: Date): string {
   const sunday = getWeekEnd(monday)
-  const mOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', timeZone: MX_TZ }
-  const sOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric', timeZone: MX_TZ }
+  const mOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', timeZone: 'UTC' }
+  const sOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }
   return `${monday.toLocaleDateString('es-MX', mOpts)} al ${sunday.toLocaleDateString('es-MX', sOpts)}`
 }
 
-/** Monday date → URL-safe "YYYY-MM-DD" */
+/** Lunes → "YYYY-MM-DD" (para URLs). */
 export function mondayToId(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-/**
- * "YYYY-MM-DD" → Date a 06:00 UTC (= 00:00 CDMX) del lunes.
- * El offset 06:00 mantiene simetría con `getMonday`, que también devuelve
- * el inicio del día calendario CDMX. Importante para que comparaciones
- * `idToMonday(id).getTime() === getMonday(new Date()).getTime()` sigan
- * funcionando (ej. resaltar semana actual en /rutas/[semana]).
- */
+/** "YYYY-MM-DD" → Date a 00:00:00 UTC del lunes (simétrico con getMonday). */
 export function idToMonday(id: string): Date {
-  return new Date(id + 'T06:00:00.000Z')
+  return new Date(id + 'T00:00:00.000Z')
 }
 
-// ── Semana de Sábado a Viernes — sólo para la sección Rutas ──────────────
+// ── Semana Sábado–Viernes (sección Rutas) ───────────────────────────────
 
 /**
- * Returns the Saturday of the Sat–Fri week containing d, anchored to the
- * CDMX calendar day. The returned Date sits at 06:00 UTC (= 00:00 CDMX) of
- * the Saturday calendar day in Mexico City. See `getMonday` for why we
- * anchor to CDMX before computing the weekday.
+ * Sábado (a 00:00:00 UTC de su día calendario) de la semana sáb–vie que
+ * contiene a `d`, calculado según el día calendario CDMX de `d`.
  */
 export function getSaturday(d: Date): Date {
-  const date = startOfDayMx(d)
-  const day = date.getUTCDay() // weekday of the CDMX calendar day; 0=Sun … 5=Fri, 6=Sat
+  const date = startOfDayMx(d) // 06:00 UTC del día calendario CDMX de d
+  const day = date.getUTCDay() // 0=dom … 5=vie, 6=sáb
   const diff = day === 6 ? 0 : -(day + 1)
   date.setUTCDate(date.getUTCDate() + diff)
+  date.setUTCHours(0, 0, 0, 0) // → 00:00:00 UTC del día calendario del sábado
   return date
 }
 
-/**
- * Returns the end of Friday CDMX of the Sat–Fri week starting on saturday —
- * el último instante representable antes del próximo sábado 00:00 CDMX
- * (= sáb 06:00 UTC). Resultado: sábado siguiente 06:00 UTC menos 1 ms =
- * sáb 05:59:59.999 UTC = viernes 23:59:59.999 CDMX. Antes la función cortaba
- * en `setUTCHours(23,...)` sobre el viernes UTC, perdiendo las últimas 6
- * horas del viernes CDMX (de 6 PM a medianoche) — schedules con
- * `fechaVencimiento` ahí se caían del reporte (caso de Hugo: 20 schedules
- * de $25k perdidos por este corte).
- */
+/** Fin del viernes (23:59:59.999 UTC) de la semana sáb–vie que arranca en `saturday`. */
 export function getFriday(saturday: Date): Date {
-  const nextSaturday = new Date(saturday)
-  nextSaturday.setUTCDate(nextSaturday.getUTCDate() + 7)
-  return new Date(nextSaturday.getTime() - 1)
+  const d = new Date(saturday)
+  d.setUTCDate(d.getUTCDate() + 6)
+  d.setUTCHours(23, 59, 59, 999)
+  return d
 }
 
-/** Returns the last `count` Sat–Fri week Saturdays, newest first (index 0 = current week) */
+/** Últimos `count` sábados (sáb–vie), más reciente primero (índice 0 = semana actual). */
 export function semanasRecientesSatFri(count: number): Date[] {
   const thisSat = getSaturday(new Date())
   return Array.from({ length: count }, (_, i) => {
@@ -113,23 +105,20 @@ export function semanasRecientesSatFri(count: number): Date[] {
   })
 }
 
-/** "4 al 10 de abril de 2026" for a Sat–Fri week. Ver nota en formatWeekLabel. */
+/** "4 al 10 de abril de 2026" para una semana sáb–vie. */
 export function formatWeekLabelSatFri(saturday: Date): string {
   const friday = getFriday(saturday)
-  const satOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', timeZone: MX_TZ }
-  const friOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric', timeZone: MX_TZ }
+  const satOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', timeZone: 'UTC' }
+  const friOpts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }
   return `${saturday.toLocaleDateString('es-MX', satOpts)} al ${friday.toLocaleDateString('es-MX', friOpts)}`
 }
 
-/** Saturday date → URL-safe "YYYY-MM-DD" */
+/** Sábado → "YYYY-MM-DD" (para URLs). */
 export function saturdayToId(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-/**
- * "YYYY-MM-DD" → Date a 06:00 UTC (= 00:00 CDMX) del sábado.
- * Ver nota en `idToMonday` sobre por qué 06:00 y no 00:00.
- */
+/** "YYYY-MM-DD" → Date a 00:00:00 UTC del sábado (simétrico con getSaturday). */
 export function idToSaturday(id: string): Date {
-  return new Date(id + 'T06:00:00.000Z')
+  return new Date(id + 'T00:00:00.000Z')
 }

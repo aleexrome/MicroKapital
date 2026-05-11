@@ -188,8 +188,14 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
 
       {open && (
         <div
-          className="absolute bottom-16 right-0 w-[360px] max-w-[calc(100vw-2rem)] max-h-[520px] flex flex-col rounded-2xl shadow-2xl overflow-hidden bg-card border border-border z-[60]"
-          style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+          className="absolute bottom-16 right-0 w-[360px] max-w-[calc(100vw-2rem)] max-h-[520px] flex flex-col rounded-2xl overflow-hidden bg-card z-[60]"
+          style={{
+            // Borde + glow morado de la marca (primary-500 = #7B6FFF), mismo
+            // tratamiento que el panel de MiKa con su naranja — para que el
+            // recuadro no se pierda contra el fondo oscuro de la app.
+            border: '2px solid #7B6FFF',
+            boxShadow: '0 0 24px rgba(123,111,255,0.35), 0 8px 32px rgba(0,0,0,0.6)',
+          }}
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/80 backdrop-blur shrink-0">
             <h3 className="font-semibold text-sm">Notificaciones</h3>

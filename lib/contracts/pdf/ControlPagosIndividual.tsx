@@ -53,7 +53,7 @@ export function ControlPagosIndividual(props: ControlPagosIndividualProps) {
             </Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Image src={MICROKAPITAL_LOGO_URL} style={{ width: 80, height: 32, objectFit: 'contain' }} />
+            <Image src={MICROKAPITAL_LOGO_URL} style={{ width: 140, height: 56, objectFit: 'contain' }} />
             <Text style={{ fontSize: 9, marginTop: 4 }}>
               <Text style={{ fontFamily: 'Helvetica-Bold' }}>FECHA DE INICIO: </Text>
               {formatDateShort(fechaInicio)}

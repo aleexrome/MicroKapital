@@ -8,9 +8,9 @@ interface Props {
 }
 
 /**
- * Lista de cobradoras con bloqueo activo (al menos un préstamo > 72h en
+ * Lista de coordinadores con bloqueo activo (al menos un préstamo > 72h en
  * limbo). Aparece en dashboard DG/DC para visibilidad de quiénes están
- * bloqueadas para crear nuevas solicitudes/renovaciones.
+ * bloqueados para crear nuevas solicitudes/renovaciones.
  */
 export function CobradorasBloqueadasWidget({ cobradoras }: Props) {
   if (cobradoras.length === 0) {
@@ -18,9 +18,9 @@ export function CobradorasBloqueadasWidget({ cobradoras }: Props) {
       <div className="rounded-xl border border-border bg-card p-5">
         <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
           <Lock className="h-4 w-4 text-muted-foreground" />
-          Cobradoras bloqueadas
+          Coordinadores bloqueados
         </h3>
-        <p className="text-xs text-muted-foreground">Ninguna cobradora bloqueada actualmente. ✨</p>
+        <p className="text-xs text-muted-foreground">Ningún coordinador bloqueado actualmente. ✨</p>
       </div>
     )
   }
@@ -29,7 +29,7 @@ export function CobradorasBloqueadasWidget({ cobradoras }: Props) {
     <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-5 space-y-3">
       <h3 className="text-sm font-semibold flex items-center gap-2 text-red-600 dark:text-red-400">
         <Lock className="h-4 w-4" />
-        Cobradoras bloqueadas
+        Coordinadores bloqueados
         <span className="text-xs font-normal text-muted-foreground">({cobradoras.length})</span>
       </h3>
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
+import { crearNotificacion, getGerentesZonalesIds } from '@/lib/notifications'
 import { z } from 'zod'
 
 const rejectSchema = z.object({
@@ -64,6 +65,27 @@ export async function POST(
     registroId: loan.id,
     valoresNuevos: { estado: 'REJECTED', razonRechazo: parsed.data.razonRechazo },
   })
+
+  // Notificar a la cobradora + GZ del branch que la solicitud fue rechazada.
+  try {
+    const [clienteRow, gerentes] = await Promise.all([
+      prisma.client.findUnique({ where: { id: loan.clientId }, select: { nombreCompleto: true } }),
+      getGerentesZonalesIds(prisma, companyId!, loan.branchId),
+    ])
+    const clienteNombre = clienteRow?.nombreCompleto ?? 'cliente'
+    await crearNotificacion(prisma, {
+      companyId: companyId!,
+      destinatariosIds: [loan.cobradorId, ...gerentes],
+      tipo: 'SOLICITUD_RECHAZADA',
+      nivel: 'IMPORTANTE',
+      titulo: 'Solicitud rechazada',
+      mensaje: `${clienteNombre} — rechazada por el Director General. Motivo: ${parsed.data.razonRechazo}`,
+      loanId: loan.id,
+      clientId: loan.clientId,
+    })
+  } catch (e) {
+    console.error('[reject] notif failed:', e)
+  }
 
   return NextResponse.json({ message: 'Préstamo rechazado' })
 }

@@ -6,6 +6,7 @@ import { generateTicketQrData } from '@/lib/ticket-generator'
 import { createAuditLog } from '@/lib/audit'
 import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioScore } from '@/lib/score-calculator'
 import { todayMx } from '@/lib/timezone'
+import { crearNotificacion, getDirectoresIds, getGerentesZonalesIds } from '@/lib/notifications'
 
 const cashBreakdownSchema = z.object({
   denominacion: z.number().int().positive(),
@@ -324,6 +325,47 @@ export async function POST(
       tickets:     tickets.map((t) => t.numeroTicket),
     },
   })
+
+  // Notificaciones del flujo de pago grupal. Best-effort.
+  try {
+    if (data.metodoPago === 'TRANSFER') {
+      // Avisar a GZ del branch que hay transferencias pendientes del grupo
+      const gerentes = await getGerentesZonalesIds(prisma, companyId!, targetBranch!)
+      await crearNotificacion(prisma, {
+        companyId: companyId!,
+        destinatariosIds: gerentes,
+        tipo: 'TRANSFERENCIA_PENDIENTE',
+        nivel: 'IMPORTANTE',
+        titulo: 'Transferencias pendientes de verificar',
+        mensaje: `Grupo ${grupo.nombre} — $${totalEsperado.toFixed(2)} en ${loansPagables.length} transferencia(s). Verifícalas en /transferencias.`,
+        linkUrl: '/transferencias',
+      })
+    } else {
+      // CASH/CARD: detectar préstamos que quedaron LIQUIDATED en este batch
+      const idsPagables = loansPagables.map((l) => l.id)
+      const liquidados = await prisma.loan.findMany({
+        where: { id: { in: idsPagables }, estado: 'LIQUIDATED' },
+        select: { id: true, cobradorId: true, clientId: true, client: { select: { nombreCompleto: true } } },
+      })
+      if (liquidados.length > 0) {
+        const directores = await getDirectoresIds(prisma, companyId!)
+        for (const l of liquidados) {
+          await crearNotificacion(prisma, {
+            companyId: companyId!,
+            destinatariosIds: [...directores, l.cobradorId],
+            tipo: 'PRESTAMO_LIQUIDADO',
+            nivel: 'INFORMATIVA',
+            titulo: 'Préstamo liquidado completamente',
+            mensaje: `${l.client.nombreCompleto} — terminó de pagar`,
+            loanId: l.id,
+            clientId: l.clientId,
+          })
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[group-pay] notif failed:', e)
+  }
 
   return NextResponse.json({
     tickets,

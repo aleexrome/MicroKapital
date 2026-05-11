@@ -42,7 +42,11 @@ export async function GET(req: NextRequest) {
   if (filtro === 'no_leidas') {
     where.leidaAt = null
   } else if (filtro === 'criticas') {
-    where.esCritica = true
+    where.nivel = 'CRITICA'
+  } else if (filtro === 'importantes') {
+    where.nivel = 'IMPORTANTE'
+  } else if (filtro === 'informativas') {
+    where.nivel = 'INFORMATIVA'
   }
   if (tipoPrefix) {
     where.tipo = { startsWith: tipoPrefix }
@@ -50,6 +54,8 @@ export async function GET(req: NextRequest) {
 
   const items = await prisma.notification.findMany({
     where,
+    // Críticas primero, luego importantes, luego por fecha. (orden de
+    // nivel se hace en cliente porque Prisma no ordena por string custom).
     orderBy: [{ esCritica: 'desc' }, { createdAt: 'desc' }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -58,7 +64,9 @@ export async function GET(req: NextRequest) {
       tipo: true,
       titulo: true,
       mensaje: true,
+      nivel: true,
       esCritica: true,
+      linkUrl: true,
       leidaAt: true,
       expiraAt: true,
       createdAt: true,
@@ -70,28 +78,20 @@ export async function GET(req: NextRequest) {
   const hasMore = items.length > limit
   const data = hasMore ? items.slice(0, limit) : items
 
-  // Conteos rápidos para badges (no leídas y críticas activas)
-  const noLeidasCount = await prisma.notification.count({
-    where: {
-      userId,
-      companyId,
-      leidaAt: null,
-      OR: [{ expiraAt: null }, { expiraAt: { gt: now } }],
-    },
-  })
-  const criticasCount = await prisma.notification.count({
-    where: {
-      userId,
-      companyId,
-      esCritica: true,
-      OR: [{ expiraAt: null }, { expiraAt: { gt: now } }],
-    },
-  })
+  // Conteos rápidos para badges
+  const noExpiradas = { OR: [{ expiraAt: null }, { expiraAt: { gt: now } }] }
+  const [noLeidasCount, criticasCount, importantesNoLeidas] = await Promise.all([
+    prisma.notification.count({ where: { userId, companyId, leidaAt: null, ...noExpiradas } }),
+    // críticas siempre cuentan (no se pueden marcar leídas)
+    prisma.notification.count({ where: { userId, companyId, nivel: 'CRITICA', ...noExpiradas } }),
+    prisma.notification.count({ where: { userId, companyId, nivel: 'IMPORTANTE', leidaAt: null, ...noExpiradas } }),
+  ])
 
   return NextResponse.json({
     items: data,
     nextCursor: hasMore ? data[data.length - 1]?.id : null,
     noLeidasCount,
     criticasCount,
+    importantesNoLeidas,
   })
 }

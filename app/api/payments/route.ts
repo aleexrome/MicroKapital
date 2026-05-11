@@ -6,6 +6,7 @@ import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generat
 import { createAuditLog } from '@/lib/audit'
 import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioScore } from '@/lib/score-calculator'
 import { todayMx } from '@/lib/timezone'
+import { crearNotificacion, getDirectoresIds, getGerentesZonalesIds } from '@/lib/notifications'
 
 const cashBreakdownSchema = z.object({
   denominacion: z.number().int().positive(),
@@ -310,6 +311,45 @@ export async function POST(req: NextRequest) {
         : { ticket: result.ticket.numeroTicket }),
     },
   })
+
+  // Notificaciones del flujo de pago. Best-effort.
+  try {
+    const clienteNombre = loan.client.nombreCompleto
+    if (result.pending) {
+      // Transferencia pendiente → avisar a GZ del branch para que verifique
+      const gerentes = await getGerentesZonalesIds(prisma, companyId!, loan.branchId)
+      await crearNotificacion(prisma, {
+        companyId: companyId!,
+        destinatariosIds: gerentes,
+        tipo: 'TRANSFERENCIA_PENDIENTE',
+        nivel: 'IMPORTANTE',
+        titulo: 'Transferencia pendiente de verificar',
+        mensaje: `${clienteNombre} — $${Number(data.monto).toFixed(2)} por transferencia. Verifícala en /transferencias.`,
+        loanId: loan.id,
+        clientId: loan.clientId,
+        linkUrl: '/transferencias',
+      })
+    } else {
+      // Pago CASH/CARD aplicado. ¿Quedó liquidado el préstamo?
+      const fuePagoCompleto = Number(data.monto) >= Number(schedule.montoEsperado)
+      const quedoLiquidado = fuePagoCompleto && loan.schedule.filter((s) => s.id !== schedule.id).length === 0
+      if (quedoLiquidado) {
+        const directores = await getDirectoresIds(prisma, companyId!)
+        await crearNotificacion(prisma, {
+          companyId: companyId!,
+          destinatariosIds: [...directores, loan.cobradorId],
+          tipo: 'PRESTAMO_LIQUIDADO',
+          nivel: 'INFORMATIVA',
+          titulo: 'Préstamo liquidado completamente',
+          mensaje: `${clienteNombre} — terminó de pagar`,
+          loanId: loan.id,
+          clientId: loan.clientId,
+        })
+      }
+    }
+  } catch (e) {
+    console.error('[payments POST] notif failed:', e)
+  }
 
   return NextResponse.json({ data: result }, { status: 201 })
 }

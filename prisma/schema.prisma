@@ -607,6 +607,12 @@ model Notification {
   // Notificaciones críticas (ej. préstamo en limbo > 72h) NO se pueden marcar
   // como leídas ni ocultar — se mantienen hasta que la condición se resuelva.
   esCritica  Boolean   @default(false)
+  // Clasificación visual: CRITICA (rojo, no marcable) | IMPORTANTE (amarillo) |
+  // INFORMATIVA (gris). Para CRITICA siempre va con esCritica=true.
+  nivel      String    @default("INFORMATIVA")
+  // URL a la que navega al hacer click (si aplica). Si es null y hay loanId,
+  // se navega a /prestamos/<loanId> por convención.
+  linkUrl    String?
   // Notificaciones no críticas se descartan después de N días para no
   // ensuciar la bandeja. NULL = no expira (críticas).
   expiraAt   DateTime? @db.Timestamptz(3)
@@ -617,6 +623,7 @@ model Notification {
   createdAt  DateTime  @default(now())
 
   @@index([userId, leidaAt])
+  @@index([userId, nivel])
 }
 
 // ─────────────────────────────────────────

@@ -51,18 +51,16 @@ export async function getLimboData(
 }> {
   const ahora = Date.now()
 
-  const loans = await prismaClient.loan.findMany({
+  // Traer TODOS los préstamos APPROVED/IN_ACTIVATION con aprobadoAt y, por
+  // separado, las solicitudes de cancelación de esos préstamos. Filtramos en
+  // JS los que tienen solicitud PENDIENTE o APROBADA (ya en proceso) — quedan
+  // solo los que requieren acción real. Evitamos filtros de relación one-to-one
+  // en el `where` de Prisma (que dan quirks).
+  const todosLosLoans = await prismaClient.loan.findMany({
     where: {
       companyId,
       estado: { in: ['APPROVED', 'IN_ACTIVATION'] },
       aprobadoAt: { not: null },
-      // Excluir los que ya tienen solicitud APROBADA (ya pasó a DECLINED)
-      // o PENDIENTE (en proceso de decidir). Solo dejar los que requieren
-      // acción real.
-      OR: [
-        { solicitudCancelacionLimbo: { is: null } },
-        { solicitudCancelacionLimbo: { estado: 'RECHAZADA' } },
-      ],
     },
     select: {
       id: true,
@@ -74,6 +72,19 @@ export async function getLimboData(
       cobrador: { select: { nombre: true } },
       branch: { select: { nombre: true } },
     },
+  })
+
+  const solicitudes = await prismaClient.solicitudCancelacionLimbo.findMany({
+    where: { loanId: { in: todosLosLoans.map((l) => l.id) } },
+    select: { loanId: true, estado: true },
+  })
+  const solicitudPorLoan = new Map(solicitudes.map((s) => [s.loanId, s.estado]))
+
+  const loans = todosLosLoans.filter((l) => {
+    const estadoSol = solicitudPorLoan.get(l.id)
+    // Excluir los que tienen solicitud PENDIENTE o APROBADA. Si fue RECHAZADA
+    // o no hay solicitud, el préstamo sí cuenta como en limbo.
+    return estadoSol !== 'PENDIENTE' && estadoSol !== 'APROBADA'
   })
 
   const buckets: LimboBuckets = {

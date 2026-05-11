@@ -27,7 +27,7 @@ export const PAGE_SIZE = 'LETTER' as const
 export const styles = StyleSheet.create({
   // Página
   page: {
-    paddingTop:    PAGE_MARGIN + 60,  // espacio para el header fixed
+    paddingTop:    PAGE_MARGIN + 85,  // espacio para el header fixed (logo grande)
     paddingBottom: PAGE_MARGIN + 50,  // espacio para el footer fixed
     paddingLeft:   PAGE_MARGIN,
     paddingRight:  PAGE_MARGIN,
@@ -57,8 +57,8 @@ export const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   headerLogo: {
-    width:  90,
-    height: 36,
+    width:  170,
+    height: 64,
     objectFit: 'contain',
   },
 

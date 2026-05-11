@@ -16,7 +16,7 @@ const SUGGESTED = [
   '¿Cuál es el flujo para aprobar un crédito?',
 ]
 
-export function MiKaChat() {
+export function KapiChat() {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -28,7 +28,7 @@ export function MiKaChat() {
     if (open && messages.length === 0) {
       setMessages([{
         role: 'assistant',
-        content: '¡Hola! Soy **MiKa**, tu asistente de MicroKapital. Puedo ayudarte a entender cómo funciona la plataforma, qué significa cada término y cómo se calculan los créditos. ¿En qué te puedo ayudar?',
+        content: '¡Hola! Soy **Kapi**, tu asistente de MicroKapital. Puedo ayudarte a entender cómo funciona la plataforma, qué significa cada término y cómo se calculan los créditos. ¿En qué te puedo ayudar?',
       }])
     }
   }, [open, messages.length])
@@ -109,10 +109,10 @@ export function MiKaChat() {
           onClick={() => setOpen(true)}
           className="fixed bottom-5 right-8 z-50 flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-white rounded-full px-4 py-3 shadow-lg transition-all hover:scale-105"
           style={{ boxShadow: '0 4px 20px rgba(249,115,22,0.5)' }}
-          aria-label="Abrir MiKa"
+          aria-label="Abrir Kapi"
         >
           <Bot className="h-5 w-5" />
-          <span className="text-sm font-semibold">MiKa</span>
+          <span className="text-sm font-semibold">Kapi</span>
         </button>
       )}
 
@@ -131,7 +131,7 @@ export function MiKaChat() {
               <Bot className="h-4 w-4 text-orange-400" />
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-sm text-white">MiKa</p>
+              <p className="font-semibold text-sm text-white">Kapi</p>
               <p className="text-xs" style={{ color: '#A898FF' }}>Asistente de MicroKapital</p>
             </div>
             <button
@@ -257,7 +257,7 @@ export function MiKaChat() {
               </button>
             </div>
             <p className="text-[10px] mt-1.5 text-center" style={{ color: '#5A567A' }}>
-              MiKa puede cometer errores. Verifica información importante.
+              Kapi puede cometer errores. Verifica información importante.
             </p>
           </div>
         </div>

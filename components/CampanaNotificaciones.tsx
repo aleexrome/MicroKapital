@@ -229,7 +229,7 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
                   ? 'text-red-600 dark:text-red-400'
                   : isUnread
                     ? 'text-foreground'
-                    : 'text-muted-foreground'
+                    : 'text-foreground/70'
                 return (
                   <button
                     key={n.id}
@@ -249,8 +249,8 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className={`text-xs font-semibold ${tituloColor}`}>{n.titulo}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.mensaje}</p>
-                      <p className="text-[10px] text-muted-foreground/70 mt-1">{tiempoRelativo(n.createdAt)}</p>
+                      <p className="text-xs text-foreground/80 line-clamp-2 mt-0.5">{n.mensaje}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">{tiempoRelativo(n.createdAt)}</p>
                     </div>
                   </button>
                 )

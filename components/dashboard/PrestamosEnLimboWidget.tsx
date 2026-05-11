@@ -25,18 +25,6 @@ export function PrestamosEnLimboWidget({ buckets, detalle }: Props) {
 
   const total = buckets.recientes.count + buckets.demorados.count + buckets.atrasados.count + buckets.criticos.count
 
-  if (total === 0) {
-    return (
-      <div className="rounded-xl border border-border bg-card p-5">
-        <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-          <Clock className="h-4 w-4 text-muted-foreground" />
-          Préstamos en limbo
-        </h3>
-        <p className="text-xs text-muted-foreground">Sin préstamos pendientes de activar. ✨</p>
-      </div>
-    )
-  }
-
   const order: BucketKey[] = ['recientes', 'demorados', 'atrasados', 'criticos']
 
   return (
@@ -44,7 +32,9 @@ export function PrestamosEnLimboWidget({ buckets, detalle }: Props) {
       <h3 className="text-sm font-semibold flex items-center gap-2">
         <Clock className="h-4 w-4 text-muted-foreground" />
         Préstamos en limbo
-        <span className="text-xs text-muted-foreground font-normal">({total} total)</span>
+        {total > 0
+          ? <span className="text-xs text-muted-foreground font-normal">({total} total)</span>
+          : <span className="text-xs text-emerald-600 dark:text-emerald-400 font-normal">— todo al día ✨</span>}
       </h3>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">

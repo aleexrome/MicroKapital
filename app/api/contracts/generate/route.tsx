@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
 
   // ── 3. Determinar si es solidario y resolver el "loan ancla" del contrato ─
   let anchorLoanId = loan.id
-  type LoanLite = { id: string; clientId: string; capital: { toString: () => string }; pagoSemanal: { toString: () => string } | null; createdAt: Date; client: { id: string; nombreCompleto: string } }
+  type LoanLite = { id: string; clientId: string; capital: { toString: () => string }; totalPago: { toString: () => string }; pagoSemanal: { toString: () => string } | null; createdAt: Date; client: { id: string; nombreCompleto: string } }
   let groupLoans: LoanLite[] = []
 
   if (loan.tipo === 'SOLIDARIO') {
@@ -263,14 +263,17 @@ export async function POST(req: NextRequest) {
   let pdfDocument: React.ReactElement
 
   if (loan.tipo === 'SOLIDARIO') {
+    // En el pagaré va la cantidad que el deudor se obliga a pagar = capital + interés
+    // (Loan.totalPago), no sólo el capital prestado.
     const integrantesTabla = groupLoans.map((gl) => ({
       nombre: gl.client.nombreCompleto,
-      monto:  Number(gl.capital),
+      monto:  Number(gl.totalPago),
     }))
+    const montoTotalPagare = groupLoans.reduce((s, gl) => s + Number(gl.totalPago), 0)
     const integrantesControl = groupLoans.map((gl, idx) => ({
       nombre: gl.client.nombreCompleto,
       esCoordinadora: idx === 0,
-      monto: Number(gl.capital),
+      monto: Number(gl.totalPago),
       pago:  Number(gl.pagoSemanal ?? 0),
     }))
 
@@ -291,7 +294,7 @@ export async function POST(req: NextRequest) {
           numeroContrato={numeroContrato}
           nombreGrupo={nombreGrupo!}
           integrantes={integrantesTabla}
-          montoTotal={solicitudTotal}
+          montoTotal={montoTotalPagare}
           plazoSemanas={8}
           fechaFirma={fechaFirma}
           representanteLegal={representanteLegal}
@@ -327,9 +330,9 @@ export async function POST(req: NextRequest) {
         />
         <ContratoIndividual
           numeroContrato={numeroContrato}
-          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.capital) }}
+          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.totalPago) }}
           aval={{ nombre: avalNombre }}
-          montoTotal={Number(loan.capital)}
+          montoTotal={Number(loan.totalPago)}
           fechaFirma={fechaFirma}
           representanteLegal={representanteLegal}
           ciudadFirma={ciudadFirma}
@@ -342,7 +345,7 @@ export async function POST(req: NextRequest) {
           fechaTermino={fechaTermino}
           diaCobro={diaCobro}
           horaLimiteCobro={horaLimiteCobro}
-          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.capital), pago: Number(loan.pagoSemanal ?? 0) }}
+          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.totalPago), pago: Number(loan.pagoSemanal ?? 0) }}
           aval={{ nombre: avalNombre }}
           fechasPagos={fechasPagos}
         />
@@ -365,9 +368,9 @@ export async function POST(req: NextRequest) {
         />
         <ContratoAgil
           numeroContrato={numeroContrato}
-          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.capital) }}
+          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.totalPago) }}
           aval={{ nombre: avalNombre }}
-          montoTotal={Number(loan.capital)}
+          montoTotal={Number(loan.totalPago)}
           fechaFirma={fechaFirma}
           representanteLegal={representanteLegal}
           ciudadFirma={ciudadFirma}
@@ -379,7 +382,7 @@ export async function POST(req: NextRequest) {
           fechaInicio={fechaInicio}
           fechaTermino={fechaTermino}
           horaLimiteCobro={horaLimiteCobro}
-          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.capital), pago: Number(loan.pagoDiario ?? 0) }}
+          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.totalPago), pago: Number(loan.pagoDiario ?? 0) }}
           aval={{ nombre: avalNombre }}
           fechasPagos={fechasPagos}
         />

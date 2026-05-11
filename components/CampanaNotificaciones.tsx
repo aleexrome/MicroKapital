@@ -2,15 +2,19 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, BellRing, AlertTriangle, X, Check, ExternalLink } from 'lucide-react'
+import { Bell, BellRing, AlertTriangle, Info, X, Check, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
+
+type Nivel = 'CRITICA' | 'IMPORTANTE' | 'INFORMATIVA'
 
 interface Notif {
   id: string
   tipo: string
   titulo: string
   mensaje: string
+  nivel: Nivel
   esCritica: boolean
+  linkUrl: string | null
   leidaAt: string | null
   expiraAt: string | null
   createdAt: string
@@ -23,6 +27,7 @@ interface FetchResponse {
   nextCursor: string | null
   noLeidasCount: number
   criticasCount: number
+  importantesNoLeidas: number
 }
 
 function tiempoRelativo(iso: string): string {
@@ -34,6 +39,13 @@ function tiempoRelativo(iso: string): string {
   if (hr < 24) return `hace ${hr} h`
   const dia = Math.round(hr / 24)
   return `hace ${dia} d`
+}
+
+/** Destino al hacer click: linkUrl explícito o /prestamos/<loanId> por convención. */
+function destinoNotif(n: Notif): string | null {
+  if (n.linkUrl) return n.linkUrl
+  if (n.loanId) return `/prestamos/${n.loanId}`
+  return null
 }
 
 interface Props {
@@ -51,6 +63,7 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
   const [items, setItems] = useState<Notif[]>([])
   const [noLeidasCount, setNoLeidasCount] = useState(0)
   const [criticasCount, setCriticasCount] = useState(0)
+  const [importantesNoLeidas, setImportantesNoLeidas] = useState(0)
   const [loading, setLoading] = useState(false)
   const [marking, setMarking] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -65,6 +78,7 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
       setItems(data.items)
       setNoLeidasCount(data.noLeidasCount)
       setCriticasCount(data.criticasCount)
+      setImportantesNoLeidas(data.importantesNoLeidas)
       onCountChange?.(data.noLeidasCount, data.criticasCount)
       if (data.criticasCount > 0 && !criticaCallbackFired.current) {
         criticaCallbackFired.current = true
@@ -100,23 +114,27 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
     return () => document.removeEventListener('mousedown', onClick)
   }, [open])
 
-  async function marcarLeida(notif: Notif) {
-    if (notif.esCritica) {
-      // Solo navega, no marca
-      if (notif.loanId) router.push(`/prestamos/${notif.loanId}`)
+  async function handleClick(notif: Notif) {
+    const destino = destinoNotif(notif)
+    if (notif.nivel === 'CRITICA') {
+      // Solo navega, NO se marca como leída
+      if (destino) router.push(destino)
       setOpen(false)
       return
     }
-    try {
-      await fetch(`/api/notifications/${notif.id}/read`, { method: 'POST' })
-      setItems((prev) =>
-        prev.map((n) => (n.id === notif.id ? { ...n, leidaAt: new Date().toISOString() } : n))
-      )
-      setNoLeidasCount((c) => Math.max(0, c - 1))
-    } catch {
-      // ignorar
+    if (notif.leidaAt === null) {
+      try {
+        await fetch(`/api/notifications/${notif.id}/read`, { method: 'POST' })
+        setItems((prev) =>
+          prev.map((n) => (n.id === notif.id ? { ...n, leidaAt: new Date().toISOString() } : n))
+        )
+        setNoLeidasCount((c) => Math.max(0, c - 1))
+        if (notif.nivel === 'IMPORTANTE') setImportantesNoLeidas((c) => Math.max(0, c - 1))
+      } catch {
+        // ignorar
+      }
     }
-    if (notif.loanId) router.push(`/prestamos/${notif.loanId}`)
+    if (destino) router.push(destino)
     setOpen(false)
   }
 
@@ -124,15 +142,19 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
     setMarking(true)
     try {
       await fetch('/api/notifications/mark-all-read', { method: 'POST' })
-      // Refrescar
       await fetchData()
     } finally {
       setMarking(false)
     }
   }
 
-  const hasUnread = noLeidasCount > 0
+  // Color del bell = nivel más alto sin leer: rojo si hay críticas, ámbar
+  // si hay importantes no leídas, morado (default) si solo informativas.
   const hasCritical = criticasCount > 0
+  const hasImportante = importantesNoLeidas > 0
+  const hasUnread = noLeidasCount > 0
+  // Solo puede marcar todas como leídas si quedan no-leídas que NO son críticas.
+  const noLeidasMarcables = noLeidasCount - criticasCount
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -141,14 +163,14 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
         className={`relative flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all hover:scale-105 ${
           hasCritical
             ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse'
-            : hasUnread
+            : hasImportante
               ? 'bg-amber-500 hover:bg-amber-400 text-white'
               : 'bg-primary-500 hover:bg-primary-400 text-white'
         }`}
         style={{
           boxShadow: hasCritical
             ? '0 4px 24px rgba(220,38,38,0.7)'
-            : hasUnread
+            : hasImportante
               ? '0 4px 20px rgba(245,158,11,0.5)'
               : '0 4px 20px rgba(123,111,255,0.55)',
         }}
@@ -156,7 +178,9 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
       >
         {hasCritical ? <BellRing className="h-6 w-6" /> : <Bell className="h-6 w-6" />}
         {hasUnread && (
-          <span className="absolute -top-1 -right-1 min-w-[22px] h-5 px-1 rounded-full bg-red-600 text-white text-xs font-bold flex items-center justify-center border-2 border-background">
+          <span className={`absolute -top-1 -right-1 min-w-[22px] h-5 px-1 rounded-full text-white text-xs font-bold flex items-center justify-center border-2 border-background ${
+            hasCritical ? 'bg-red-600' : hasImportante ? 'bg-amber-600' : 'bg-gray-500'
+          }`}>
             {noLeidasCount > 99 ? '99+' : noLeidasCount}
           </span>
         )}
@@ -186,27 +210,39 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
             ) : (
               items.map((n) => {
                 const isUnread = n.leidaAt === null
+                const esCritica = n.nivel === 'CRITICA'
+                const esImportante = n.nivel === 'IMPORTANTE'
+                const rowBg = esCritica
+                  ? 'bg-red-50/40 dark:bg-red-500/10'
+                  : isUnread && esImportante
+                    ? 'bg-amber-50/30 dark:bg-amber-500/5'
+                    : isUnread
+                      ? 'bg-muted/20'
+                      : ''
+                const tituloColor = esCritica
+                  ? 'text-red-600 dark:text-red-400'
+                  : isUnread
+                    ? 'text-foreground'
+                    : 'text-muted-foreground'
                 return (
                   <button
                     key={n.id}
-                    onClick={() => marcarLeida(n)}
-                    className={`w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors flex gap-3 ${
-                      isUnread && !n.esCritica ? 'bg-amber-50/30 dark:bg-amber-500/5' : ''
-                    } ${n.esCritica ? 'bg-red-50/40 dark:bg-red-500/10' : ''}`}
+                    onClick={() => handleClick(n)}
+                    className={`w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors flex gap-3 ${rowBg}`}
                   >
                     <div className="shrink-0 mt-0.5">
-                      {n.esCritica ? (
+                      {esCritica ? (
                         <AlertTriangle className="h-4 w-4 text-red-500" />
+                      ) : esImportante ? (
+                        <span className={`block w-2 h-2 mt-1.5 rounded-full ${isUnread ? 'bg-amber-500' : 'bg-amber-300/40'}`} />
                       ) : isUnread ? (
-                        <span className="block w-2 h-2 mt-1.5 rounded-full bg-amber-500" />
+                        <Info className="h-4 w-4 text-gray-400" />
                       ) : (
                         <Check className="h-4 w-4 text-muted-foreground/50" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-semibold ${n.esCritica ? 'text-red-600 dark:text-red-400' : isUnread ? 'text-foreground' : 'text-muted-foreground'}`}>
-                        {n.titulo}
-                      </p>
+                      <p className={`text-xs font-semibold ${tituloColor}`}>{n.titulo}</p>
                       <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.mensaje}</p>
                       <p className="text-[10px] text-muted-foreground/70 mt-1">{tiempoRelativo(n.createdAt)}</p>
                     </div>
@@ -219,7 +255,7 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-border bg-card/80 shrink-0">
             <button
               onClick={marcarTodasLeidas}
-              disabled={marking || noLeidasCount === 0 || (noLeidasCount === criticasCount && criticasCount > 0)}
+              disabled={marking || noLeidasMarcables <= 0}
               className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {marking ? 'Marcando…' : 'Marcar todas como leídas'}

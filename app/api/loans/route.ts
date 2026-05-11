@@ -8,6 +8,7 @@ import { calcLoan } from '@/lib/financial-formulas'
 import { generarFechasSemanales, generarFechasHabiles } from '@/lib/business-days'
 import { createAuditLog } from '@/lib/audit'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
+import { crearNotificacion, getDirectoresIds, getGerentesZonalesIds } from '@/lib/notifications'
 
 const createLoanSchema = z.object({
   clientId: z.string().uuid(),
@@ -183,6 +184,31 @@ export async function POST(req: NextRequest) {
     registroId: loan.id,
     valoresNuevos: { tipo: data.tipo, capital: data.capital, clientId: data.clientId },
   })
+
+  // Notificar a DG/DC + GZ del branch que hay una solicitud nueva esperando
+  // aprobación. Best-effort: no rompe la creación si falla.
+  try {
+    const [clienteRow, cobradorRow, directores, gerentes] = await Promise.all([
+      prisma.client.findUnique({ where: { id: data.clientId }, select: { nombreCompleto: true } }),
+      prisma.user.findUnique({ where: { id: cobradorId }, select: { nombre: true } }),
+      getDirectoresIds(prisma, companyId!),
+      getGerentesZonalesIds(prisma, companyId!, targetBranchId),
+    ])
+    const clienteNombre = clienteRow?.nombreCompleto ?? 'cliente'
+    const cobradorNombre = cobradorRow?.nombre ?? 'cobradora'
+    await crearNotificacion(prisma, {
+      companyId: companyId!,
+      destinatariosIds: [...directores, ...gerentes],
+      tipo: 'SOLICITUD_NUEVA',
+      nivel: 'IMPORTANTE',
+      titulo: 'Nueva solicitud de crédito',
+      mensaje: `${clienteNombre} por $${Number(calc.capital).toFixed(2)} — Cobradora: ${cobradorNombre}`,
+      loanId: loan.id,
+      clientId: data.clientId,
+    })
+  } catch (e) {
+    console.error('[loans POST] notif SOLICITUD_NUEVA failed:', e)
+  }
 
   return NextResponse.json({ data: loan }, { status: 201 })
 }

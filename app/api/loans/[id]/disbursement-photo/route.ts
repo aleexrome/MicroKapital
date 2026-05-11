@@ -8,6 +8,7 @@ import {
   generarFechasSemanalesDesde, generarFechasHabilesDesde,
 } from '@/lib/business-days'
 import { todayMx } from '@/lib/timezone'
+import { crearNotificacion, getDirectoresIds } from '@/lib/notifications'
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -281,6 +282,44 @@ export async function POST(
       ...(loan.loanOriginalId ? { loanOriginalLiquidado: loan.loanOriginalId } : {}),
     },
   })
+
+  // ── Notificaciones informativas: préstamo activado + (si renovación)
+  // crédito original liquidado. Best-effort, fuera del flujo crítico.
+  try {
+    const [clienteRow, cobradorRow, directores] = await Promise.all([
+      prisma.client.findUnique({ where: { id: loan.clientId }, select: { nombreCompleto: true } }),
+      prisma.user.findUnique({ where: { id: loan.cobradorId }, select: { nombre: true } }),
+      getDirectoresIds(prisma, companyId!),
+    ])
+    const clienteNombre = clienteRow?.nombreCompleto ?? 'cliente'
+    const cobradorNombre = cobradorRow?.nombre ?? 'cobradora'
+
+    await crearNotificacion(prisma, {
+      companyId: companyId!,
+      destinatariosIds: directores,
+      tipo: 'PRESTAMO_ACTIVADO',
+      nivel: 'INFORMATIVA',
+      titulo: 'Préstamo activado',
+      mensaje: `${clienteNombre} por $${Number(loan.capital).toFixed(2)} — Cobradora: ${cobradorNombre}`,
+      loanId: loan.id,
+      clientId: loan.clientId,
+    })
+
+    if (loan.loanOriginalId) {
+      await crearNotificacion(prisma, {
+        companyId: companyId!,
+        destinatariosIds: [...directores, loan.cobradorId],
+        tipo: 'PRESTAMO_LIQUIDADO',
+        nivel: 'INFORMATIVA',
+        titulo: 'Préstamo liquidado completamente',
+        mensaje: `${clienteNombre} — liquidado por renovación anticipada`,
+        loanId: loan.loanOriginalId,
+        clientId: loan.clientId,
+      })
+    }
+  } catch (e) {
+    console.error('[disbursement-photo] notif failed:', e)
+  }
 
   return NextResponse.json({
     message: 'Préstamo activado — foto de desembolso registrada y calendario de pagos generado',

@@ -6,6 +6,7 @@ import { createAuditLog } from '@/lib/audit'
 import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
 import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioScore } from '@/lib/score-calculator'
 import { todayMx } from '@/lib/timezone'
+import { crearNotificacion, getDirectoresIds } from '@/lib/notifications'
 
 const schema = z.object({
   paymentId: z.string().uuid(),
@@ -201,6 +202,38 @@ export async function POST(req: NextRequest) {
     registroId: paymentId,
     valoresNuevos: { statusTransferencia: 'VERIFICADO' },
   })
+
+  // Notificaciones informativas: pago verificado (para la cobradora) y, si
+  // el préstamo quedó liquidado con este pago, "préstamo liquidado".
+  try {
+    const clienteNombre = loan.client.nombreCompleto
+    const quedoLiquidado = loan.schedule.filter((s) => s.id !== schedule.id).length === 0
+    await crearNotificacion(prisma, {
+      companyId: companyId!,
+      destinatariosIds: [payment.cobradorId],
+      tipo: 'PAGO_VERIFICADO',
+      nivel: 'INFORMATIVA',
+      titulo: 'Pago verificado por gerente',
+      mensaje: `${clienteNombre} — transferencia de $${monto.toFixed(2)} verificada`,
+      loanId: loan.id,
+      clientId: loan.clientId,
+    })
+    if (quedoLiquidado) {
+      const directores = await getDirectoresIds(prisma, companyId!)
+      await crearNotificacion(prisma, {
+        companyId: companyId!,
+        destinatariosIds: [...directores, payment.cobradorId],
+        tipo: 'PRESTAMO_LIQUIDADO',
+        nivel: 'INFORMATIVA',
+        titulo: 'Préstamo liquidado completamente',
+        mensaje: `${clienteNombre} — terminó de pagar`,
+        loanId: loan.id,
+        clientId: loan.clientId,
+      })
+    }
+  } catch (e) {
+    console.error('[verify-transfer] notif failed:', e)
+  }
 
   return NextResponse.json({ success: true })
 }

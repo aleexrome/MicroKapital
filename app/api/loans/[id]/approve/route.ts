@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { calcLoan } from '@/lib/financial-formulas'
 import { createAuditLog } from '@/lib/audit'
+import { crearNotificacion, getGerentesZonalesIds } from '@/lib/notifications'
 import { z } from 'zod'
 
 const approveSchema = z.object({
@@ -153,6 +154,43 @@ export async function POST(
         aprobadoPorId: userId,
       },
     })
+  }
+
+  // Notificar a la cobradora + GZ del branch sobre la decisión del DG.
+  try {
+    const [clienteRow, gerentes] = await Promise.all([
+      prisma.client.findUnique({ where: { id: loan.clientId }, select: { nombreCompleto: true } }),
+      getGerentesZonalesIds(prisma, companyId!, loan.branchId),
+    ])
+    const clienteNombre = clienteRow?.nombreCompleto ?? 'cliente'
+    const destinatarios = [loan.cobradorId, ...gerentes]
+
+    if (esContrapropuesta) {
+      const c = contrapropuesta!
+      await crearNotificacion(prisma, {
+        companyId: companyId!,
+        destinatariosIds: destinatarios,
+        tipo: 'SOLICITUD_CONTRAPROPUESTA',
+        nivel: 'IMPORTANTE',
+        titulo: 'Contrapropuesta del Director General',
+        mensaje: `${clienteNombre}: capital $${Number(c.capital).toFixed(2)}${c.fechaDesembolso ? `, desembolso ${c.fechaDesembolso}` : ''}. Visita al cliente para presentar las nuevas condiciones.`,
+        loanId: loan.id,
+        clientId: loan.clientId,
+      })
+    } else {
+      await crearNotificacion(prisma, {
+        companyId: companyId!,
+        destinatariosIds: destinatarios,
+        tipo: 'SOLICITUD_APROBADA',
+        nivel: 'IMPORTANTE',
+        titulo: 'Solicitud aprobada',
+        mensaje: `${clienteNombre} — aprobada por el Director General. Pendiente de activación.`,
+        loanId: loan.id,
+        clientId: loan.clientId,
+      })
+    }
+  } catch (e) {
+    console.error('[approve] notif failed:', e)
   }
 
   const message = esContrapropuesta

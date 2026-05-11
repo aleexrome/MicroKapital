@@ -2,16 +2,20 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Check, Clock, Loader2, Filter } from 'lucide-react'
+import { AlertTriangle, Check, Clock, Info, Loader2, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
+
+type Nivel = 'CRITICA' | 'IMPORTANTE' | 'INFORMATIVA'
 
 interface Notif {
   id: string
   tipo: string
   titulo: string
   mensaje: string
+  nivel: Nivel
   esCritica: boolean
+  linkUrl: string | null
   leidaAt: string | null
   expiraAt: string | null
   createdAt: string
@@ -24,15 +28,18 @@ interface FetchResponse {
   nextCursor: string | null
   noLeidasCount: number
   criticasCount: number
+  importantesNoLeidas: number
 }
 
-type Filtro = 'todas' | 'no_leidas' | 'criticas'
+type Filtro = 'todas' | 'no_leidas' | 'criticas' | 'importantes' | 'informativas'
 type TipoFiltro = '' | 'LIMBO_'
 
 const FILTROS: Array<{ value: Filtro; label: string }> = [
-  { value: 'todas',     label: 'Todas' },
-  { value: 'no_leidas', label: 'No leídas' },
-  { value: 'criticas',  label: 'Críticas' },
+  { value: 'todas',        label: 'Todas' },
+  { value: 'no_leidas',    label: 'No leídas' },
+  { value: 'criticas',     label: 'Críticas' },
+  { value: 'importantes',  label: 'Importantes' },
+  { value: 'informativas', label: 'Informativas' },
 ]
 
 const TIPOS: Array<{ value: TipoFiltro; label: string }> = [
@@ -40,11 +47,23 @@ const TIPOS: Array<{ value: TipoFiltro; label: string }> = [
   { value: 'LIMBO_', label: 'Préstamos en limbo' },
 ]
 
+const NIVEL_BADGE: Record<Nivel, { label: string; cls: string }> = {
+  CRITICA:     { label: 'CRÍTICA',     cls: 'bg-red-500/20 text-red-600 dark:text-red-400 font-bold' },
+  IMPORTANTE:  { label: 'IMPORTANTE',  cls: 'bg-amber-500/20 text-amber-700 dark:text-amber-400 font-semibold' },
+  INFORMATIVA: { label: 'INFO',        cls: 'bg-muted text-muted-foreground' },
+}
+
 function fechaCompleta(iso: string): string {
   return new Date(iso).toLocaleString('es-MX', {
     day: 'numeric', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
+}
+
+function destinoNotif(n: Notif): string | null {
+  if (n.linkUrl) return n.linkUrl
+  if (n.loanId) return `/prestamos/${n.loanId}`
+  return null
 }
 
 export function NotificacionesClient() {
@@ -56,6 +75,7 @@ export function NotificacionesClient() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [marking, setMarking] = useState(false)
   const [noLeidasCount, setNoLeidasCount] = useState(0)
+  const [criticasCount, setCriticasCount] = useState(0)
   const [filtro, setFiltro] = useState<Filtro>('todas')
   const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('')
 
@@ -72,13 +92,10 @@ export function NotificacionesClient() {
       const res = await fetch(`/api/notifications?${params}`)
       if (!res.ok) throw new Error('Error de carga')
       const data = (await res.json()) as FetchResponse
-      setItems(replace ? data.items : (prev) => [...prev, ...data.items] as never)
-      // Si no es replace, el setItems con función debe pasar items previos:
-      if (!replace) {
-        setItems((prev) => [...prev, ...data.items])
-      }
+      setItems((prev) => (replace ? data.items : [...prev, ...data.items]))
       setNextCursor(data.nextCursor)
       setNoLeidasCount(data.noLeidasCount)
+      setCriticasCount(data.criticasCount)
     } catch (e) {
       toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
     } finally {
@@ -93,18 +110,17 @@ export function NotificacionesClient() {
   }, [filtro, tipoFiltro])
 
   async function handleClick(n: Notif) {
-    if (!n.esCritica && !n.leidaAt) {
+    const destino = destinoNotif(n)
+    if (n.nivel !== 'CRITICA' && n.leidaAt === null) {
       try {
         await fetch(`/api/notifications/${n.id}/read`, { method: 'POST' })
-        setItems((prev) =>
-          prev.map((x) => (x.id === n.id ? { ...x, leidaAt: new Date().toISOString() } : x))
-        )
+        setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, leidaAt: new Date().toISOString() } : x)))
         setNoLeidasCount((c) => Math.max(0, c - 1))
       } catch {
         // ignore
       }
     }
-    if (n.loanId) router.push(`/prestamos/${n.loanId}`)
+    if (destino) router.push(destino)
   }
 
   async function marcarTodasLeidas() {
@@ -120,6 +136,9 @@ export function NotificacionesClient() {
       setMarking(false)
     }
   }
+
+  // Solo se pueden marcar como leídas las no-leídas que no son críticas.
+  const noLeidasMarcables = noLeidasCount - criticasCount
 
   return (
     <div className="space-y-4">
@@ -160,7 +179,7 @@ export function NotificacionesClient() {
           size="sm"
           variant="outline"
           onClick={marcarTodasLeidas}
-          disabled={marking || noLeidasCount === 0}
+          disabled={marking || noLeidasMarcables <= 0}
         >
           {marking && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />}
           Marcar todas como leídas
@@ -180,40 +199,40 @@ export function NotificacionesClient() {
         <div className="border rounded-xl overflow-hidden divide-y divide-border bg-card">
           {items.map((n) => {
             const isUnread = n.leidaAt === null
+            const esCritica = n.nivel === 'CRITICA'
+            const esImportante = n.nivel === 'IMPORTANTE'
+            const rowBg = esCritica
+              ? 'bg-red-50/40 dark:bg-red-500/10'
+              : isUnread && esImportante
+                ? 'bg-amber-50/30 dark:bg-amber-500/5'
+                : isUnread
+                  ? 'bg-muted/20'
+                  : ''
+            const badge = NIVEL_BADGE[n.nivel]
             return (
               <button
                 key={n.id}
                 onClick={() => handleClick(n)}
-                className={`w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors flex gap-3 ${
-                  n.esCritica
-                    ? 'bg-red-50/40 dark:bg-red-500/10'
-                    : isUnread
-                      ? 'bg-amber-50/30 dark:bg-amber-500/5'
-                      : ''
-                }`}
+                className={`w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors flex gap-3 ${rowBg}`}
               >
                 <div className="shrink-0 mt-1">
-                  {n.esCritica ? (
+                  {esCritica ? (
                     <AlertTriangle className="h-5 w-5 text-red-500" />
+                  ) : esImportante ? (
+                    <Clock className={`h-5 w-5 ${isUnread ? 'text-amber-500' : 'text-amber-300/40'}`} />
                   ) : isUnread ? (
-                    <Clock className="h-5 w-5 text-amber-500" />
+                    <Info className="h-5 w-5 text-gray-400" />
                   ) : (
                     <Check className="h-5 w-5 text-muted-foreground/50" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className={`text-sm font-semibold ${n.esCritica ? 'text-red-600 dark:text-red-400' : ''}`}>
+                    <p className={`text-sm font-semibold ${esCritica ? 'text-red-600 dark:text-red-400' : isUnread ? '' : 'text-muted-foreground'}`}>
                       {n.titulo}
                     </p>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
-                      {n.tipo}
-                    </span>
-                    {n.esCritica && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-600 dark:text-red-400 font-bold">
-                        CRÍTICA
-                      </span>
-                    )}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{n.tipo}</span>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">{n.mensaje}</p>
                   <p className="text-[11px] text-muted-foreground/70 mt-1">{fechaCompleta(n.createdAt)}</p>

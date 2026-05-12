@@ -268,11 +268,19 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     loan.tipo === 'SOLIDARIO' &&
     loan.estado === 'PENDING_APPROVAL' &&
     (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') &&
-    loan.loanGroupId
+    loan.loanGroupId &&
+    !loan.loanOriginalId  // NO renovación — las renovaciones se manejan abajo
   ) {
-    // Crédito nuevo solidario: cargar todos los integrantes del grupo
+    // Crédito nuevo solidario: cargar los integrantes del grupo. Filtramos
+    // a los créditos nuevos pendientes (loanOriginalId null) para no incluir
+    // renovaciones de este grupo, que comparten el mismo loanGroupId.
     const siblings = await prisma.loan.findMany({
-      where: { loanGroupId: loan.loanGroupId, companyId: companyId! },
+      where: {
+        loanGroupId: loan.loanGroupId,
+        loanOriginalId: null,
+        estado: 'PENDING_APPROVAL',
+        companyId: companyId!,
+      },
       include: { client: { select: { nombreCompleto: true } } },
       orderBy: { createdAt: 'asc' },
     })
@@ -287,16 +295,16 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') &&
     loan.loanOriginalId
   ) {
-    // Renovación solidaria: rastrear el grupo original y cargar las renovaciones de los demás miembros
-    const originalGroupId = loan.loanOriginal?.loanGroupId ?? null
-    if (originalGroupId) {
-      const originalLoans = await prisma.loan.findMany({
-        where: { loanGroupId: originalGroupId, companyId: companyId! },
-        select: { id: true },
-      })
+    // Renovación solidaria: las renovaciones del grupo comparten loanGroupId
+    // (heredado del crédito original). Cargar SOLO las renovaciones pendientes
+    // del grupo — no los créditos viejos que siguen ACTIVE ni renovaciones de
+    // ciclos anteriores.
+    const renovGroupId = loan.loanGroupId ?? loan.loanOriginal?.loanGroupId ?? null
+    if (renovGroupId) {
       const renewalLoans = await prisma.loan.findMany({
         where: {
-          loanOriginalId: { in: originalLoans.map((l) => l.id) },
+          loanGroupId: renovGroupId,
+          loanOriginalId: { not: null },
           estado: 'PENDING_APPROVAL',
           companyId: companyId!,
         },

@@ -23,6 +23,9 @@ export interface RutaCobroRow {
   // muestra como "Pre-pagado" para que la cobradora sepa que NO debe
   // visitar al cliente esta semana, y no se cuenta en cobranza efectiva.
   prePagado?: boolean
+  // Nombre del grupo solidario, para agrupar visualmente en la lista
+  // impresa. null/undefined para créditos no solidarios.
+  nombreGrupo?: string | null
 }
 
 export interface RutaColocacionRow {
@@ -122,6 +125,7 @@ const BASE_STYLE = `
   .vencido    { color: #b91c1c; font-weight: 600; }
   .pendiente  { color: #6b7280; }
   .prepagado  { color: #6b7280; font-style: italic; }
+  tr.group-header td { background: #e8eef5; color: #1a3a5c; font-weight: 700; padding: 7px 8px; text-align: left; font-size: 12px; letter-spacing: .02em; }
   .nuevo      { color: #1d4ed8; }
   .renovacion { color: #7c3aed; }
   tfoot td { border-top: 2px solid #1a3a5c; font-weight: bold; background: #f0f4f8; padding: 6px 8px; }
@@ -159,7 +163,10 @@ export function ImprimirRutaButton({
       // en el chip "Pre-pagados: N".
       const cobrosVisibles = cobros.filter((r) => !r.prePagado)
 
-      const cobroRows = cobrosVisibles.map((r, i) => {
+      // Renderiza una fila de cobro. El i es solo para alternancia visual,
+      // se mantiene un contador global para que el zebra-striping se vea
+      // continuo entre grupos.
+      const renderCobroRow = (r: RutaCobroRow, i: number) => {
         const isCobrado = r.estado === 'PAID' || r.estado === 'ADVANCE'
         const isPartial = r.estado === 'PARTIAL'
         const isVencido = r.estado === 'OVERDUE'
@@ -176,7 +183,40 @@ export function ImprimirRutaButton({
             <td class="right ${cls}">${r.montoCobrado > 0 ? fmt(r.montoCobrado) : '—'}</td>
             <td class="center ${cls}">${estadoLabel}</td>
           </tr>`
-      }).join('')
+      }
+
+      // Los solidarios se agrupan por nombre del grupo (los coordinadores
+      // los ubican mejor así). Los demás tipos van debajo en su sección.
+      const solidarios = cobrosVisibles.filter((r) => r.tipo === 'SOLIDARIO')
+      const otros      = cobrosVisibles.filter((r) => r.tipo !== 'SOLIDARIO')
+
+      const gruposMap = new Map<string, RutaCobroRow[]>()
+      for (const r of solidarios) {
+        const key = r.nombreGrupo ?? 'Sin grupo asignado'
+        const arr = gruposMap.get(key) ?? []
+        arr.push(r)
+        gruposMap.set(key, arr)
+      }
+      const nombresGruposOrdenados = Array.from(gruposMap.keys()).sort((a, b) =>
+        a.localeCompare(b, 'es', { sensitivity: 'base' })
+      )
+
+      let rowIdx = 0
+      const rowParts: string[] = []
+      for (const nombreGrupo of nombresGruposOrdenados) {
+        const filas = gruposMap.get(nombreGrupo)!
+        rowParts.push(`<tr class="group-header"><td colspan="8">Grupo: ${nombreGrupo} · ${filas.length} integrante${filas.length === 1 ? '' : 's'}</td></tr>`)
+        for (const r of filas) {
+          rowParts.push(renderCobroRow(r, rowIdx++))
+        }
+      }
+      if (otros.length > 0) {
+        rowParts.push(`<tr class="group-header"><td colspan="8">Individuales y Ágiles · ${otros.length}</td></tr>`)
+        for (const r of otros) {
+          rowParts.push(renderCobroRow(r, rowIdx++))
+        }
+      }
+      const cobroRows = rowParts.join('')
 
       const colocRows = (colocaciones ?? []).map((r, i) => `
         <tr class="${i % 2 === 1 ? 'alt' : ''}">

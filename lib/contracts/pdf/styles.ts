@@ -8,6 +8,7 @@ export const COLORS = {
   border:      '#E5E7EB',
   borderSoft:  '#F3F4F6',
   accent:      '#3B82F6', // azul Microkapital
+  headerBlue:  '#1F4E79', // azul oscuro de Word para encabezados de tabla
   white:       '#FFFFFF',
 }
 
@@ -149,7 +150,7 @@ export const styles = StyleSheet.create({
   },
   tableHeader: {
     flexDirection:     'row',
-    backgroundColor:   COLORS.borderSoft,
+    backgroundColor:   COLORS.headerBlue,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -166,7 +167,7 @@ export const styles = StyleSheet.create({
     paddingVertical:   6,
     fontSize:    FONT_SIZES.body,
     fontFamily:  'Helvetica-Bold',
-    color:       COLORS.black,
+    color:       COLORS.white,
   },
 
   // Firmas
@@ -324,7 +325,7 @@ export const styles = StyleSheet.create({
   },
   controlRowHeader: {
     flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.headerBlue,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.black,
     minHeight: 22,
@@ -342,6 +343,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 2,
     fontSize: 8,
     fontFamily: 'Helvetica-Bold',
+    color: COLORS.white,
     borderRightWidth: 0.5,
     borderRightColor: COLORS.black,
     textAlign: 'center',

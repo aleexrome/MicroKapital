@@ -116,7 +116,7 @@ export const styles = StyleSheet.create({
     fontSize:     FONT_SIZES.body,
     color:        COLORS.textPrimary,
     marginBottom: 6,
-    textAlign:    'justify',
+    textAlign:    'left',
   },
   bold: {
     fontFamily: 'Helvetica-Bold',
@@ -234,11 +234,14 @@ export const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // Texto en mayúsculas y justificado (las plantillas usan mucho)
+  // Texto en mayúsculas. Antes era textAlign 'justify', pero react-pdf
+  // inserta un guión de continuación al final de la línea cuando justifica
+  // ("$44,800.°° (-CUARENTA Y CUATRO MIL..."), y DG lo considera causal de
+  // invalidación del pagaré. Alineación a la izquierda elimina el artefacto.
   upper: {
     fontSize: FONT_SIZES.body,
     color: COLORS.textPrimary,
-    textAlign: 'justify',
+    textAlign: 'left',
     marginBottom: 6,
   },
 

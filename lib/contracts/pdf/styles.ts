@@ -34,7 +34,7 @@ export const styles = StyleSheet.create({
     fontSize:      FONT_SIZES.body,
     color:         COLORS.textPrimary,
     fontFamily:    'Helvetica',
-    lineHeight:    1.5,
+    lineHeight:    1.15,  // ≈ "single" de Word, en vez de 1.5 default
   },
 
   // Header (fixed en la parte superior)
@@ -91,26 +91,28 @@ export const styles = StyleSheet.create({
     textAlign:  'right',
   },
 
-  // Tipografía
+  // Tipografía — los títulos en negritas se mantienen al tamaño del
+  // cuerpo (body) y sólo se distinguen por el peso. Antes eran 16/14/12 pt
+  // y rompían el ritmo visual del documento + estiraban el plazo en hojas.
   title: {
-    fontSize:   FONT_SIZES.title,
+    fontSize:   FONT_SIZES.body,
     fontFamily: 'Helvetica-Bold',
     color:      COLORS.black,
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize:   FONT_SIZES.header,
-    fontFamily: 'Helvetica-Bold',
-    color:      COLORS.black,
-    marginTop:    14,
     marginBottom: 6,
   },
-  subTitle: {
-    fontSize:   FONT_SIZES.subHeader,
+  sectionTitle: {
+    fontSize:   FONT_SIZES.body,
     fontFamily: 'Helvetica-Bold',
     color:      COLORS.black,
-    marginTop:    10,
+    marginTop:    8,
     marginBottom: 4,
+  },
+  subTitle: {
+    fontSize:   FONT_SIZES.body,
+    fontFamily: 'Helvetica-Bold',
+    color:      COLORS.black,
+    marginTop:    6,
+    marginBottom: 3,
   },
   paragraph: {
     fontSize:     FONT_SIZES.body,

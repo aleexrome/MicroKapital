@@ -154,13 +154,17 @@ export function ImprimirRutaButton({
       const pendientesCount = cobros.filter((r) => r.estado === 'PENDING' || r.estado === 'OVERDUE').length
       const prePagadosCount = cobros.filter((r) => r.prePagado).length
 
-      const cobroRows = cobros.map((r, i) => {
-        const isPrePagado = r.prePagado === true
-        const isCobrado = !isPrePagado && (r.estado === 'PAID' || r.estado === 'ADVANCE')
-        const isPartial = !isPrePagado && r.estado === 'PARTIAL'
+      // Los pre-pagados se omiten de la tabla impresa para no saturarla
+      // con clientes que ya no hay que visitar — el conteo sigue arriba
+      // en el chip "Pre-pagados: N".
+      const cobrosVisibles = cobros.filter((r) => !r.prePagado)
+
+      const cobroRows = cobrosVisibles.map((r, i) => {
+        const isCobrado = r.estado === 'PAID' || r.estado === 'ADVANCE'
+        const isPartial = r.estado === 'PARTIAL'
         const isVencido = r.estado === 'OVERDUE'
-        const cls = isPrePagado ? 'prepagado' : isCobrado ? 'cobrado' : isPartial ? 'parcial' : isVencido ? 'vencido' : 'pendiente'
-        const estadoLabel = isPrePagado ? PRE_PAGADO_LABEL : (ESTADO_LABEL[r.estado] ?? r.estado)
+        const cls = isCobrado ? 'cobrado' : isPartial ? 'parcial' : isVencido ? 'vencido' : 'pendiente'
+        const estadoLabel = ESTADO_LABEL[r.estado] ?? r.estado
         return `
           <tr class="${i % 2 === 1 ? 'alt' : ''}">
             <td>${r.clientNombre}</td>
@@ -209,8 +213,8 @@ export function ImprimirRutaButton({
           </div>
         </div>
 
-        <h3>Cobros de la semana (${cobros.length})</h3>
-        ${cobros.length === 0
+        <h3>Cobros de la semana (${cobrosVisibles.length}${prePagadosCount > 0 ? ` · ${prePagadosCount} pre-pagado(s) omitido(s)` : ''})</h3>
+        ${cobrosVisibles.length === 0
           ? '<p class="empty">Sin cobros pactados esta semana</p>'
           : `<table>
               <thead>

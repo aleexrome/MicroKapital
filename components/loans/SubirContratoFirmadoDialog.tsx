@@ -4,7 +4,7 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
-import { Loader2, Upload, X, Trash2 } from 'lucide-react'
+import { Loader2, Upload, X, Trash2, Plus, Image as ImageIcon } from 'lucide-react'
 
 // `accept` lo dejamos amplio para que en celulares aparezca cámara + galería
 // + archivos. La validación real de tipo la hace el backend (por extensión)
@@ -179,6 +179,7 @@ export function SubirContratoFirmadoDialog({
         </p>
 
         <div>
+          {/* Input nativo oculto; abrimos el selector con un botón visible. */}
           <input
             ref={fileRef}
             type="file"
@@ -186,8 +187,35 @@ export function SubirContratoFirmadoDialog({
             multiple
             onChange={handleFileChange}
             disabled={uploading}
-            className="block w-full text-sm text-foreground file:mr-3 file:rounded-xl file:border-0 file:bg-primary-500 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-primary-400 disabled:opacity-50"
+            className="sr-only"
           />
+
+          {/* Botón principal: si no hay archivos, abre el selector. Si ya
+              hay, sirve como "+ Agregar más fotos". */}
+          {files.length === 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="w-full justify-center py-6 border-dashed"
+            >
+              <ImageIcon className="h-4 w-4 mr-2" />
+              Seleccionar PDF o fotos
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="w-full justify-center border-dashed"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Agregar más fotos
+            </Button>
+          )}
+
           {files.length > 0 && (
             <div className="mt-3 space-y-1.5">
               <p className="text-xs text-muted-foreground">

@@ -355,6 +355,7 @@ export default async function RutaDetallePage({
             select: {
               tipo: true,
               client: { select: { nombreCompleto: true } },
+              loanGroup: { select: { nombre: true } },
             },
           },
         },
@@ -410,6 +411,7 @@ export default async function RutaDetallePage({
         montoCobrado,
         estado:        s.estado,
         prePagado,
+        nombreGrupo:   s.loan.loanGroup?.nombre ?? null,
       }
     })
     const printColocaciones: RutaColocacionRow[] = loans.map((l) => ({

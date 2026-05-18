@@ -74,6 +74,28 @@ export async function POST(
           },
         })
 
+        // Limpiar hijos del Payment antes de borrarlo (mismo razonamiento
+        // que en /loans/[id]/schedule/[scheduleId]/undo).
+        await tx.cashBreakdown.deleteMany({ where: { paymentId: pago.id } })
+        const ticketsDelPago = await tx.ticket.findMany({
+          where: { paymentId: pago.id },
+          select: { id: true },
+        })
+        if (ticketsDelPago.length > 0) {
+          const ticketIds = ticketsDelPago.map((t) => t.id)
+          await tx.ticket.updateMany({
+            where: { ticketOriginalId: { in: ticketIds } },
+            data:  { ticketOriginalId: null },
+          })
+        }
+        await tx.ticket.deleteMany({ where: { paymentId: pago.id, esReimpresion: true } })
+        await tx.ticket.deleteMany({ where: { paymentId: pago.id, esReimpresion: false } })
+
+        await tx.scoreEvent.updateMany({
+          where: { paymentId: pago.id },
+          data:  { paymentId: null },
+        })
+
         await tx.payment.delete({ where: { id: pago.id } })
       }
 

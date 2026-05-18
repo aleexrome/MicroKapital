@@ -24,6 +24,9 @@ const createPaymentSchema = z.object({
   // Transferencia
   cuentaDestinoId: z.string().uuid().optional(),
   idTransferencia: z.string().optional(),
+  // Admin override: permite cobrar más del montoEsperado de la cuota.
+  // Sólo DG / SUPER_ADMIN; coordinadores/gerentes nunca pueden sobrepasar.
+  excedeMontoConfirmado: z.boolean().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -147,6 +150,35 @@ export async function POST(req: NextRequest) {
 
   if (!autorizado) {
     return NextResponse.json({ error: 'No autorizado para cobrar este préstamo' }, { status: 403 })
+  }
+
+  // ── Anti-doble cobro ────────────────────────────────────────────────────
+  // No permitir que el monto registrado sumado a lo ya pagado en esa cuota
+  // exceda el montoEsperado. Esto bloquea los casos típicos de captura
+  // duplicada (registran dos veces el mismo cobro, o un pago parcial y
+  // luego el total completo, dejando la cuota cobrada por encima de lo que
+  // realmente toca). DG/SUPER_ADMIN pueden sobrepasar con flag explícito
+  // si hay un caso excepcional (ej. cliente paga $1 extra de propina).
+  const montoEsperado = Number(schedule.montoEsperado)
+  const yaPagado = Number(schedule.montoPagado ?? 0)
+  const montoFaltante = Math.max(0, montoEsperado - yaPagado)
+  if (data.monto > montoFaltante) {
+    const overrideAdmin = esOpAdmin && data.excedeMontoConfirmado === true
+    if (!overrideAdmin) {
+      return NextResponse.json(
+        {
+          error: 'PAGO_EXCEDE_MONTO',
+          message:
+            yaPagado > 0
+              ? `Esta cuota ya tiene $${yaPagado.toFixed(2)} cobrado y faltan $${montoFaltante.toFixed(2)}. El monto de $${data.monto.toFixed(2)} la sobrepasa — revisa que no sea cobro duplicado.`
+              : `El cobro de $${data.monto.toFixed(2)} excede el monto esperado de la cuota ($${montoEsperado.toFixed(2)}). Revisa que no estés capturando un cobro duplicado.`,
+          montoEsperado,
+          yaPagado,
+          montoFaltante,
+        },
+        { status: 400 }
+      )
+    }
   }
 
   const loan = schedule.loan

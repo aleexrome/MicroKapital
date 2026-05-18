@@ -83,7 +83,35 @@ export async function POST(
       // Borrar hijos del Payment antes del Payment mismo (no hay onDelete: Cascade
       // en el schema, así que hay que hacerlo a mano para evitar 23503).
       await tx.cashBreakdown.deleteMany({ where: { paymentId: pago.id } })
-      await tx.ticket.deleteMany({ where: { paymentId: pago.id } })
+      // Tickets tienen self-FK (ticketOriginalId → otro Ticket) para
+      // marcar reimpresiones. Hay que borrar primero las reimpresiones,
+      // luego los originales, o Prisma truena con foreign-key violation.
+      // Como las reimpresiones pueden referenciar tickets de OTROS pagos
+      // (caso poco común pero posible si re-imprimieron el de otro día),
+      // primero anulamos el FK de cualquier reimpresión que apunte a un
+      // ticket de este pago.
+      const ticketsDelPago = await tx.ticket.findMany({
+        where: { paymentId: pago.id },
+        select: { id: true },
+      })
+      if (ticketsDelPago.length > 0) {
+        const ticketIds = ticketsDelPago.map((t) => t.id)
+        await tx.ticket.updateMany({
+          where: { ticketOriginalId: { in: ticketIds } },
+          data:  { ticketOriginalId: null },
+        })
+      }
+      // Primero las reimpresiones del propio pago (esReimpresion=true)
+      await tx.ticket.deleteMany({ where: { paymentId: pago.id, esReimpresion: true } })
+      // Luego los tickets originales
+      await tx.ticket.deleteMany({ where: { paymentId: pago.id, esReimpresion: false } })
+
+      // ScoreEvent tiene paymentId nullable sin relación Prisma — desligamos
+      // por si el DDL del DB tiene un FK constraint que rompa el delete.
+      await tx.scoreEvent.updateMany({
+        where: { paymentId: pago.id },
+        data:  { paymentId: null },
+      })
 
       // Eliminar el registro del pago
       await tx.payment.delete({ where: { id: pago.id } })

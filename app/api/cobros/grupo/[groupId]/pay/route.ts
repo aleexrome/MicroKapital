@@ -26,6 +26,13 @@ const bodySchema = z.object({
   cashBreakdown:   z.array(cashBreakdownSchema).optional().default([]),
   cuentaDestinoId: z.string().uuid().optional(),
   idTransferencia: z.string().optional(),
+  // Número de cuota que el coordinador piensa estar cobrando. Lo manda el
+  // frontend tomado de la UI (Pago N de M). Si el backend encuentra que
+  // la próxima cuota pendiente del grupo es distinta, rechaza para evitar
+  // doble cobro (ej. ya se cobró el pago 3 y por error se vuelve a entrar
+  // al grupo: el "siguiente pendiente" sería el 4, pero el coordinador
+  // sigue viendo "Pago 3" en pantalla → mismatch → bloqueo).
+  numeroPago: z.number().int().positive().optional(),
 })
 
 export async function POST(
@@ -96,6 +103,27 @@ export async function POST(
   const loansPagables = loansAutorizados.filter((l) => l.schedule.length > 0)
   if (loansPagables.length === 0) {
     return NextResponse.json({ error: 'El grupo no tiene pagos pendientes' }, { status: 400 })
+  }
+
+  // ── Anti-doble cobro grupal ─────────────────────────────────────────────
+  // El frontend manda `numeroPago` con la cuota que está mostrando en
+  // pantalla. Si la próxima cuota pendiente real del grupo es distinta,
+  // significa que ese pago ya fue cobrado por alguien más (o se está
+  // intentando recobrar) — rechazamos.
+  if (typeof data.numeroPago === 'number') {
+    // Cuota pendiente más temprana de cualquier integrante del grupo
+    const nextNumeroPago = Math.min(...loansPagables.map((l) => l.schedule[0]!.numeroPago))
+    if (nextNumeroPago !== data.numeroPago) {
+      return NextResponse.json(
+        {
+          error: 'PAGO_NUMERO_NO_COINCIDE',
+          message: `La próxima cuota pendiente del grupo es la #${nextNumeroPago}, no la #${data.numeroPago}. Probablemente alguien ya cobró este pago. Recarga la pantalla.`,
+          esperado: nextNumeroPago,
+          enviado: data.numeroPago,
+        },
+        { status: 400 }
+      )
+    }
   }
 
   // ── Validar breakdown de efectivo ─────────────────────────────────────────

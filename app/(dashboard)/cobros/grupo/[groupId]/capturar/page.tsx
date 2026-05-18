@@ -108,6 +108,10 @@ export default function CapturarGrupoPage() {
         metodoPago,
         cambioEntregado: cambio ?? 0,
         cashBreakdown:   cashBreakdown ?? [],
+        // Le mandamos al backend qué número de pago creemos estar cobrando
+        // (lo que la UI muestra). Si no coincide con la próxima cuota
+        // pendiente real, el endpoint rechaza para evitar doble cobro.
+        numeroPago:      miembros[0]?.numeroPago,
       }
       if (metodoPago === 'TRANSFER') {
         body.cuentaDestinoId = selectedAccount || undefined

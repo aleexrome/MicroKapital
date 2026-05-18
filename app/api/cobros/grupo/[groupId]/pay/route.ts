@@ -6,6 +6,7 @@ import { generateTicketQrData } from '@/lib/ticket-generator'
 import { createAuditLog } from '@/lib/audit'
 import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioScore } from '@/lib/score-calculator'
 import { todayMx } from '@/lib/timezone'
+import { getSaturday, getFriday } from '@/lib/week-utils'
 import { crearNotificacion, getDirectoresIds, getGerentesZonalesIds } from '@/lib/notifications'
 
 const cashBreakdownSchema = z.object({
@@ -120,6 +121,26 @@ export async function POST(
           message: `La próxima cuota pendiente del grupo es la #${nextNumeroPago}, no la #${data.numeroPago}. Probablemente alguien ya cobró este pago. Recarga la pantalla.`,
           esperado: nextNumeroPago,
           enviado: data.numeroPago,
+        },
+        { status: 400 }
+      )
+    }
+  }
+
+  // ── No cobrar cuotas de semanas futuras ─────────────────────────────────
+  // Los grupos son SOLIDARIO (semanal). Bloqueamos cobros cuya cuota
+  // venza después del viernes de la semana sáb-vie en curso. Las cuotas
+  // atrasadas SÍ se permiten (es atraso del grupo, no captura adelantada).
+  // DG/SUPER_ADMIN omiten esta regla.
+  if (rol !== 'DIRECTOR_GENERAL' && rol !== 'SUPER_ADMIN') {
+    const finSemana = getFriday(getSaturday(new Date()))
+    const cuotaFutura = loansPagables.find((l) => new Date(l.schedule[0]!.fechaVencimiento) > finSemana)
+    if (cuotaFutura) {
+      return NextResponse.json(
+        {
+          error: 'PAGO_CUOTA_FUTURA',
+          message: `La próxima cuota del grupo vence en una semana futura. Sólo se pueden capturar cobros de esta semana o atrasados. Verifica que no sea cobro duplicado.`,
+          fechaVencimiento: cuotaFutura.schedule[0]!.fechaVencimiento,
         },
         { status: 400 }
       )

@@ -5,7 +5,8 @@ import { z } from 'zod'
 import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
 import { createAuditLog } from '@/lib/audit'
 import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioScore } from '@/lib/score-calculator'
-import { todayMx } from '@/lib/timezone'
+import { todayMx, endOfDayMx } from '@/lib/timezone'
+import { getSaturday, getFriday } from '@/lib/week-utils'
 import { crearNotificacion, getDirectoresIds, getGerentesZonalesIds } from '@/lib/notifications'
 
 const cashBreakdownSchema = z.object({
@@ -153,12 +154,68 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Anti-doble cobro ────────────────────────────────────────────────────
-  // No permitir que el monto registrado sumado a lo ya pagado en esa cuota
-  // exceda el montoEsperado. Esto bloquea los casos típicos de captura
-  // duplicada (registran dos veces el mismo cobro, o un pago parcial y
-  // luego el total completo, dejando la cuota cobrada por encima de lo que
-  // realmente toca). DG/SUPER_ADMIN pueden sobrepasar con flag explícito
-  // si hay un caso excepcional (ej. cliente paga $1 extra de propina).
+  // 3 reglas para bloquear capturas duplicadas / fuera de tiempo:
+  //   (1) Sólo se puede cobrar la cuota más antigua pendiente del préstamo
+  //       — no se puede saltar a una cuota futura aunque sea PENDING.
+  //   (2) La cuota debe corresponder a "hoy / esta semana"; no se permite
+  //       cobrar cuotas que vencen la semana / día siguiente.
+  //   (3) El monto sumado a lo ya pagado no debe exceder el montoEsperado.
+  //
+  // DG/SUPER_ADMIN pueden sobrepasar (1) y (2) automáticamente, y (3) con
+  // flag explícito `excedeMontoConfirmado: true` por si hay un caso real.
+  const esCuotaFutura = (() => {
+    const venc = new Date(schedule.fechaVencimiento)
+    if (schedule.loan.tipo === 'AGIL') {
+      // AGIL: una cuota por día — no permitir nada que venza después de hoy.
+      return venc > endOfDayMx(new Date())
+    }
+    // Semanal (SOLIDARIO / INDIVIDUAL) y quincenal (FIDUCIARIO): la cuota
+    // debe vencer dentro de la semana sáb-vie en curso o antes.
+    const finSemana = getFriday(getSaturday(new Date()))
+    return venc > finSemana
+  })()
+
+  if (!esOpAdmin) {
+    // (1) Solo la cuota más antigua pendiente
+    const earliestPending = await prisma.paymentSchedule.findFirst({
+      where: {
+        loanId: schedule.loanId,
+        estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
+      },
+      orderBy: { numeroPago: 'asc' },
+      select: { id: true, numeroPago: true },
+    })
+    if (earliestPending && earliestPending.id !== schedule.id) {
+      return NextResponse.json(
+        {
+          error: 'PAGO_FUERA_DE_ORDEN',
+          message: `Hay una cuota anterior pendiente (#${earliestPending.numeroPago}). Cobra primero la más vieja — no se puede saltar a la cuota #${schedule.numeroPago}.`,
+          cuotaPendienteMasVieja: earliestPending.numeroPago,
+          cuotaSolicitada: schedule.numeroPago,
+        },
+        { status: 400 }
+      )
+    }
+
+    // (2) No cobrar cuotas de fechas futuras (la semana / día siguiente).
+    //     Las cuotas vencidas (fechaVencimiento < hoy) SÍ se permiten —
+    //     son atraso del cliente, no captura adelantada por error.
+    if (esCuotaFutura) {
+      return NextResponse.json(
+        {
+          error: 'PAGO_CUOTA_FUTURA',
+          message:
+            schedule.loan.tipo === 'AGIL'
+              ? `Esta cuota corresponde a un día futuro (${new Date(schedule.fechaVencimiento).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' })}). Sólo se pueden capturar cobros del día de hoy o atrasados.`
+              : `Esta cuota corresponde a una semana futura (vence ${new Date(schedule.fechaVencimiento).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' })}). Sólo se pueden capturar cobros de esta semana o atrasados. Verifica que no sea cobro duplicado.`,
+          fechaVencimiento: schedule.fechaVencimiento,
+        },
+        { status: 400 }
+      )
+    }
+  }
+
+  // (3) Anti-sobrepago dentro de la misma cuota
   const montoEsperado = Number(schedule.montoEsperado)
   const yaPagado = Number(schedule.montoPagado ?? 0)
   const montoFaltante = Math.max(0, montoEsperado - yaPagado)

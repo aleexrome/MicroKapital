@@ -122,6 +122,11 @@ export async function POST(
   const file = formData.get('foto') as File | null
   const lat = formData.get('lat') as string | null
   const lng = formData.get('lng') as string | null
+  // 'EXIF' = GPS leído de los metadatos de la foto (foto subida desde galería).
+  // 'LIVE' = GPS del navegador en el momento de subir (foto tomada con cámara).
+  // null = legacy / no especificado.
+  const gpsSourceRaw = formData.get('gpsSource') as string | null
+  const gpsSource = gpsSourceRaw === 'EXIF' || gpsSourceRaw === 'LIVE' ? gpsSourceRaw : null
 
   if (!file) {
     return NextResponse.json({ error: 'Foto requerida' }, { status: 400 })
@@ -174,6 +179,7 @@ export async function POST(
         desembolsoFotoUrl: uploadResult.url,
         lat: lat ? parseFloat(lat) : null,
         lng: lng ? parseFloat(lng) : null,
+        gpsSource,
         modo: 'legacy',
       },
     })
@@ -278,6 +284,7 @@ export async function POST(
       desembolsoFotoUrl: uploadResult.url,
       lat: lat ? parseFloat(lat) : null,
       lng: lng ? parseFloat(lng) : null,
+      gpsSource,
       estado: 'ACTIVE',
       ...(loan.loanOriginalId ? { loanOriginalLiquidado: loan.loanOriginalId } : {}),
     },

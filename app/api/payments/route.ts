@@ -153,35 +153,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No autorizado para cobrar este préstamo' }, { status: 403 })
   }
 
-  // ── Anti-doble cobro: salto de cuota / cuota futura ─────────────────────
-  // El caso reportado: coordinador cobra cuota 1 hoy, días después olvida y
-  // captura otro pago — como cuota 1 ya está PAID, el siguiente pendiente
-  // es cuota 2 (próxima semana). El cliente NO trajo ese dinero, pero el
-  // sistema lo registra. Para evitarlo:
-  //   (a) Sólo se puede cobrar la cuota más antigua pendiente.
-  //   (b) Esa cuota debe corresponder a hoy / esta semana (no futura).
-  // Cuotas vencidas (atrasadas) SÍ se permiten. DG/SUPER_ADMIN omiten.
+  // ── Anti-doble cobro: cuota futura ──────────────────────────────────────
+  // No se permite cobrar cuotas cuya fecha sea posterior a hoy (AGIL) o a
+  // la semana sáb-vie en curso (SOLIDARIO/INDIVIDUAL). Cuotas atrasadas SÍ
+  // se permiten — es atraso del cliente. DG/SUPER_ADMIN omiten.
+  //
+  // ANTES había también una regla "Sólo cobra la cuota más antigua
+  // pendiente" pero quitada porque generaba falsos positivos comunes en
+  // AGIL: cliente falta un día y el coordinador no podía capturar la
+  // cuota de HOY hasta primero capturar la del día anterior. La regla
+  // del monto (anti-sobrepago) y la de cuota futura cubren el caso real
+  // de doble cobro sin restringir al coordinador de más.
   if (!esOpAdmin) {
-    const earliestPending = await prisma.paymentSchedule.findFirst({
-      where: {
-        loanId: schedule.loanId,
-        estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
-      },
-      orderBy: { numeroPago: 'asc' },
-      select: { id: true, numeroPago: true },
-    })
-    if (earliestPending && earliestPending.id !== schedule.id) {
-      return NextResponse.json(
-        {
-          error: 'PAGO_FUERA_DE_ORDEN',
-          message: `Hay una cuota anterior pendiente (#${earliestPending.numeroPago}). Cobra primero la más vieja — no se puede saltar a la cuota #${schedule.numeroPago}.`,
-          cuotaPendienteMasVieja: earliestPending.numeroPago,
-          cuotaSolicitada: schedule.numeroPago,
-        },
-        { status: 400 }
-      )
-    }
-
     const venc = new Date(schedule.fechaVencimiento)
     const esCuotaFutura =
       schedule.loan.tipo === 'AGIL'

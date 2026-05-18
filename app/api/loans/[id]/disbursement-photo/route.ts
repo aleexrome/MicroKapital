@@ -9,6 +9,7 @@ import {
 } from '@/lib/business-days'
 import { todayMx } from '@/lib/timezone'
 import { crearNotificacion, getDirectoresIds } from '@/lib/notifications'
+import type { Prisma } from '@prisma/client'
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -19,20 +20,17 @@ cloudinary.config({
 /**
  * POST /api/loans/[id]/disbursement-photo
  *
- * Soporta dos flujos:
+ * Candado 3 del flujo de activación. Sube la foto del desembolso y, en la
+ * misma transacción, activa el préstamo y genera el calendario.
  *
- *  1) Flujo nuevo (Fase 6) — préstamo en IN_ACTIVATION:
- *     candado 3 del flujo de activación. Sube la foto del desembolso con
- *     GPS y, en la misma transacción, cierra el flujo:
- *       - Cambia loan.estado de IN_ACTIVATION → ACTIVE
- *       - Genera PaymentSchedule (calendario de cuotas)
- *       - Si es renovación anticipada, liquida el crédito original
- *     Requiere candados 1 (contrato firmado) y 2 (pago de comisión OK).
+ * **Activación grupal SOLIDARIA** (Loan.esCoordinadora):
+ * Cuando el préstamo recibido es la COORDINADORA del grupo, la activación
+ * se propaga a todos los integrantes en IN_ACTIVATION del mismo ciclo
+ * (misma foto, mismo GPS, mismo timestamp). Si el préstamo recibido es un
+ * INTEGRANTE no-coordinador del grupo, se rechaza pidiendo activar desde
+ * el perfil de la coordinadora.
  *
- *  2) Flujo legacy — préstamo en ACTIVE sin foto:
- *     préstamos viejos activados antes de Fase 6 que aún no tienen foto.
- *     Solo sube la foto y guarda los metadatos (lat/lng/fotoAt). NO toca
- *     estado, NO genera calendario, NO valida candados.
+ * Flujo legacy: préstamos viejos en ACTIVE sin foto sólo guardan la foto.
  *
  * Permisos: SUPER_ADMIN, COORDINADOR/GERENTE/GERENTE_ZONAL del préstamo.
  */
@@ -86,34 +84,95 @@ export async function POST(
     return NextResponse.json({ error: 'Ya existe una foto de desembolso' }, { status: 400 })
   }
 
-  // ── Validación de candados — solo flujo nuevo ────────────────────────────
-  if (esFlujoNuevo) {
-    // Candado 1: contrato firmado
-    const contractWithSigned = await prisma.contract.findFirst({
-      where: {
-        companyId: companyId!,
-        loanDocumentFirmadoId: { not: null },
-        OR: [
-          { loanId: loan.id },
-          { groupMembers: { some: { loanId: loan.id } } },
-        ],
-      },
-      select: { id: true },
-    })
-    if (!contractWithSigned) {
-      return NextResponse.json(
-        { error: 'Falta el contrato firmado del cliente (candado 1)' },
-        { status: 400 }
-      )
-    }
+  // ── Determinar los préstamos a activar ────────────────────────────────────
+  // Para SOLIDARIO con esCoordinadora: propagamos al resto del grupo en
+  // IN_ACTIVATION del mismo ciclo. Para SOLIDARIO no-coordinador: rechazamos
+  // y direccionamos al perfil de la coordinadora.
+  type ActivableLoan = typeof loan
+  let targetLoans: ActivableLoan[] = [loan]
+  let activacionGrupal = false
 
-    // Candado 2: pago de comisión completado
-    const candado2OK = loan.seguroMetodoPago !== null && !loan.seguroPendiente
-    if (!candado2OK) {
-      return NextResponse.json(
-        { error: 'Falta registrar el pago de comisión / seguro (candado 2) o aún está pendiente de verificación' },
-        { status: 400 }
-      )
+  if (esFlujoNuevo && loan.tipo === 'SOLIDARIO' && loan.loanGroupId) {
+    const esRenovacion = loan.loanOriginalId !== null
+    const cicloFilter = esRenovacion
+      ? { loanOriginalId: { not: null } }
+      : { loanOriginalId: null }
+
+    if (loan.esCoordinadora) {
+      // Coordinadora: cargar todos los integrantes (incluyéndola) en IN_ACTIVATION.
+      const integrantes = await prisma.loan.findMany({
+        where: {
+          loanGroupId: loan.loanGroupId,
+          estado: 'IN_ACTIVATION',
+          ...cicloFilter,
+          companyId: companyId!,
+        },
+      }) as ActivableLoan[]
+      if (integrantes.length > 0) {
+        targetLoans = integrantes
+        activacionGrupal = integrantes.length > 1
+      }
+    } else {
+      // Integrante no-coordinadora: buscar la coordinadora del grupo
+      const coord = await prisma.loan.findFirst({
+        where: {
+          loanGroupId: loan.loanGroupId,
+          esCoordinadora: true,
+          ...cicloFilter,
+          companyId: companyId!,
+        },
+        include: { client: { select: { nombreCompleto: true } } },
+      })
+      if (coord) {
+        return NextResponse.json(
+          {
+            error: 'ACTIVAR_DESDE_COORDINADORA',
+            message: `Este préstamo se activa con todo el grupo desde el perfil de la coordinadora: ${coord.client.nombreCompleto}.`,
+            coordinadoraLoanId: coord.id,
+            coordinadoraNombre: coord.client.nombreCompleto,
+          },
+          { status: 400 }
+        )
+      }
+      // Sin coordinadora en el grupo (data legacy): fallback al flujo single.
+    }
+  }
+
+  // ── Validación de candados — solo flujo nuevo, una vez por cada loan ─────
+  if (esFlujoNuevo) {
+    for (const target of targetLoans) {
+      // Candado 1: contrato firmado (el contrato grupal SOLIDARIO cubre a todos
+      // los integrantes por groupMembers).
+      const contractWithSigned = await prisma.contract.findFirst({
+        where: {
+          companyId: companyId!,
+          loanDocumentFirmadoId: { not: null },
+          OR: [
+            { loanId: target.id },
+            { groupMembers: { some: { loanId: target.id } } },
+          ],
+        },
+        select: { id: true },
+      })
+      if (!contractWithSigned) {
+        return NextResponse.json(
+          {
+            error: 'Falta el contrato firmado (candado 1)' + (activacionGrupal ? ` para ${target.id}` : ''),
+          },
+          { status: 400 }
+        )
+      }
+
+      // Candado 2: pago de comisión completado
+      const candado2OK = target.seguroMetodoPago !== null && !target.seguroPendiente
+      if (!candado2OK) {
+        return NextResponse.json(
+          {
+            error: 'Falta registrar el pago de comisión / seguro (candado 2) o aún está pendiente' + (activacionGrupal ? ` para algún integrante del grupo` : ''),
+          },
+          { status: 400 }
+        )
+      }
     }
   }
 
@@ -122,9 +181,6 @@ export async function POST(
   const file = formData.get('foto') as File | null
   const lat = formData.get('lat') as string | null
   const lng = formData.get('lng') as string | null
-  // 'EXIF' = GPS leído de los metadatos de la foto (foto subida desde galería).
-  // 'LIVE' = GPS del navegador en el momento de subir (foto tomada con cámara).
-  // null = legacy / no especificado.
   const gpsSourceRaw = formData.get('gpsSource') as string | null
   const gpsSource = gpsSourceRaw === 'EXIF' || gpsSourceRaw === 'LIVE' ? gpsSourceRaw : null
 
@@ -158,7 +214,7 @@ export async function POST(
     stream.end(buffer)
   })
 
-  // ── Flujo legacy — solo guardar foto, sin tocar estado ni calendario ─────
+  // ── Flujo legacy — solo guardar foto en este loan, sin propagar ──────────
   if (esLegacyActivePendiente) {
     await prisma.loan.update({
       where: { id: loan.id },
@@ -192,136 +248,170 @@ export async function POST(
     })
   }
 
-  // ── Flujo nuevo (IN_ACTIVATION) — calendario + activación ────────────────
-  // Generar fechas del calendario.
-  // todayMx() devuelve 06:00 UTC del día calendario CDMX. Importante para
-  // que la fecha caiga en la semana correcta de los reportes (sáb–vie CDMX).
-  const fechaDesembolso = loan.fechaDesembolso ?? todayMx()
-  const fechaPrimerPagoRef = loan.fechaPrimerPago ?? null
-  const plazo = Number(loan.plazo)
+  // ── Flujo nuevo (IN_ACTIVATION) ──────────────────────────────────────────
+  // La foto + GPS se aplican a TODOS los loans del grupo. El calendario se
+  // genera por separado para cada uno con sus propios montos/plazo.
+  const fechaFoto = new Date()
+  const parsedLat = lat ? parseFloat(lat) : null
+  const parsedLng = lng ? parseFloat(lng) : null
 
-  let fechas: Date[]
-  if (loan.tipo === 'AGIL') {
-    fechas = fechaPrimerPagoRef
-      ? generarFechasHabilesDesde(fechaPrimerPagoRef, plazo)
-      : generarFechasHabiles(fechaDesembolso, plazo)
-  } else if (loan.tipo === 'FIDUCIARIO') {
-    fechas = generarFechasQuincenales(fechaDesembolso, plazo)
-  } else {
-    fechas = fechaPrimerPagoRef
-      ? generarFechasSemanalesDesde(fechaPrimerPagoRef, plazo)
-      : generarFechasSemanales(fechaDesembolso, plazo)
-  }
-
-  const montoPorPago =
-    loan.tipo === 'AGIL'       ? Number(loan.pagoDiario) :
-    loan.tipo === 'FIDUCIARIO' ? Number(loan.pagoQuincenal) :
-                                 Number(loan.pagoSemanal)
-
-  // Transacción: foto + activación + calendario + liquidación renovación
   await prisma.$transaction(async (tx) => {
-    // 1. Guardar foto + GPS y cambiar estado a ACTIVE
-    await tx.loan.update({
-      where: { id: loan.id },
-      data: {
-        desembolsoFotoUrl: uploadResult.url,
-        desembolsoLat: lat ? parseFloat(lat) : null,
-        desembolsoLng: lng ? parseFloat(lng) : null,
-        desembolsoFotoAt: new Date(),
-        estado: 'ACTIVE',
-        fechaDesembolso,
-      },
-    })
+    for (const target of targetLoans) {
+      const fechaDesembolso = target.fechaDesembolso ?? todayMx()
+      const fechaPrimerPagoRef = target.fechaPrimerPago ?? null
+      const plazo = Number(target.plazo)
 
-    // 2. Generar PaymentSchedule
-    const scheduleData = fechas.map((fecha, idx) => ({
-      loanId: loan.id,
-      numeroPago: idx + 1,
-      fechaVencimiento: fecha,
-      montoEsperado: montoPorPago,
-      estado: 'PENDING' as const,
-    }))
-    await tx.paymentSchedule.createMany({ data: scheduleData })
-
-    // 3. Si es renovación anticipada, liquidar el crédito original
-    if (loan.loanOriginalId) {
-      const idsFinanciados = Array.isArray(loan.pagosFinanciadosIds)
-        ? (loan.pagosFinanciadosIds as string[])
-        : null
-
-      const pagadoAtMx = todayMx()
-      if (idsFinanciados && idsFinanciados.length > 0) {
-        await tx.paymentSchedule.updateMany({
-          where: { id: { in: idsFinanciados } },
-          data: { estado: 'FINANCIADO', pagadoAt: pagadoAtMx },
-        })
+      let fechas: Date[]
+      if (target.tipo === 'AGIL') {
+        fechas = fechaPrimerPagoRef
+          ? generarFechasHabilesDesde(fechaPrimerPagoRef, plazo)
+          : generarFechasHabiles(fechaDesembolso, plazo)
+      } else if (target.tipo === 'FIDUCIARIO') {
+        fechas = generarFechasQuincenales(fechaDesembolso, plazo)
+      } else {
+        fechas = fechaPrimerPagoRef
+          ? generarFechasSemanalesDesde(fechaPrimerPagoRef, plazo)
+          : generarFechasSemanales(fechaDesembolso, plazo)
       }
 
-      // Pagos pendientes que NO fueron seleccionados también pasan a FINANCIADO
-      // (mismo razonamiento que en el activate legacy: evita inflar la cobranza).
-      await tx.paymentSchedule.updateMany({
-        where: {
-          loanId: loan.loanOriginalId,
-          estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
-          ...(idsFinanciados?.length ? { id: { notIn: idsFinanciados } } : {}),
+      const montoPorPago =
+        target.tipo === 'AGIL'       ? Number(target.pagoDiario) :
+        target.tipo === 'FIDUCIARIO' ? Number(target.pagoQuincenal) :
+                                       Number(target.pagoSemanal)
+
+      // 1. Guardar foto + GPS + ACTIVE
+      await tx.loan.update({
+        where: { id: target.id },
+        data: {
+          desembolsoFotoUrl: uploadResult.url,
+          desembolsoLat: parsedLat,
+          desembolsoLng: parsedLng,
+          desembolsoFotoAt: fechaFoto,
+          estado: 'ACTIVE',
+          fechaDesembolso,
         },
-        data: { estado: 'FINANCIADO', pagadoAt: pagadoAtMx },
       })
 
-      await tx.loan.update({
-        where: { id: loan.loanOriginalId },
-        data: { estado: 'LIQUIDATED' },
-      })
+      // 2. PaymentSchedule
+      const scheduleData = fechas.map((fecha, idx) => ({
+        loanId: target.id,
+        numeroPago: idx + 1,
+        fechaVencimiento: fecha,
+        montoEsperado: montoPorPago,
+        estado: 'PENDING' as const,
+      } satisfies Prisma.PaymentScheduleCreateManyInput))
+      await tx.paymentSchedule.createMany({ data: scheduleData })
+
+      // 3. Renovación → liquidar crédito original
+      if (target.loanOriginalId) {
+        const idsFinanciados = Array.isArray(target.pagosFinanciadosIds)
+          ? (target.pagosFinanciadosIds as string[])
+          : null
+
+        const pagadoAtMx = todayMx()
+        if (idsFinanciados && idsFinanciados.length > 0) {
+          await tx.paymentSchedule.updateMany({
+            where: { id: { in: idsFinanciados } },
+            data: { estado: 'FINANCIADO', pagadoAt: pagadoAtMx },
+          })
+        }
+
+        await tx.paymentSchedule.updateMany({
+          where: {
+            loanId: target.loanOriginalId,
+            estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] },
+            ...(idsFinanciados?.length ? { id: { notIn: idsFinanciados } } : {}),
+          },
+          data: { estado: 'FINANCIADO', pagadoAt: pagadoAtMx },
+        })
+
+        await tx.loan.update({
+          where: { id: target.loanOriginalId },
+          data: { estado: 'LIQUIDATED' },
+        })
+      }
     }
   })
 
   createAuditLog({
     userId,
-    accion: 'ACTIVATE_LOAN_VIA_DISBURSEMENT_PHOTO',
+    accion: activacionGrupal ? 'ACTIVATE_GROUP_VIA_DISBURSEMENT_PHOTO' : 'ACTIVATE_LOAN_VIA_DISBURSEMENT_PHOTO',
     tabla: 'Loan',
     registroId: loan.id,
     valoresNuevos: {
       desembolsoFotoUrl: uploadResult.url,
-      lat: lat ? parseFloat(lat) : null,
-      lng: lng ? parseFloat(lng) : null,
+      lat: parsedLat,
+      lng: parsedLng,
       gpsSource,
       estado: 'ACTIVE',
+      ...(activacionGrupal ? { integrantesActivados: targetLoans.map((t) => t.id) } : {}),
       ...(loan.loanOriginalId ? { loanOriginalLiquidado: loan.loanOriginalId } : {}),
     },
   })
 
-  // ── Notificaciones informativas: préstamo activado + (si renovación)
-  // crédito original liquidado. Best-effort, fuera del flujo crítico.
+  // ── Notificaciones informativas ──────────────────────────────────────────
   try {
-    const [clienteRow, cobradorRow, directores] = await Promise.all([
-      prisma.client.findUnique({ where: { id: loan.clientId }, select: { nombreCompleto: true } }),
-      prisma.user.findUnique({ where: { id: loan.cobradorId }, select: { nombre: true } }),
-      getDirectoresIds(prisma, companyId!),
-    ])
-    const clienteNombre = clienteRow?.nombreCompleto ?? 'cliente'
-    const cobradorNombre = cobradorRow?.nombre ?? 'cobradora'
+    const [directores] = await Promise.all([getDirectoresIds(prisma, companyId!)])
 
-    await crearNotificacion(prisma, {
-      companyId: companyId!,
-      destinatariosIds: directores,
-      tipo: 'PRESTAMO_ACTIVADO',
-      nivel: 'INFORMATIVA',
-      titulo: 'Préstamo activado',
-      mensaje: `${clienteNombre} por $${Number(loan.capital).toFixed(2)} — Cobradora: ${cobradorNombre}`,
-      loanId: loan.id,
-      clientId: loan.clientId,
-    })
+    if (activacionGrupal) {
+      const clienteRow = await prisma.client.findUnique({
+        where: { id: loan.clientId },
+        select: { nombreCompleto: true },
+      })
+      const cobradorRow = await prisma.user.findUnique({
+        where: { id: loan.cobradorId },
+        select: { nombre: true },
+      })
+      const coordinadoraNombre = clienteRow?.nombreCompleto ?? 'coordinadora'
+      const cobradorNombre = cobradorRow?.nombre ?? 'cobradora'
 
-    if (loan.loanOriginalId) {
       await crearNotificacion(prisma, {
         companyId: companyId!,
-        destinatariosIds: [...directores, loan.cobradorId],
+        destinatariosIds: directores,
+        tipo: 'PRESTAMO_ACTIVADO',
+        nivel: 'INFORMATIVA',
+        titulo: `Grupo solidario activado — ${targetLoans.length} integrantes`,
+        mensaje: `Coordinadora ${coordinadoraNombre} · Cobradora: ${cobradorNombre}`,
+        loanId: loan.id,
+        clientId: loan.clientId,
+      })
+    } else {
+      const [clienteRow, cobradorRow] = await Promise.all([
+        prisma.client.findUnique({ where: { id: loan.clientId }, select: { nombreCompleto: true } }),
+        prisma.user.findUnique({ where: { id: loan.cobradorId }, select: { nombre: true } }),
+      ])
+      const clienteNombre = clienteRow?.nombreCompleto ?? 'cliente'
+      const cobradorNombre = cobradorRow?.nombre ?? 'cobradora'
+
+      await crearNotificacion(prisma, {
+        companyId: companyId!,
+        destinatariosIds: directores,
+        tipo: 'PRESTAMO_ACTIVADO',
+        nivel: 'INFORMATIVA',
+        titulo: 'Préstamo activado',
+        mensaje: `${clienteNombre} por $${Number(loan.capital).toFixed(2)} — Cobradora: ${cobradorNombre}`,
+        loanId: loan.id,
+        clientId: loan.clientId,
+      })
+    }
+
+    // Renovaciones liquidadas
+    for (const target of targetLoans) {
+      if (!target.loanOriginalId) continue
+      const clienteRow = await prisma.client.findUnique({
+        where: { id: target.clientId },
+        select: { nombreCompleto: true },
+      })
+      const clienteNombre = clienteRow?.nombreCompleto ?? 'cliente'
+      await crearNotificacion(prisma, {
+        companyId: companyId!,
+        destinatariosIds: [...directores, target.cobradorId],
         tipo: 'PRESTAMO_LIQUIDADO',
         nivel: 'INFORMATIVA',
         titulo: 'Préstamo liquidado completamente',
         mensaje: `${clienteNombre} — liquidado por renovación anticipada`,
-        loanId: loan.loanOriginalId,
-        clientId: loan.clientId,
+        loanId: target.loanOriginalId,
+        clientId: target.clientId,
       })
     }
   } catch (e) {
@@ -329,7 +419,11 @@ export async function POST(
   }
 
   return NextResponse.json({
-    message: 'Préstamo activado — foto de desembolso registrada y calendario de pagos generado',
+    message: activacionGrupal
+      ? `Grupo activado — ${targetLoans.length} integrantes con foto + calendario`
+      : 'Préstamo activado — foto de desembolso registrada y calendario generado',
     url: uploadResult.url,
+    activacionGrupal,
+    integrantesActivados: targetLoans.length,
   })
 }

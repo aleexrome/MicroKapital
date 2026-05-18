@@ -16,6 +16,10 @@ const approveSchema = z.object({
     fechaDesembolso: z.string().optional(),
     fechaPrimerPago: z.string().optional(),
   }).optional(),
+  // SOLIDARIO: si la UI marca a este integrante como coordinadora del
+  // grupo, se setea Loan.esCoordinadora = true (los demás false). El
+  // contrato y la activación grupal usan este flag como ancla.
+  esCoordinadora: z.boolean().optional(),
 })
 
 export async function POST(
@@ -58,6 +62,7 @@ export async function POST(
   const avalOverride = parsed.success ? parsed.data.avalOverride : undefined
   const contrapropuesta = parsed.success ? parsed.data.contrapropuesta : undefined
   const requiereDocumentos = parsed.success ? (parsed.data.requiereDocumentos ?? false) : false
+  const esCoordinadora = parsed.success && loan.tipo === 'SOLIDARIO' ? (parsed.data.esCoordinadora ?? false) : false
 
   // Build updated financial fields if Director makes a counteroffer
   let loanFieldUpdates: Record<string, unknown> = {}
@@ -109,9 +114,27 @@ export async function POST(
         aprobadoAt: new Date(),
         notas: notas ?? null,
         requiereDocumentos,
+        ...(loan.tipo === 'SOLIDARIO' ? { esCoordinadora } : {}),
         ...loanFieldUpdates,
       },
     })
+
+    // Si este loan se marcó como coordinadora de un grupo SOLIDARIO,
+    // limpiar el flag en cualquier otro integrante del mismo grupo
+    // (mismo ciclo: original vs renovación se diferencia por loanOriginalId).
+    if (loan.tipo === 'SOLIDARIO' && esCoordinadora && loan.loanGroupId) {
+      const esRenovacionLoan = loan.loanOriginalId !== null
+      await tx.loan.updateMany({
+        where: {
+          loanGroupId: loan.loanGroupId,
+          id: { not: loan.id },
+          ...(esRenovacionLoan
+            ? { loanOriginalId: { not: null } }
+            : { loanOriginalId: null }),
+        },
+        data: { esCoordinadora: false },
+      })
+    }
 
     await tx.loanApproval.updateMany({
       where: { loanId: loan.id, estado: 'PENDING' },

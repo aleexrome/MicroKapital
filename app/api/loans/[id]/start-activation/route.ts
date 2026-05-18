@@ -26,7 +26,10 @@ export async function POST(
 
   const loan = await prisma.loan.findFirst({
     where: { id: params.id, companyId: companyId! },
-    select: { id: true, estado: true, cobradorId: true, branchId: true },
+    select: {
+      id: true, estado: true, cobradorId: true, branchId: true,
+      tipo: true, loanGroupId: true, loanOriginalId: true, esCoordinadora: true,
+    },
   })
   if (!loan) {
     return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
@@ -53,12 +56,63 @@ export async function POST(
     )
   }
 
-  await prisma.loan.update({
-    where: { id: loan.id },
+  // ── SOLIDARIO grupal ─────────────────────────────────────────────────────
+  // Si es integrante no-coordinador, rechazar — el flujo arranca desde la
+  // coordinadora del grupo. Si es coordinadora, transicionar TODOS los
+  // integrantes APPROVED del mismo ciclo en una sola transacción.
+  let loanIdsToStart: string[] = [loan.id]
+  let inicioGrupal = false
+
+  if (loan.tipo === 'SOLIDARIO' && loan.loanGroupId) {
+    const esRenovacion = loan.loanOriginalId !== null
+    const cicloFilter = esRenovacion
+      ? { loanOriginalId: { not: null } }
+      : { loanOriginalId: null }
+
+    if (loan.esCoordinadora) {
+      const integrantes = await prisma.loan.findMany({
+        where: {
+          loanGroupId: loan.loanGroupId,
+          estado: 'APPROVED',
+          ...cicloFilter,
+          companyId: companyId!,
+        },
+        select: { id: true },
+      })
+      if (integrantes.length > 0) {
+        loanIdsToStart = integrantes.map((i) => i.id)
+        inicioGrupal = integrantes.length > 1
+      }
+    } else {
+      const coord = await prisma.loan.findFirst({
+        where: {
+          loanGroupId: loan.loanGroupId,
+          esCoordinadora: true,
+          ...cicloFilter,
+          companyId: companyId!,
+        },
+        include: { client: { select: { nombreCompleto: true } } },
+      })
+      if (coord) {
+        return NextResponse.json(
+          {
+            error: 'INICIAR_DESDE_COORDINADORA',
+            message: `La activación grupal arranca desde el perfil de la coordinadora: ${coord.client.nombreCompleto}.`,
+            coordinadoraLoanId: coord.id,
+            coordinadoraNombre: coord.client.nombreCompleto,
+          },
+          { status: 400 }
+        )
+      }
+    }
+  }
+
+  const startedAt = new Date()
+  await prisma.loan.updateMany({
+    where: { id: { in: loanIdsToStart } },
     data: {
       estado: 'IN_ACTIVATION',
-      activationStartedAt: new Date(),
-      // Si había una cancelación previa (DECLINED → APPROVED → IN_ACTIVATION), limpiar
+      activationStartedAt: startedAt,
       activationCanceledAt: null,
       activationCanceledBy: null,
       activationCancelReason: null,
@@ -67,11 +121,18 @@ export async function POST(
 
   createAuditLog({
     userId,
-    accion: 'START_ACTIVATION',
+    accion: inicioGrupal ? 'START_GROUP_ACTIVATION' : 'START_ACTIVATION',
     tabla: 'Loan',
     registroId: loan.id,
-    valoresNuevos: { estado: 'IN_ACTIVATION' },
+    valoresNuevos: {
+      estado: 'IN_ACTIVATION',
+      ...(inicioGrupal ? { integrantesIniciados: loanIdsToStart } : {}),
+    },
   })
 
-  return NextResponse.json({ message: 'Activación iniciada' })
+  return NextResponse.json({
+    message: inicioGrupal
+      ? `Activación iniciada para ${loanIdsToStart.length} integrantes del grupo`
+      : 'Activación iniciada',
+  })
 }

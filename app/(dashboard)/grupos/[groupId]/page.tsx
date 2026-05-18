@@ -51,9 +51,12 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
         include: {
           client:   { select: { id: true, nombreCompleto: true } },
           schedule: { orderBy: { numeroPago: 'asc' } },
+          // Cargamos también las renovaciones que YA están ACTIVE para
+          // poder detectar préstamos del ciclo viejo (incluso si por algún
+          // bug viejo el original no quedó marcado como LIQUIDATED).
           loanRenovado: {
-            where: { estado: { in: ['PENDING_APPROVAL', 'APPROVED', 'IN_ACTIVATION'] } },
-            select: { id: true },
+            where: { estado: { in: ['PENDING_APPROVAL', 'APPROVED', 'IN_ACTIVATION', 'ACTIVE'] } },
+            select: { id: true, estado: true },
           },
         },
       },
@@ -62,13 +65,23 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
 
   if (!grupo) notFound()
 
+  // "Ciclo vigente" del grupo: préstamos ACTIVE/DEFAULTED del ciclo más
+  // nuevo. Se excluyen:
+  //   1. Préstamos LIQUIDATED y demás estados terminales.
+  //   2. Préstamos cuya renovación YA está ACTIVE — significa que son del
+  //      ciclo viejo aunque por algún bug histórico su estado siga ACTIVE
+  //      (caso reportado: grupos donde el original no quedó LIQUIDATED).
+  const loansVigentes = grupo.loans.filter((loan) => {
+    if (loan.estado !== 'ACTIVE' && loan.estado !== 'DEFAULTED') return false
+    const tieneRenovacionActiva = loan.loanRenovado.some((r) => r.estado === 'ACTIVE')
+    return !tieneRenovacionActiva
+  })
+
   // Pagos grupales: N de plazo, contando pagos donde todos los integrantes
   // pagaron. FINANCIADO también cuenta como "cerrado" porque la renovación
-  // absorbió esa cuota — si no se incluye, los últimos pagos del crédito
-  // viejo quedan flotando como pendientes en el conteo del grupo.
-  const activosParaConteo = grupo.loans.filter((l) => l.estado === 'ACTIVE')
-  const plazo = activosParaConteo[0]?.schedule.length ?? grupo.loans[0]?.schedule.length ?? 0
-  const loansParaConteo = activosParaConteo.length > 0 ? activosParaConteo : grupo.loans
+  // absorbió esa cuota.
+  const plazo = loansVigentes[0]?.schedule.length ?? grupo.loans[0]?.schedule.length ?? 0
+  const loansParaConteo = loansVigentes.length > 0 ? loansVigentes : grupo.loans
   const pagosCompletos = plazo > 0
     ? Array.from({ length: plazo }, (_, i) => i + 1).filter((num) =>
         loansParaConteo.every((l) => {
@@ -214,13 +227,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
 
       <GrupoCalendar
         groupId={grupo.id}
-        loans={grupo.loans
-          // Sólo el ciclo VIGENTE del grupo. Después de una renovación
-          // anticipada, los créditos viejos quedan LIQUIDATED pero el
-          // calendario grupal sólo debe reflejar los activos — si no,
-          // mezcla cuotas del ciclo viejo (FINANCIADO/PAID) con las del
-          // nuevo (PENDING) y la columna del grupo sale inconsistente.
-          .filter((loan) => loan.estado === 'ACTIVE')
+        loans={loansVigentes
           .map((loan) => ({
           id:           loan.id,
           clientId:     loan.client.id,

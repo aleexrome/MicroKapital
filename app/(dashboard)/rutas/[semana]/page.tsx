@@ -281,11 +281,16 @@ export default async function RutaDetallePage({
   let targetUserId: string = userId
   let targetUserName: string = session.user.name ?? 'Mi ruta'
   let targetBranchId: string | null = branchId ?? null
+  // zonaBranchIds del usuario destino — para gerentes con varias sucursales
+  // (ej. Héctor: Toluca + San Mateo Atenco) la ruta agregada cubre TODAS.
+  let targetZonaBranchIds: string[] = (session.user.zonaBranchIds as string[] | null)?.length
+    ? (session.user.zonaBranchIds as string[])
+    : []
   let isDrillDown = false
   if (searchParams?.u && (isGerente || isDG)) {
     const target = await prisma.user.findFirst({
       where: { id: searchParams.u, companyId: companyId!, activo: true },
-      select: { id: true, nombre: true, branchId: true },
+      select: { id: true, nombre: true, branchId: true, zonaBranchIds: true },
     })
     if (target) {
       let allowed = false
@@ -301,6 +306,7 @@ export default async function RutaDetallePage({
         targetUserId   = target.id
         targetUserName = target.nombre
         targetBranchId = target.branchId ?? null
+        targetZonaBranchIds = Array.isArray(target.zonaBranchIds) ? (target.zonaBranchIds as string[]) : []
         isDrillDown    = true
       }
     }
@@ -311,7 +317,19 @@ export default async function RutaDetallePage({
   // personal (que está vacía y daría 0% / $0). Aplica tanto cuando ellos
   // mismos abren su /rutas como cuando alguien hace drill-down a su ficha.
   const aggregateByBranch =
-    GERENTES_AGREGADOS_POR_SUCURSAL.has(targetUserId) && !!targetBranchId
+    GERENTES_AGREGADOS_POR_SUCURSAL.has(targetUserId) && (!!targetBranchId || targetZonaBranchIds.length > 0)
+
+  // Lista efectiva de sucursales a agregar: si el gerente tiene
+  // zonaBranchIds (varias sucursales asignadas), agregamos todas; si no,
+  // sólo la sucursal individual. Antes sólo se usaba targetBranchId y por
+  // eso un gerente de 2 sucursales (ej. Toluca + San Mateo Atenco) sólo
+  // veía la cobranza de UNA.
+  const targetBranchIds: string[] =
+    targetZonaBranchIds.length > 0
+      ? targetZonaBranchIds
+      : targetBranchId
+        ? [targetBranchId]
+        : []
 
   // ── COORDINADOR / COBRADOR view ─────────────────────────────────────
   // También usada en modo drill-down: cuando un Gerente o Director entra
@@ -319,9 +337,10 @@ export default async function RutaDetallePage({
   // usuario seleccionado.
   if (isCoordinador || isDrillDown) {
     // Para gerentes sin cartera propia el filtro pasa de cobradorId a
-    // branchId — así la "ruta" del gerente refleja toda su sucursal.
-    const loanFilterBase = aggregateByBranch && targetBranchId
-      ? { branchId: targetBranchId }
+    // branchId — así la "ruta" del gerente refleja todas sus sucursales
+    // (puede tener una o varias en zonaBranchIds).
+    const loanFilterBase = aggregateByBranch && targetBranchIds.length > 0
+      ? { branchId: { in: targetBranchIds } }
       : { cobradorId: targetUserId }
 
     const [schedules, loans] = await Promise.all([
@@ -747,7 +766,10 @@ export default async function RutaDetallePage({
           rol: { in: ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL'] },
           activo: true,
         },
-        select: { id: true, nombre: true, rol: true, branchId: true },
+        // zonaBranchIds nos sirve para gerentes que cubren varias sucursales
+        // (ej. Héctor: Toluca + San Mateo Atenco) — su tarjeta debe agregar
+        // TODAS sus sucursales, no sólo la "principal" de `branchId`.
+        select: { id: true, nombre: true, rol: true, branchId: true, zonaBranchIds: true },
         orderBy: { nombre: 'asc' },
       }),
       prisma.branch.findMany({
@@ -802,14 +824,22 @@ export default async function RutaDetallePage({
 
     // Per-user stats
     const userStats = allUsuarios.map((u) => {
-      // Para los gerentes sin cartera propia la tarjeta refleja TODA su
-      // sucursal (no su filtro personal, que está vacío).
-      const aggregator = GERENTES_AGREGADOS_POR_SUCURSAL.has(u.id) && !!u.branchId
+      // Para los gerentes sin cartera propia la tarjeta refleja TODA(S)
+      // su(s) sucursal(es). Si tiene zonaBranchIds (varias sucursales),
+      // agregamos todas (caso Héctor: Toluca + San Mateo Atenco). Si sólo
+      // tiene branchId, agregamos esa única.
+      const aggregatorBranchIds = (() => {
+        if (!GERENTES_AGREGADOS_POR_SUCURSAL.has(u.id)) return null
+        const zona = Array.isArray(u.zonaBranchIds) ? (u.zonaBranchIds as string[]) : []
+        if (zona.length > 0) return zona
+        return u.branchId ? [u.branchId] : null
+      })()
+      const aggregator = !!aggregatorBranchIds
       const uSched = aggregator
-        ? wSchedules.filter((s) => s.loan.branchId === u.branchId)
+        ? wSchedules.filter((s) => aggregatorBranchIds!.includes(s.loan.branchId))
         : wSchedules.filter((s) => s.loan.cobradorId === u.id)
       const uLoans = aggregator
-        ? wLoans.filter((l) => l.branchId === u.branchId)
+        ? wLoans.filter((l) => aggregatorBranchIds!.includes(l.branchId))
         : wLoans.filter((l) => l.cobradorId === u.id)
       const { totalAPagar, totalCobrado, cobradosCount, scheduleCount } = calcCobranza(uSched)
       const colocacion = uLoans.reduce((s, l) => s + Number(l.capital), 0)

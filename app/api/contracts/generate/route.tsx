@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
 
   // ── 3. Determinar si es solidario y resolver el "loan ancla" del contrato ─
   let anchorLoanId = loan.id
-  type LoanLite = { id: string; clientId: string; capital: { toString: () => string }; totalPago: { toString: () => string }; pagoSemanal: { toString: () => string } | null; plazo: number; createdAt: Date; client: { id: string; nombreCompleto: string } }
+  type LoanLite = { id: string; clientId: string; capital: { toString: () => string }; totalPago: { toString: () => string }; pagoSemanal: { toString: () => string } | null; plazo: number; esCoordinadora: boolean; createdAt: Date; client: { id: string; nombreCompleto: string } }
   let groupLoans: LoanLite[] = []
 
   if (loan.tipo === 'SOLIDARIO') {
@@ -144,9 +144,16 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
-    // TODO: cuando exista un flag explícito de coordinadora, usarlo. Por ahora
-    // la coordinadora es el primer loan del grupo por createdAt.
-    anchorLoanId = groupLoans[0].id
+    // Ancla = el integrante marcado como coordinadora por DG (Loan.esCoordinadora).
+    // Si por algún motivo ninguno tiene el flag (datos viejos sin migrar),
+    // fallback al primero por createdAt para no romper.
+    const coord = groupLoans.find((gl) => gl.esCoordinadora)
+    anchorLoanId = coord?.id ?? groupLoans[0].id
+    // Reordenar para que la coordinadora aparezca primera en la tabla del
+    // contrato (DEUDOR/INTEGRANTES) y en ContractGroupMember.esCoordinadora.
+    if (coord) {
+      groupLoans = [coord, ...groupLoans.filter((gl) => gl.id !== coord.id)]
+    }
   }
 
   // ── 4. Ver si ya existe un Contract para el ancla ────────────────────────

@@ -21,6 +21,19 @@ interface ContratoExistente {
   loanDocumentFirmadoUrl?: string | null
 }
 
+interface SolidarioGroupInfo {
+  esCoordinadora: boolean
+  // Total de la comisión / seguro sumando a todos los integrantes en
+  // IN_ACTIVATION del mismo ciclo. Sólo presente en el loan de la coordinadora.
+  feeTotalGrupo?: number
+  integrantesCount?: number
+  // Si este loan NO es la coordinadora, identifica a quién lleva el flujo.
+  coordinadora?: {
+    loanId: string
+    clientNombre: string
+  } | null
+}
+
 interface EstadoFlujoActivacionProps {
   loanId: string
   loanEstado: string                   // PENDING_APPROVAL | APPROVED | IN_ACTIVATION | ACTIVE | DECLINED | ...
@@ -35,6 +48,10 @@ interface EstadoFlujoActivacionProps {
   feeMonto: number
   capital: number
   descuentoRenovacion?: number
+
+  // SOLIDARIO grupal — si presente, define si este loan es coordinadora
+  // del grupo y muestra el monto total agregado al firmar/pagar/activar.
+  solidarioGroupInfo?: SolidarioGroupInfo
 
   // Permisos
   userRole: string
@@ -68,8 +85,22 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
     contratoFirmadoSubido, seguroPagado, seguroPendienteTransfer, fotoDesembolsoSubida,
     contrato,
     feeConcepto, feeMonto, capital, descuentoRenovacion = 0,
+    solidarioGroupInfo,
     userRole, userId, loanCobradorId, loanGerenteZonalIds, loanBranchId,
   } = props
+
+  // SOLIDARIO grupal: si este loan es de un integrante (no coordinadora),
+  // bloqueamos las acciones del flujo de activación — todo se dispara
+  // desde el perfil de la coordinadora del grupo.
+  const esIntegranteNoCoord = !!solidarioGroupInfo && !solidarioGroupInfo.esCoordinadora
+  // Cuando este loan SÍ es coordinadora, las acciones (contrato, pago,
+  // foto) aplican a todo el grupo. El monto del pago se muestra como total.
+  const esCoordinadoraGrupal = !!solidarioGroupInfo?.esCoordinadora && (solidarioGroupInfo.integrantesCount ?? 1) > 1
+  // Monto que se mostrará en el chip 2 (pago) — sumatoria si es coordinadora,
+  // individual si es solo o integrante.
+  const feeMontoEfectivo = esCoordinadoraGrupal && solidarioGroupInfo?.feeTotalGrupo
+    ? solidarioGroupInfo.feeTotalGrupo
+    : feeMonto
 
   const router = useRouter()
   const { toast } = useToast()
@@ -88,8 +119,12 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
   const esGZDelLoan =
     userRole === 'GERENTE_ZONAL' &&
     !!loanGerenteZonalIds?.includes(loanBranchId)
+  // Para SOLIDARIO grupal, los integrantes no-coordinadores NO pueden disparar
+  // los candados desde su perfil — toda la activación se hace desde la
+  // coordinadora del grupo.
   const puedeActuar =
-    userRole === 'SUPER_ADMIN' || esCobradorDelLoan || esGZDelLoan
+    (userRole === 'SUPER_ADMIN' || esCobradorDelLoan || esGZDelLoan) &&
+    !esIntegranteNoCoord
 
   const isInActivation = loanEstado === 'IN_ACTIVATION'
   const isDeclined     = loanEstado === 'DECLINED'
@@ -163,6 +198,30 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
 
   return (
     <div className="rounded-2xl border border-border/60 bg-card p-4 space-y-4">
+      {/* ── Banner SOLIDARIO grupal ──────────────────────────────────────── */}
+      {esIntegranteNoCoord && solidarioGroupInfo?.coordinadora && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+          <p className="font-semibold text-amber-900">Préstamo solidario — integrante del grupo</p>
+          <p className="text-xs text-amber-800 mt-1 leading-snug">
+            La activación de este crédito se hace en conjunto con todo el grupo desde el
+            perfil de la <strong>coordinadora: {solidarioGroupInfo.coordinadora.clientNombre}</strong>.
+            Cuando ella complete los 3 candados (contrato firmado, pago de comisión grupal y
+            foto del desembolso), este préstamo se activa automáticamente.
+          </p>
+        </div>
+      )}
+      {esCoordinadoraGrupal && solidarioGroupInfo && (
+        <div className="rounded-lg border border-primary-300 bg-primary-50 p-3 text-sm">
+          <p className="font-semibold text-primary-900">
+            Coordinadora del grupo · {solidarioGroupInfo.integrantesCount} integrantes
+          </p>
+          <p className="text-xs text-primary-800 mt-1 leading-snug">
+            La activación que dispares aquí (foto del desembolso, pago de comisión)
+            aplica a TODOS los integrantes del grupo en una sola operación.
+          </p>
+        </div>
+      )}
+
       {/* ── Header con barra de progreso ────────────────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -305,7 +364,7 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
         open={openPago}
         onClose={() => setOpenPago(false)}
         feeConcepto={feeConcepto}
-        feeMonto={feeMonto}
+        feeMonto={feeMontoEfectivo}
         capital={capital}
         descuentoRenovacion={descuentoRenovacion}
       />

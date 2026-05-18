@@ -300,6 +300,10 @@ model Loan {
   tuvoAtraso             Boolean        @default(false) // INDIVIDUAL: afecta comisión de renovación
   clienteIrregular       Boolean        @default(false) // ÁGIL: determina tasa $65 o $75
   tipoGrupo              String? // SOLIDARIO: "REGULAR" o "RESCATE"
+  // SOLIDARIO: el integrante elegido por DG como coordinadora del grupo.
+  // El loan del coordinador es el ancla del contrato y desde el que se
+  // dispara la activación grupal (foto + comisiones se propagan al resto).
+  esCoordinadora         Boolean        @default(false)
   // Campos FIDUCIARIO
   tipoGarantia           String? // "MUEBLE" o "INMUEBLE"
   descripcionGarantia    String?

@@ -10,6 +10,7 @@ interface GrupoMiembro {
   loanId: string
   clientNombre: string
   capital: number
+  esCoordinadora?: boolean
 }
 
 interface LoanApprovalActionsProps {
@@ -36,6 +37,14 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
       ? Object.fromEntries(grupoMiembros.map((m) => [m.loanId, m.capital.toString()]))
       : {}
   )
+  // Coordinadora del grupo (SOLIDARIO). Default: el integrante que ya está
+  // marcado como coordinadora si existe (continuar selección previa), o el
+  // primero de la lista (mismo criterio que se usaba implícitamente antes).
+  const [coordinadoraLoanId, setCoordinadoraLoanId] = useState<string>(() => {
+    if (!grupoMiembros || grupoMiembros.length === 0) return ''
+    const yaCoord = grupoMiembros.find((m) => m.esCoordinadora)
+    return yaCoord?.loanId ?? grupoMiembros[0]!.loanId
+  })
   const [fechaDesembolsoCP, setFechaDesembolsoCP] = useState('')
   const [fechaPrimerPagoCP, setFechaPrimerPagoCP] = useState('')
 
@@ -59,7 +68,11 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
 
         await Promise.all(
           grupoMiembros!.map(async (m) => {
-            const body: Record<string, unknown> = {}
+            const body: Record<string, unknown> = {
+              // Marca a este integrante como coordinadora si fue el elegido en
+              // el dropdown. El backend pone false en los demás del grupo.
+              esCoordinadora: m.loanId === coordinadoraLoanId,
+            }
             if (conContrapropuesta) {
               body.contrapropuesta = {
                 capital: parseFloat(capitalesMiembros[m.loanId] ?? '0'),
@@ -182,6 +195,32 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
 
   return (
     <div className="flex flex-col gap-2 pt-2">
+      {/* Selector de coordinadora del grupo — sólo SOLIDARIO grupal.
+          Aplica tanto al aprobado simple como a la contrapropuesta. */}
+      {tipo === 'SOLIDARIO' && grupoMiembros && grupoMiembros.length > 1 && (
+        <div className="rounded-lg border border-primary-200 bg-primary-50 p-2.5 text-sm">
+          <label className="block text-xs font-semibold text-primary-800 mb-1.5">
+            Coordinadora del grupo
+          </label>
+          <select
+            value={coordinadoraLoanId}
+            onChange={(e) => setCoordinadoraLoanId(e.target.value)}
+            className="w-full border border-primary-300 rounded px-2 py-1.5 text-sm bg-white"
+            disabled={processing}
+          >
+            {grupoMiembros.map((m) => (
+              <option key={m.loanId} value={m.loanId}>
+                {m.clientNombre}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-primary-700 mt-1.5 leading-snug">
+            Será el ancla del contrato y desde su perfil se dispara la activación
+            grupal (foto y comisiones se aplican a todo el grupo).
+          </p>
+        </div>
+      )}
+
       {/* Botones principales */}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="success" disabled={processing} onClick={() => handleApprove(false)}>

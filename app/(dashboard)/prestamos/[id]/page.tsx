@@ -263,7 +263,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   }
 
   // Para SOLIDARIO pendiente de aprobación: cargar todos los integrantes del grupo
-  let grupoMiembros: Array<{ loanId: string; clientNombre: string; capital: number }> | undefined
+  let grupoMiembros: Array<{ loanId: string; clientNombre: string; capital: number; esCoordinadora: boolean }> | undefined
   if (
     loan.tipo === 'SOLIDARIO' &&
     loan.estado === 'PENDING_APPROVAL' &&
@@ -288,6 +288,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       loanId: s.id,
       clientNombre: s.client.nombreCompleto,
       capital: Number(s.capital),
+      esCoordinadora: s.esCoordinadora,
     }))
   } else if (
     loan.tipo === 'SOLIDARIO' &&
@@ -315,6 +316,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         loanId: r.id,
         clientNombre: r.client.nombreCompleto,
         capital: Number(r.capital),
+        esCoordinadora: r.esCoordinadora,
       }))
     }
   }
@@ -336,6 +338,65 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     Number(loan.capital),
     Number(loan.comision)
   )
+
+  // ── Info grupal SOLIDARIO (para EstadoFlujoActivacion) ────────────────────
+  // Si este loan es SOLIDARIO + tiene grupo, calculamos:
+  //   - Si es coordinadora: monto total agregado del seguro/comisión grupal
+  //     y cuántos integrantes va a activar al disparar el flujo.
+  //   - Si es integrante: nombre de la coordinadora del grupo para mostrar
+  //     "Se activa con ella" y bloquear los botones de los candados.
+  let solidarioGroupInfo:
+    | {
+        esCoordinadora: boolean
+        feeTotalGrupo?: number
+        integrantesCount?: number
+        coordinadora?: { loanId: string; clientNombre: string } | null
+      }
+    | undefined
+  if (
+    loan.tipo === 'SOLIDARIO' &&
+    loan.loanGroupId &&
+    (loan.estado === 'APPROVED' || loan.estado === 'IN_ACTIVATION')
+  ) {
+    const esRenovacionLoan = loan.loanOriginalId !== null
+    const cicloFilter = esRenovacionLoan
+      ? { loanOriginalId: { not: null } }
+      : { loanOriginalId: null }
+
+    const integrantes = await prisma.loan.findMany({
+      where: {
+        loanGroupId: loan.loanGroupId,
+        estado: { in: ['APPROVED', 'IN_ACTIVATION'] },
+        ...cicloFilter,
+        companyId: companyId!,
+      },
+      include: { client: { select: { nombreCompleto: true } } },
+    })
+
+    if (loan.esCoordinadora) {
+      const feeTotalGrupo = integrantes.reduce((sum, m) => {
+        const t = calcTarifaApertura(
+          m.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
+          Number(m.capital),
+          Number(m.comision)
+        )
+        return sum + t.monto
+      }, 0)
+      solidarioGroupInfo = {
+        esCoordinadora: true,
+        feeTotalGrupo,
+        integrantesCount: integrantes.length,
+      }
+    } else {
+      const coord = integrantes.find((m) => m.esCoordinadora) ?? null
+      solidarioGroupInfo = {
+        esCoordinadora: false,
+        coordinadora: coord
+          ? { loanId: coord.id, clientNombre: coord.client.nombreCompleto }
+          : null,
+      }
+    }
+  }
 
   // Director General y SUPER_ADMIN: pueden editar fechas en cualquier estado,
   // incluyendo filas PAID, y pueden deshacer pagos.
@@ -446,8 +507,18 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
-                <ComenzarActivacionButton loanId={loan.id} />
-                <LoanClientRejectButton loanId={loan.id} />
+                {solidarioGroupInfo?.esCoordinadora === false && solidarioGroupInfo.coordinadora ? (
+                  // SOLIDARIO integrante: no muestra botones — todo arranca desde la coordinadora.
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+                    Este crédito se activa con todo el grupo desde el perfil de la coordinadora:{' '}
+                    <strong>{solidarioGroupInfo.coordinadora.clientNombre}</strong>.
+                  </div>
+                ) : (
+                  <>
+                    <ComenzarActivacionButton loanId={loan.id} />
+                    <LoanClientRejectButton loanId={loan.id} />
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -473,6 +544,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 feeMonto={tarifaApertura.monto}
                 capital={Number(loan.capital)}
                 descuentoRenovacion={loan.descuentoRenovacion ? Number(loan.descuentoRenovacion) : 0}
+                solidarioGroupInfo={solidarioGroupInfo}
                 userRole={rol}
                 userId={userId}
                 loanCobradorId={loan.cobradorId}

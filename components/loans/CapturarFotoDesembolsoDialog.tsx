@@ -73,11 +73,25 @@ export function CapturarFotoDesembolsoDialog({
     )
   }
 
-  /** Lee los metadatos EXIF de la foto. Devuelve null si no hay GPS. */
+  /** Lee los metadatos EXIF de la foto. Devuelve null si no hay GPS válido
+   *  (sin EXIF, sin tags GPS, o con tags GPS pero valores no finitos /
+   *  fuera de rango). */
   async function extractGpsFromExif(file: File): Promise<{ lat: number; lng: number } | null> {
     try {
       const gps = await exifr.gps(file)
-      if (!gps || typeof gps.latitude !== 'number' || typeof gps.longitude !== 'number') {
+      // Cuidado: exifr puede regresar `{ latitude: NaN, longitude: NaN }`
+      // cuando el bloque GPS existe pero está vacío. typeof NaN === 'number'
+      // así que hay que validar con isFinite + rango válido.
+      if (
+        !gps ||
+        typeof gps.latitude !== 'number' ||
+        typeof gps.longitude !== 'number' ||
+        !Number.isFinite(gps.latitude) ||
+        !Number.isFinite(gps.longitude) ||
+        Math.abs(gps.latitude) > 90 ||
+        Math.abs(gps.longitude) > 180 ||
+        (gps.latitude === 0 && gps.longitude === 0)  // (0, 0) suele ser un valor por defecto basura
+      ) {
         return null
       }
       return { lat: gps.latitude, lng: gps.longitude }
@@ -128,10 +142,17 @@ export function CapturarFotoDesembolsoDialog({
 
   async function handleUpload() {
     if (!selectedFile) return
-    if (!location) {
+    // Defensa por si llegó alguna coordenada inválida (NaN, fuera de rango).
+    const locOk =
+      !!location &&
+      Number.isFinite(location.lat) &&
+      Number.isFinite(location.lng) &&
+      Math.abs(location.lat) <= 90 &&
+      Math.abs(location.lng) <= 180
+    if (!locOk) {
       toast({
         title: 'Falta ubicación GPS',
-        description: 'Necesitamos las coordenadas para registrar el desembolso.',
+        description: 'No se pudieron obtener las coordenadas válidas. Sube otra foto con GPS o usa la cámara directa.',
         variant: 'destructive',
       })
       return

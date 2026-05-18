@@ -62,13 +62,18 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
 
   if (!grupo) notFound()
 
-  // Pagos grupales: N de plazo, contando pagos donde todos los integrantes pagaron
-  const plazo = grupo.loans[0]?.schedule.length ?? 0
+  // Pagos grupales: N de plazo, contando pagos donde todos los integrantes
+  // pagaron. FINANCIADO también cuenta como "cerrado" porque la renovación
+  // absorbió esa cuota — si no se incluye, los últimos pagos del crédito
+  // viejo quedan flotando como pendientes en el conteo del grupo.
+  const activosParaConteo = grupo.loans.filter((l) => l.estado === 'ACTIVE')
+  const plazo = activosParaConteo[0]?.schedule.length ?? grupo.loans[0]?.schedule.length ?? 0
+  const loansParaConteo = activosParaConteo.length > 0 ? activosParaConteo : grupo.loans
   const pagosCompletos = plazo > 0
     ? Array.from({ length: plazo }, (_, i) => i + 1).filter((num) =>
-        grupo.loans.every((l) => {
+        loansParaConteo.every((l) => {
           const s = l.schedule.find((x) => x.numeroPago === num)
-          return s?.estado === 'PAID' || s?.estado === 'ADVANCE'
+          return s?.estado === 'PAID' || s?.estado === 'ADVANCE' || s?.estado === 'FINANCIADO'
         })
       ).length
     : 0
@@ -209,7 +214,14 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
 
       <GrupoCalendar
         groupId={grupo.id}
-        loans={grupo.loans.map((loan) => ({
+        loans={grupo.loans
+          // Sólo el ciclo VIGENTE del grupo. Después de una renovación
+          // anticipada, los créditos viejos quedan LIQUIDATED pero el
+          // calendario grupal sólo debe reflejar los activos — si no,
+          // mezcla cuotas del ciclo viejo (FINANCIADO/PAID) con las del
+          // nuevo (PENDING) y la columna del grupo sale inconsistente.
+          .filter((loan) => loan.estado === 'ACTIVE')
+          .map((loan) => ({
           id:           loan.id,
           clientId:     loan.client.id,
           clientNombre: loan.client.nombreCompleto,

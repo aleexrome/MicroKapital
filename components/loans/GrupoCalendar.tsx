@@ -35,7 +35,7 @@ interface GroupRow {
   fechaVencimiento: Date | string
   montoGrupal: number
   montoPagadoGrupal: number
-  estado: 'PAID' | 'PARTIAL' | 'PENDING' | 'OVERDUE'
+  estado: 'PAID' | 'PARTIAL' | 'PENDING' | 'OVERDUE' | 'FINANCIADO'
   pagados: number
   total: number
 }
@@ -60,16 +60,25 @@ function computeGroupRows(loans: LoanEntry[]): GroupRow[] {
   for (const [numeroPago, { schedules, fecha }] of entries) {
     const montoGrupal       = schedules.reduce((s: number, i: ScheduleItem) => s + i.montoEsperado, 0)
     const montoPagadoGrupal = schedules.reduce((s: number, i: ScheduleItem) => s + i.montoPagado, 0)
-    const pagados           = schedules.filter((i: ScheduleItem) => i.estado === 'PAID' || i.estado === 'ADVANCE').length
-    const total             = schedules.length
+    // FINANCIADO cuenta como cerrado: cuando la renovación anticipada
+    // absorbe las últimas cuotas del crédito anterior, el schedule queda
+    // en FINANCIADO. Si no lo incluimos, esos pagos aparecen como
+    // "Pendiente" en el calendario grupal aunque ya estén cubiertos.
+    const cerrados = schedules.filter((i: ScheduleItem) =>
+      i.estado === 'PAID' || i.estado === 'ADVANCE' || i.estado === 'FINANCIADO'
+    ).length
+    const todosFinanciado = schedules.length > 0 && schedules.every((i: ScheduleItem) => i.estado === 'FINANCIADO')
+    const total           = schedules.length
 
     const _d     = typeof fecha === 'string' ? new Date(fecha) : fecha
     const dueDate = new Date(_d.getUTCFullYear(), _d.getUTCMonth(), _d.getUTCDate())
 
     let estado: GroupRow['estado']
-    if (pagados === total) {
-      estado = 'PAID'
-    } else if (pagados > 0) {
+    if (cerrados === total) {
+      // Si todos los miembros tienen la cuota FINANCIADA, mostramos
+      // "Financiado". Cualquier otra combinación cerrada → PAID.
+      estado = todosFinanciado ? 'FINANCIADO' : 'PAID'
+    } else if (cerrados > 0) {
       estado = 'PARTIAL'
     } else if (dueDate < today) {
       estado = 'OVERDUE'
@@ -77,23 +86,25 @@ function computeGroupRows(loans: LoanEntry[]): GroupRow[] {
       estado = 'PENDING'
     }
 
-    rows.push({ numeroPago, fechaVencimiento: fecha, montoGrupal, montoPagadoGrupal, estado, pagados, total })
+    rows.push({ numeroPago, fechaVencimiento: fecha, montoGrupal, montoPagadoGrupal, estado, pagados: cerrados, total })
   }
 
   return rows
 }
 
 const GROUP_STATUS_VARIANT: Record<GroupRow['estado'], 'success' | 'info' | 'warning' | 'error'> = {
-  PAID:    'success',
-  PARTIAL: 'info',
-  PENDING: 'warning',
-  OVERDUE: 'error',
+  PAID:        'success',
+  PARTIAL:     'info',
+  PENDING:     'warning',
+  OVERDUE:     'error',
+  FINANCIADO:  'info',
 }
 const GROUP_STATUS_LABEL: Record<GroupRow['estado'], string> = {
-  PAID:    'Pagado',
-  PARTIAL: 'Parcial',
-  PENDING: 'Pendiente',
-  OVERDUE: 'Vencido',
+  PAID:        'Pagado',
+  PARTIAL:     'Parcial',
+  PENDING:     'Pendiente',
+  OVERDUE:     'Vencido',
+  FINANCIADO:  'Financiado',
 }
 
 interface MemberRenewalData {
@@ -245,7 +256,10 @@ export function GrupoCalendar({
         <CardContent className="p-0">
           <div className="divide-y">
             {groupRows.map((row) => {
-              const canApplyRow = canActGroup && row.estado !== 'PAID'
+              // FINANCIADO también cierra la cuota (no se puede aplicar
+              // ni deshacer desde aquí — para revertir una renovación hay
+              // que deshacer desde el préstamo original).
+              const canApplyRow = canActGroup && row.estado !== 'PAID' && row.estado !== 'FINANCIADO'
               const canUndoRow  = canActGroup && row.estado === 'PAID'
               const isOverdue   = row.estado === 'OVERDUE'
 

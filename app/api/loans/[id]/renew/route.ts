@@ -202,6 +202,12 @@ export async function POST(
         // grupo y al generar el contrato saldría "Préstamo solidario sin
         // grupo asignado". Si cambia de tipo (ej. a INDIVIDUAL), no grupo.
         loanGroupId: nuevoTipo === 'SOLIDARIO' ? loanOriginal.loanGroupId : null,
+        // Día y hora de cobro: heredan del crédito original (que ya lleva
+        // los valores definidos por DG en el ciclo anterior) para que la
+        // renovación arranque con los mismos defaults. DG puede ajustar al
+        // aprobar la renovación.
+        diaCobro: loanOriginal.diaCobro ?? null,
+        horaLimiteCobro: loanOriginal.horaLimiteCobro ?? null,
         // Vínculo con el crédito anterior
         loanOriginalId: loanOriginal.id,
         descuentoRenovacion: montoFinanciado,

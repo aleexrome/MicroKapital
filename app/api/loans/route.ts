@@ -131,6 +131,13 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Día y hora de cobro: copiamos de la sucursal al crear, para que DG
+  // los vea pre-llenados al aprobar y solo confirme/ajuste si quiere.
+  const branchDefaults = await prisma.branchContractConfig.findUnique({
+    where: { branchId: targetBranchId },
+    select: { diaCobro: true, horaLimiteCobro: true },
+  })
+
   const loan = await prisma.$transaction(async (tx) => {
     const newLoan = await tx.loan.create({
       data: {
@@ -161,6 +168,8 @@ export async function POST(req: NextRequest) {
         avalNombre: data.avalNombre ?? null,
         avalTelefono: data.avalTelefono ?? null,
         avalRelacion: data.avalRelacion ?? null,
+        diaCobro: branchDefaults?.diaCobro ?? null,
+        horaLimiteCobro: branchDefaults?.horaLimiteCobro ?? null,
         notas: data.notas ?? null,
       },
     })

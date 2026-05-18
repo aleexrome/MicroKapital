@@ -20,6 +20,11 @@ const approveSchema = z.object({
   // grupo, se setea Loan.esCoordinadora = true (los demás false). El
   // contrato y la activación grupal usan este flag como ancla.
   esCoordinadora: z.boolean().optional(),
+  // Día (LUNES..DOMINGO) y hora límite (HH:MM 24h) de cobro definidos por
+  // DG. Se plasman en el contrato. Si no llegan, se conservan los valores
+  // actuales del Loan (que pueden venir del backfill desde BranchConfig).
+  diaCobro: z.enum(['LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO','DOMINGO']).optional(),
+  horaLimiteCobro: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Formato HH:MM (24h)').optional(),
 })
 
 export async function POST(
@@ -63,6 +68,8 @@ export async function POST(
   const contrapropuesta = parsed.success ? parsed.data.contrapropuesta : undefined
   const requiereDocumentos = parsed.success ? (parsed.data.requiereDocumentos ?? false) : false
   const esCoordinadora = parsed.success && loan.tipo === 'SOLIDARIO' ? (parsed.data.esCoordinadora ?? false) : false
+  const diaCobro = parsed.success ? parsed.data.diaCobro : undefined
+  const horaLimiteCobro = parsed.success ? parsed.data.horaLimiteCobro : undefined
 
   // Build updated financial fields if Director makes a counteroffer
   let loanFieldUpdates: Record<string, unknown> = {}
@@ -115,6 +122,8 @@ export async function POST(
         notas: notas ?? null,
         requiereDocumentos,
         ...(loan.tipo === 'SOLIDARIO' ? { esCoordinadora } : {}),
+        ...(diaCobro ? { diaCobro } : {}),
+        ...(horaLimiteCobro ? { horaLimiteCobro } : {}),
         ...loanFieldUpdates,
       },
     })

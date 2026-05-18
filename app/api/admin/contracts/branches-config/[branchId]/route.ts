@@ -14,10 +14,15 @@ const branchConfigSchema = z.object({
     .max(10, 'Código demasiado largo')
     .regex(/^[A-Z0-9]+$/, 'Solo letras y números'),
   ciudad: z.string().trim().min(2, 'Ciudad requerida'),
-  diaCobro: z.enum(DIAS, { errorMap: () => ({ message: 'Día inválido' }) }),
+  // Día y hora ya no se configuran por sucursal — DG los define al
+  // aprobar cada préstamo. Se aceptan opcionalmente para retrocompatibilidad
+  // (algún cliente viejo del API podría seguir enviándolos), y si llegan
+  // se actualiza el fallback. Si no llegan, se conserva el valor previo.
+  diaCobro: z.enum(DIAS, { errorMap: () => ({ message: 'Día inválido' }) }).optional(),
   horaLimiteCobro: z
     .string()
-    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Formato HH:MM (24h)'),
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Formato HH:MM (24h)')
+    .optional(),
 })
 
 function isAuthorized(rol: string): boolean {
@@ -66,20 +71,24 @@ export async function PUT(
     )
   }
 
+  // En create necesitamos valores para los campos NOT NULL diaCobro y
+  // horaLimiteCobro (defensa para BD legacy). Si no vienen en el body,
+  // ponemos defaults razonables — el dato real lo aporta cada Loan al
+  // aprobarse, así que estos defaults rara vez se imprimen.
   const config = await prisma.branchContractConfig.upsert({
     where: { branchId: params.branchId },
     create: {
       branchId: params.branchId,
       codigoSucursal: data.codigoSucursal,
       ciudad: data.ciudad,
-      diaCobro: data.diaCobro,
-      horaLimiteCobro: data.horaLimiteCobro,
+      diaCobro: data.diaCobro ?? 'LUNES',
+      horaLimiteCobro: data.horaLimiteCobro ?? '18:00',
     },
     update: {
       codigoSucursal: data.codigoSucursal,
       ciudad: data.ciudad,
-      diaCobro: data.diaCobro,
-      horaLimiteCobro: data.horaLimiteCobro,
+      ...(data.diaCobro ? { diaCobro: data.diaCobro } : {}),
+      ...(data.horaLimiteCobro ? { horaLimiteCobro: data.horaLimiteCobro } : {}),
     },
   })
 

@@ -19,9 +19,23 @@ interface LoanApprovalActionsProps {
   capital: number
   tasaInteres?: number
   grupoMiembros?: GrupoMiembro[]
+  // Día (LUNES..DOMINGO) y hora límite (HH:MM 24h) que DG plasma en el
+  // contrato. Default = lo que tenga el préstamo o, si no, la sucursal.
+  defaultDiaCobro?: string
+  defaultHoraLimite?: string
 }
 
-export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoMiembros }: LoanApprovalActionsProps) {
+const DIAS_COBRO: { value: string; label: string }[] = [
+  { value: 'LUNES',     label: 'Lunes' },
+  { value: 'MARTES',    label: 'Martes' },
+  { value: 'MIERCOLES', label: 'Miércoles' },
+  { value: 'JUEVES',    label: 'Jueves' },
+  { value: 'VIERNES',   label: 'Viernes' },
+  { value: 'SABADO',    label: 'Sábado' },
+  { value: 'DOMINGO',   label: 'Domingo' },
+]
+
+export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoMiembros, defaultDiaCobro, defaultHoraLimite }: LoanApprovalActionsProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [processing, setProcessing] = useState(false)
@@ -47,6 +61,11 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
   })
   const [fechaDesembolsoCP, setFechaDesembolsoCP] = useState('')
   const [fechaPrimerPagoCP, setFechaPrimerPagoCP] = useState('')
+  // Día y hora límite de cobro que se plasman en el contrato. DG puede
+  // ajustarlos en el modal de aprobación; defaults vienen del préstamo o
+  // la sucursal (pasados como props).
+  const [diaCobro, setDiaCobro] = useState<string>(defaultDiaCobro ?? '')
+  const [horaLimite, setHoraLimite] = useState<string>(defaultHoraLimite ?? '')
 
   async function handleApprove(conContrapropuesta = false) {
     setProcessing(true)
@@ -72,6 +91,9 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
               // Marca a este integrante como coordinadora si fue el elegido en
               // el dropdown. El backend pone false en los demás del grupo.
               esCoordinadora: m.loanId === coordinadoraLoanId,
+              // Día y hora aplican a todos los integrantes del grupo por igual.
+              ...(diaCobro ? { diaCobro } : {}),
+              ...(horaLimite ? { horaLimiteCobro: horaLimite } : {}),
             }
             if (conContrapropuesta) {
               body.contrapropuesta = {
@@ -102,7 +124,10 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
             : `${grupoMiembros!.length} integrantes aprobados · Pendiente de activación`,
         })
       } else {
-        const body: Record<string, unknown> = {}
+        const body: Record<string, unknown> = {
+          ...(diaCobro ? { diaCobro } : {}),
+          ...(horaLimite ? { horaLimiteCobro: horaLimite } : {}),
+        }
         if (conContrapropuesta) {
           const cap = parseFloat(nuevoCapital)
           if (!cap || cap <= 0) {
@@ -220,6 +245,37 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
           </p>
         </div>
       )}
+
+      {/* Día y hora límite de cobro — siempre visibles para que DG los
+          confirme/ajuste antes de aprobar. Se plasman en el contrato. */}
+      <div className="rounded-lg border border-primary-200 bg-primary-50 p-2.5 text-sm">
+        <p className="text-xs font-semibold text-primary-800 mb-1.5">
+          Día y hora de cobro {grupoMiembros && grupoMiembros.length > 1 ? '(aplica a todo el grupo)' : ''}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <select
+            value={diaCobro}
+            onChange={(e) => setDiaCobro(e.target.value)}
+            disabled={processing}
+            className="border border-primary-300 rounded px-2 py-1.5 text-sm bg-white"
+          >
+            <option value="">— Día —</option>
+            {DIAS_COBRO.map((d) => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
+          <input
+            type="time"
+            value={horaLimite}
+            onChange={(e) => setHoraLimite(e.target.value)}
+            disabled={processing}
+            className="border border-primary-300 rounded px-2 py-1.5 text-sm bg-white"
+          />
+        </div>
+        <p className="text-[11px] text-primary-700 mt-1.5 leading-snug">
+          Se imprime en el contrato. Si lo dejas vacío, se conserva el valor actual del préstamo.
+        </p>
+      </div>
 
       {/* Botones principales */}
       <div className="flex flex-wrap gap-2">

@@ -264,8 +264,12 @@ export async function POST(req: NextRequest) {
     .trim()
     .replace(/^[^A-Za-zÀ-ÿ0-9]+/, '')
   const ciudadFirma = branchConfig.ciudad
-  const diaCobro = branchConfig.diaCobro
-  const horaLimiteCobro = branchConfig.horaLimiteCobro
+  // Día / hora límite: DG los define al aprobar cada préstamo (Loan.diaCobro
+  // y Loan.horaLimiteCobro). Si por alguna razón el loan no los tiene
+  // (créditos viejos del backfill que perdieron el dato, edge case),
+  // caemos al BranchContractConfig como fallback defensivo.
+  const diaCobro = loan.diaCobro ?? branchConfig.diaCobro
+  const horaLimiteCobro = loan.horaLimiteCobro ?? branchConfig.horaLimiteCobro
 
   let pdfDocument: React.ReactElement
 

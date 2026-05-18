@@ -304,6 +304,13 @@ model Loan {
   // El loan del coordinador es el ancla del contrato y desde el que se
   // dispara la activación grupal (foto + comisiones se propagan al resto).
   esCoordinadora         Boolean        @default(false)
+  // Día (LUNES..DOMINGO) y hora límite (HH:MM 24h) de cobro definidos por
+  // DG al aprobar este préstamo. Se plasman en el contrato. Antes venían
+  // del BranchContractConfig por sucursal; ahora son por-préstamo para que
+  // DG decida según el cliente. BranchContractConfig sigue como fallback
+  // para créditos viejos donde estos campos quedaron en NULL.
+  diaCobro               String?
+  horaLimiteCobro        String?
   // Campos FIDUCIARIO
   tipoGarantia           String? // "MUEBLE" o "INMUEBLE"
   descripcionGarantia    String?

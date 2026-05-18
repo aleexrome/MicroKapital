@@ -135,7 +135,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/admin/contratos-config',
-    label: 'Config. Contratos',
+    label: 'Folio y sede de contratos',
     icon: <FileText className="h-5 w-5" />,
     roles: ['SUPER_ADMIN', 'DIRECTOR_GENERAL'],
   },

@@ -339,6 +339,17 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     Number(loan.comision)
   )
 
+  // Defaults de día/hora de cobro para que el modal de aprobación los
+  // pre-llene cuando el préstamo aún no tenga los suyos (creados antes del
+  // backfill). Se sacan de la BranchContractConfig de la sucursal del loan.
+  const branchConfigDefaults =
+    loan.estado === 'PENDING_APPROVAL'
+      ? await prisma.branchContractConfig.findUnique({
+          where: { branchId: loan.branchId },
+          select: { diaCobro: true, horaLimiteCobro: true },
+        })
+      : null
+
   // ── Info grupal SOLIDARIO (para EstadoFlujoActivacion) ────────────────────
   // Si este loan es SOLIDARIO + tiene grupo, calculamos:
   //   - Si es coordinadora: monto total agregado del seguro/comisión grupal
@@ -491,6 +502,8 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               capital={Number(loan.capital)}
               tasaInteres={loan.tasaInteres ? Number(loan.tasaInteres) : undefined}
               grupoMiembros={grupoMiembros}
+              defaultDiaCobro={loan.diaCobro ?? branchConfigDefaults?.diaCobro ?? ''}
+              defaultHoraLimite={loan.horaLimiteCobro ?? branchConfigDefaults?.horaLimiteCobro ?? ''}
             />
           )}
 

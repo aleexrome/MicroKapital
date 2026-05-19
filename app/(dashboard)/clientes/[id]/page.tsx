@@ -10,7 +10,7 @@ import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
 import { ClientRenovacionButton } from '@/components/loans/ClientRenovacionButton'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 import { formatDate, formatMoney } from '@/lib/utils'
-import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2, FolderOpen, Users, Pencil, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2, FolderOpen, Users, Pencil, ShieldCheck, FileText } from 'lucide-react'
 import Link from 'next/link'
 import type { LoanType } from '@prisma/client'
 import { findAvalMatches, getAvalRiskLevel } from '@/lib/aval-check'
@@ -293,6 +293,10 @@ export default async function ClienteExpedientePage({
                   pagados >= umbral &&
                   !tieneRenovacionActiva
 
+                // Estado de cuenta disponible para créditos con vida real
+                // (ya desembolsados). Excluye PENDING_APPROVAL/APPROVED/etc.
+                const tieneEstadoCuenta = ['ACTIVE', 'LIQUIDATED', 'RESTRUCTURED', 'DEFAULTED'].includes(loan.estado)
+
                 return (
                   <div key={loan.id} className="border rounded-lg overflow-hidden">
                     <Link
@@ -313,6 +317,16 @@ export default async function ClienteExpedientePage({
                         <Badge variant={st.variant}>{st.label}</Badge>
                       </div>
                     </Link>
+                    {tieneEstadoCuenta && (
+                      <div className="px-4 py-2 border-t bg-muted/10 flex justify-end">
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/prestamos/${loan.id}/estado-cuenta`}>
+                            <FileText className="h-3 w-3 mr-1" />
+                            Estado de cuenta
+                          </Link>
+                        </Button>
+                      </div>
+                    )}
                     {tieneAval && (
                       <div className="px-4 pb-3 border-t bg-muted/10">
                         <div className="flex items-center gap-2 mt-2">

@@ -254,7 +254,7 @@ export default async function CreditosConcluidos({
                         </Link>
                       </Button>
                       <Button asChild size="sm" variant="outline">
-                        <Link href={`/creditos-concluidos/${loan.id}/pdf`}>
+                        <Link href={`/prestamos/${loan.id}/estado-cuenta`}>
                           <FileText className="h-3 w-3 mr-1" />PDF
                         </Link>
                       </Button>

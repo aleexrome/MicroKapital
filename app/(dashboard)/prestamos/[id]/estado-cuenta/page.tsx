@@ -13,9 +13,6 @@ interface LoanReport {
   capital: number
   comision: number
   montoReal: number
-  tasaInteres: number
-  interes: number
-  totalPago: number
   pagoSemanal: number | null
   pagoDiario: number | null
   pagoQuincenal: number | null
@@ -42,7 +39,6 @@ interface LoanReport {
     fechaHora: string
     tickets: { numeroTicket: string }[]
   }[]
-  _interestHidden?: boolean
 }
 
 export default function EstadoCuentaPage() {
@@ -94,6 +90,19 @@ export default function EstadoCuentaPage() {
     <>
       <style>{`
         @media print {
+          /* Oculta toda la cromática de la app (sidebar, header, etc.)
+             y solo deja visible el reporte. Funciona en Safari/Chrome/Firefox
+             a diferencia de display:none por clase, que pierde nodos fuera
+             del componente. */
+          body * { visibility: hidden !important; }
+          #estado-cuenta-print, #estado-cuenta-print * { visibility: visible !important; }
+          #estado-cuenta-print {
+            position: absolute !important;
+            left: 0; top: 0;
+            width: 100%;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
           .no-print { display: none !important; }
           body { font-size: 12px; }
         }
@@ -109,7 +118,7 @@ export default function EstadoCuentaPage() {
         </Button>
       </div>
 
-      <div className="p-8 max-w-3xl mx-auto space-y-6 print:p-4">
+      <div id="estado-cuenta-print" className="p-8 max-w-3xl mx-auto space-y-6 print:p-4">
 
         <div className="text-center border-b pb-4">
           <h1 className="text-xl font-bold">{loan.company.nombre}</h1>
@@ -136,12 +145,6 @@ export default function EstadoCuentaPage() {
             <div><span className="text-gray-500">Capital: </span><span className="font-bold">{formatMoney(loan.capital)}</span></div>
             {loan.comision > 0 && <div><span className="text-gray-500">Comisión: </span><span>-{formatMoney(loan.comision)}</span></div>}
             <div><span className="text-gray-500">Entregado: </span><span className="font-bold">{formatMoney(loan.montoReal)}</span></div>
-            {!loan._interestHidden && (
-              <>
-                <div><span className="text-gray-500">Interés: </span><span>{formatMoney(loan.interes)}</span></div>
-                <div><span className="text-gray-500">Total pactado: </span><span className="font-bold">{formatMoney(loan.totalPago)}</span></div>
-              </>
-            )}
             <div><span className="text-gray-500">Total cobrado: </span><span className="font-bold text-green-700">{formatMoney(totalPagado)}</span></div>
             {!esConcluido && (
               <div><span className="text-gray-500">Saldo pendiente: </span><span className="font-bold text-amber-700">{formatMoney(saldoPendiente)}</span></div>

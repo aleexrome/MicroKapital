@@ -12,8 +12,16 @@ export async function GET(
 
   const { companyId, rol } = session.user
 
+  // Acepta cualquier crédito que haya tomado vida (ACTIVE, LIQUIDATED,
+  // RESTRUCTURED, DEFAULTED). Excluimos los que aún no se desembolsan
+  // (PENDING_APPROVAL/APPROVED/IN_ACTIVATION/REJECTED) porque no tienen
+  // pagos reales que reportar.
   const loan = await prisma.loan.findFirst({
-    where: { id: params.id, companyId: companyId!, estado: 'LIQUIDATED' },
+    where: {
+      id: params.id,
+      companyId: companyId!,
+      estado: { in: ['ACTIVE', 'LIQUIDATED', 'RESTRUCTURED', 'DEFAULTED'] },
+    },
     include: {
       client: { select: { nombreCompleto: true, telefono: true, domicilio: true } },
       cobrador: { select: { nombre: true } },

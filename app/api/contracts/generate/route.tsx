@@ -359,7 +359,7 @@ export async function POST(req: NextRequest) {
           fechaTermino={fechaTermino}
           diaCobro={diaCobro}
           horaLimiteCobro={horaLimiteCobro}
-          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.pagoSemanal ?? 0) * Number(loan.plazo), pago: Number(loan.pagoSemanal ?? 0) }}
+          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.capital), pago: Number(loan.pagoSemanal ?? 0) }}
           aval={{ nombre: avalNombre }}
           fechasPagos={fechasPagos}
         />

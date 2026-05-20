@@ -49,8 +49,7 @@ export function CapturarFotoDesembolsoDialog({
     if (!navigator.geolocation) {
       toast({
         title: 'GPS no disponible',
-        description: 'El navegador no permite obtener ubicación. Activa los permisos de ubicación o sube una foto con GPS desde la galería.',
-        variant: 'destructive',
+        description: 'El navegador no permite obtener ubicación. Puedes continuar sin ella.',
       })
       return
     }
@@ -61,12 +60,11 @@ export function CapturarFotoDesembolsoDialog({
         setGpsSource('LIVE')
         setGettingLocation(false)
       },
-      (err) => {
+      () => {
         setGettingLocation(false)
         toast({
           title: 'No se pudo obtener la ubicación',
-          description: err.message ?? 'Verifica los permisos de GPS del navegador.',
-          variant: 'destructive',
+          description: 'Puedes continuar sin ella o reintentar el GPS.',
         })
       },
       { enableHighAccuracy: true, timeout: 15000 },
@@ -134,36 +132,31 @@ export function CapturarFotoDesembolsoDialog({
     } else {
       toast({
         title: 'La foto no tiene GPS en sus metadatos',
-        description: 'Usa una foto tomada con el GPS activado (Configuración → Cámara → Ubicación) o toma una nueva desde la cámara.',
-        variant: 'destructive',
+        description: 'Se subirá sin ubicación — puedes continuar con la activación de todos modos.',
       })
     }
   }
 
   async function handleUpload() {
     if (!selectedFile) return
-    // Defensa por si llegó alguna coordenada inválida (NaN, fuera de rango).
+    // Las coordenadas son opcionales: si la foto trae GPS válido se envían;
+    // si no (sin EXIF / sin permiso de GPS), se sube igual y la activación
+    // continúa. La defensa con Number.isFinite descarta valores basura.
     const locOk =
       !!location &&
       Number.isFinite(location.lat) &&
       Number.isFinite(location.lng) &&
       Math.abs(location.lat) <= 90 &&
       Math.abs(location.lng) <= 180
-    if (!locOk) {
-      toast({
-        title: 'Falta ubicación GPS',
-        description: 'No se pudieron obtener las coordenadas válidas. Sube otra foto con GPS o usa la cámara directa.',
-        variant: 'destructive',
-      })
-      return
-    }
     setUploading(true)
     try {
       const fd = new FormData()
       fd.append('foto', selectedFile)
-      fd.append('lat', location.lat.toString())
-      fd.append('lng', location.lng.toString())
-      if (gpsSource) fd.append('gpsSource', gpsSource)
+      if (locOk && location) {
+        fd.append('lat', location.lat.toString())
+        fd.append('lng', location.lng.toString())
+        if (gpsSource) fd.append('gpsSource', gpsSource)
+      }
 
       const res = await fetch(`/api/loans/${loanId}/disbursement-photo`, {
         method: 'POST',
@@ -246,8 +239,8 @@ export function CapturarFotoDesembolsoDialog({
         </div>
 
         <p className="text-sm text-muted-foreground">
-          Toma una foto del cliente recibiendo el dinero. Si no hay señal, sube una foto desde la galería —
-          se usará el GPS guardado en los metadatos de la imagen. Al subirla el préstamo se activa.
+          Toma una foto del cliente recibiendo el dinero. Si la foto trae ubicación (GPS en vivo o en
+          sus metadatos) se guardará; si no la tiene, igual puedes subirla y activar el préstamo.
         </p>
 
         {/* Botones de elegir origen — sólo si no hay archivo todavía */}
@@ -306,7 +299,7 @@ export function CapturarFotoDesembolsoDialog({
                 <>
                   <MapPin className="h-4 w-4 text-amber-500" />
                   {captureMode === 'gallery' ? (
-                    <span className="text-xs">Esta foto no tiene GPS. Elige otra o usa la cámara.</span>
+                    <span className="text-xs">Esta foto no tiene GPS — se subirá sin ubicación.</span>
                   ) : (
                     <Button size="sm" variant="outline" onClick={requestLocation}>
                       Reintentar GPS
@@ -335,7 +328,7 @@ export function CapturarFotoDesembolsoDialog({
           </Button>
           <Button
             onClick={handleUpload}
-            disabled={!selectedFile || !location || uploading}
+            disabled={!selectedFile || uploading}
           >
             {uploading ? (
               <>

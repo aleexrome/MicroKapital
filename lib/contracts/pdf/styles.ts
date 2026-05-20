@@ -8,7 +8,7 @@ export const COLORS = {
   border:      '#E5E7EB',
   borderSoft:  '#F3F4F6',
   accent:      '#3B82F6', // azul Microkapital
-  headerBlue:  '#1F4E79', // azul oscuro de Word para encabezados de tabla
+  headerBlue:  '#98ADD6', // Pantone azul claro para encabezados de tabla
   white:       '#FFFFFF',
 }
 
@@ -28,7 +28,7 @@ export const PAGE_SIZE = 'LETTER' as const
 export const styles = StyleSheet.create({
   // Página
   page: {
-    paddingTop:    PAGE_MARGIN + 85,  // espacio para el header fixed (logo grande)
+    paddingTop:    PAGE_MARGIN + 100,  // espacio para el header fixed (logo grande)
     paddingBottom: PAGE_MARGIN + 50,  // espacio para el footer fixed
     paddingLeft:   PAGE_MARGIN,
     paddingRight:  PAGE_MARGIN,
@@ -58,8 +58,8 @@ export const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   headerLogo: {
-    width:  170,
-    height: 64,
+    width:  205,
+    height: 77,
     objectFit: 'contain',
   },
 
@@ -167,7 +167,9 @@ export const styles = StyleSheet.create({
     paddingVertical:   6,
     fontSize:    FONT_SIZES.body,
     fontFamily:  'Helvetica-Bold',
-    color:       COLORS.white,
+    // Texto oscuro: el fondo del encabezado (#98ADD6) es claro y el
+    // blanco quedaría con muy poco contraste.
+    color:       COLORS.black,
   },
 
   // Firmas
@@ -343,7 +345,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 2,
     fontSize: 8,
     fontFamily: 'Helvetica-Bold',
-    color: COLORS.white,
+    color: COLORS.black,
     borderRightWidth: 0.5,
     borderRightColor: COLORS.black,
     textAlign: 'center',

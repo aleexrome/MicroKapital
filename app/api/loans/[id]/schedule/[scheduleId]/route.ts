@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
+import { generarFechasHabiles } from '@/lib/business-days'
 import { z } from 'zod'
 
 const patchSchema = z.object({
@@ -45,7 +46,10 @@ export async function PATCH(
   // Verify the schedule belongs to a loan of this company
   const schedule = await prisma.paymentSchedule.findFirst({
     where: { id: params.scheduleId, loanId: params.id, loan: { companyId: companyId! } },
-    select: { id: true, numeroPago: true, fechaVencimiento: true, estado: true },
+    select: {
+      id: true, numeroPago: true, fechaVencimiento: true, estado: true,
+      loan: { select: { tipo: true } },
+    },
   })
   if (!schedule) return NextResponse.json({ error: 'Pago no encontrado' }, { status: 404 })
 
@@ -68,6 +72,8 @@ export async function PATCH(
   )
   const deltaDays = Math.round((nuevaFecha.getTime() - oldLocal.getTime()) / 86_400_000)
 
+  const esAgil = schedule.loan.tipo === 'AGIL'
+
   // Pagos siguientes al editado (mismo crédito, numeroPago mayor)
   const siguientes = deltaDays !== 0
     ? await prisma.paymentSchedule.findMany({
@@ -77,6 +83,14 @@ export async function PATCH(
       })
     : []
 
+  // AGIL cobra solo en días hábiles: los pagos siguientes se recalculan
+  // como días hábiles consecutivos desde la nueva fecha. Un desplazamiento
+  // parejo de calendario (deltaDays) los metería en sábado/domingo.
+  // El resto de productos sí usa el desplazamiento parejo.
+  const fechasSiguientes = esAgil
+    ? generarFechasHabiles(nuevaFecha, siguientes.length)
+    : siguientes.map((s) => shiftDate(s.fechaVencimiento, deltaDays))
+
   await prisma.$transaction(async (tx) => {
     // 1. Actualizar el pago editado
     await tx.paymentSchedule.update({
@@ -84,11 +98,11 @@ export async function PATCH(
       data: { fechaVencimiento: nuevaFecha },
     })
 
-    // 2. Desplazar en cascada todos los pagos siguientes
-    for (const sig of siguientes) {
+    // 2. Recalcular/desplazar en cascada los pagos siguientes
+    for (let i = 0; i < siguientes.length; i++) {
       await tx.paymentSchedule.update({
-        where: { id: sig.id },
-        data: { fechaVencimiento: shiftDate(sig.fechaVencimiento, deltaDays) },
+        where: { id: siguientes[i].id },
+        data: { fechaVencimiento: fechasSiguientes[i] },
       })
     }
   })
@@ -106,10 +120,13 @@ export async function PATCH(
     },
   })
 
+  const plural = siguientes.length > 1 ? 's' : ''
   const msg = deltaDays === 0
     ? 'Fecha sin cambios'
     : siguientes.length > 0
-      ? `Fecha actualizada. ${siguientes.length} pago${siguientes.length > 1 ? 's' : ''} siguiente${siguientes.length > 1 ? 's' : ''} desplazado${siguientes.length > 1 ? 's' : ''} ${deltaDays > 0 ? '+' : ''}${deltaDays} día${Math.abs(deltaDays) !== 1 ? 's' : ''}.`
+      ? esAgil
+        ? `Fecha actualizada. ${siguientes.length} pago${plural} siguiente${plural} recalculado${plural} a días hábiles.`
+        : `Fecha actualizada. ${siguientes.length} pago${plural} siguiente${plural} desplazado${plural} ${deltaDays > 0 ? '+' : ''}${deltaDays} día${Math.abs(deltaDays) !== 1 ? 's' : ''}.`
       : 'Fecha actualizada'
 
   return NextResponse.json({ message: msg })

@@ -186,6 +186,7 @@ export default function NuevaSolicitudPage() {
           if (avalNombre) { body.avalNombre = avalNombre; body.avalTelefono = avalTelefono || undefined; body.avalRelacion = avalRelacion || undefined }
         } else if (tipo === 'AGIL') {
           body.clienteIrregular = clienteIrregular
+          if (avalNombre) { body.avalNombre = avalNombre; body.avalTelefono = avalTelefono || undefined; body.avalRelacion = avalRelacion || undefined }
         } else if (tipo === 'FIDUCIARIO') {
           body.tasaInteres = parseFloat(tasaFid)
           body.tipoGarantia = tipoGarantia
@@ -473,7 +474,7 @@ export default function NuevaSolicitudPage() {
             )}
 
             {/* Aval */}
-            {(tipo === 'INDIVIDUAL' || tipo === 'FIDUCIARIO') && (
+            {(tipo === 'INDIVIDUAL' || tipo === 'AGIL' || tipo === 'FIDUCIARIO') && (
               <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
                 <p className="text-sm font-semibold flex items-center gap-2">
                   <UserCheck className="h-4 w-4 text-primary" />

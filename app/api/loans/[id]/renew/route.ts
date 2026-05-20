@@ -18,6 +18,12 @@ const renewSchema = z.object({
   tuvoAtraso: z.boolean().optional(),
   tipoGrupo: z.enum(['REGULAR', 'RESCATE']).optional(),
   clienteIrregular: z.boolean().optional(),
+  // Aval (INDIVIDUAL y AGIL): el coordinador puede ajustarlo en cada
+  // renovación porque a veces cambia de un ciclo a otro. Si no se envían,
+  // se heredan del crédito original.
+  avalNombre: z.string().optional(),
+  avalTelefono: z.string().optional(),
+  avalRelacion: z.string().optional(),
 })
 
 // Reglas de renovación anticipada por producto
@@ -208,6 +214,11 @@ export async function POST(
         // aprobar la renovación.
         diaCobro: loanOriginal.diaCobro ?? null,
         horaLimiteCobro: loanOriginal.horaLimiteCobro ?? null,
+        // Aval: hereda del crédito original salvo que el coordinador lo
+        // haya cambiado en esta renovación.
+        avalNombre: data.avalNombre ?? loanOriginal.avalNombre,
+        avalTelefono: data.avalTelefono ?? loanOriginal.avalTelefono,
+        avalRelacion: data.avalRelacion ?? loanOriginal.avalRelacion,
         // Vínculo con el crédito anterior
         loanOriginalId: loanOriginal.id,
         descuentoRenovacion: montoFinanciado,

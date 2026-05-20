@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { calcLoan } from '@/lib/financial-formulas'
 import { createAuditLog } from '@/lib/audit'
 import { crearNotificacion, getGerentesZonalesIds } from '@/lib/notifications'
+import { parseMxYMD } from '@/lib/timezone'
 import { z } from 'zod'
 
 const approveSchema = z.object({
@@ -13,8 +14,8 @@ const approveSchema = z.object({
   contrapropuesta: z.object({
     capital: z.number().positive(),
     tasaInteres: z.number().positive().optional(),
-    fechaDesembolso: z.string().optional(),
-    fechaPrimerPago: z.string().optional(),
+    fechaDesembolso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
+    fechaPrimerPago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
   }).optional(),
   // SOLIDARIO: si la UI marca a este integrante como coordinadora del
   // grupo, se setea Loan.esCoordinadora = true (los demás false). El
@@ -105,8 +106,12 @@ export async function POST(
       pagoDiario: calc.pagoDiario ?? null,
       pagoQuincenal: calc.pagoQuincenal ?? null,
       plazo: calc.plazo,
-      ...(contrapropuesta.fechaDesembolso ? { fechaDesembolso: new Date(contrapropuesta.fechaDesembolso) } : {}),
-      ...(contrapropuesta.fechaPrimerPago ? { fechaPrimerPago: new Date(contrapropuesta.fechaPrimerPago) } : {}),
+      // parseMxYMD ancla la fecha a las 06:00 UTC (medianoche CDMX). Si se
+      // usara new Date('YYYY-MM-DD') quedaría a medianoche UTC, que en CDMX
+      // es el día ANTERIOR — y el calendario de cobros se recorría un día
+      // (los pagos de ágil terminaban cayendo en sábado/domingo).
+      ...(contrapropuesta.fechaDesembolso ? { fechaDesembolso: parseMxYMD(contrapropuesta.fechaDesembolso) } : {}),
+      ...(contrapropuesta.fechaPrimerPago ? { fechaPrimerPago: parseMxYMD(contrapropuesta.fechaPrimerPago) } : {}),
     }
     esContrapropuesta = true
   }

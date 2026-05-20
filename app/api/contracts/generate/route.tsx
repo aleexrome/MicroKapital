@@ -230,22 +230,29 @@ export async function POST(req: NextRequest) {
 
   if (loan.tipo === 'SOLIDARIO') {
     nombreGrupo = loan.loanGroup?.nombre ?? 'GRUPO'
+    // El "MONTO SOLICITADO" de la Solicitud debe coincidir con el monto del
+    // pagaré (cuadro DEUDOR/CLIENTE del contrato) = pago × plazo, el total
+    // que el cliente realmente paga. Mismo cálculo que `totalPorMiembro`.
     solicitudIntegrantes = groupLoans.map((gl, idx) => ({
       rol: idx === 0 ? 'Coordinadora' : 'Integrante',
       numero: idx + 1,
       nombre: gl.client.nombreCompleto,
-      montoSolicitado: Number(gl.capital),
+      montoSolicitado: Number(gl.pagoSemanal ?? 0) * Number(gl.plazo),
     }))
-    solicitudTotal   = groupLoans.reduce((s, gl) => s + Number(gl.capital), 0)
+    solicitudTotal   = groupLoans.reduce((s, gl) => s + Number(gl.pagoSemanal ?? 0) * Number(gl.plazo), 0)
     solicitudPactado = groupLoans.reduce((s, gl) => s + Number(gl.pagoSemanal ?? 0), 0)
     solicitudPactadoFreq = 'SEMANAL'
   } else {
     const avalNombre = loan.avalNombre ?? 'POR DEFINIR'
+    // Igual que solidario: el monto de la Solicitud = monto del pagaré.
+    const montoPagare = loan.tipo === 'AGIL'
+      ? Number(loan.pagoDiario ?? 0) * Number(loan.plazo)
+      : Number(loan.pagoSemanal ?? 0) * Number(loan.plazo)
     solicitudIntegrantes = [
-      { rol: 'Cliente', numero: 1, nombre: loan.client.nombreCompleto, montoSolicitado: Number(loan.capital) },
+      { rol: 'Cliente', numero: 1, nombre: loan.client.nombreCompleto, montoSolicitado: montoPagare },
       { rol: 'Aval',    numero: 2, nombre: avalNombre },  // sin monto: el aval no recibe dinero
     ]
-    solicitudTotal   = Number(loan.capital)
+    solicitudTotal   = montoPagare
     if (loan.tipo === 'AGIL') {
       solicitudPactado = Number(loan.pagoDiario ?? 0)
       solicitudPactadoFreq = 'DIARIO'

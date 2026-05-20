@@ -274,16 +274,16 @@ export async function POST(req: NextRequest) {
   let pdfDocument: React.ReactElement
 
   if (loan.tipo === 'SOLIDARIO') {
-    // El monto del pagaré y la tabla DEUDOR/CLIENTE = capital del crédito,
-    // el mismo valor que el "MONTO SOLICITADO" de la Solicitud de Crédito.
-    // El Control de Pagos sí usa el total a pagar (pago × plazo) en su
-    // columna MONTO — por eso `totalPorMiembro` se conserva para él.
+    // Solo las tablas DEUDOR/CLIENTE del contrato muestran el capital del
+    // crédito (= "MONTO SOLICITADO" de la Solicitud). El recuadro
+    // "BUENO POR", el texto del pagaré y la cláusula PRIMERA conservan el
+    // total a pagar (pago × plazo) — igual que el Control de Pagos.
     const totalPorMiembro = (gl: LoanLite) => Number(gl.pagoSemanal ?? 0) * Number(gl.plazo)
     const integrantesTabla = groupLoans.map((gl) => ({
       nombre: gl.client.nombreCompleto,
       monto:  Number(gl.capital),
     }))
-    const montoTotalPagare = groupLoans.reduce((s, gl) => s + Number(gl.capital), 0)
+    const montoTotalPagare = groupLoans.reduce((s, gl) => s + totalPorMiembro(gl), 0)
     const integrantesControl = groupLoans.map((gl, idx) => ({
       nombre: gl.client.nombreCompleto,
       esCoordinadora: idx === 0,
@@ -346,7 +346,7 @@ export async function POST(req: NextRequest) {
           numeroContrato={numeroContrato}
           cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.capital) }}
           aval={{ nombre: avalNombre }}
-          montoTotal={Number(loan.capital)}
+          montoTotal={Number(loan.pagoSemanal ?? 0) * Number(loan.plazo)}
           fechaFirma={fechaFirma}
           representanteLegal={representanteLegal}
           ciudadFirma={ciudadFirma}
@@ -384,7 +384,7 @@ export async function POST(req: NextRequest) {
           numeroContrato={numeroContrato}
           cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.capital) }}
           aval={{ nombre: avalNombre }}
-          montoTotal={Number(loan.capital)}
+          montoTotal={Number(loan.pagoDiario ?? 0) * Number(loan.plazo)}
           fechaFirma={fechaFirma}
           representanteLegal={representanteLegal}
           ciudadFirma={ciudadFirma}

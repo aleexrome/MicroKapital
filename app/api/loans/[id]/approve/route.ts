@@ -12,7 +12,6 @@ const approveSchema = z.object({
   requiereDocumentos: z.boolean().optional(),
   contrapropuesta: z.object({
     capital: z.number().positive(),
-    tasaInteres: z.number().positive().optional(),
     fechaDesembolso: z.string().optional(),
     fechaPrimerPago: z.string().optional(),
   }).optional(),
@@ -79,7 +78,6 @@ export async function POST(
     const calc = calcLoan(
       loan.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
       contrapropuesta.capital,
-      contrapropuesta.tasaInteres,
       {
         ciclo: loan.ciclo ?? 1,
         tuvoAtraso: loan.tuvoAtraso,

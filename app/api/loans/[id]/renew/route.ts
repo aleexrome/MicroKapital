@@ -13,7 +13,6 @@ const renewSchema = z.object({
   // campo no llega, el handler cae a la regla automática (últimos N).
   pagosFinanciadosIds: z.array(z.string()).optional(),
   notas: z.string().optional(),
-  tasaInteres: z.number().positive().optional(),
   ciclo: z.number().int().min(1).optional(),
   tuvoAtraso: z.boolean().optional(),
   tipoGrupo: z.enum(['REGULAR', 'RESCATE']).optional(),
@@ -142,21 +141,12 @@ export async function POST(
   // Tipo del nuevo crédito (puede cambiar)
   const nuevoTipo = data.tipo ?? loanOriginal.tipo
 
-  // Calcular el nuevo crédito
-  let tasaInteres = data.tasaInteres
-  if (!tasaInteres && nuevoTipo === 'FIDUCIARIO') {
-    const setting = await prisma.companySetting.findFirst({
-      where: { companyId: companyId!, clave: 'tasa_fiduciario' },
-    })
-    tasaInteres = setting ? parseFloat(setting.valor) : 0.30
-  }
-
+  // Calcular el nuevo crédito — las tasas están fijas en las fórmulas.
   const nuevoCiclo = data.ciclo ?? (loanOriginal.ciclo ?? 1)
 
   const calc = calcLoan(
     nuevoTipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
     data.capital,
-    tasaInteres,
     {
       ciclo: nuevoCiclo,
       tuvoAtraso: data.tuvoAtraso ?? loanOriginal.tuvoAtraso,

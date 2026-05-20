@@ -14,7 +14,6 @@ const createLoanSchema = z.object({
   clientId: z.string().uuid(),
   tipo: z.enum(['SOLIDARIO', 'INDIVIDUAL', 'AGIL', 'FIDUCIARIO']),
   capital: z.number().positive(),
-  tasaInteres: z.number().positive().optional(),
   cobradorId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
   loanGroupId: z.string().uuid().optional(),
@@ -82,16 +81,8 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Para FIDUCIARIO la tasa la define la empresa; para los demás está fija en las fórmulas
-  let tasaInteres = data.tasaInteres
-  if (!tasaInteres && data.tipo === 'FIDUCIARIO') {
-    const setting = await prisma.companySetting.findFirst({
-      where: { companyId: companyId!, clave: 'tasa_fiduciario' },
-    })
-    tasaInteres = setting ? parseFloat(setting.valor) : 0.30
-  }
-
-  const calc = calcLoan(data.tipo, data.capital, tasaInteres, {
+  // Todas las tasas de interés están fijas en las fórmulas de cada producto.
+  const calc = calcLoan(data.tipo, data.capital, {
     ciclo: data.ciclo,
     tuvoAtraso: data.tuvoAtraso,
     clienteIrregular: data.clienteIrregular,

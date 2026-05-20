@@ -17,7 +17,6 @@ interface LoanApprovalActionsProps {
   loanId: string
   tipo: string
   capital: number
-  tasaInteres?: number
   grupoMiembros?: GrupoMiembro[]
   // Día (LUNES..DOMINGO) y hora límite (HH:MM 24h) que DG plasma en el
   // contrato. Default = lo que tenga el préstamo o, si no, la sucursal.
@@ -35,7 +34,7 @@ const DIAS_COBRO: { value: string; label: string }[] = [
   { value: 'DOMINGO',   label: 'Domingo' },
 ]
 
-export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoMiembros, defaultDiaCobro, defaultHoraLimite }: LoanApprovalActionsProps) {
+export function LoanApprovalActions({ loanId, tipo, capital, grupoMiembros, defaultDiaCobro, defaultHoraLimite }: LoanApprovalActionsProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [processing, setProcessing] = useState(false)
@@ -43,7 +42,6 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
   const [showContrapropuesta, setShowContrapropuesta] = useState(false)
   const [razonRechazo, setRazonRechazo] = useState('')
   const [nuevoCapital, setNuevoCapital] = useState(capital.toString())
-  const [nuevaTasa, setNuevaTasa] = useState(tasaInteres?.toString() ?? '')
   const [notasDG, setNotasDG] = useState('')
   const [requiereDocumentos, setRequiereDocumentos] = useState(false)
   const [capitalesMiembros, setCapitalesMiembros] = useState<Record<string, string>>(
@@ -137,7 +135,6 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
           }
           body.contrapropuesta = {
             capital: cap,
-            ...(nuevaTasa ? { tasaInteres: parseFloat(nuevaTasa) } : {}),
             ...(fechaDesembolsoCP ? { fechaDesembolso: fechaDesembolsoCP } : {}),
             ...(fechaPrimerPagoCP ? { fechaPrimerPago: fechaPrimerPagoCP } : {}),
           }
@@ -334,32 +331,16 @@ export function LoanApprovalActions({ loanId, tipo, capital, tasaInteres, grupoM
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs text-amber-700 mb-1">Nuevo capital ($)</label>
-                <input
-                  type="number"
-                  min={1}
-                  step={500}
-                  className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
-                  value={nuevoCapital}
-                  onChange={(e) => setNuevoCapital(e.target.value)}
-                />
-              </div>
-              {tipo === 'FIDUCIARIO' && (
-                <div>
-                  <label className="block text-xs text-amber-700 mb-1">Tasa de interés (ej. 0.30)</label>
-                  <input
-                    type="number"
-                    min={0.01}
-                    max={1}
-                    step={0.01}
-                    className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
-                    value={nuevaTasa}
-                    onChange={(e) => setNuevaTasa(e.target.value)}
-                  />
-                </div>
-              )}
+            <div>
+              <label className="block text-xs text-amber-700 mb-1">Nuevo capital ($)</label>
+              <input
+                type="number"
+                min={1}
+                step={500}
+                className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
+                value={nuevoCapital}
+                onChange={(e) => setNuevoCapital(e.target.value)}
+              />
             </div>
           )}
           {/* Fechas definidas por el DG — anclan el calendario al activar */}

@@ -500,7 +500,6 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               loanId={loan.id}
               tipo={loan.tipo}
               capital={Number(loan.capital)}
-              tasaInteres={loan.tasaInteres ? Number(loan.tasaInteres) : undefined}
               grupoMiembros={grupoMiembros}
               defaultDiaCobro={loan.diaCobro ?? branchConfigDefaults?.diaCobro ?? ''}
               defaultHoraLimite={loan.horaLimiteCobro ?? branchConfigDefaults?.horaLimiteCobro ?? ''}

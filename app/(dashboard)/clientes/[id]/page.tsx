@@ -354,6 +354,11 @@ export default async function ClienteExpedientePage({
                                 ? { bloqueado: true, prestamosCount: limboCheck.prestamosEnLimbo.length }
                                 : undefined
                             }
+                            avalActual={{
+                              nombre: loan.avalNombre,
+                              telefono: loan.avalTelefono,
+                              relacion: loan.avalRelacion,
+                            }}
                           />
                         </div>
                       </div>

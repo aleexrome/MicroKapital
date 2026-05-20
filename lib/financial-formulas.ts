@@ -131,24 +131,29 @@ export function calcAgil(capital: number, clienteIrregular = false): LoanCalcula
 
 // ─── FIDUCIARIO ──────────────────────────────────────────────────────────────
 //
-// Plazo: 12 quincenas (pago cada 15 días)
+// Plazo: 12 quincenas (pago cada 15 días = 6 meses)
 // Comisión por apertura: 10% sobre el capital
 // Monto mínimo: 40% del valor de la garantía
 // Monto máximo: 50% del valor de la garantía
-// La tasa la define la empresa — se recibe como parámetro
+// Tasa de interés: 20% mensual FIJA, simple sobre los 6 meses del plazo
+//   → interés total = capital × 20% × 6 = capital × 120%
 // Validaciones: titular + 1 aval (2 avales si >$15,000) · edad 18–64
 
-export function calcFiduciario(capital: number, tasaInteres: number): LoanCalculation {
+// Tasa fija del Fiduciario — ya no es configurable por la empresa.
+const FIDUCIARIO_TASA_MENSUAL = 0.20
+const FIDUCIARIO_MESES = 6  // 12 quincenas = 6 meses
+
+export function calcFiduciario(capital: number): LoanCalculation {
   const plazo = 12  // 12 quincenas
   const comision = roundTwo(capital * 0.10)
   const montoReal = capital
-  const interes = roundTwo(capital * tasaInteres)
+  const interes = roundTwo(capital * FIDUCIARIO_TASA_MENSUAL * FIDUCIARIO_MESES)
   const totalPago = roundTwo(capital + interes)
   const pagoQuincenal = roundTwo(totalPago / plazo)
 
   return {
     capital,
-    tasaInteres,
+    tasaInteres: FIDUCIARIO_TASA_MENSUAL,
     comision,
     montoReal,
     interes,
@@ -177,7 +182,7 @@ export function calcTarifaApertura(
 // ─── DISPATCHER ─────────────────────────────────────────────────────────────
 //
 // opciones — ciclo, tuvoAtraso, clienteIrregular, tipoGrupo
-// tasaInteres — solo aplica en FIDUCIARIO (los demás tienen tasas fijas)
+// Todas las tasas de interés están fijas en las fórmulas de cada producto.
 
 interface CalcOpciones {
   ciclo?: number
@@ -189,7 +194,6 @@ interface CalcOpciones {
 export function calcLoan(
   tipo: 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
   capital: number,
-  tasaInteres?: number,
   opciones: CalcOpciones = {}
 ): LoanCalculation {
   switch (tipo) {
@@ -200,6 +204,6 @@ export function calcLoan(
     case 'AGIL':
       return calcAgil(capital, opciones.clienteIrregular ?? false)
     case 'FIDUCIARIO':
-      return calcFiduciario(capital, tasaInteres ?? 0.30)
+      return calcFiduciario(capital)
   }
 }

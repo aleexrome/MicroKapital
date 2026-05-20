@@ -230,29 +230,22 @@ export async function POST(req: NextRequest) {
 
   if (loan.tipo === 'SOLIDARIO') {
     nombreGrupo = loan.loanGroup?.nombre ?? 'GRUPO'
-    // El "MONTO SOLICITADO" de la Solicitud debe coincidir con el monto del
-    // pagaré (cuadro DEUDOR/CLIENTE del contrato) = pago × plazo, el total
-    // que el cliente realmente paga. Mismo cálculo que `totalPorMiembro`.
     solicitudIntegrantes = groupLoans.map((gl, idx) => ({
       rol: idx === 0 ? 'Coordinadora' : 'Integrante',
       numero: idx + 1,
       nombre: gl.client.nombreCompleto,
-      montoSolicitado: Number(gl.pagoSemanal ?? 0) * Number(gl.plazo),
+      montoSolicitado: Number(gl.capital),
     }))
-    solicitudTotal   = groupLoans.reduce((s, gl) => s + Number(gl.pagoSemanal ?? 0) * Number(gl.plazo), 0)
+    solicitudTotal   = groupLoans.reduce((s, gl) => s + Number(gl.capital), 0)
     solicitudPactado = groupLoans.reduce((s, gl) => s + Number(gl.pagoSemanal ?? 0), 0)
     solicitudPactadoFreq = 'SEMANAL'
   } else {
     const avalNombre = loan.avalNombre ?? 'POR DEFINIR'
-    // Igual que solidario: el monto de la Solicitud = monto del pagaré.
-    const montoPagare = loan.tipo === 'AGIL'
-      ? Number(loan.pagoDiario ?? 0) * Number(loan.plazo)
-      : Number(loan.pagoSemanal ?? 0) * Number(loan.plazo)
     solicitudIntegrantes = [
-      { rol: 'Cliente', numero: 1, nombre: loan.client.nombreCompleto, montoSolicitado: montoPagare },
+      { rol: 'Cliente', numero: 1, nombre: loan.client.nombreCompleto, montoSolicitado: Number(loan.capital) },
       { rol: 'Aval',    numero: 2, nombre: avalNombre },  // sin monto: el aval no recibe dinero
     ]
-    solicitudTotal   = montoPagare
+    solicitudTotal   = Number(loan.capital)
     if (loan.tipo === 'AGIL') {
       solicitudPactado = Number(loan.pagoDiario ?? 0)
       solicitudPactadoFreq = 'DIARIO'
@@ -281,16 +274,16 @@ export async function POST(req: NextRequest) {
   let pdfDocument: React.ReactElement
 
   if (loan.tipo === 'SOLIDARIO') {
-    // El monto del pagaré = pago semanal × plazo (lo que realmente paga el
-    // cliente). No usamos Loan.totalPago porque el cálculo teórico
-    // (capital + interés) no refleja el redondeo del pagoSemanal y deja
-    // diferencias de centavos o pesos contra la suma de cuotas firmadas.
+    // El monto del pagaré y la tabla DEUDOR/CLIENTE = capital del crédito,
+    // el mismo valor que el "MONTO SOLICITADO" de la Solicitud de Crédito.
+    // El Control de Pagos sí usa el total a pagar (pago × plazo) en su
+    // columna MONTO — por eso `totalPorMiembro` se conserva para él.
     const totalPorMiembro = (gl: LoanLite) => Number(gl.pagoSemanal ?? 0) * Number(gl.plazo)
     const integrantesTabla = groupLoans.map((gl) => ({
       nombre: gl.client.nombreCompleto,
-      monto:  totalPorMiembro(gl),
+      monto:  Number(gl.capital),
     }))
-    const montoTotalPagare = groupLoans.reduce((s, gl) => s + totalPorMiembro(gl), 0)
+    const montoTotalPagare = groupLoans.reduce((s, gl) => s + Number(gl.capital), 0)
     const integrantesControl = groupLoans.map((gl, idx) => ({
       nombre: gl.client.nombreCompleto,
       esCoordinadora: idx === 0,
@@ -351,9 +344,9 @@ export async function POST(req: NextRequest) {
         />
         <ContratoIndividual
           numeroContrato={numeroContrato}
-          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.pagoSemanal ?? 0) * Number(loan.plazo) }}
+          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.capital) }}
           aval={{ nombre: avalNombre }}
-          montoTotal={Number(loan.pagoSemanal ?? 0) * Number(loan.plazo)}
+          montoTotal={Number(loan.capital)}
           fechaFirma={fechaFirma}
           representanteLegal={representanteLegal}
           ciudadFirma={ciudadFirma}
@@ -389,9 +382,9 @@ export async function POST(req: NextRequest) {
         />
         <ContratoAgil
           numeroContrato={numeroContrato}
-          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.pagoDiario ?? 0) * Number(loan.plazo) }}
+          cliente={{ nombre: loan.client.nombreCompleto, monto: Number(loan.capital) }}
           aval={{ nombre: avalNombre }}
-          montoTotal={Number(loan.pagoDiario ?? 0) * Number(loan.plazo)}
+          montoTotal={Number(loan.capital)}
           fechaFirma={fechaFirma}
           representanteLegal={representanteLegal}
           ciudadFirma={ciudadFirma}

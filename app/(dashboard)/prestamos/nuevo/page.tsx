@@ -73,7 +73,6 @@ export default function NuevaSolicitudPage() {
   const [ciclo, setCiclo]                   = useState(1)
   const [tuvoAtraso, setTuvoAtraso]         = useState(false)
   const [clienteIrregular, setClienteIrregular] = useState(false)
-  const [tasaFid, setTasaFid]               = useState('0.30')
   const [tipoGarantia, setTipoGarantia]     = useState<'MUEBLE' | 'INMUEBLE'>('INMUEBLE')
   const [descGarantia, setDescGarantia]     = useState('')
   const [valorGarantia, setValorGarantia]   = useState('')
@@ -186,8 +185,8 @@ export default function NuevaSolicitudPage() {
           if (avalNombre) { body.avalNombre = avalNombre; body.avalTelefono = avalTelefono || undefined; body.avalRelacion = avalRelacion || undefined }
         } else if (tipo === 'AGIL') {
           body.clienteIrregular = clienteIrregular
+          if (avalNombre) { body.avalNombre = avalNombre; body.avalTelefono = avalTelefono || undefined; body.avalRelacion = avalRelacion || undefined }
         } else if (tipo === 'FIDUCIARIO') {
-          body.tasaInteres = parseFloat(tasaFid)
           body.tipoGarantia = tipoGarantia
           body.descripcionGarantia = descGarantia || undefined
           body.valorGarantia = valorGarantia ? parseFloat(valorGarantia) : undefined
@@ -462,18 +461,14 @@ export default function NuevaSolicitudPage() {
                     <p className="text-xs text-muted-foreground">Capital permitido: ${(Number(valorGarantia) * 0.40).toLocaleString()} – ${(Number(valorGarantia) * 0.50).toLocaleString()}</p>
                   )}
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="tasaFid">Tasa de interés (%)</Label>
-                  <div className="relative">
-                    <Input id="tasaFid" type="number" min="0.01" max="1" step="0.01" value={tasaFid} onChange={(e) => setTasaFid(e.target.value)} className="pr-8" placeholder="0.30" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
-                  </div>
+                <div className="rounded-lg bg-muted/40 border border-border/60 px-3 py-2 text-xs text-muted-foreground">
+                  Tasa de interés: <strong className="text-foreground">20% mensual</strong> (fija, sobre el plazo de 6 meses)
                 </div>
               </div>
             )}
 
             {/* Aval */}
-            {(tipo === 'INDIVIDUAL' || tipo === 'FIDUCIARIO') && (
+            {(tipo === 'INDIVIDUAL' || tipo === 'AGIL' || tipo === 'FIDUCIARIO') && (
               <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
                 <p className="text-sm font-semibold flex items-center gap-2">
                   <UserCheck className="h-4 w-4 text-primary" />
@@ -591,7 +586,6 @@ export default function NuevaSolicitudPage() {
           <LoanCalculator
             tipo={tipo}
             capital={capitalNum}
-            tasaInteres={tipo === 'FIDUCIARIO' ? parseFloat(tasaFid) : undefined}
             ciclo={tipo === 'INDIVIDUAL' ? ciclo : undefined}
             tuvoAtraso={tipo === 'INDIVIDUAL' ? tuvoAtraso : undefined}
             clienteIrregular={tipo === 'AGIL' ? clienteIrregular : undefined}
@@ -607,7 +601,7 @@ export default function NuevaSolicitudPage() {
               <div className="divide-y divide-primary-100">
                 {miembros.map((m, i) => {
                   if (!m.id || Number(m.capital) < 100) return null
-                  const c = calcLoan('SOLIDARIO', Number(m.capital), undefined, { tipoGrupo })
+                  const c = calcLoan('SOLIDARIO', Number(m.capital), { tipoGrupo })
                   return (
                     <div key={i} className="py-2 text-sm">
                       <p className="font-semibold text-primary-800">{m.nombre || `Integrante ${i + 1}`}</p>

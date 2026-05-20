@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     // 2. Crear préstamo individual por cada integrante (capital individual por miembro)
     const loans = await Promise.all(
       data.clientIds.map(async (clientId, idx) => {
-        const calc = calcLoan('SOLIDARIO', data.capitales[idx], undefined, {
+        const calc = calcLoan('SOLIDARIO', data.capitales[idx], {
           tipoGrupo: data.tipoGrupo,
         })
         const loan = await tx.loan.create({

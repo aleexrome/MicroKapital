@@ -13,7 +13,6 @@ const approveSchema = z.object({
   requiereDocumentos: z.boolean().optional(),
   contrapropuesta: z.object({
     capital: z.number().positive(),
-    tasaInteres: z.number().positive().optional(),
     fechaDesembolso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
     fechaPrimerPago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
   }).optional(),
@@ -80,7 +79,6 @@ export async function POST(
     const calc = calcLoan(
       loan.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
       contrapropuesta.capital,
-      contrapropuesta.tasaInteres,
       {
         ciclo: loan.ciclo ?? 1,
         tuvoAtraso: loan.tuvoAtraso,

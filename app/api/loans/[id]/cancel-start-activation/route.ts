@@ -108,14 +108,32 @@ export async function POST(
     )
   }
 
-  // ── Regresar a APPROVED ───────────────────────────────────────────────────
-  await prisma.loan.update({
-    where: { id: loan.id },
-    data: {
-      estado: 'APPROVED',
-      activationStartedAt: null,
-    },
-  })
+  // ── Regresar a APPROVED + borrar el contrato sin firmar ───────────────────
+  // Si se generó un contrato, hay que eliminarlo: como no está firmado
+  // (ya se validó arriba), al reintentar la activación el flujo debe volver
+  // a mostrar "Generar contrato" en lugar de saltar directo a los botones
+  // de descargar/subir. ContractGroupMember se borra en cascada.
+  // Nota: el folio ya consumido no se reusa — el nuevo contrato tomará el
+  // siguiente número (puede quedar un hueco, lo cual es normal).
+  await prisma.$transaction([
+    prisma.contract.deleteMany({
+      where: {
+        companyId: companyId!,
+        loanDocumentFirmadoId: null,
+        OR: [
+          { loanId: loan.id },
+          { groupMembers: { some: { loanId: loan.id } } },
+        ],
+      },
+    }),
+    prisma.loan.update({
+      where: { id: loan.id },
+      data: {
+        estado: 'APPROVED',
+        activationStartedAt: null,
+      },
+    }),
+  ])
 
   createAuditLog({
     userId,

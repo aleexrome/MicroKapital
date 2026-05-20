@@ -9,7 +9,6 @@ import type { LoanCalculation } from '@/types'
 interface LoanCalculatorProps {
   tipo: 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO'
   capital: number
-  tasaInteres?: number
   ciclo?: number
   tuvoAtraso?: boolean
   clienteIrregular?: boolean
@@ -23,7 +22,7 @@ interface LoanCalculatorProps {
 }
 
 export function LoanCalculator({
-  tipo, capital, tasaInteres, ciclo, tuvoAtraso, clienteIrregular, tipoGrupo, onCalc,
+  tipo, capital, ciclo, tuvoAtraso, clienteIrregular, tipoGrupo, onCalc,
   showInterest = false,
 }: LoanCalculatorProps) {
   const [calc, setCalc] = useState<LoanCalculation | null>(null)
@@ -31,12 +30,12 @@ export function LoanCalculator({
   useEffect(() => {
     if (!capital || capital <= 0) { setCalc(null); return }
 
-    const result = calcLoan(tipo, capital, tasaInteres, {
+    const result = calcLoan(tipo, capital, {
       ciclo, tuvoAtraso, clienteIrregular, tipoGrupo,
     })
     setCalc(result)
     onCalc?.(result)
-  }, [tipo, capital, tasaInteres, ciclo, tuvoAtraso, clienteIrregular, tipoGrupo, onCalc])
+  }, [tipo, capital, ciclo, tuvoAtraso, clienteIrregular, tipoGrupo, onCalc])
 
   if (!calc || capital <= 0) return null
 

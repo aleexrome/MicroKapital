@@ -25,6 +25,9 @@ interface ClientRenovacionButtonProps {
   /** Si la cobradora tiene préstamos en limbo > 72h, bloquea solicitud
    *  de renovación. Mensaje y conteo se muestran en tooltip. */
   bloqueoLimbo?: { bloqueado: boolean; prestamosCount: number }
+  /** Aval del crédito original — pre-llena el formulario. El coordinador
+   *  puede ajustarlo si cambió para el nuevo ciclo. Solo INDIVIDUAL/AGIL. */
+  avalActual?: { nombre: string | null; telefono: string | null; relacion: string | null }
 }
 
 const TIPO_LABELS: Record<LoanType, string> = {
@@ -41,6 +44,7 @@ export function ClientRenovacionButton({
   umbral,
   pagosPendientes,
   bloqueoLimbo,
+  avalActual,
 }: ClientRenovacionButtonProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -51,6 +55,13 @@ export function ClientRenovacionButton({
   const [selectedPagos, setSelectedPagos] = useState<Set<string>>(
     () => new Set()
   )
+
+  // El aval solo aplica a INDIVIDUAL y AGIL. Se pre-llena con el del
+  // crédito original para que el coordinador solo lo ajuste si cambió.
+  const requiereAval = tipo === 'INDIVIDUAL' || tipo === 'AGIL'
+  const [avalNombre, setAvalNombre] = useState(avalActual?.nombre ?? '')
+  const [avalTelefono, setAvalTelefono] = useState(avalActual?.telefono ?? '')
+  const [avalRelacion, setAvalRelacion] = useState(avalActual?.relacion ?? '')
 
   const pagosSeleccionados = pagosPendientes.filter((p) => selectedPagos.has(p.id))
   const montoFinanciado = pagosSeleccionados.reduce((sum, p) => sum + p.montoEsperado, 0)
@@ -76,6 +87,10 @@ export function ClientRenovacionButton({
       toast({ title: 'Selecciona al menos un pago a financiar', variant: 'destructive' })
       return
     }
+    if (requiereAval && !avalNombre.trim()) {
+      toast({ title: 'Ingresa el nombre del aval', variant: 'destructive' })
+      return
+    }
 
     setLoading(true)
     try {
@@ -86,6 +101,13 @@ export function ClientRenovacionButton({
           capital: capitalNum,
           pagosFinanciadosIds: Array.from(selectedPagos),
           notas: notas.trim() || undefined,
+          ...(requiereAval
+            ? {
+                avalNombre: avalNombre.trim(),
+                avalTelefono: avalTelefono.trim() || undefined,
+                avalRelacion: avalRelacion || undefined,
+              }
+            : {}),
         }),
       })
       const data = await res.json()
@@ -178,6 +200,56 @@ export function ClientRenovacionButton({
             </div>
           </div>
 
+          {/* Aval — solo INDIVIDUAL y AGIL */}
+          {requiereAval && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                Datos del aval{' '}
+                <span className="font-normal text-muted-foreground">
+                  (puede cambiar respecto al crédito anterior)
+                </span>
+              </p>
+              <div className="bg-white rounded-lg border border-green-100 p-3 space-y-2">
+                <div>
+                  <label className="text-xs text-gray-600">Nombre completo *</label>
+                  <input
+                    type="text"
+                    value={avalNombre}
+                    onChange={(e) => setAvalNombre(e.target.value)}
+                    placeholder="Nombre del aval"
+                    className="mt-0.5 border rounded px-3 py-1.5 text-sm w-full"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-gray-600">Teléfono</label>
+                    <input
+                      type="text"
+                      value={avalTelefono}
+                      onChange={(e) => setAvalTelefono(e.target.value)}
+                      placeholder="10 dígitos"
+                      className="mt-0.5 border rounded px-3 py-1.5 text-sm w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600">Relación</label>
+                    <select
+                      value={avalRelacion}
+                      onChange={(e) => setAvalRelacion(e.target.value)}
+                      className="mt-0.5 border rounded px-3 py-1.5 text-sm w-full bg-white"
+                    >
+                      <option value="">Seleccionar...</option>
+                      <option value="CONYUGE">Cónyuge</option>
+                      <option value="FAMILIAR">Familiar directo</option>
+                      <option value="CONOCIDO">Conocido / Amigo</option>
+                      <option value="OTRO">Otro</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Notas opcionales */}
           <div>
             <label className="text-sm font-medium text-gray-700">
@@ -228,7 +300,7 @@ export function ClientRenovacionButton({
             <Button
               size="sm"
               className="bg-green-600 hover:bg-green-700 text-white"
-              disabled={loading || capitalNum <= 0 || selectedPagos.size === 0 || bloqueoLimbo?.bloqueado === true}
+              disabled={loading || capitalNum <= 0 || selectedPagos.size === 0 || bloqueoLimbo?.bloqueado === true || (requiereAval && !avalNombre.trim())}
               onClick={handleRenew}
               title={bloqueoLimbo?.bloqueado ? `Bloqueado por ${bloqueoLimbo.prestamosCount} préstamo(s) en limbo > 72h` : undefined}
             >

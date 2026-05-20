@@ -66,6 +66,10 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
   const [importantesNoLeidas, setImportantesNoLeidas] = useState(0)
   const [loading, setLoading] = useState(false)
   const [marking, setMarking] = useState(false)
+  // IDs que estaban no-leídas al momento de abrir el panel, para conservar
+  // el highlight visual durante la sesión actual (estilo Twitter/Instagram:
+  // abres → badge se va, pero las recientes siguen marcadas hasta cerrar).
+  const [unreadAtOpen, setUnreadAtOpen] = useState<Set<string>>(new Set())
   const dropdownRef = useRef<HTMLDivElement>(null)
   const criticaCallbackFired = useRef(false)
 
@@ -97,9 +101,46 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Refrescar al abrir
+  // Refrescar al abrir + auto-marcar como leídas (comportamiento red social:
+  // abrir el panel resetea el badge; las críticas se conservan porque la
+  // API de mark-all-read las excluye explícitamente).
   useEffect(() => {
-    if (open) fetchData()
+    if (!open) {
+      // Al cerrar, limpia el set de "highlighted en esta sesión"
+      setUnreadAtOpen(new Set())
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      // 1. Fetch fresco para tener los IDs no-leídos actuales
+      try {
+        const res = await fetch('/api/notifications?limit=5')
+        if (!res.ok || cancelled) return
+        const data = (await res.json()) as FetchResponse
+        setItems(data.items)
+        setCriticasCount(data.criticasCount)
+
+        // 2. Snapshot: qué estaba no-leído al abrir → conserva highlight
+        const unreadIds = new Set(
+          data.items.filter((n) => n.leidaAt === null).map((n) => n.id)
+        )
+        setUnreadAtOpen(unreadIds)
+
+        // 3. Optimistic: el badge baja YA a solo críticas — no esperamos al servidor
+        setNoLeidasCount(data.criticasCount)
+        setImportantesNoLeidas(0)
+        onCountChange?.(data.criticasCount, data.criticasCount)
+
+        // 4. Disparar mark-all-read en background. Si falla, el siguiente
+        // fetchData del polling (60s) corregirá el conteo.
+        if (data.noLeidasCount - data.criticasCount > 0) {
+          fetch('/api/notifications/mark-all-read', { method: 'POST' }).catch(() => {})
+        }
+      } catch {
+        // ignorar
+      }
+    })()
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -215,7 +256,11 @@ export function CampanaNotificaciones({ onCriticaDetected, onCountChange }: Prop
               <div className="p-6 text-center text-xs text-muted-foreground">Sin notificaciones</div>
             ) : (
               items.map((n) => {
-                const isUnread = n.leidaAt === null
+                // Para el highlight visual durante esta apertura del panel,
+                // usamos el snapshot de "estaba no-leída al abrir" — así no
+                // se "des-resaltan" inmediatamente cuando el mark-all-read
+                // optimista cambia el estado en el servidor.
+                const isUnread = unreadAtOpen.has(n.id) || n.leidaAt === null
                 const esCritica = n.nivel === 'CRITICA'
                 const esImportante = n.nivel === 'IMPORTANTE'
                 const rowBg = esCritica

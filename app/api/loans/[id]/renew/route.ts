@@ -13,11 +13,16 @@ const renewSchema = z.object({
   // campo no llega, el handler cae a la regla automática (últimos N).
   pagosFinanciadosIds: z.array(z.string()).optional(),
   notas: z.string().optional(),
-  tasaInteres: z.number().positive().optional(),
   ciclo: z.number().int().min(1).optional(),
   tuvoAtraso: z.boolean().optional(),
   tipoGrupo: z.enum(['REGULAR', 'RESCATE']).optional(),
   clienteIrregular: z.boolean().optional(),
+  // Aval (INDIVIDUAL y AGIL): el coordinador puede ajustarlo en cada
+  // renovación porque a veces cambia de un ciclo a otro. Si no se envían,
+  // se heredan del crédito original.
+  avalNombre: z.string().optional(),
+  avalTelefono: z.string().optional(),
+  avalRelacion: z.string().optional(),
 })
 
 // Reglas de renovación anticipada por producto
@@ -142,21 +147,12 @@ export async function POST(
   // Tipo del nuevo crédito (puede cambiar)
   const nuevoTipo = data.tipo ?? loanOriginal.tipo
 
-  // Calcular el nuevo crédito
-  let tasaInteres = data.tasaInteres
-  if (!tasaInteres && nuevoTipo === 'FIDUCIARIO') {
-    const setting = await prisma.companySetting.findFirst({
-      where: { companyId: companyId!, clave: 'tasa_fiduciario' },
-    })
-    tasaInteres = setting ? parseFloat(setting.valor) : 0.30
-  }
-
+  // Calcular el nuevo crédito — las tasas están fijas en las fórmulas.
   const nuevoCiclo = data.ciclo ?? (loanOriginal.ciclo ?? 1)
 
   const calc = calcLoan(
     nuevoTipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
     data.capital,
-    tasaInteres,
     {
       ciclo: nuevoCiclo,
       tuvoAtraso: data.tuvoAtraso ?? loanOriginal.tuvoAtraso,
@@ -208,6 +204,11 @@ export async function POST(
         // aprobar la renovación.
         diaCobro: loanOriginal.diaCobro ?? null,
         horaLimiteCobro: loanOriginal.horaLimiteCobro ?? null,
+        // Aval: hereda del crédito original salvo que el coordinador lo
+        // haya cambiado en esta renovación.
+        avalNombre: data.avalNombre ?? loanOriginal.avalNombre,
+        avalTelefono: data.avalTelefono ?? loanOriginal.avalTelefono,
+        avalRelacion: data.avalRelacion ?? loanOriginal.avalRelacion,
         // Vínculo con el crédito anterior
         loanOriginalId: loanOriginal.id,
         descuentoRenovacion: montoFinanciado,

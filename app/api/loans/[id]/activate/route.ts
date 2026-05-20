@@ -9,11 +9,11 @@ import {
 import { createAuditLog } from '@/lib/audit'
 import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
 import { calcTarifaApertura } from '@/lib/financial-formulas'
-import { todayMx } from '@/lib/timezone'
+import { todayMx, parseMxYMD } from '@/lib/timezone'
 import { z } from 'zod'
 
 const activateSchema = z.object({
-  fechaDesembolso: z.string().optional(),
+  fechaDesembolso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
   metodoPago: z.enum(['CASH', 'CARD', 'TRANSFER', 'FINANCIADO']).optional(),
   cashBreakdown: z.array(z.object({
     denominacion: z.number(),
@@ -137,8 +137,10 @@ export async function POST(
 
   // Fallback en CDMX (todayMx → 06:00 UTC del día calendario CDMX) para que
   // los reportes semanales coloquen el préstamo en la semana correcta.
+  // parseMxYMD ancla la fecha enviada a medianoche CDMX (no UTC), si no el
+  // calendario de cobros se recorre un día.
   const fechaDesembolso = loan.fechaDesembolso
-    ?? (data.fechaDesembolso ? new Date(data.fechaDesembolso) : todayMx())
+    ?? (data.fechaDesembolso ? parseMxYMD(data.fechaDesembolso) : todayMx())
 
   // Gerente verifica transferencia pendiente: no tiene metodoPago, loan ya tiene seguroPendiente
   if (!data.metodoPago && loan.seguroPendiente) {

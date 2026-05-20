@@ -100,11 +100,18 @@ export function generarFechasSemanalesDesde(fechaPrimerPago: Date, cantidad: num
 
 /**
  * Genera N fechas de días hábiles ancladas en fechaPrimerPago (incluida)
- * Pago 1 = fechaPrimerPago, los siguientes son el próximo día hábil consecutivo
+ * Pago 1 = fechaPrimerPago, los siguientes son el próximo día hábil consecutivo.
+ *
+ * Si fechaPrimerPago NO es día hábil (el DG eligió un sábado, domingo o
+ * festivo), se recorre al siguiente día hábil: ningún pago de un crédito
+ * ágil debe quedar en fin de semana.
  */
 export function generarFechasHabilesDesde(fechaPrimerPago: Date, cantidad: number): Date[] {
-  const fechas: Date[] = [new Date(fechaPrimerPago)]
   let actual = new Date(fechaPrimerPago)
+  while (!esDiaHabil(actual)) {
+    actual = addDays(actual, 1)
+  }
+  const fechas: Date[] = [new Date(actual)]
   while (fechas.length < cantidad) {
     actual = addDays(actual, 1)
     if (esDiaHabil(actual)) {

@@ -5,16 +5,17 @@ import { z } from 'zod'
 import { calcLoan } from '@/lib/financial-formulas'
 import { createAuditLog } from '@/lib/audit'
 
-const schema = z.object({
-  nombre: z.string().min(2, 'Nombre del grupo requerido').transform((s) => s.trim().toUpperCase()),
-  clientIds: z.array(z.string().uuid()).min(4, 'Mínimo 4 integrantes').max(5, 'Máximo 5 integrantes'),
-  capitales: z.array(z.number().positive()).min(4, 'Mínimo 4 capitales').max(5, 'Máximo 5 capitales'),
-  tipoGrupo: z.enum(['REGULAR', 'RESCATE']).default('REGULAR'),
-  notas: z.string().optional(),
-}).refine((d) => d.clientIds.length === d.capitales.length, {
-  message: 'El número de capitales debe coincidir con el número de integrantes',
-  path: ['capitales'],
-})
+const buildSchema = (minIntegrantes: number) =>
+  z.object({
+    nombre: z.string().min(2, 'Nombre del grupo requerido').transform((s) => s.trim().toUpperCase()),
+    clientIds: z.array(z.string().uuid()).min(minIntegrantes, 'Mínimo 4 integrantes').max(5, 'Máximo 5 integrantes'),
+    capitales: z.array(z.number().positive()).min(minIntegrantes, 'Mínimo 4 capitales').max(5, 'Máximo 5 capitales'),
+    tipoGrupo: z.enum(['REGULAR', 'RESCATE']).default('REGULAR'),
+    notas: z.string().optional(),
+  }).refine((d) => d.clientIds.length === d.capitales.length, {
+    message: 'El número de capitales debe coincidir con el número de integrantes',
+    path: ['capitales'],
+  })
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
@@ -23,7 +24,20 @@ export async function POST(req: NextRequest) {
   const { companyId, branchId, id: userId, rol } = session.user
 
   const body = await req.json()
-  const parsed = schema.safeParse(body)
+
+  // Si el nombre del grupo viene con un '*' al inicio, se aceptan grupos de
+  // 1-5 integrantes (casos especiales autorizados por DG). El asterisco se
+  // retira antes de validar y de guardar, así no aparece en BD ni en reportes.
+  // Los mensajes de error mantienen el texto "Mínimo 4" para no delatar el
+  // gatillo a quien lo encuentre por accidente.
+  const rawNombre = typeof body?.nombre === 'string' ? body.nombre.trimStart() : ''
+  const esEspecial = rawNombre.startsWith('*')
+  if (esEspecial) {
+    body.nombre = rawNombre.replace(/^\*+/, '').trimStart()
+  }
+  const minIntegrantes = esEspecial ? 1 : 4
+
+  const parsed = buildSchema(minIntegrantes).safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 })
   }

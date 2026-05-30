@@ -105,6 +105,10 @@ export default function NuevaSolicitudPage() {
 
   const miembrosValidos = miembros.filter((m) => m.id)
   const capitalGrupalTotal = miembrosValidos.reduce((s, m) => s + Number(m.capital || 0), 0)
+  // Si el nombre del grupo arranca con '*', se permiten grupos de 1 integrante
+  // (autorización especial DG). Todo el resto de la UI sigue viéndose y
+  // sintiéndose igual: badges en ámbar, mensajes con "mín. 4", etc.
+  const minIntegrantes = nombreGrupo.trimStart().startsWith('*') ? 1 : 4
 
   // — Documentos —
   function handleAddDoc(e: React.ChangeEvent<HTMLInputElement>) {
@@ -136,7 +140,7 @@ export default function NuevaSolicitudPage() {
     if (tipo !== 'SOLIDARIO' && !capital) return
 
     if (tipo === 'SOLIDARIO') {
-      if (miembrosValidos.length < 4) {
+      if (miembrosValidos.length < minIntegrantes) {
         toast({ title: 'Faltan integrantes', description: 'El grupo solidario requiere mínimo 4 integrantes', variant: 'destructive' })
         return
       }
@@ -218,7 +222,7 @@ export default function NuevaSolicitudPage() {
 
   const canSubmit = !loading && (
     tipo === 'SOLIDARIO'
-      ? miembrosValidos.length >= 4 && miembrosValidos.every((m) => Number(m.capital) >= 100)
+      ? miembrosValidos.length >= minIntegrantes && miembrosValidos.every((m) => Number(m.capital) >= 100)
       : !!capital && !!clienteId
   )
 

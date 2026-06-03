@@ -56,8 +56,10 @@ export default async function RecursosHumanosPage() {
     contactoEmergencia: e.contactoEmergencia,
     parentesco:         e.parentesco,
     telefono2:          e.telefono2,
-    fechaEntrada:       e.fechaEntrada ? e.fechaEntrada.toISOString() : null,
-    fechaBaja:          e.fechaBaja    ? e.fechaBaja.toISOString()    : null,
+    // Date column → serializamos como YYYY-MM-DD para que el PATCH no
+    // reciba un ISO completo (el endpoint valida con regex).
+    fechaEntrada:       e.fechaEntrada ? e.fechaEntrada.toISOString().slice(0, 10) : null,
+    fechaBaja:          e.fechaBaja    ? e.fechaBaja.toISOString().slice(0, 10)    : null,
   }))
 
   return (

@@ -743,10 +743,13 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
       />
 
-      {/* Evidencia de desembolso (legacy) — solo cuando el préstamo ya está
-          ACTIVE y aún no tiene foto subida. En IN_ACTIVATION el upload se
-          hace desde el chip 3 de EstadoFlujoActivacion. */}
-      {loan.estado === 'ACTIVE' && !loan.desembolsoFotoUrl && (
+      {/* Evidencia de desembolso. Cuando el préstamo está ACTIVE el
+          componente decide qué renderizar:
+          - Con foto: tarjeta con GPS y botón "Ver foto" (todos los roles).
+          - Sin foto + rol puede subir: formulario de upload (legacy, para
+            créditos que se activaron antes del flujo de candados).
+          - Sin foto + Director (readOnly): no renderiza nada. */}
+      {loan.estado === 'ACTIVE' && (
         <DisbursementPhoto
           loanId={loan.id}
           fotoUrl={loan.desembolsoFotoUrl}

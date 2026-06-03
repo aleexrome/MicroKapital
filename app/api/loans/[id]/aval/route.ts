@@ -5,21 +5,25 @@ import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
 
 const updateAvalSchema = z.object({
-  avalNombre:   z.string().optional().nullable(),
-  avalTelefono: z.string().optional().nullable(),
-  avalRelacion: z.string().optional().nullable(),
+  avalNombre:      z.string().optional().nullable(),
+  avalTelefono:    z.string().optional().nullable(),
+  avalTelefonoAlt: z.string().optional().nullable(),
+  avalDireccion:   z.string().optional().nullable(),
+  avalRelacion:    z.string().optional().nullable(),
 })
 
 /**
  * PATCH /api/loans/[id]/aval
  *
- * Actualiza unicamente los tres campos del aval (nombre, telefono,
- * relacion). Cualquier rol autenticado puede llamarlo porque este dato
- * alimenta el sistema de recordatorios automaticos por voz: la cobradora
- * en campo a veces captura o corrige el contacto del aval sobre la
- * marcha, sobre todo en creditos viejos / renovados que se quedaron sin
- * aval registrado. Los demas campos del prestamo (capital, plazo, etc.)
- * NO se tocan aqui.
+ * Actualiza unicamente los campos del aval (nombre, telefono principal,
+ * telefono alterno, direccion, relacion). Cualquier rol autenticado puede
+ * llamarlo porque este dato alimenta el sistema de recordatorios
+ * automaticos por voz: la cobradora en campo a veces captura o corrige
+ * el contacto del aval sobre la marcha, sobre todo en creditos viejos /
+ * renovados que se quedaron sin aval registrado. Si el telefono principal
+ * no contesta, la IA intenta con el alterno, y la direccion es el fallback
+ * para visita en campo. Los demas campos del prestamo (capital, plazo,
+ * etc.) NO se tocan aqui.
  *
  * Solo aplica a INDIVIDUAL y FIDUCIARIO -- son los productos con aval.
  */
@@ -41,6 +45,8 @@ export async function PATCH(
       tipo: true,
       avalNombre: true,
       avalTelefono: true,
+      avalTelefonoAlt: true,
+      avalDireccion: true,
       avalRelacion: true,
     },
   })
@@ -61,7 +67,8 @@ export async function PATCH(
   }
   const data = parsed.data
 
-  // Normalizacion: nombres y relacion en MAYUSCULAS + trim; telefono solo trim.
+  // Normalizacion: nombres y relacion en MAYUSCULAS + trim; telefonos y
+  // direccion solo trim (la direccion puede llevar minusculas/numeros).
   const update: Record<string, unknown> = {}
   if (data.avalNombre !== undefined) {
     const v = (data.avalNombre ?? '').trim().toUpperCase()
@@ -70,6 +77,14 @@ export async function PATCH(
   if (data.avalTelefono !== undefined) {
     const v = (data.avalTelefono ?? '').trim()
     update.avalTelefono = v === '' ? null : v
+  }
+  if (data.avalTelefonoAlt !== undefined) {
+    const v = (data.avalTelefonoAlt ?? '').trim()
+    update.avalTelefonoAlt = v === '' ? null : v
+  }
+  if (data.avalDireccion !== undefined) {
+    const v = (data.avalDireccion ?? '').trim()
+    update.avalDireccion = v === '' ? null : v
   }
   if (data.avalRelacion !== undefined) {
     const v = (data.avalRelacion ?? '').trim().toUpperCase()
@@ -91,9 +106,11 @@ export async function PATCH(
     tabla: 'Loan',
     registroId: params.id,
     valoresAnteriores: {
-      avalNombre:   loan.avalNombre,
-      avalTelefono: loan.avalTelefono,
-      avalRelacion: loan.avalRelacion,
+      avalNombre:      loan.avalNombre,
+      avalTelefono:    loan.avalTelefono,
+      avalTelefonoAlt: loan.avalTelefonoAlt,
+      avalDireccion:   loan.avalDireccion,
+      avalRelacion:    loan.avalRelacion,
     },
     valoresNuevos: update,
     ipAddress: req.headers.get('x-forwarded-for') ?? undefined,

@@ -119,7 +119,7 @@ export function EditarTelefonoDialog({
 
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="telefono">Telefono principal</Label>
+                <Label htmlFor="telefono">Telefono del cliente</Label>
                 <Input
                   id="telefono"
                   type="tel"
@@ -132,7 +132,7 @@ export function EditarTelefonoDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="telefonoAlt">Telefono alterno (opcional)</Label>
+                <Label htmlFor="telefonoAlt">Telefono alterno del cliente (opcional)</Label>
                 <Input
                   id="telefonoAlt"
                   type="tel"

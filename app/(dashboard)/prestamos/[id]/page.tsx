@@ -699,14 +699,26 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                   loanId={loan.id}
                   initialNombre={loan.avalNombre}
                   initialTelefono={loan.avalTelefono}
+                  initialTelefonoAlt={loan.avalTelefonoAlt}
+                  initialDireccion={loan.avalDireccion}
                   initialRelacion={loan.avalRelacion}
-                  tieneAval={!!loan.avalNombre || !!loan.avalTelefono}
+                  tieneAval={!!loan.avalNombre || !!loan.avalTelefono || !!loan.avalDireccion}
                 />
               </div>
-              {loan.avalNombre ? (
+              {loan.avalNombre || loan.avalTelefono || loan.avalDireccion ? (
                 <>
-                  <p className="font-semibold">{loan.avalNombre}{loan.avalRelacion ? ` (${loan.avalRelacion})` : ''}</p>
-                  {loan.avalTelefono && <p className="text-xs text-muted-foreground">{loan.avalTelefono}</p>}
+                  {loan.avalNombre && (
+                    <p className="font-semibold">{loan.avalNombre}{loan.avalRelacion ? ` (${loan.avalRelacion})` : ''}</p>
+                  )}
+                  {loan.avalTelefono && (
+                    <p className="text-xs text-muted-foreground">
+                      {loan.avalTelefono}
+                      {loan.avalTelefonoAlt ? ` / ${loan.avalTelefonoAlt}` : ''}
+                    </p>
+                  )}
+                  {loan.avalDireccion && (
+                    <p className="text-xs text-muted-foreground">{loan.avalDireccion}</p>
+                  )}
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground italic">Sin aval registrado</p>

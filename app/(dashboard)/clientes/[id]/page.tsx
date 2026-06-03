@@ -360,6 +360,8 @@ export default async function ClienteExpedientePage({
                             loanId={loan.id}
                             initialNombre={loan.avalNombre}
                             initialTelefono={loan.avalTelefono}
+                            initialTelefonoAlt={loan.avalTelefonoAlt}
+                            initialDireccion={loan.avalDireccion}
                             initialRelacion={loan.avalRelacion}
                             tieneAval={tieneAvalCapturado}
                           />

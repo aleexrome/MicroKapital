@@ -38,6 +38,16 @@ function calcPct(a: number, b: number) {
   return b > 0 ? Math.round((a / b) * 100) : 0
 }
 
+/**
+ * Meta de colocación semanal en función de la cobranza semanal:
+ *   - cobranza <= $74,999  → meta fija de $40,000.
+ *   - cobranza >= $75,000  → meta = 70% de la cobranza.
+ * Se aplica igual a coordinador individual y a los agregados por gerencia.
+ */
+function metaColocacion(cobranzaSemanal: number): number {
+  return cobranzaSemanal <= 74_999 ? 40_000 : cobranzaSemanal * 0.7
+}
+
 function barColor(p: number, type: 'cobranza' | 'meta') {
   if (type === 'cobranza') {
     if (p >= 90) return 'bg-green-500'
@@ -402,7 +412,7 @@ export default async function RutaDetallePage({
 
     const { totalAPagar, totalCobrado, cobradosCount, scheduleCount: pactadosCount } = calcCobranza(schedules)
     const colocacion = loans.reduce((s, l) => s + Number(l.capital), 0)
-    const metaTarget = totalAPagar * 0.7
+    const metaTarget = metaColocacion(totalAPagar)
     const cobranzaPct = calcPct(totalCobrado, totalAPagar)
     const metaPct     = calcPct(colocacion, metaTarget)
 
@@ -667,7 +677,7 @@ export default async function RutaDetallePage({
       const uLoans  = aggregator ? wLoans     : wLoans.filter((l) => l.cobradorId === u.id)
       const { totalAPagar, totalCobrado, cobradosCount, scheduleCount } = calcCobranza(uSched)
       const colocacion  = uLoans.reduce((s, l) => s + Number(l.capital), 0)
-      const metaTarget  = totalAPagar * 0.7
+      const metaTarget  = metaColocacion(totalAPagar)
       return {
         id: u.id,
         nombre: u.nombre,
@@ -689,7 +699,7 @@ export default async function RutaDetallePage({
       cobradosCount: aggCobradosCount,
     } = calcCobranza(wSchedules)
     const aggColocacion = wLoans.reduce((s, l) => s + Number(l.capital), 0)
-    const aggMeta      = aggAPagar * 0.7
+    const aggMeta      = metaColocacion(aggAPagar)
     const aggCobranzaPct = calcPct(aggCobrado, aggAPagar)
     const aggMetaPct     = calcPct(aggColocacion, aggMeta)
     const aggSchedCount = wSchedules.length
@@ -843,7 +853,7 @@ export default async function RutaDetallePage({
         : wLoans.filter((l) => l.cobradorId === u.id)
       const { totalAPagar, totalCobrado, cobradosCount, scheduleCount } = calcCobranza(uSched)
       const colocacion = uLoans.reduce((s, l) => s + Number(l.capital), 0)
-      const metaTarget = totalAPagar * 0.7
+      const metaTarget = metaColocacion(totalAPagar)
       return {
         id: u.id,
         nombre: u.nombre,
@@ -866,7 +876,7 @@ export default async function RutaDetallePage({
       cobradosCount: aggCobradosCount,
     } = calcCobranza(wSchedules)
     const aggColocacion = wLoans.reduce((s, l) => s + Number(l.capital), 0)
-    const aggMeta       = aggAPagar * 0.7
+    const aggMeta       = metaColocacion(aggAPagar)
     const aggCobranzaPct = calcPct(aggCobrado, aggAPagar)
     const aggMetaPct     = calcPct(aggColocacion, aggMeta)
     const aggSchedCount = wSchedules.length

@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
 import { ClientRenovacionButton } from '@/components/loans/ClientRenovacionButton'
+import { EditarTelefonoDialog } from '@/components/clients/EditarTelefonoDialog'
+import { EditarAvalDialog } from '@/components/loans/EditarAvalDialog'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 import { formatDate, formatMoney } from '@/lib/utils'
 import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2, FolderOpen, Users, Pencil, ShieldCheck, FileText } from 'lucide-react'
@@ -155,13 +157,24 @@ export default async function ClienteExpedientePage({
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><User className="h-4 w-4" />Datos personales</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
-            {client.telefono && (
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-                <span>{client.telefono}</span>
-                {client.telefonoAlt && <span className="text-muted-foreground">/ {client.telefonoAlt}</span>}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                {client.telefono ? (
+                  <span className="truncate">
+                    {client.telefono}
+                    {client.telefonoAlt && <span className="text-muted-foreground"> / {client.telefonoAlt}</span>}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground italic">Sin teléfono</span>
+                )}
               </div>
-            )}
+              <EditarTelefonoDialog
+                clientId={client.id}
+                initialTelefono={client.telefono}
+                initialTelefonoAlt={client.telefonoAlt}
+              />
+            </div>
             {client.domicilio && (
               <div className="flex items-start gap-2">
                 <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
@@ -277,7 +290,8 @@ export default async function ClienteExpedientePage({
             <div className="space-y-3">
               {client.loans.map((loan) => {
                 const st = statusLabel[loan.estado] ?? { label: loan.estado, variant: 'outline' as const }
-                const tieneAval = (loan.tipo === 'INDIVIDUAL' || loan.tipo === 'FIDUCIARIO') && loan.avalNombre
+                const esCreditoConAval = loan.tipo === 'INDIVIDUAL' || loan.tipo === 'FIDUCIARIO'
+                const tieneAvalCapturado = !!loan.avalNombre || !!loan.avalTelefono
 
                 // Calcular elegibilidad de renovación anticipada
                 const umbral = UMBRAL_RENOVACION[loan.tipo]
@@ -327,15 +341,28 @@ export default async function ClienteExpedientePage({
                         </Button>
                       </div>
                     )}
-                    {tieneAval && (
+                    {esCreditoConAval && (
                       <div className="px-4 pb-3 border-t bg-muted/10">
-                        <div className="flex items-center gap-2 mt-2">
-                          <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <div className="text-xs text-muted-foreground">
-                            <span className="font-medium text-foreground">{loan.avalNombre}</span>
-                            {loan.avalRelacion ? ` · ${loan.avalRelacion}` : ''}
-                            {loan.avalTelefono ? ` · ${loan.avalTelefono}` : ''}
+                        <div className="flex items-center justify-between gap-2 mt-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            {tieneAvalCapturado ? (
+                              <div className="text-xs text-muted-foreground truncate">
+                                <span className="font-medium text-foreground">{loan.avalNombre ?? 'Sin nombre'}</span>
+                                {loan.avalRelacion ? ` · ${loan.avalRelacion}` : ''}
+                                {loan.avalTelefono ? ` · ${loan.avalTelefono}` : ''}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">Sin aval registrado</span>
+                            )}
                           </div>
+                          <EditarAvalDialog
+                            loanId={loan.id}
+                            initialNombre={loan.avalNombre}
+                            initialTelefono={loan.avalTelefono}
+                            initialRelacion={loan.avalRelacion}
+                            tieneAval={tieneAvalCapturado}
+                          />
                         </div>
                       </div>
                     )}

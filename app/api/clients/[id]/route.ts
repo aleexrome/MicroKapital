@@ -52,11 +52,18 @@ const updateClientSchema = z.object({
 })
 
 /**
- * Edicion de expediente de cliente -- solo DIRECTOR_GENERAL.
+ * Edicion de expediente de cliente.
  *
- * Stephanie necesita poder corregir errores de captura (p. ej. "|7225634881"
- * o domicilios en minusculas). El resto de roles NO puede editar clientes
- * -- tienen que pedirle a Direccion.
+ * - DIRECTOR_GENERAL puede actualizar cualquier campo (Stephanie necesita
+ *   poder corregir errores de captura: "|7225634881", domicilios en
+ *   minusculas, etc.).
+ * - Los demas roles autenticados pueden actualizar UNICAMENTE los telefonos
+ *   del cliente (telefono, telefonoAlt). Esto sirve para alimentar el
+ *   sistema de recordatorios automaticos por voz: cualquier persona en
+ *   campo que detecte un numero malo o ausente lo puede corregir/agregar
+ *   sin esperar a Direccion General. El resto del expediente (nombre, INE,
+ *   CURP, domicilio, etc.) sigue siendo dominio exclusivo del DG: si llegan
+ *   esos campos en el body para un rol distinto, se descartan en silencio.
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession()
@@ -66,9 +73,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const { rol, companyId, id: userId } = session.user
 
-  if (rol !== 'DIRECTOR_GENERAL') {
-    return NextResponse.json({ error: 'Solo Direccion General puede editar clientes' }, { status: 403 })
-  }
+  const esDG = rol === 'DIRECTOR_GENERAL'
 
   // Verificar que el cliente exista y sea de su empresa
   const existing = await prisma.client.findFirst({
@@ -78,7 +83,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
   }
 
-  const body = await req.json()
+  const bodyBruto = await req.json()
+
+  // Para roles distintos a DG: solo aceptamos los dos telefonos. Cualquier
+  // otro campo enviado en el body se descarta antes de validar.
+  const body = esDG
+    ? bodyBruto
+    : {
+        telefono:    bodyBruto?.telefono,
+        telefonoAlt: bodyBruto?.telefonoAlt,
+      }
+
   const parsed = updateClientSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 })

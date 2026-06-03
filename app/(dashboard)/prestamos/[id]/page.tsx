@@ -12,6 +12,7 @@ import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
 import { ScheduleDateEditor } from '@/components/loans/ScheduleDateEditor'
 import { EstadoFlujoActivacion } from '@/components/loans/EstadoFlujoActivacion'
 import { ComenzarActivacionButton } from '@/components/loans/ComenzarActivacionButton'
+import { EditarAvalDialog } from '@/components/loans/EditarAvalDialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatMoney, formatDate } from '@/lib/utils'
@@ -690,11 +691,26 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               </p>
             </div>
           )}
-          {loan.avalNombre && (
+          {(loan.tipo === 'INDIVIDUAL' || loan.tipo === 'FIDUCIARIO') && (
             <div>
-              <p className="text-muted-foreground">Aval</p>
-              <p className="font-semibold">{loan.avalNombre}{loan.avalRelacion ? ` (${loan.avalRelacion})` : ''}</p>
-              {loan.avalTelefono && <p className="text-xs text-muted-foreground">{loan.avalTelefono}</p>}
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-muted-foreground">Aval</p>
+                <EditarAvalDialog
+                  loanId={loan.id}
+                  initialNombre={loan.avalNombre}
+                  initialTelefono={loan.avalTelefono}
+                  initialRelacion={loan.avalRelacion}
+                  tieneAval={!!loan.avalNombre || !!loan.avalTelefono}
+                />
+              </div>
+              {loan.avalNombre ? (
+                <>
+                  <p className="font-semibold">{loan.avalNombre}{loan.avalRelacion ? ` (${loan.avalRelacion})` : ''}</p>
+                  {loan.avalTelefono && <p className="text-xs text-muted-foreground">{loan.avalTelefono}</p>}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">Sin aval registrado</p>
+              )}
             </div>
           )}
         </CardContent>

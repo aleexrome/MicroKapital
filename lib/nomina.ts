@@ -179,9 +179,11 @@ export async function calcularNominaSemana(
         tipo: true,
         capital: true,
         loanOriginalId: true,
+        loanGroupId: true,
         cobradorId: true,
         branchId: true,
         client: { select: { nombreCompleto: true } },
+        loanGroup: { select: { nombre: true } },
       },
     }),
   ])
@@ -218,25 +220,65 @@ export async function calcularNominaSemana(
   }
 
   // Colocación por cobrador y por branch.
-  const creditosPorCobrador = new Map<string, NominaCredito[]>()
+  //
+  // Tratamiento especial de SOLIDARIO: cada miembro del grupo es una fila
+  // en Loan, pero la comisión se paga UNA vez por grupo, no por miembro.
+  // Por eso colapsamos los miembros de cada grupo en una sola entrada de
+  // creditosPorCobrador (con el capital sumado de todos los integrantes
+  // y el nombre del grupo como cliente). En cambio el monto total para
+  // el 1% de colocación de Senior sí suma todo (siempre representa el
+  // dinero efectivamente colocado en la semana).
+  const creditosPorCobrador   = new Map<string, NominaCredito[]>()
   const colocMontoPorCobrador = new Map<string, number>()
   const colocMontoPorBranch   = new Map<string, number>()
+  const grupoSolidarioIndex   = new Map<string, NominaCredito>() // loanGroupId → credito
+
   for (const l of loans) {
     const capital = l.capital.toNumber()
+
+    // Acumulado monetario (para el 1% del Senior) — esto SÍ suma por miembro.
+    colocMontoPorCobrador.set(l.cobradorId, (colocMontoPorCobrador.get(l.cobradorId) ?? 0) + capital)
+    colocMontoPorBranch.set(l.branchId,     (colocMontoPorBranch.get(l.branchId)     ?? 0) + capital)
+
+    // Para la lista de créditos (que controla la comisión por crédito y se
+    // muestra en el desglose), SOLIDARIO agrupa por loanGroupId.
+    if (l.tipo === 'SOLIDARIO' && l.loanGroupId) {
+      const existing = grupoSolidarioIndex.get(l.loanGroupId)
+      if (existing) {
+        existing.capital += capital
+        // esRenovacion: si CUALQUIER miembro trae loanOriginalId marcamos
+        // todo el grupo como renovación (en la práctica es uniforme).
+        if (l.loanOriginalId !== null) existing.esRenovacion = true
+        continue
+      }
+      const credito: NominaCredito = {
+        id: l.loanGroupId,
+        tipo: 'SOLIDARIO',
+        esRenovacion: l.loanOriginalId !== null,
+        capital,
+        comision: 0,
+        clienteNombre: l.loanGroup?.nombre ?? null,
+      }
+      grupoSolidarioIndex.set(l.loanGroupId, credito)
+      const arr = creditosPorCobrador.get(l.cobradorId) ?? []
+      arr.push(credito)
+      creditosPorCobrador.set(l.cobradorId, arr)
+      continue
+    }
+
+    // INDIVIDUAL / AGIL / FIDUCIARIO (o SOLIDARIO sin grupo, caso raro):
+    // se cuenta por loan, igual que antes.
     const credito: NominaCredito = {
       id: l.id,
       tipo: l.tipo as LoanTipo,
       esRenovacion: l.loanOriginalId !== null,
       capital,
-      comision: 0, // se setea adelante cuando ya sepamos el perfil del cobrador
+      comision: 0,
       clienteNombre: l.client?.nombreCompleto ?? null,
     }
     const arr = creditosPorCobrador.get(l.cobradorId) ?? []
     arr.push(credito)
     creditosPorCobrador.set(l.cobradorId, arr)
-
-    colocMontoPorCobrador.set(l.cobradorId, (colocMontoPorCobrador.get(l.cobradorId) ?? 0) + capital)
-    colocMontoPorBranch.set(l.branchId,     (colocMontoPorBranch.get(l.branchId)     ?? 0) + capital)
   }
 
   const result: NominaEmpleado[] = []

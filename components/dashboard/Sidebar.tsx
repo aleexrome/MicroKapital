@@ -32,6 +32,7 @@ import {
   UserCheck,
   Navigation,
   CalendarClock,
+  BriefcaseBusiness,
 } from 'lucide-react'
 import type { BranchTreeData } from '@/types/tree'
 
@@ -126,6 +127,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Reportes',
     icon: <BarChart3 className="h-5 w-5" />,
     roles: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
+  },
+  {
+    href: '/recursos-humanos',
+    label: 'Recursos Humanos',
+    icon: <BriefcaseBusiness className="h-5 w-5" />,
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   {
     href: '/admin',

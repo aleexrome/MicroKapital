@@ -102,8 +102,11 @@ export function EmpleadoFormDialog({ empleado, sucursalesSugeridas, trigger = 'b
       contactoEmergencia: form.contactoEmergencia || null,
       parentesco:         form.parentesco         || null,
       telefono2:          form.telefono2          || null,
-      fechaEntrada:       form.fechaEntrada       || null,
-      fechaBaja:          form.fechaBaja          || null,
+      // Si el campo trae aún el ISO completo del server, le pelamos los
+      // primeros 10 caracteres para mandar solo YYYY-MM-DD (el endpoint
+      // valida con regex y rechaza el ISO con T...Z).
+      fechaEntrada:       form.fechaEntrada ? form.fechaEntrada.slice(0, 10) : null,
+      fechaBaja:          form.fechaBaja    ? form.fechaBaja.slice(0, 10)    : null,
     }
 
     try {

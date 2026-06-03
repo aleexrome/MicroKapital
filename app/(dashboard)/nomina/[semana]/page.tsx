@@ -45,8 +45,6 @@ export default async function NominaSemanaPage({
   // Navegación semana anterior / siguiente
   const prevSat = new Date(saturday); prevSat.setUTCDate(prevSat.getUTCDate() - 7)
   const nextSat = new Date(saturday); nextSat.setUTCDate(nextSat.getUTCDate() + 7)
-  const cierreSemana = new Date(saturday); cierreSemana.setUTCDate(cierreSemana.getUTCDate() + 6); cierreSemana.setUTCHours(20, 0, 0, 0)
-  const yaCerrada    = new Date() >= cierreSemana
 
   return (
     <NominaClient
@@ -57,8 +55,6 @@ export default async function NominaSemanaPage({
       semanaAnteriorId={saturdayToId(prevSat)}
       semanaSiguienteId={saturdayToId(nextSat)}
       isCurrent={isCurrent}
-      yaCerrada={yaCerrada}
-      cutoffISO={cutoff.toISOString()}
     />
   )
 }

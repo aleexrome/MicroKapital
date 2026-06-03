@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
-  ArrowLeft, ArrowRight, CheckCircle2, XCircle, Search, AlertCircle, Wallet,
+  ArrowLeft, ArrowRight, CheckCircle2, XCircle, Search, Wallet,
   TrendingUp, Target, Coins,
 } from 'lucide-react'
 
@@ -52,8 +52,6 @@ interface Props {
   semanaAnteriorId: string
   semanaSiguienteId: string
   isCurrent: boolean
-  yaCerrada: boolean
-  cutoffISO: string
 }
 
 function formatMoney(value: number): string {
@@ -78,7 +76,7 @@ function PerfilBadge({ perfil }: { perfil: 'JUNIOR' | 'EXCELENCIA' | 'SENIOR' | 
 }
 
 export function NominaClient(props: Props) {
-  const { nomina, vistaCompleta, semanaLabel, semanaAnteriorId, semanaSiguienteId, isCurrent, yaCerrada, cutoffISO } = props
+  const { nomina, vistaCompleta, semanaLabel, semanaAnteriorId, semanaSiguienteId, isCurrent } = props
 
   const [q, setQ] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
@@ -124,26 +122,6 @@ export function NominaClient(props: Props) {
           </Button>
         </div>
       </div>
-
-      {/* Aviso de corte */}
-      <Card className={`border-l-4 ${yaCerrada ? 'border-l-gray-400 bg-gray-50' : 'border-l-amber-500 bg-amber-50'}`}>
-        <CardContent className="p-3 text-sm flex items-start gap-2">
-          <AlertCircle className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
-          <div>
-            {yaCerrada ? (
-              <span>Semana cerrada — corte aplicado el viernes a las 14:00 CDMX. Cualquier captura posterior no cuenta para esta nómina.</span>
-            ) : (
-              <span>
-                Semana en curso — se cuentan capturas hasta el <strong>viernes 14:00 CDMX</strong>.
-                Datos al{' '}
-                <strong>
-                  {new Date(cutoffISO).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Mexico_City' })}
-                </strong>.
-              </span>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Totales (solo en vista de director) */}
       {vistaCompleta && (
@@ -208,7 +186,7 @@ export function NominaClient(props: Props) {
                     <th className="text-right py-2 px-2 font-medium">Colocación %</th>
                     <th className="text-center py-2 px-2 font-medium">Cumple</th>
                     <th className="text-right py-2 px-2 font-medium">Sueldo base</th>
-                    <th className="text-right py-2 px-2 font-medium">Variable</th>
+                    <th className="text-right py-2 px-2 font-medium">Comisiones</th>
                     <th className="text-right py-2 px-2 font-medium">Total</th>
                   </tr>
                 </thead>

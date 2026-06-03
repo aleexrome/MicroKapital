@@ -10,18 +10,20 @@ import { Loader2, Users, Pencil, X } from 'lucide-react'
 
 interface EditarAvalDialogProps {
   loanId: string
-  initialNombre:   string | null
-  initialTelefono: string | null
-  initialRelacion: string | null
+  initialNombre:      string | null
+  initialTelefono:    string | null
+  initialTelefonoAlt: string | null
+  initialDireccion:   string | null
+  initialRelacion:    string | null
   /** Si false, el boton dice "Agregar aval" en vez de "Editar aval". */
   tieneAval: boolean
 }
 
 /**
- * Boton + dialogo para capturar/editar los tres campos del aval del
- * prestamo. Muchos creditos viejos o renovados quedaron sin aval
- * registrado, asi que el aval entra por aqui: nombre primero (para
- * saber de quien es el numero), luego telefono, luego relacion.
+ * Boton + dialogo para capturar/editar los datos del aval del prestamo.
+ * Muchos creditos viejos o renovados quedaron sin aval registrado, asi
+ * que aqui entra todo: nombre (primero, para saber de quien es el
+ * numero), direccion, telefono, telefono alterno y relacion.
  *
  * Cualquier rol autenticado puede llamarlo.
  */
@@ -29,6 +31,8 @@ export function EditarAvalDialog({
   loanId,
   initialNombre,
   initialTelefono,
+  initialTelefonoAlt,
+  initialDireccion,
   initialRelacion,
   tieneAval,
 }: EditarAvalDialogProps) {
@@ -36,16 +40,20 @@ export function EditarAvalDialog({
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [nombre,   setNombre]   = useState(initialNombre   ?? '')
-  const [telefono, setTelefono] = useState(initialTelefono ?? '')
-  const [relacion, setRelacion] = useState(initialRelacion ?? '')
+  const [nombre,      setNombre]      = useState(initialNombre      ?? '')
+  const [telefono,    setTelefono]    = useState(initialTelefono    ?? '')
+  const [telefonoAlt, setTelefonoAlt] = useState(initialTelefonoAlt ?? '')
+  const [direccion,   setDireccion]   = useState(initialDireccion   ?? '')
+  const [relacion,    setRelacion]    = useState(initialRelacion    ?? '')
 
   function close() {
     if (loading) return
     setOpen(false)
-    setNombre(initialNombre   ?? '')
-    setTelefono(initialTelefono ?? '')
-    setRelacion(initialRelacion ?? '')
+    setNombre(initialNombre           ?? '')
+    setTelefono(initialTelefono       ?? '')
+    setTelefonoAlt(initialTelefonoAlt ?? '')
+    setDireccion(initialDireccion     ?? '')
+    setRelacion(initialRelacion       ?? '')
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -56,9 +64,11 @@ export function EditarAvalDialog({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          avalNombre:   nombre.trim()   || null,
-          avalTelefono: telefono.trim() || null,
-          avalRelacion: relacion.trim() || null,
+          avalNombre:      nombre.trim()      || null,
+          avalTelefono:    telefono.trim()    || null,
+          avalTelefonoAlt: telefonoAlt.trim() || null,
+          avalDireccion:   direccion.trim()   || null,
+          avalRelacion:    relacion.trim()    || null,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -123,7 +133,7 @@ export function EditarAvalDialog({
 
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="avalNombre">Nombre completo</Label>
+                <Label htmlFor="avalNombre">Nombre completo del aval</Label>
                 <Input
                   id="avalNombre"
                   autoFocus
@@ -134,7 +144,17 @@ export function EditarAvalDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="avalTelefono">Telefono</Label>
+                <Label htmlFor="avalDireccion">Direccion del aval</Label>
+                <Input
+                  id="avalDireccion"
+                  placeholder="Calle, numero, colonia, municipio"
+                  value={direccion}
+                  onChange={(e) => setDireccion(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="avalTelefono">Telefono del aval</Label>
                 <Input
                   id="avalTelefono"
                   type="tel"
@@ -142,6 +162,18 @@ export function EditarAvalDialog({
                   placeholder="Ej: 7225634881"
                   value={telefono}
                   onChange={(e) => setTelefono(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="avalTelefonoAlt">Telefono alterno del aval</Label>
+                <Input
+                  id="avalTelefonoAlt"
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="Otro numero del aval (opcional)"
+                  value={telefonoAlt}
+                  onChange={(e) => setTelefonoAlt(e.target.value)}
                   disabled={loading}
                 />
               </div>

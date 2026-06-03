@@ -331,6 +331,8 @@ model Loan {
   // Aval
   avalNombre             String?
   avalTelefono           String?
+  avalTelefonoAlt        String?
+  avalDireccion          String?
   avalRelacion           String? // "CONYUGE", "FAMILIAR", "CONOCIDO", etc.
   // Aprobación
   aprobadoPorId          String?

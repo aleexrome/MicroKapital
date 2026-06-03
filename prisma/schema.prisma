@@ -120,6 +120,7 @@ model Company {
   settings      CompanySetting[]
   bankAccounts  CompanyBankAccount[]
   goals         Goal[]
+  employees     EmployeeRecord[]
 }
 
 model License {
@@ -752,4 +753,47 @@ model SolicitudCancelacionLimbo {
   loan        Loan  @relation(fields: [loanId], references: [id], onDelete: Cascade)
   solicitante User  @relation("SolicitanteCancelacion", fields: [solicitadoPor], references: [id])
   aprobador   User? @relation("AprobadorCancelacion", fields: [aprobadoPor], references: [id])
+}
+
+// ─── RECURSOS HUMANOS ────────────────────────────────────────────────────────
+//
+// Registro de empleados independiente del modelo User. User existe para
+// que la persona inicie sesión y opere la app; EmployeeRecord existe para
+// que Recursos Humanos lleve el control administrativo (datos personales,
+// sueldo, fecha de baja, etc.). Los dos universos son paralelos: hay
+// empleados sin cuenta de app y cuentas de app sin ficha de RH.
+
+enum EmpleadoEstatus {
+  ACTIVO
+  BAJA
+}
+
+model EmployeeRecord {
+  id                  String          @id @default(uuid())
+  companyId           String
+  company             Company         @relation(fields: [companyId], references: [id])
+
+  nombre              String
+  sucursal            String?         // texto libre — autocompletar con sucursales reales en UI
+  estatus             EmpleadoEstatus @default(ACTIVO)
+  nacionalidad        String?
+  edad                Int?
+  identificacion      String?
+  estadoCivil         String?
+  domicilio           String?
+  sueldo              Decimal?        @db.Decimal(12, 2)
+  base                String?         // monto en letras: "(DOS MIL PESOS 00/100 MN)"
+  puesto              String?
+  profesion           String?         // escolaridad
+  telefono            String?
+  contactoEmergencia  String?
+  parentesco          String?
+  telefono2           String?
+  fechaEntrada        DateTime?       @db.Date
+  fechaBaja           DateTime?       @db.Date
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([companyId])
 }

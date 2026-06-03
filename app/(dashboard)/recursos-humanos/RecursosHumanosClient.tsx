@@ -29,6 +29,30 @@ function formatMoney(value: number | string | null): string {
   return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })
 }
 
+const PERFIL_STYLES: Record<'JUNIOR' | 'EXCELENCIA' | 'SENIOR', { bg: string; text: string; label: string }> = {
+  JUNIOR:     { bg: 'bg-amber-100',  text: 'text-amber-800',  label: 'Junior' },
+  EXCELENCIA: { bg: 'bg-blue-100',   text: 'text-blue-800',   label: 'Excelencia' },
+  SENIOR:     { bg: 'bg-emerald-100', text: 'text-emerald-800', label: 'Senior' },
+}
+
+function PerfilBadge({ perfil, cobranzaSemanal }: { perfil?: 'JUNIOR' | 'EXCELENCIA' | 'SENIOR' | null; cobranzaSemanal?: number | null }) {
+  if (!perfil) {
+    return <span className="text-muted-foreground italic text-xs" title="Sin cuenta de app o sin cobranza ligada">—</span>
+  }
+  const style = PERFIL_STYLES[perfil]
+  const tooltip = cobranzaSemanal !== null && cobranzaSemanal !== undefined
+    ? `Cobranza semanal: ${formatMoney(cobranzaSemanal)}`
+    : undefined
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${style.bg} ${style.text}`}
+      title={tooltip}
+    >
+      {style.label}
+    </span>
+  )
+}
+
 export function RecursosHumanosClient({ empleados, sucursalesSugeridas }: Props) {
   const [q, setQ] = useState('')
 
@@ -91,6 +115,7 @@ export function RecursosHumanosClient({ empleados, sucursalesSugeridas }: Props)
                     <th className="text-left py-2 px-2 font-medium">Teléfono</th>
                     <th className="text-right py-2 px-2 font-medium">Sueldo</th>
                     <th className="text-left py-2 px-2 font-medium">Entrada</th>
+                    <th className="text-left py-2 px-2 font-medium">Perfil</th>
                     <th className="text-left py-2 px-2 font-medium">Estatus</th>
                     <th className="text-right py-2 px-2 font-medium">Acciones</th>
                   </tr>
@@ -104,6 +129,9 @@ export function RecursosHumanosClient({ empleados, sucursalesSugeridas }: Props)
                       <td className="py-2 px-2 text-muted-foreground">{emp.telefono ?? '—'}</td>
                       <td className="py-2 px-2 text-right tabular-nums">{formatMoney(emp.sueldo)}</td>
                       <td className="py-2 px-2 text-muted-foreground text-xs">{formatDate(emp.fechaEntrada)}</td>
+                      <td className="py-2 px-2">
+                        <PerfilBadge perfil={emp.perfil} cobranzaSemanal={emp.cobranzaSemanal} />
+                      </td>
                       <td className="py-2 px-2">
                         <Badge variant={emp.estatus === 'ACTIVO' ? 'default' : 'outline'}>
                           {emp.estatus === 'ACTIVO' ? 'Activo' : 'Baja'}

@@ -28,6 +28,9 @@ export interface EmpleadoData {
   telefono2:            string | null
   fechaEntrada:         string | null  // ISO o YYYY-MM-DD
   fechaBaja:            string | null
+  // Campos derivados (solo display, no se envían al PATCH).
+  perfil?:              'JUNIOR' | 'EXCELENCIA' | 'SENIOR' | null
+  cobranzaSemanal?:     number | null
 }
 
 interface Props {

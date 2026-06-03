@@ -20,32 +20,16 @@ import {
   ImprimirRutaButton,
   type RutaCobroRow, type RutaColocacionRow,
 } from '@/components/rutas/ImprimirRutaButton'
+import {
+  GERENTES_AGREGADOS_POR_SUCURSAL,
+  metaColocacion,
+} from '@/lib/cobranza-semanal'
 import type { ScheduleStatus, Prisma } from '@prisma/client'
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
-// Gerentes que no tienen clientes asignados como cobradores. Por decisión
-// de Dirección General, su tarjeta de "Rutas" y su drill-down muestran el
-// agregado de toda su sucursal en lugar de su (vacía) cobranza personal.
-// Edgar Solís Pérez y Héctor Eulises Rodríguez Guzmán son los únicos en
-// este caso; el resto de gerentes sí tiene cartera propia.
-const GERENTES_AGREGADOS_POR_SUCURSAL = new Set<string>([
-  '3d189694-644b-4b28-b28d-2762a8bad0fb', // Edgar Solís Pérez
-  'e31f210d-332a-40c8-81c2-fef20589cebc', // Héctor Eulises Rodríguez Guzmán
-])
-
 function calcPct(a: number, b: number) {
   return b > 0 ? Math.round((a / b) * 100) : 0
-}
-
-/**
- * Meta de colocación semanal en función de la cobranza semanal:
- *   - cobranza <= $74,999  → meta fija de $40,000.
- *   - cobranza >= $75,000  → meta = 70% de la cobranza.
- * Se aplica igual a coordinador individual y a los agregados por gerencia.
- */
-function metaColocacion(cobranzaSemanal: number): number {
-  return cobranzaSemanal <= 74_999 ? 40_000 : cobranzaSemanal * 0.7
 }
 
 function barColor(p: number, type: 'cobranza' | 'meta') {

@@ -135,6 +135,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   {
+    href: '/nomina',
+    label: 'Nómina',
+    icon: <Wallet className="h-5 w-5" />,
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'GERENTE_ZONAL', 'GERENTE', 'COORDINADOR', 'COBRADOR'],
+  },
+  {
     href: '/admin',
     label: 'Administración',
     icon: <Shield className="h-5 w-5" />,

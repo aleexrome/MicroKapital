@@ -46,9 +46,10 @@ export async function POST(
 
   // ── SOLIDARIO grupal ─────────────────────────────────────────────────────
   // Si el cliente del grupo rechaza, todo el grupo del mismo ciclo debe
-  // quedar cancelado — antes solo se cancelaba la coordinadora (o el
-  // integrante al que se le presionó el botón) y los demás se quedaban
-  // colgados en APPROVED y, pasadas 72h, en limbo. Filtro de ciclo igual
+  // quedar cancelado. La búsqueda incluye APPROVED y IN_ACTIVATION porque
+  // pudo haberse iniciado activación y luego usado "Volver atrás" solo en
+  // la coordinadora — las demás integrantes se quedan en IN_ACTIVATION y,
+  // sin esta propagación, caen en limbo. El filtro de ciclo es el mismo
   // que start-activation: original vs renovación se distinguen por
   // loanOriginalId.
   let loanIdsARechazar: string[] = [loan.id]
@@ -63,7 +64,7 @@ export async function POST(
     const integrantes = await prisma.loan.findMany({
       where: {
         loanGroupId: loan.loanGroupId,
-        estado: 'APPROVED',
+        estado: { in: ['APPROVED', 'IN_ACTIVATION'] },
         companyId: companyId!,
         ...cicloFilter,
       },

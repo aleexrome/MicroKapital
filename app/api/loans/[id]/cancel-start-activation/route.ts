@@ -36,6 +36,7 @@ export async function POST(
     select: {
       id: true, estado: true, cobradorId: true, branchId: true, companyId: true,
       desembolsoFotoUrl: true, capital: true,
+      tipo: true, loanGroupId: true, loanOriginalId: true,
       client: { select: { nombreCompleto: true } },
     },
   })
@@ -108,6 +109,36 @@ export async function POST(
     )
   }
 
+  // ── SOLIDARIO grupal ─────────────────────────────────────────────────────
+  // Si el préstamo es parte de un grupo solidario, "Volver atrás" debe
+  // regresar a TODOS los integrantes del mismo ciclo a APPROVED. Antes solo
+  // se revertía el préstamo individual, dejando al resto colgado en
+  // IN_ACTIVATION — pasadas 72h caían en limbo y se rompían los grupos
+  // ante cualquier intento de rechazo o cancelación posterior.
+  let loanIdsAVolverAtras: string[] = [loan.id]
+  let reversionGrupal = false
+
+  if (loan.tipo === 'SOLIDARIO' && loan.loanGroupId) {
+    const esRenovacion = loan.loanOriginalId !== null
+    const cicloFilter = esRenovacion
+      ? { loanOriginalId: { not: null } }
+      : { loanOriginalId: null }
+
+    const integrantes = await prisma.loan.findMany({
+      where: {
+        loanGroupId: loan.loanGroupId,
+        estado: 'IN_ACTIVATION',
+        companyId: companyId!,
+        ...cicloFilter,
+      },
+      select: { id: true },
+    })
+    if (integrantes.length > 0) {
+      loanIdsAVolverAtras = integrantes.map((i) => i.id)
+      reversionGrupal = integrantes.length > 1
+    }
+  }
+
   // ── Regresar a APPROVED + borrar el contrato sin firmar ───────────────────
   // Si se generó un contrato, hay que eliminarlo: como no está firmado
   // (ya se validó arriba), al reintentar la activación el flujo debe volver
@@ -126,8 +157,8 @@ export async function POST(
         ],
       },
     }),
-    prisma.loan.update({
-      where: { id: loan.id },
+    prisma.loan.updateMany({
+      where: { id: { in: loanIdsAVolverAtras } },
       data: {
         estado: 'APPROVED',
         activationStartedAt: null,
@@ -137,10 +168,14 @@ export async function POST(
 
   createAuditLog({
     userId,
-    accion: 'CANCEL_START_ACTIVATION',
+    accion: reversionGrupal ? 'CANCEL_START_ACTIVATION_GROUP' : 'CANCEL_START_ACTIVATION',
     tabla: 'Loan',
     registroId: loan.id,
-    valoresNuevos: { estado: 'APPROVED', motivo: 'Volver atrás antes de avance' },
+    valoresNuevos: {
+      estado: 'APPROVED',
+      motivo: 'Volver atrás antes de avance',
+      ...(reversionGrupal ? { integrantesRevertidos: loanIdsAVolverAtras } : {}),
+    },
   })
 
   // Notificar a cobradora + GZ + DG/DC. Best-effort.

@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { type Prisma } from '@prisma/client'
 import { createAuditLog } from '@/lib/audit'
 
+const RAZON_RECHAZO = 'Cliente no aceptó las condiciones ofrecidas'
+
 export async function POST(
   _req: NextRequest,
   { params }: { params: { id: string } }
@@ -32,6 +34,9 @@ export async function POST(
 
   const loan = await prisma.loan.findFirst({
     where: rejectWhere,
+    select: {
+      id: true, estado: true, tipo: true, loanGroupId: true, loanOriginalId: true,
+    },
   })
 
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
@@ -39,25 +44,61 @@ export async function POST(
     return NextResponse.json({ error: 'Solo se puede rechazar un crédito en estado Aprobado' }, { status: 400 })
   }
 
-  await prisma.loan.update({
-    where: { id: loan.id },
+  // ── SOLIDARIO grupal ─────────────────────────────────────────────────────
+  // Si el cliente del grupo rechaza, todo el grupo del mismo ciclo debe
+  // quedar cancelado — antes solo se cancelaba la coordinadora (o el
+  // integrante al que se le presionó el botón) y los demás se quedaban
+  // colgados en APPROVED y, pasadas 72h, en limbo. Filtro de ciclo igual
+  // que start-activation: original vs renovación se distinguen por
+  // loanOriginalId.
+  let loanIdsARechazar: string[] = [loan.id]
+  let rechazoGrupal = false
+
+  if (loan.tipo === 'SOLIDARIO' && loan.loanGroupId) {
+    const esRenovacion = loan.loanOriginalId !== null
+    const cicloFilter: Prisma.LoanWhereInput = esRenovacion
+      ? { loanOriginalId: { not: null } }
+      : { loanOriginalId: null }
+
+    const integrantes = await prisma.loan.findMany({
+      where: {
+        loanGroupId: loan.loanGroupId,
+        estado: 'APPROVED',
+        companyId: companyId!,
+        ...cicloFilter,
+      },
+      select: { id: true },
+    })
+    if (integrantes.length > 0) {
+      loanIdsARechazar = integrantes.map((i) => i.id)
+      rechazoGrupal = integrantes.length > 1
+    }
+  }
+
+  await prisma.loan.updateMany({
+    where: { id: { in: loanIdsARechazar } },
     data: {
       estado: 'REJECTED',
-      razonRechazo: 'Cliente no aceptó las condiciones ofrecidas',
+      razonRechazo: RAZON_RECHAZO,
     },
   })
 
   createAuditLog({
     userId,
-    accion: 'CLIENT_REJECT_LOAN',
+    accion: rechazoGrupal ? 'CLIENT_REJECT_GROUP' : 'CLIENT_REJECT_LOAN',
     tabla: 'Loan',
     registroId: loan.id,
     valoresNuevos: {
       estado: 'REJECTED',
-      razonRechazo: 'Cliente no aceptó las condiciones ofrecidas',
+      razonRechazo: RAZON_RECHAZO,
       registradoPorId: userId,
+      ...(rechazoGrupal ? { integrantesRechazados: loanIdsARechazar } : {}),
     },
   })
 
-  return NextResponse.json({ message: 'Crédito cancelado — el cliente no aceptó las condiciones' })
+  return NextResponse.json({
+    message: rechazoGrupal
+      ? `Crédito grupal cancelado — el cliente no aceptó las condiciones (${loanIdsARechazar.length} integrantes)`
+      : 'Crédito cancelado — el cliente no aceptó las condiciones',
+  })
 }

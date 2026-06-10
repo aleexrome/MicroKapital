@@ -1,4 +1,5 @@
 import { TrafficCone } from 'lucide-react'
+import Link from 'next/link'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -42,12 +43,12 @@ export default function MantenimientoPage() {
         </p>
 
         <div className="pt-2">
-          <button
-            type="button"
+          <Link
+            href="/mantenimiento/pro"
             className="inline-flex items-center justify-center rounded-lg bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-500/30 hover:bg-orange-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 focus:ring-offset-black"
           >
             Actualizar a Pro
-          </button>
+          </Link>
         </div>
 
         <p className="text-xs text-gray-600 pt-8">

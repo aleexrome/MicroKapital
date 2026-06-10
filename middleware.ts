@@ -13,8 +13,30 @@ const PUBLIC_PATHS = [
 const SUPER_ADMIN_PATH = '/sys-mnt-9x7k'
 const CLIENT_PORTAL_PATHS = ['/mi-cuenta', '/mis-pagos', '/mis-documentos']
 
+// Modo mantenimiento: cuando la env var MAINTENANCE_MODE === 'true', toda
+// la app (incluyendo /login) se rewrite a /mantenimiento. La URL del
+// browser se conserva pero el contenido es la pantalla de candado.
+// Para desactivar: quitar/setear false la env var en Vercel y redeployar.
+const MAINTENANCE_ALLOWED_PATHS = [
+  '/mantenimiento',
+  '/_next',
+  '/favicon',
+]
+const MAINTENANCE_ALLOWED_EXTENSIONS = /\.(png|svg|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|eot)$/i
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
+
+  // 0. Modo mantenimiento — corta antes que cualquier otra lógica.
+  if (process.env.MAINTENANCE_MODE === 'true') {
+    const allowed =
+      MAINTENANCE_ALLOWED_PATHS.some((p) => pathname.startsWith(p)) ||
+      MAINTENANCE_ALLOWED_EXTENSIONS.test(pathname)
+    if (!allowed) {
+      return NextResponse.rewrite(new URL('/mantenimiento', req.url))
+    }
+    return NextResponse.next()
+  }
 
   // 1. Rutas públicas → pasar
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {

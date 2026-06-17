@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
+import { loanNotDeletedWhere } from '@/lib/access'
 
 /**
  * Lógica compartida de "cobranza semanal" (sábado a viernes) y derivados.
@@ -70,6 +71,10 @@ export async function cobranzaSemanalPorUsuario(
       loan: {
         companyId,
         estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
+        // Excluimos clientes y grupos soft-deleted para que esta cifra
+        // (que alimenta perfil en RH y nómina semanal) coincida con la
+        // que ve el coordinador en su propia ruta.
+        AND: [loanNotDeletedWhere],
       },
     },
     select: {

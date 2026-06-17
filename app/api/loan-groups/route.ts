@@ -44,12 +44,20 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Verificar que todos los clientes pertenecen a la empresa
+  // Verificar que todos los clientes pertenecen a la empresa y NO estén
+  // soft-deleted. El caso que se observó en producción: una coordinadora
+  // recapturó un grupo y sin darse cuenta seleccionó fichas marcadas con
+  // eliminadoEn (las dejó así la limpieza de un duplicado previo). Los
+  // préstamos se aprobaron pero después no aparecían en /rutas porque el
+  // filtro loanNotDeletedWhere los escondía.
   const clients = await prisma.client.findMany({
-    where: { id: { in: data.clientIds }, companyId: companyId! },
+    where: { id: { in: data.clientIds }, companyId: companyId!, eliminadoEn: null },
   })
   if (clients.length !== data.clientIds.length) {
-    return NextResponse.json({ error: 'Uno o más clientes no encontrados en esta empresa' }, { status: 404 })
+    return NextResponse.json(
+      { error: 'Uno o más clientes no se encontraron en esta empresa o están dados de baja. Verifica los nombres y vuelve a intentar.' },
+      { status: 404 },
+    )
   }
 
   // Coordinador, Cobrador, Gerente y Gerente Zonal: se auto-asignan como cobrador

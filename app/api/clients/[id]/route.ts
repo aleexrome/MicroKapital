@@ -20,7 +20,9 @@ export async function GET(
   const { companyId } = session.user
 
   const client = await prisma.client.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    // Excluimos clientes soft-deleted: si alguien escribe a mano la URL de
+    // un cliente borrado, no debe recibir sus datos como si estuviera vivo.
+    where: { id: params.id, companyId: companyId!, eliminadoEn: null },
     select: {
       id: true,
       nombreCompleto: true,
@@ -75,9 +77,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const esDG = rol === 'DIRECTOR_GENERAL'
 
-  // Verificar que el cliente exista y sea de su empresa
+  // Verificar que el cliente exista, sea de su empresa y no esté soft-deleted.
+  // Los soft-deleted no se editan vía PATCH; si Dirección quiere restaurar uno
+  // se hace con un UPDATE puntual en BD seteando eliminadoEn = NULL.
   const existing = await prisma.client.findFirst({
-    where: { id: params.id, companyId: companyId! },
+    where: { id: params.id, companyId: companyId!, eliminadoEn: null },
   })
   if (!existing) {
     return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })

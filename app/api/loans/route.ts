@@ -89,9 +89,12 @@ export async function POST(req: NextRequest) {
     tipoGrupo: data.tipoGrupo,
   })
 
-  // Verificar que el cliente pertenezca a la empresa
+  // Verificar que el cliente pertenezca a la empresa y no esté soft-deleted.
+  // Si está borrado no debería poder usarse para una nueva solicitud — si por
+  // alguna razón llega aquí (UI bypass, script externo), devolvemos 404 para
+  // que el flujo no continúe con una ficha fantasma.
   const client = await prisma.client.findFirst({
-    where: { id: data.clientId, companyId: companyId! },
+    where: { id: data.clientId, companyId: companyId!, eliminadoEn: null },
   })
   if (!client) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
 

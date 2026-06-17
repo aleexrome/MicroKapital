@@ -37,6 +37,11 @@ export async function GET(req: NextRequest) {
   const where: Prisma.ClientWhereInput = {
     companyId: companyId!,
     activo: true,
+    // Los clientes soft-deleted (eliminadoEn IS NOT NULL) no deben aparecer
+    // en ningún buscador. Antes se colaban y permitían armar grupos con
+    // fichas oficialmente borradas, lo que después rompía /rutas porque
+    // el filtro de loanNotDeletedWhere los escondía del pactado.
+    eliminadoEn: null,
     AND: [scopedClientWhere(session.user)],
     ...(q ? { nombreCompleto: { contains: q, mode: 'insensitive' } } : {}),
   }

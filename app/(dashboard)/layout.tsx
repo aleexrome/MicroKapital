@@ -24,7 +24,9 @@ export default async function DashboardLayout({
     if (!licenseResult.allowed) redirect('/licencia-suspendida')
   }
 
-  const isDirector    = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
+  // MESA_CONTROL ve toda la empresa (mismo alcance que Dirección) para poder
+  // navegar el árbol de cartera al revisar solicitudes por sucursal.
+  const isDirector    = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'MESA_CONTROL'
   const isGerente     = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
   const isCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
 

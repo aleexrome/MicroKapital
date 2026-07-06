@@ -189,7 +189,7 @@ const ROL_ETIQUETAS: Partial<Record<UserRole, string>> = {
 
 // Roles que ven el árbol de cartera
 const TREE_ROLES: UserRole[] = [
-  'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE_ZONAL', 'GERENTE', 'COORDINADOR', 'COBRADOR'
+  'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'MESA_CONTROL', 'GERENTE_ZONAL', 'GERENTE', 'COORDINADOR', 'COBRADOR'
 ]
 
 const TIPO_ICON: Record<string, React.ReactNode> = {

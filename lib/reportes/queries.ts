@@ -44,6 +44,8 @@ export function buildLoanWhere(
 export interface CarteraSnapshot {
   totalCapital: number    // suma de capital de loans ACTIVE
   totalSaldoTeorico: number  // suma de totalPago (capital + interés)
+  totalRecuperado: number    // suma de pagos aplicados (no cancelados) a esos loans
+  totalCarteraVigente: number  // teórica - recuperado = lo que falta por recuperar
   numCreditos: number
   porTipo: Array<{ tipo: LoanType; capital: number; numCreditos: number }>
   porSucursal: Array<{ branchId: string; nombre: string; capital: number; numCreditos: number }>
@@ -57,7 +59,7 @@ export async function getCarteraSnapshot(
 ): Promise<CarteraSnapshot> {
   const where: Prisma.LoanWhereInput = { ...buildLoanWhere(user, companyId, filtros), estado: 'ACTIVE' }
 
-  const [totales, byTipo, byBranch, byCobrador, branches, cobradores] = await Promise.all([
+  const [totales, byTipo, byBranch, byCobrador, branches, cobradores, recuperado] = await Promise.all([
     prisma.loan.aggregate({
       where,
       _sum: { capital: true, totalPago: true },
@@ -89,14 +91,34 @@ export async function getCarteraSnapshot(
       where: { companyId },
       select: { id: true, nombre: true },
     }),
+    // Total recuperado = pagos aplicados (no cancelados) a los mismos loans
+    // filtrados. Delegamos al `where` del Loan vía la relación `loan` para
+    // que el scope de rol/sucursal se aplique idéntico. Excluimos pagos
+    // cancelados (canceledAt IS NULL) — solo cuenta la cobranza real.
+    prisma.payment.aggregate({
+      where: {
+        canceledAt: null,
+        loan: where,
+      },
+      _sum: { monto: true },
+    }),
   ])
+
+  const totalSaldoTeorico = Number(totales._sum.totalPago ?? 0)
+  const totalRecuperado = Number(recuperado._sum.monto ?? 0)
+  // Piso en 0 por seguridad — si por alguna razón la cobranza superara al
+  // saldo teórico (redondeos, pagos duplicados), mostramos 0 en vez de un
+  // negativo confuso.
+  const totalCarteraVigente = Math.max(0, totalSaldoTeorico - totalRecuperado)
 
   const branchMap = new Map(branches.map((b) => [b.id, b.nombre]))
   const cobradorMap = new Map(cobradores.map((c) => [c.id, c.nombre]))
 
   return {
     totalCapital: Number(totales._sum.capital ?? 0),
-    totalSaldoTeorico: Number(totales._sum.totalPago ?? 0),
+    totalSaldoTeorico,
+    totalRecuperado,
+    totalCarteraVigente,
     numCreditos: totales._count,
     porTipo: byTipo.map((g) => ({
       tipo: g.tipo,

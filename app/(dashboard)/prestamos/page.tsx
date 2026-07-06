@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { Plus, CreditCard } from 'lucide-react'
+import { Plus, CreditCard, Building2, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Prisma, type LoanStatus } from '@prisma/client'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
@@ -50,14 +50,43 @@ export default async function PrestamosPage({
 
   const loans = await prisma.loan.findMany({
     where,
-    orderBy: { createdAt: 'desc' },
+    // Agrupar visualmente por sucursal → coordinador, y dentro dejar
+    // primero las solicitudes más recientes (que suelen ser las que
+    // más importan al abrir la bandeja).
+    orderBy: [
+      { branch: { nombre: 'asc' } },
+      { cobrador: { nombre: 'asc' } },
+      { createdAt: 'desc' },
+    ],
     take: PAGE_SIZE,
     skip: (page - 1) * PAGE_SIZE,
     include: {
       client: { select: { nombreCompleto: true } },
       cobrador: { select: { nombre: true } },
+      branch: { select: { nombre: true } },
     },
   })
+
+  // Agrupar por sucursal → coordinador respetando el orden del query
+  // (que ya vino ordenado por sucursal asc, coordinador asc, fecha desc).
+  type LoanRow = typeof loans[number]
+  const porSucursal = new Map<string, Map<string, LoanRow[]>>()
+  for (const loan of loans) {
+    const sucursal = loan.branch?.nombre ?? 'Sin sucursal'
+    const coordinador = loan.cobrador.nombre
+    if (!porSucursal.has(sucursal)) porSucursal.set(sucursal, new Map())
+    const porCoordinador = porSucursal.get(sucursal)!
+    if (!porCoordinador.has(coordinador)) porCoordinador.set(coordinador, [])
+    porCoordinador.get(coordinador)!.push(loan)
+  }
+  const grupos = Array.from(porSucursal.entries()).map(([sucursal, coordinadores]) => ({
+    sucursal,
+    total: Array.from(coordinadores.values()).reduce((s, ls) => s + ls.length, 0),
+    coordinadores: Array.from(coordinadores.entries()).map(([coordinador, loans]) => ({
+      coordinador,
+      loans,
+    })),
+  }))
 
   // Count per-tab for badges (mismo scope que la lista principal)
   const whereCount: Prisma.LoanWhereInput = {
@@ -146,37 +175,61 @@ export default async function PrestamosPage({
       </div>
 
       {/* List */}
-      <Card>
-        <CardContent className="p-0">
-          {loans.length === 0 ? (
+      {loans.length === 0 ? (
+        <Card>
+          <CardContent className="p-0">
             <div className="text-center py-12 text-muted-foreground">
               <CreditCard className="h-10 w-10 mx-auto mb-3" />
               No hay solicitudes{estadoFiltro ? ' con este estado' : ''}
             </div>
-          ) : (
-            <div className="divide-y">
-              {loans.map((loan) => (
-                <Link
-                  key={loan.id}
-                  href={`/prestamos/${loan.id}`}
-                  className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{loan.client.nombreCompleto}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {loan.tipo} · {loan.cobrador.nombre} · {formatDate(loan.createdAt)}
-                    </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-5">
+          {grupos.map((grupo) => (
+            <div key={grupo.sucursal} className="space-y-2">
+              <div className="flex items-center gap-2 border-b border-gray-200 pb-1.5">
+                <Building2 className="h-4 w-4 text-primary-700" />
+                <h2 className="font-semibold text-gray-900">{grupo.sucursal}</h2>
+                <span className="text-xs text-muted-foreground">({grupo.total})</span>
+              </div>
+              {grupo.coordinadores.map(({ coordinador, loans: loansCoord }) => (
+                <div key={coordinador} className="space-y-1 ml-2">
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <User className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-medium text-gray-700">{coordinador}</span>
+                    <span className="text-xs text-muted-foreground">({loansCoord.length})</span>
                   </div>
-                  <div className="flex items-center gap-3 ml-2">
-                    <span className="font-semibold text-sm">{formatMoney(Number(loan.capital))}</span>
-                    <ApprovalBadge status={loan.estado as LoanStatus} />
-                  </div>
-                </Link>
+                  <Card>
+                    <CardContent className="p-0">
+                      <div className="divide-y">
+                        {loansCoord.map((loan) => (
+                          <Link
+                            key={loan.id}
+                            href={`/prestamos/${loan.id}`}
+                            className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{loan.client.nombreCompleto}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {loan.tipo} · {formatDate(loan.createdAt)}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3 ml-2 shrink-0">
+                              <span className="font-semibold text-sm">{formatMoney(Number(loan.capital))}</span>
+                              <ApprovalBadge status={loan.estado as LoanStatus} />
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+      )}
       {/* Paginación inferior */}
       <PaginationBar estadoFiltro={estadoFiltro} page={page} totalPages={totalPages} />
     </div>

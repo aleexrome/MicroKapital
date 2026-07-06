@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
-import { CheckCircle, XCircle, Loader2, AlertCircle } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, AlertCircle, Building2, User } from 'lucide-react'
 
 interface LoanPending {
   id: string
@@ -19,6 +19,34 @@ interface LoanPending {
   createdAt: string
   client: { nombreCompleto: string }
   cobrador: { nombre: string }
+  branch: { nombre: string } | null
+}
+
+interface Grupo {
+  sucursal: string
+  total: number
+  coordinadores: { coordinador: string; loans: LoanPending[] }[]
+}
+
+function agrupar(loans: LoanPending[]): Grupo[] {
+  const porSucursal = new Map<string, Map<string, LoanPending[]>>()
+  for (const loan of loans) {
+    const sucursal = loan.branch?.nombre ?? 'Sin sucursal'
+    const coordinador = loan.cobrador.nombre
+    if (!porSucursal.has(sucursal)) porSucursal.set(sucursal, new Map())
+    const porCoordinador = porSucursal.get(sucursal)!
+    if (!porCoordinador.has(coordinador)) porCoordinador.set(coordinador, [])
+    porCoordinador.get(coordinador)!.push(loan)
+  }
+  return Array.from(porSucursal.entries())
+    .sort(([a], [b]) => a.localeCompare(b, 'es'))
+    .map(([sucursal, coordinadores]) => ({
+      sucursal,
+      coordinadores: Array.from(coordinadores.entries())
+        .sort(([a], [b]) => a.localeCompare(b, 'es'))
+        .map(([coordinador, loans]) => ({ coordinador, loans })),
+      total: Array.from(coordinadores.values()).reduce((s, ls) => s + ls.length, 0),
+    }))
 }
 
 export function AprobacionesContent() {
@@ -73,6 +101,8 @@ export function AprobacionesContent() {
     }
   }
 
+  const grupos = useMemo(() => agrupar(loans), [loans])
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -92,82 +122,101 @@ export function AprobacionesContent() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {loans.map((loan) => (
-            <Card key={loan.id}>
-              <CardContent className="p-5">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <AlertCircle className="h-4 w-4 text-yellow-500" />
-                      <span className="font-semibold">{loan.client.nombreCompleto}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm mt-2">
-                      <div><span className="text-muted-foreground">Tipo:</span> {loan.tipo}</div>
-                      <div><span className="text-muted-foreground">Capital:</span> <span className="font-medium money">{formatMoney(Number(loan.capital))}</span></div>
-                      <div><span className="text-muted-foreground">Total:</span> <span className="font-semibold money">{formatMoney(Number(loan.totalPago))}</span></div>
-                      <div>
-                        <span className="text-muted-foreground">Pago:</span>{' '}
-                        <span className="font-medium money">
-                          {loan.pagoSemanal ? `${formatMoney(Number(loan.pagoSemanal))}/sem` : `${formatMoney(Number(loan.pagoDiario))}/día`}
-                        </span>
-                      </div>
-                      <div><span className="text-muted-foreground">Plazo:</span> {loan.plazo} {loan.tipo === 'AGIL' ? 'días' : 'semanas'}</div>
-                      <div><span className="text-muted-foreground">Cobrador:</span> {loan.cobrador.nombre}</div>
-                    </div>
-                    {loan.notas && (
-                      <p className="text-sm text-muted-foreground mt-2 italic">{loan.notas}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-2">Solicitado: {formatDate(loan.createdAt)}</p>
+        <div className="space-y-6">
+          {grupos.map((grupo) => (
+            <div key={grupo.sucursal} className="space-y-3">
+              <div className="flex items-center gap-2 border-b border-gray-200 pb-1.5">
+                <Building2 className="h-4 w-4 text-primary-700" />
+                <h2 className="font-semibold text-gray-900">{grupo.sucursal}</h2>
+                <span className="text-xs text-muted-foreground">({grupo.total})</span>
+              </div>
+              {grupo.coordinadores.map(({ coordinador, loans: loansCoord }) => (
+                <div key={coordinador} className="space-y-2 ml-2">
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <User className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-medium text-gray-700">{coordinador}</span>
+                    <span className="text-xs text-muted-foreground">({loansCoord.length})</span>
                   </div>
+                  <div className="space-y-2 ml-1">
+                    {loansCoord.map((loan) => (
+                      <Card key={loan.id}>
+                        <CardContent className="p-5">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <AlertCircle className="h-4 w-4 text-yellow-500" />
+                                <span className="font-semibold">{loan.client.nombreCompleto}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm mt-2">
+                                <div><span className="text-muted-foreground">Tipo:</span> {loan.tipo}</div>
+                                <div><span className="text-muted-foreground">Capital:</span> <span className="font-medium money">{formatMoney(Number(loan.capital))}</span></div>
+                                <div><span className="text-muted-foreground">Total:</span> <span className="font-semibold money">{formatMoney(Number(loan.totalPago))}</span></div>
+                                <div>
+                                  <span className="text-muted-foreground">Pago:</span>{' '}
+                                  <span className="font-medium money">
+                                    {loan.pagoSemanal ? `${formatMoney(Number(loan.pagoSemanal))}/sem` : `${formatMoney(Number(loan.pagoDiario))}/día`}
+                                  </span>
+                                </div>
+                                <div><span className="text-muted-foreground">Plazo:</span> {loan.plazo} {loan.tipo === 'AGIL' ? 'días' : 'semanas'}</div>
+                              </div>
+                              {loan.notas && (
+                                <p className="text-sm text-muted-foreground mt-2 italic">{loan.notas}</p>
+                              )}
+                              <p className="text-xs text-muted-foreground mt-2">Solicitado: {formatDate(loan.createdAt)}</p>
+                            </div>
 
-                  <div className="flex flex-col gap-2 sm:items-end">
-                    {rejectId === loan.id ? (
-                      <div className="flex flex-col gap-2 w-full sm:w-64">
-                        <input
-                          className="border rounded px-3 py-2 text-sm w-full"
-                          placeholder="Razón del rechazo..."
-                          value={razonRechazo}
-                          onChange={(e) => setRazonRechazo(e.target.value)}
-                          autoFocus
-                        />
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={!razonRechazo.trim() || processing === loan.id}
-                            onClick={() => handleReject(loan.id)}
-                            className="flex-1"
-                          >
-                            {processing === loan.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Confirmar rechazo'}
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setRejectId(null)}>Cancelar</Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="success"
-                          disabled={!!processing}
-                          onClick={() => handleApprove(loan.id)}
-                        >
-                          {processing === loan.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><CheckCircle className="h-4 w-4" /> Aprobar</>}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-red-300 text-red-600 hover:bg-red-50"
-                          onClick={() => setRejectId(loan.id)}
-                        >
-                          <XCircle className="h-4 w-4" /> Rechazar
-                        </Button>
-                      </>
-                    )}
+                            <div className="flex flex-col gap-2 sm:items-end">
+                              {rejectId === loan.id ? (
+                                <div className="flex flex-col gap-2 w-full sm:w-64">
+                                  <input
+                                    className="border rounded px-3 py-2 text-sm w-full"
+                                    placeholder="Razón del rechazo..."
+                                    value={razonRechazo}
+                                    onChange={(e) => setRazonRechazo(e.target.value)}
+                                    autoFocus
+                                  />
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      disabled={!razonRechazo.trim() || processing === loan.id}
+                                      onClick={() => handleReject(loan.id)}
+                                      className="flex-1"
+                                    >
+                                      {processing === loan.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Confirmar rechazo'}
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => setRejectId(null)}>Cancelar</Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="success"
+                                    disabled={!!processing}
+                                    onClick={() => handleApprove(loan.id)}
+                                  >
+                                    {processing === loan.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><CheckCircle className="h-4 w-4" /> Aprobar</>}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-red-300 text-red-600 hover:bg-red-50"
+                                    onClick={() => setRejectId(loan.id)}
+                                  >
+                                    <XCircle className="h-4 w-4" /> Rechazar
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              ))}
+            </div>
           ))}
         </div>
       )}

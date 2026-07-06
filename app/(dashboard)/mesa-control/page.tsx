@@ -7,10 +7,48 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { AlertTriangle, ClipboardList, CheckCircle } from 'lucide-react'
+import { AlertTriangle, ClipboardList, CheckCircle, Building2, User } from 'lucide-react'
 import { loanNotDeletedWhere } from '@/lib/access'
 
 const ROLES_PERMITIDOS = ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN']
+
+type LoanRow = {
+  id: string
+  tipo: string
+  capital: unknown
+  createdAt: Date
+  notas: string | null
+  revisadoAt: Date | null
+  revisionNotasGenerales: string | null
+  client: { id: string; nombreCompleto: string }
+  cobrador: { nombre: string }
+  branch: { nombre: string } | null
+}
+
+/**
+ * Agrupa una lista de préstamos por sucursal → coordinador. Preserva el
+ * orden que ya trajo el query (por sucursal asc, coordinador asc, fecha).
+ * "Sin sucursal" cae en una llave especial al final para no perder registros.
+ */
+function agrupar(loans: LoanRow[]) {
+  const porSucursal = new Map<string, Map<string, LoanRow[]>>()
+  for (const loan of loans) {
+    const sucursal = loan.branch?.nombre ?? 'Sin sucursal'
+    const coordinador = loan.cobrador.nombre
+    if (!porSucursal.has(sucursal)) porSucursal.set(sucursal, new Map())
+    const porCoordinador = porSucursal.get(sucursal)!
+    if (!porCoordinador.has(coordinador)) porCoordinador.set(coordinador, [])
+    porCoordinador.get(coordinador)!.push(loan)
+  }
+  return Array.from(porSucursal.entries()).map(([sucursal, coordinadores]) => ({
+    sucursal,
+    coordinadores: Array.from(coordinadores.entries()).map(([coordinador, loans]) => ({
+      coordinador,
+      loans,
+    })),
+    total: Array.from(coordinadores.values()).reduce((s, ls) => s + ls.length, 0),
+  }))
+}
 
 export default async function MesaControlPage() {
   const session = await getSession()
@@ -26,7 +64,11 @@ export default async function MesaControlPage() {
         estado: 'PENDING_REVIEW',
         ...loanNotDeletedWhere,
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [
+        { branch: { nombre: 'asc' } },
+        { cobrador: { nombre: 'asc' } },
+        { createdAt: 'asc' },
+      ],
       include: {
         client: { select: { id: true, nombreCompleto: true } },
         cobrador: { select: { nombre: true } },
@@ -39,7 +81,11 @@ export default async function MesaControlPage() {
         estado: 'RETURNED_TO_COORDINATOR',
         ...loanNotDeletedWhere,
       },
-      orderBy: { revisadoAt: 'desc' },
+      orderBy: [
+        { branch: { nombre: 'asc' } },
+        { cobrador: { nombre: 'asc' } },
+        { revisadoAt: 'desc' },
+      ],
       include: {
         client: { select: { id: true, nombreCompleto: true } },
         cobrador: { select: { nombre: true } },
@@ -47,6 +93,9 @@ export default async function MesaControlPage() {
       },
     }),
   ])
+
+  const pendientesAgrupadas = agrupar(pendientes)
+  const regresadasAgrupadas = agrupar(regresadas)
 
   return (
     <div className="p-6 space-y-6">
@@ -60,7 +109,7 @@ export default async function MesaControlPage() {
         </p>
       </div>
 
-      <section className="space-y-3">
+      <section className="space-y-4">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-yellow-500" />
           Por revisar ({pendientes.length})
@@ -73,47 +122,11 @@ export default async function MesaControlPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {pendientes.map((loan) => (
-              <Link key={loan.id} href={`/prestamos/${loan.id}`}>
-                <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
-                  <CardContent className="p-5">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold">{loan.client.nombreCompleto}</span>
-                          <Badge variant="warning">{loan.tipo}</Badge>
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm mt-2">
-                          <div>
-                            <span className="text-muted-foreground">Capital:</span>{' '}
-                            <span className="font-medium money">{formatMoney(Number(loan.capital))}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Sucursal:</span>{' '}
-                            {loan.branch?.nombre ?? '—'}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Cobradora:</span> {loan.cobrador.nombre}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Solicitado:</span> {formatDate(loan.createdAt)}
-                          </div>
-                        </div>
-                        {loan.notas && (
-                          <p className="text-sm text-muted-foreground italic mt-2">{loan.notas}</p>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
+          <ListaAgrupada grupos={pendientesAgrupadas} variante="pendiente" />
         )}
       </section>
 
-      <section className="space-y-3">
+      <section className="space-y-4">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <ClipboardList className="h-4 w-4 text-blue-500" />
           Regresadas al coordinador ({regresadas.length})
@@ -125,48 +138,80 @@ export default async function MesaControlPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {regresadas.map((loan) => (
-              <Link key={loan.id} href={`/prestamos/${loan.id}`}>
-                <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
-                  <CardContent className="p-5">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div>
+          <ListaAgrupada grupos={regresadasAgrupadas} variante="regresada" />
+        )}
+      </section>
+    </div>
+  )
+}
+
+function ListaAgrupada({
+  grupos,
+  variante,
+}: {
+  grupos: ReturnType<typeof agrupar>
+  variante: 'pendiente' | 'regresada'
+}) {
+  return (
+    <div className="space-y-6">
+      {grupos.map((grupo) => (
+        <div key={grupo.sucursal} className="space-y-3">
+          <div className="flex items-center gap-2 border-b border-gray-200 pb-1.5">
+            <Building2 className="h-4 w-4 text-primary-700" />
+            <h3 className="font-semibold text-gray-900">{grupo.sucursal}</h3>
+            <span className="text-xs text-muted-foreground">({grupo.total})</span>
+          </div>
+          {grupo.coordinadores.map(({ coordinador, loans }) => (
+            <div key={coordinador} className="space-y-2 ml-2">
+              <div className="flex items-center gap-1.5 text-sm">
+                <User className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="font-medium text-gray-700">{coordinador}</span>
+                <span className="text-xs text-muted-foreground">({loans.length})</span>
+              </div>
+              <div className="space-y-2 ml-1">
+                {loans.map((loan) => (
+                  <Link key={loan.id} href={`/prestamos/${loan.id}`}>
+                    <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
+                      <CardContent className="p-4">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-semibold">{loan.client.nombreCompleto}</span>
-                          <Badge variant="default">Regresada</Badge>
+                          <Badge variant={variante === 'regresada' ? 'default' : 'warning'}>
+                            {variante === 'regresada' ? 'Regresada' : loan.tipo}
+                          </Badge>
                         </div>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm mt-2">
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm mt-1">
                           <div>
                             <span className="text-muted-foreground">Capital:</span>{' '}
                             <span className="font-medium money">{formatMoney(Number(loan.capital))}</span>
                           </div>
                           <div>
-                            <span className="text-muted-foreground">Sucursal:</span>{' '}
-                            {loan.branch?.nombre ?? '—'}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Cobradora:</span> {loan.cobrador.nombre}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Regresada:</span>{' '}
-                            {loan.revisadoAt ? formatDate(loan.revisadoAt) : '—'}
+                            <span className="text-muted-foreground">
+                              {variante === 'regresada' ? 'Regresada:' : 'Solicitado:'}
+                            </span>{' '}
+                            {variante === 'regresada'
+                              ? loan.revisadoAt
+                                ? formatDate(loan.revisadoAt)
+                                : '—'
+                              : formatDate(loan.createdAt)}
                           </div>
                         </div>
-                        {loan.revisionNotasGenerales && (
+                        {variante === 'regresada' && loan.revisionNotasGenerales && (
                           <p className="text-sm text-yellow-800 bg-yellow-50 border border-yellow-200 rounded p-2 mt-2 whitespace-pre-wrap">
                             {loan.revisionNotasGenerales}
                           </p>
                         )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+                        {variante === 'pendiente' && loan.notas && (
+                          <p className="text-sm text-muted-foreground italic mt-2">{loan.notas}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }

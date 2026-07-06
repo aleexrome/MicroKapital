@@ -50,11 +50,12 @@ export async function GET(req: NextRequest) {
 
   const loans = await prisma.loan.findMany({
     where,
-    orderBy: { createdAt: 'desc' },
-    take: 50,
+    orderBy: [{ branch: { nombre: 'asc' } }, { cobrador: { nombre: 'asc' } }, { createdAt: 'asc' }],
+    take: 100,
     include: {
       client: { select: { nombreCompleto: true } },
       cobrador: { select: { nombre: true } },
+      branch: { select: { nombre: true } },
     },
   })
 

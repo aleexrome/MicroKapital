@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
             clientId,
             loanGroupId: group.id,
             tipo: 'SOLIDARIO',
-            estado: 'PENDING_APPROVAL',
+            estado: 'PENDING_REVIEW',
             capital: calc.capital,
             comision: calc.comision,
             montoReal: calc.montoReal,

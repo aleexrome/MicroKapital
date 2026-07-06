@@ -8,7 +8,7 @@ import { calcLoan } from '@/lib/financial-formulas'
 import { generarFechasSemanales, generarFechasHabiles } from '@/lib/business-days'
 import { createAuditLog } from '@/lib/audit'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
-import { crearNotificacion, getDirectoresIds, getGerentesZonalesIds } from '@/lib/notifications'
+import { crearNotificacion, getDirectoresIds, getGerentesZonalesIds, getMesaControlIds } from '@/lib/notifications'
 
 const createLoanSchema = z.object({
   clientId: z.string().uuid(),
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
         clientId: data.clientId,
         loanGroupId: data.loanGroupId ?? null,
         tipo: data.tipo,
-        estado: 'PENDING_APPROVAL',
+        estado: 'PENDING_REVIEW',
         capital: calc.capital,
         comision: calc.comision,
         montoReal: calc.montoReal,
@@ -185,20 +185,26 @@ export async function POST(req: NextRequest) {
     valoresNuevos: { tipo: data.tipo, capital: data.capital, clientId: data.clientId },
   })
 
-  // Notificar a DG/DC + GZ del branch que hay una solicitud nueva esperando
-  // aprobación. Best-effort: no rompe la creación si falla.
+  // Notificar a Mesa de Control + GZ del branch que hay una solicitud nueva
+  // esperando revisión. Las solicitudes nuevas ya no van directo a DG:
+  // pasan por Mesa de Control antes. Si no hay Mesa de Control activa,
+  // fallback a DG/DC para no dejar la solicitud sin destinatarios.
+  // Best-effort: no rompe la creación si falla.
   try {
-    const [clienteRow, cobradorRow, directores, gerentes] = await Promise.all([
+    const [clienteRow, cobradorRow, mesaControl, gerentes] = await Promise.all([
       prisma.client.findUnique({ where: { id: data.clientId }, select: { nombreCompleto: true } }),
       prisma.user.findUnique({ where: { id: cobradorId }, select: { nombre: true } }),
-      getDirectoresIds(prisma, companyId!),
+      getMesaControlIds(prisma, companyId!),
       getGerentesZonalesIds(prisma, companyId!, targetBranchId),
     ])
     const clienteNombre = clienteRow?.nombreCompleto ?? 'cliente'
     const cobradorNombre = cobradorRow?.nombre ?? 'cobradora'
+    const destinatarios = mesaControl.length
+      ? [...mesaControl, ...gerentes]
+      : [...(await getDirectoresIds(prisma, companyId!)), ...gerentes]
     await crearNotificacion(prisma, {
       companyId: companyId!,
-      destinatariosIds: [...directores, ...gerentes],
+      destinatariosIds: destinatarios,
       tipo: 'SOLICITUD_NUEVA',
       nivel: 'IMPORTANTE',
       titulo: 'Nueva solicitud de crédito',

@@ -54,6 +54,7 @@ export default async function DashboardPage({
 }) {
   const session = await getSession()
   if (!session?.user || session.user.rol === 'COBRADOR') redirect('/cobros/agenda')
+  if (session.user.rol === 'MESA_CONTROL') redirect('/mesa-control')
 
   const { rol, companyId, branchId: userBranchId, id: userId } = session.user
 

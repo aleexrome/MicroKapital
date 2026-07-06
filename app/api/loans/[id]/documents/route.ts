@@ -35,6 +35,8 @@ export async function GET(
       archivoUrl: true,
       descripcion: true,
       createdAt: true,
+      revisionNota: true,
+      revisadoAt: true,
       uploadedBy: { select: { nombre: true } },
     },
   })

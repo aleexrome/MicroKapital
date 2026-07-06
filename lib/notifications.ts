@@ -104,6 +104,22 @@ export async function getDirectoresIds(
   return users.map((u) => u.id)
 }
 
+/** IDs de todos los MESA_CONTROL activos de la company. */
+export async function getMesaControlIds(
+  client: PrismaClient | Prisma.TransactionClient,
+  companyId: string
+): Promise<string[]> {
+  const users = await client.user.findMany({
+    where: {
+      companyId,
+      activo: true,
+      rol: 'MESA_CONTROL',
+    },
+    select: { id: true },
+  })
+  return users.map((u) => u.id)
+}
+
 /**
  * IDs de los GERENTE_ZONAL activos cuya zona (zonaBranchIds JSON) incluye
  * el branchId dado. Prisma no soporta filtro JSON contains portable, así

@@ -13,6 +13,8 @@ interface LoanDocumentItem {
   archivoUrl: string
   descripcion: string | null
   createdAt: string
+  revisionNota?: string | null
+  revisadoAt?: string | null
   uploadedBy: { nombre: string }
 }
 
@@ -40,9 +42,12 @@ interface LoanDocumentUploadProps {
   loanId: string
   tipo: LoanType
   readOnly?: boolean
+  /** True cuando el usuario actual es Mesa de Control y el préstamo está en
+   * revisión — habilita el input de observación por documento. */
+  canObserve?: boolean
 }
 
-export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocumentUploadProps) {
+export function LoanDocumentUpload({ loanId, tipo, readOnly = false, canObserve = false }: LoanDocumentUploadProps) {
   const { toast } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [docs, setDocs] = useState<LoanDocumentItem[]>([])
@@ -212,39 +217,126 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false }: LoanDocum
         ) : (
           <div className="space-y-2">
             {docs.map((doc) => (
-              <div key={doc.id} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-gray-800/50 text-sm">
-                <FileText className="h-4 w-4 text-primary-600 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{TIPO_LABELS[doc.tipo] ?? doc.tipo}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {doc.uploadedBy.nombre} · {new Date(doc.createdAt).toLocaleDateString('es-MX')}
-                    {doc.descripcion ? ` · ${doc.descripcion}` : ''}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <a
-                    href={doc.archivoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-primary-400 hover:bg-primary-500/10 border border-primary-500/30"
-                  >
-                    <ExternalLink className="h-4 w-4" /> Ver
-                  </a>
-                  {!readOnly && (
-                    <button
-                      onClick={() => handleDelete(doc.id)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 border border-red-500/30"
-                      title="Eliminar"
+              <div key={doc.id} className="rounded-lg bg-gray-800/50 text-sm">
+                <div className="flex items-center gap-3 py-2 px-3">
+                  <FileText className="h-4 w-4 text-primary-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{TIPO_LABELS[doc.tipo] ?? doc.tipo}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {doc.uploadedBy.nombre} · {new Date(doc.createdAt).toLocaleDateString('es-MX')}
+                      {doc.descripcion ? ` · ${doc.descripcion}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={doc.archivoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-primary-400 hover:bg-primary-500/10 border border-primary-500/30"
                     >
-                      <Trash2 className="h-4 w-4" /> Eliminar
-                    </button>
-                  )}
+                      <ExternalLink className="h-4 w-4" /> Ver
+                    </a>
+                    {!readOnly && (
+                      <button
+                        onClick={() => handleDelete(doc.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 border border-red-500/30"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="h-4 w-4" /> Eliminar
+                      </button>
+                    )}
+                  </div>
                 </div>
+                <DocRevisionRow
+                  docId={doc.id}
+                  loanId={loanId}
+                  initial={doc.revisionNota ?? null}
+                  canObserve={canObserve}
+                />
               </div>
             ))}
           </div>
         )}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Observación de Mesa de Control sobre un documento del préstamo. Cuando
+ * `canObserve` es true muestra el textarea editable con auto-guardado; en
+ * caso contrario solo pinta la nota si existe (para que coordinador y DG
+ * la vean).
+ */
+function DocRevisionRow({
+  docId,
+  loanId,
+  initial,
+  canObserve,
+}: {
+  docId: string
+  loanId: string
+  initial: string | null
+  canObserve: boolean
+}) {
+  const { toast } = useToast()
+  const [nota, setNota] = useState(initial ?? '')
+  const [savedNota, setSavedNota] = useState(initial ?? '')
+  const [saving, setSaving] = useState(false)
+
+  const dirty = nota.trim() !== savedNota.trim()
+
+  async function save() {
+    setSaving(true)
+    try {
+      const value = nota.trim()
+      const res = await fetch(`/api/loans/${loanId}/documents/${docId}/review`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nota: value || null }),
+      })
+      if (!res.ok) throw new Error()
+      setSavedNota(value)
+      toast({ title: 'Observación guardada' })
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo guardar la observación', variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!canObserve) {
+    if (!initial) return null
+    return (
+      <div className="border-t border-gray-700 px-3 py-2 text-xs text-amber-300 bg-amber-500/10">
+        <span className="font-semibold">Observación de Mesa de Control:</span> {initial}
+      </div>
+    )
+  }
+
+  return (
+    <div className="border-t border-gray-700 px-3 py-2 space-y-2 bg-gray-900/40">
+      <label className="text-xs text-amber-300 font-medium">Observación de Mesa de Control</label>
+      <textarea
+        value={nota}
+        onChange={(e) => setNota(e.target.value)}
+        rows={2}
+        maxLength={2000}
+        placeholder="Ej. La copia no se lee — pedir foto nueva."
+        className="w-full rounded border border-gray-600 bg-gray-800 text-gray-100 px-3 py-1.5 text-sm"
+      />
+      <div className="flex justify-end gap-2">
+        {dirty && (
+          <>
+            <Button size="sm" variant="outline" disabled={saving} onClick={() => setNota(savedNota)}>
+              Descartar
+            </Button>
+            <Button size="sm" disabled={saving} onClick={save}>
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Guardar'}
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
   )
 }

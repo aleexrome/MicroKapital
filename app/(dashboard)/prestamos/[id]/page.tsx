@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
 import { LoanApprovalActions } from '@/components/loans/LoanApprovalActions'
+import { MesaControlActions } from '@/components/loans/MesaControlActions'
+import { ResubmitLoanButton } from '@/components/loans/ResubmitLoanButton'
 import { DisbursementPhoto } from '@/components/loans/DisbursementPhoto'
 import { LoanActivateButton } from '@/components/loans/LoanActivateButton'
 import { LoanClientRejectButton } from '@/components/loans/LoanClientRejectButton'
@@ -495,6 +497,29 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             </div>
           )}
 
+          {/* Mesa de Control: enviar a DG o regresar al coordinador */}
+          {loan.estado === 'PENDING_REVIEW' && (rol === 'MESA_CONTROL' || rol === 'SUPER_ADMIN') && (
+            <MesaControlActions
+              loanId={loan.id}
+              capital={Number(loan.capital)}
+            />
+          )}
+
+          {/* Solicitud regresada al coordinador — mostrar observaciones + botón reenviar */}
+          {loan.estado === 'RETURNED_TO_COORDINATOR' && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-amber-900">Observaciones de Mesa de Control</p>
+              {loan.revisionNotasGenerales ? (
+                <p className="text-sm text-amber-900 whitespace-pre-wrap">{loan.revisionNotasGenerales}</p>
+              ) : (
+                <p className="text-sm italic text-amber-800">Sin nota general — revisa las observaciones por documento del expediente.</p>
+              )}
+              {(rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN') && (loan.cobradorId === userId || rol !== 'COORDINADOR') && (
+                <ResubmitLoanButton loanId={loan.id} />
+              )}
+            </div>
+          )}
+
           {/* Director General: aprobar / contrapropuesta / rechazar */}
           {loan.estado === 'PENDING_APPROVAL' && (rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN') && (
             <LoanApprovalActions
@@ -768,7 +793,8 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       <LoanDocumentUpload
         loanId={loan.id}
         tipo={loan.tipo as LoanType}
-        readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
+        readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL' || rol === 'MESA_CONTROL'}
+        canObserve={rol === 'MESA_CONTROL' && loan.estado === 'PENDING_REVIEW'}
       />
 
       {/* Evidencia de desembolso. Cuando el préstamo está ACTIVE el

@@ -33,6 +33,7 @@ import {
   Navigation,
   CalendarClock,
   BriefcaseBusiness,
+  ClipboardList,
 } from 'lucide-react'
 import type { BranchTreeData } from '@/types/tree'
 
@@ -54,13 +55,19 @@ const NAV_ITEMS: NavItem[] = [
     href: '/clientes',
     label: 'Cartera de Clientes',
     icon: <Users className="h-5 w-5" />,
-    roles: ['GERENTE', 'COBRADOR', 'COORDINADOR', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
+    roles: ['GERENTE', 'COBRADOR', 'COORDINADOR', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'MESA_CONTROL'],
   },
   {
     href: '/prestamos',
     label: 'Solicitudes',
     icon: <CreditCard className="h-5 w-5" />,
-    roles: ['GERENTE', 'COBRADOR', 'COORDINADOR', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
+    roles: ['GERENTE', 'COBRADOR', 'COORDINADOR', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'MESA_CONTROL'],
+  },
+  {
+    href: '/mesa-control',
+    label: 'Mesa de Control',
+    icon: <ClipboardList className="h-5 w-5" />,
+    roles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   {
     href: '/prestamos/aprobaciones',
@@ -158,6 +165,7 @@ const ROL_ETIQUETAS: Partial<Record<UserRole, string>> = {
   SUPER_ADMIN:        'Administrador del Sistema',
   DIRECTOR_GENERAL:   'Director General',
   DIRECTOR_COMERCIAL: 'Director Comercial',
+  MESA_CONTROL:       'Mesa de Control',
   GERENTE_ZONAL:      'Gerente Zonal',
   COORDINADOR:        'Coordinador de Crédito',
   GERENTE:            'Gerente',

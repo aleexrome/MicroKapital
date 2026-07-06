@@ -45,7 +45,7 @@ export function scopedClientWhere(user: AccessUser): Prisma.ClientWhereInput {
 
   if (rol === 'SUPER_ADMIN') return {}
 
-  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') return {}
+  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'MESA_CONTROL') return {}
 
   if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
     return {
@@ -98,7 +98,7 @@ export function scopedCashRegisterWhere(user: AccessUser): Prisma.CashRegisterWh
 
   if (rol === 'SUPER_ADMIN') return {}
 
-  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') return {}
+  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'MESA_CONTROL') return {}
 
   if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
     return {
@@ -141,7 +141,7 @@ export function scopedLoanWhere(user: AccessUser): Prisma.LoanWhereInput {
 
   if (rol === 'SUPER_ADMIN') return {}
 
-  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL') return {}
+  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'MESA_CONTROL') return {}
 
   if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
     return {

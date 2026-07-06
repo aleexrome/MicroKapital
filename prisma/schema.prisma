@@ -16,6 +16,7 @@ enum UserRole {
   SUPER_ADMIN
   DIRECTOR_GENERAL // Aprueba créditos, cambia fechas de pago
   DIRECTOR_COMERCIAL // Visualización total, sin aprobación
+  MESA_CONTROL // Revisa expedientes de solicitudes antes de la aprobación de DG
   GERENTE_ZONAL // Verifica transferencias, activa créditos de su zona
   COORDINADOR // Asesor de campo — gestiona sus propios clientes
   // Roles legacy (mantener hasta migración completa de datos)
@@ -39,7 +40,9 @@ enum LoanType {
 }
 
 enum LoanStatus {
-  PENDING_APPROVAL
+  PENDING_REVIEW // Recién capturada por coordinador — esperando revisión de Mesa de Control
+  RETURNED_TO_COORDINATOR // Mesa de Control regresó con observaciones al coordinador
+  PENDING_APPROVAL // Mesa de Control aprobó — esperando decisión de Dirección General
   APPROVED // Aprobado por Director General — pendiente de activación
   IN_ACTIVATION // Cliente aceptó condiciones — coordinador transita los 3 candados
   ACTIVE
@@ -189,6 +192,7 @@ model User {
   auditLogs                   AuditLog[]
   loansApproved               Loan[]                      @relation("ApprovedLoans")
   loansRejected               Loan[]                      @relation("RejectedLoans")
+  loansRevised                Loan[]                      @relation("RevisedLoans")
   loansCobrador               Loan[]                      @relation("CobradoresLoans")
   loanGroups                  LoanGroup[]
   approvalReviewer            LoanApproval[]              @relation("ReviewerApprovals")
@@ -241,15 +245,19 @@ model Client {
 }
 
 model ClientDocument {
-  id          String       @id @default(uuid())
-  clientId    String
-  client      Client       @relation(fields: [clientId], references: [id])
-  subidoPor   String
-  uploadedBy  User         @relation(fields: [subidoPor], references: [id])
-  tipo        DocumentType
-  archivoUrl  String
-  descripcion String?
-  createdAt   DateTime     @default(now())
+  id           String       @id @default(uuid())
+  clientId     String
+  client       Client       @relation(fields: [clientId], references: [id])
+  subidoPor    String
+  uploadedBy   User         @relation(fields: [subidoPor], references: [id])
+  tipo         DocumentType
+  archivoUrl   String
+  descripcion  String?
+  // Observación de Mesa de Control (nula si aún no la revisó). Se sobrescribe
+  // en cada revisión; no guardamos historial de observaciones previas.
+  revisionNota String?
+  revisadoAt   DateTime?
+  createdAt    DateTime     @default(now())
 }
 
 model LoanGroup {
@@ -343,6 +351,15 @@ model Loan {
   rechazadoPor           User?          @relation("RejectedLoans", fields: [rechazadoPorId], references: [id])
   razonRechazo           String?
   notas                  String?
+  // Mesa de Control — revisión intermedia entre creación y aprobación de DG.
+  // revisionNotasGenerales: observaciones libres que Mesa de Control redacta
+  // sobre la solicitud (visibles al coordinador cuando el préstamo regresa).
+  // revisadoPorId / revisadoAt: quién decidió el último cambio de estado
+  // (forward a DG o regreso al coordinador).
+  revisionNotasGenerales String?
+  revisadoPorId          String?
+  revisadoPor            User?          @relation("RevisedLoans", fields: [revisadoPorId], references: [id])
+  revisadoAt             DateTime?
   // Flujo secuencial de activación (Fase 6 — 3 candados)
   activationStartedAt    DateTime?
   activationCanceledAt   DateTime?
@@ -368,15 +385,19 @@ model Loan {
 }
 
 model LoanDocument {
-  id          String   @id @default(uuid())
-  loanId      String
-  loan        Loan     @relation(fields: [loanId], references: [id])
-  subidoPor   String
-  uploadedBy  User     @relation(fields: [subidoPor], references: [id])
-  tipo        String // "SOLICITUD", "INE_FRENTE", "INE_REVERSO", "COMPROBANTE_DOMICILIO", "CONTRATO", "PAGARE", "FOTO", "AVAL_INE", "OTRO"
-  archivoUrl  String
-  descripcion String?
-  createdAt   DateTime @default(now())
+  id           String   @id @default(uuid())
+  loanId       String
+  loan         Loan     @relation(fields: [loanId], references: [id])
+  subidoPor    String
+  uploadedBy   User     @relation(fields: [subidoPor], references: [id])
+  tipo         String // "SOLICITUD", "INE_FRENTE", "INE_REVERSO", "COMPROBANTE_DOMICILIO", "CONTRATO", "PAGARE", "FOTO", "AVAL_INE", "OTRO"
+  archivoUrl   String
+  descripcion  String?
+  // Observación de Mesa de Control (nula si aún no la revisó). Se sobrescribe
+  // en cada revisión; no guardamos historial de observaciones previas.
+  revisionNota String?
+  revisadoAt   DateTime?
+  createdAt    DateTime @default(now())
 }
 
 model LoanApproval {

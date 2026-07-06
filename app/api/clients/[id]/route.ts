@@ -73,7 +73,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const { rol, companyId, id: userId } = session.user
 
-  const esDG = rol === 'DIRECTOR_GENERAL'
+  // Mesa de Control tiene los mismos permisos de edición que DG para
+  // subsanar el expediente del cliente durante la revisión de la solicitud.
+  const esDG = rol === 'DIRECTOR_GENERAL' || rol === 'MESA_CONTROL'
 
   // Verificar que el cliente exista y sea de su empresa
   const existing = await prisma.client.findFirst({

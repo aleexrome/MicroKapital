@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { Plus, CreditCard, Building2, User } from 'lucide-react'
+import { Plus, CreditCard, Filter } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Prisma, type LoanStatus } from '@prisma/client'
+import { Prisma, type LoanStatus, type UserRole } from '@prisma/client'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 
 const TABS: { label: string; value: string | null }[] = [
@@ -23,15 +23,29 @@ const TABS: { label: string; value: string | null }[] = [
 
 const PAGE_SIZE = 50
 
+interface SearchParams {
+  estado?: string
+  sucursal?: string
+  cobrador?: string
+  page?: string
+}
+
 export default async function PrestamosPage({
   searchParams,
 }: {
-  searchParams: { estado?: string; page?: string }
+  searchParams: SearchParams
 }) {
   const session = await getSession()
   if (!session?.user) return null
 
-  const { rol, companyId, id: userId } = session.user
+  const { rol, companyId, branchId: userBranchId, zonaBranchIds, id: userId } = session.user
+
+  const isDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'MESA_CONTROL' || rol === 'SUPER_ADMIN'
+  const isGerenteZonal = rol === 'GERENTE_ZONAL'
+  const isGerente = rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
+  // Roles que ven más de una sucursal → tiene sentido mostrarles los filtros
+  // de sucursal y coordinador (igual criterio que en /clientes).
+  const puedeFiltrar = isDirector || isGerente
 
   const estadoFiltro = searchParams.estado ?? null
   const page = Math.max(1, parseInt(searchParams.page ?? '1', 10))
@@ -48,62 +62,89 @@ export default async function PrestamosPage({
 
   if (estadoFiltro) where.estado = estadoFiltro as LoanStatus
 
-  const loans = await prisma.loan.findMany({
-    where,
-    // Agrupar visualmente por sucursal → coordinador, y dentro dejar
-    // primero las solicitudes más recientes (que suelen ser las que
-    // más importan al abrir la bandeja).
-    orderBy: [
-      { branch: { nombre: 'asc' } },
-      { cobrador: { nombre: 'asc' } },
-      { createdAt: 'desc' },
-    ],
-    take: PAGE_SIZE,
-    skip: (page - 1) * PAGE_SIZE,
-    include: {
-      client: { select: { nombreCompleto: true } },
-      cobrador: { select: { nombre: true } },
-      branch: { select: { nombre: true } },
-    },
-  })
-
-  // Agrupar por sucursal → coordinador respetando el orden del query
-  // (que ya vino ordenado por sucursal asc, coordinador asc, fecha desc).
-  type LoanRow = typeof loans[number]
-  const porSucursal = new Map<string, Map<string, LoanRow[]>>()
-  for (const loan of loans) {
-    const sucursal = loan.branch?.nombre ?? 'Sin sucursal'
-    const coordinador = loan.cobrador.nombre
-    if (!porSucursal.has(sucursal)) porSucursal.set(sucursal, new Map())
-    const porCoordinador = porSucursal.get(sucursal)!
-    if (!porCoordinador.has(coordinador)) porCoordinador.set(coordinador, [])
-    porCoordinador.get(coordinador)!.push(loan)
+  // Filtros adicionales de UI. El alcance base ya limita el universo
+  // visible; estos sólo lo restringen más, y se validan contra el alcance
+  // del usuario para que no puedan "saltarse" su zona.
+  const zoneIds = zonaBranchIds?.length ? zonaBranchIds : userBranchId ? [userBranchId] : []
+  if (searchParams.sucursal) {
+    if (isDirector) {
+      where.branchId = searchParams.sucursal
+    } else if (isGerenteZonal && zoneIds.includes(searchParams.sucursal)) {
+      where.branchId = searchParams.sucursal
+    }
   }
-  const grupos = Array.from(porSucursal.entries()).map(([sucursal, coordinadores]) => ({
-    sucursal,
-    total: Array.from(coordinadores.values()).reduce((s, ls) => s + ls.length, 0),
-    coordinadores: Array.from(coordinadores.entries()).map(([coordinador, loans]) => ({
-      coordinador,
-      loans,
-    })),
-  }))
-
-  // Count per-tab for badges (mismo scope que la lista principal)
-  const whereCount: Prisma.LoanWhereInput = {
-    companyId: companyId!,
-    AND: [scopeWhere],
+  if (searchParams.cobrador && puedeFiltrar) {
+    where.cobradorId = searchParams.cobrador
   }
-  const countByEstado = await prisma.loan.groupBy({
-    by: ['estado'],
-    where: whereCount,
-    _count: { _all: true },
-  })
+
+  const [loans, branches, cobradoresList, countByEstado] = await Promise.all([
+    prisma.loan.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: PAGE_SIZE,
+      skip: (page - 1) * PAGE_SIZE,
+      include: {
+        client: { select: { nombreCompleto: true } },
+        cobrador: { select: { nombre: true } },
+      },
+    }),
+
+    // Sucursales para el filtro: directores/mesa control ven todas; gerente
+    // zonal su zona; gerente y coordinador no tienen dropdown.
+    isDirector
+      ? prisma.branch.findMany({
+          where: { companyId: companyId!, activa: true },
+          select: { id: true, nombre: true },
+          orderBy: { nombre: 'asc' },
+        })
+      : isGerenteZonal && zoneIds.length
+        ? prisma.branch.findMany({
+            where: { companyId: companyId!, activa: true, id: { in: zoneIds } },
+            select: { id: true, nombre: true },
+            orderBy: { nombre: 'asc' },
+          })
+        : Promise.resolve([]),
+
+    // Coordinadores/cobradores para el filtro. Si el usuario eligió una
+    // sucursal específica, restringimos la lista de coordinadores a esa
+    // sucursal — así el dropdown no ofrece coordinadores de otras plazas.
+    puedeFiltrar
+      ? prisma.user.findMany({
+          where: {
+            companyId: companyId!,
+            rol: { in: ['COORDINADOR' as UserRole, 'COBRADOR' as UserRole] },
+            activo: true,
+            ...(rol === 'GERENTE' && userBranchId ? { branchId: userBranchId } : {}),
+            ...(isGerenteZonal && zoneIds.length ? { branchId: { in: zoneIds } } : {}),
+            ...(searchParams.sucursal ? { branchId: searchParams.sucursal } : {}),
+          },
+          select: { id: true, nombre: true },
+          orderBy: { nombre: 'asc' },
+        })
+      : Promise.resolve([]),
+
+    // Count per-tab for badges: usa el MISMO where (scope + filtros de
+    // sucursal/coordinador) menos el estado, para que los contadores
+    // reflejen lo mismo que se está viendo.
+    prisma.loan.groupBy({
+      by: ['estado'],
+      where: (() => {
+        const w = { ...where }
+        delete w.estado
+        return w
+      })(),
+      _count: { _all: true },
+    }),
+  ])
+
   const countMap: Record<string, number> = {}
   countByEstado.forEach((r) => { countMap[r.estado] = r._count._all })
   const totalAll = Object.values(countMap).reduce((s, v) => s + v, 0)
 
   const totalFiltered = estadoFiltro ? (countMap[estadoFiltro] ?? 0) : totalAll
   const totalPages    = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE))
+
+  const hayFiltros = Boolean(searchParams.sucursal || searchParams.cobrador)
 
   const canCreate = ['COORDINADOR', 'COBRADOR', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN'].includes(rol)
 
@@ -143,11 +184,64 @@ export default async function PrestamosPage({
         )}
       </div>
 
+      {/* Filtros de sucursal / coordinador (mismo patrón que /clientes) */}
+      {puedeFiltrar && (branches.length > 0 || cobradoresList.length > 0) && (
+        <form className="flex flex-wrap gap-3 items-end">
+          {/* Preservar estado seleccionado al aplicar filtros */}
+          {estadoFiltro && (
+            <input type="hidden" name="estado" value={estadoFiltro} />
+          )}
+
+          {branches.length > 0 && (
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Sucursal</label>
+              <select
+                name="sucursal"
+                defaultValue={searchParams.sucursal ?? ''}
+                className="border border-input rounded-md px-3 py-1.5 text-sm h-9 min-w-[180px] bg-background text-foreground"
+              >
+                <option value="">Todas las sucursales</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {cobradoresList.length > 0 && (
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Coordinador / Cobrador</label>
+              <select
+                name="cobrador"
+                defaultValue={searchParams.cobrador ?? ''}
+                className="border border-input rounded-md px-3 py-1.5 text-sm h-9 min-w-[200px] bg-background text-foreground"
+              >
+                <option value="">Todos</option>
+                {cobradoresList.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <Button type="submit" variant="secondary" size="sm" className="h-9">
+            <Filter className="h-3.5 w-3.5 mr-1" />Filtrar
+          </Button>
+          {hayFiltros && (
+            <Button asChild variant="ghost" size="sm" className="h-9">
+              <Link href={estadoFiltro ? `/prestamos?estado=${estadoFiltro}` : '/prestamos'}>
+                Limpiar
+              </Link>
+            </Button>
+          )}
+        </form>
+      )}
+
       {/* Status tabs */}
       <div className="flex flex-wrap gap-1 border-b">
         {TABS.map((tab) => {
           const isActive = estadoFiltro === tab.value || (!estadoFiltro && tab.value === null)
-          const href = tab.value ? `/prestamos?estado=${tab.value}` : '/prestamos'
+          const href = buildHref(searchParams, 1, tab.value)
           const count = tab.value === null ? totalAll : (countMap[tab.value] ?? 0)
           return (
             <Link
@@ -174,82 +268,61 @@ export default async function PrestamosPage({
         })}
       </div>
 
-      {/* List */}
-      {loans.length === 0 ? (
-        <Card>
-          <CardContent className="p-0">
+      {/* Lista */}
+      <Card>
+        <CardContent className="p-0">
+          {loans.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <CreditCard className="h-10 w-10 mx-auto mb-3" />
               No hay solicitudes{estadoFiltro ? ' con este estado' : ''}
             </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-5">
-          {grupos.map((grupo) => (
-            <div key={grupo.sucursal} className="space-y-2">
-              <div className="flex items-center gap-2 border-b border-gray-200 pb-1.5">
-                <Building2 className="h-4 w-4 text-primary-700" />
-                <h2 className="font-semibold text-gray-900">{grupo.sucursal}</h2>
-                <span className="text-xs text-muted-foreground">({grupo.total})</span>
-              </div>
-              {grupo.coordinadores.map(({ coordinador, loans: loansCoord }) => (
-                <div key={coordinador} className="space-y-1 ml-2">
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <User className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="font-medium text-gray-700">{coordinador}</span>
-                    <span className="text-xs text-muted-foreground">({loansCoord.length})</span>
+          ) : (
+            <div className="divide-y">
+              {loans.map((loan) => (
+                <Link
+                  key={loan.id}
+                  href={`/prestamos/${loan.id}`}
+                  className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{loan.client.nombreCompleto}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {loan.tipo} · {loan.cobrador.nombre} · {formatDate(loan.createdAt)}
+                    </p>
                   </div>
-                  <Card>
-                    <CardContent className="p-0">
-                      <div className="divide-y">
-                        {loansCoord.map((loan) => (
-                          <Link
-                            key={loan.id}
-                            href={`/prestamos/${loan.id}`}
-                            className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate">{loan.client.nombreCompleto}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {loan.tipo} · {formatDate(loan.createdAt)}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-3 ml-2 shrink-0">
-                              <span className="font-semibold text-sm">{formatMoney(Number(loan.capital))}</span>
-                              <ApprovalBadge status={loan.estado as LoanStatus} />
-                            </div>
-                          </Link>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                  <div className="flex items-center gap-3 ml-2">
+                    <span className="font-semibold text-sm">{formatMoney(Number(loan.capital))}</span>
+                    <ApprovalBadge status={loan.estado as LoanStatus} />
+                  </div>
+                </Link>
               ))}
             </div>
-          ))}
-        </div>
-      )}
+          )}
+        </CardContent>
+      </Card>
       {/* Paginación inferior */}
-      <PaginationBar estadoFiltro={estadoFiltro} page={page} totalPages={totalPages} />
+      <PaginationBar searchParams={searchParams} page={page} totalPages={totalPages} />
     </div>
   )
 }
 
-function buildHref(estado: string | null, page: number) {
+function buildHref(sp: SearchParams, page: number, estadoOverride?: string | null) {
   const params = new URLSearchParams()
+  const estado = estadoOverride === undefined ? sp.estado : estadoOverride
   if (estado) params.set('estado', estado)
+  if (sp.sucursal) params.set('sucursal', sp.sucursal)
+  if (sp.cobrador) params.set('cobrador', sp.cobrador)
   if (page > 1) params.set('page', String(page))
   const qs = params.toString()
   return `/prestamos${qs ? `?${qs}` : ''}`
 }
 
 function PaginationBar({
-  estadoFiltro,
+  searchParams,
   page,
   totalPages,
 }: {
-  estadoFiltro: string | null
+  searchParams: SearchParams
   page: number
   totalPages: number
 }) {
@@ -267,7 +340,7 @@ function PaginationBar({
   return (
     <div className="flex items-center justify-center gap-2 py-1">
       <Link
-        href={buildHref(estadoFiltro, Math.max(1, page - 1))}
+        href={buildHref(searchParams, Math.max(1, page - 1))}
         className={cn(
           'px-3 py-1.5 text-sm rounded-md border transition-colors',
           page <= 1
@@ -284,7 +357,7 @@ function PaginationBar({
         ) : (
           <Link
             key={p}
-            href={buildHref(estadoFiltro, p as number)}
+            href={buildHref(searchParams, p as number)}
             className={cn(
               'w-8 h-8 flex items-center justify-center text-sm rounded-md border transition-colors',
               p === page
@@ -298,7 +371,7 @@ function PaginationBar({
       )}
 
       <Link
-        href={buildHref(estadoFiltro, Math.min(totalPages, page + 1))}
+        href={buildHref(searchParams, Math.min(totalPages, page + 1))}
         className={cn(
           'px-3 py-1.5 text-sm rounded-md border transition-colors',
           page >= totalPages

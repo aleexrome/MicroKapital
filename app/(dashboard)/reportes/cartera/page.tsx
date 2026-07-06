@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, DollarSign, Users, Layers } from 'lucide-react'
+import { ArrowLeft, DollarSign, Users, Layers, TrendingDown } from 'lucide-react'
 import { formatMoney } from '@/lib/utils'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { FiltrosBar } from '@/components/reportes/FiltrosBar'
@@ -73,7 +73,11 @@ export default async function CarteraReportePage({
       items: [
         { label: 'Capital activo', valor: formatMoney(snapshot.totalCapital) },
         ...(verInteres
-          ? [{ label: 'Saldo teórico (capital + interés)', valor: formatMoney(snapshot.totalSaldoTeorico) }]
+          ? [
+              { label: 'Saldo teórico (capital + interés)', valor: formatMoney(snapshot.totalSaldoTeorico) },
+              { label: 'Recuperado (desgaste de cartera)', valor: formatMoney(snapshot.totalRecuperado) },
+              { label: 'Cartera vigente (falta por recuperar)', valor: formatMoney(snapshot.totalCarteraVigente) },
+            ]
           : []),
         { label: 'Créditos activos', valor: snapshot.numCreditos.toLocaleString('es-MX') },
       ],
@@ -139,7 +143,7 @@ export default async function CarteraReportePage({
 
       <FiltrosBar branches={opciones.branches} cobradores={opciones.cobradores} hidePeriodo />
 
-      <div className={`grid grid-cols-1 ${verInteres ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
+      <div className={`grid grid-cols-1 ${verInteres ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2'} gap-4`}>
         <MetricCard
           title="Capital activo"
           value={formatMoney(snapshot.totalCapital)}
@@ -147,12 +151,21 @@ export default async function CarteraReportePage({
           color="blue"
         />
         {verInteres && (
-          <MetricCard
-            title="Saldo teórico"
-            value={formatMoney(snapshot.totalSaldoTeorico)}
-            icon={Layers}
-            color="purple"
-          />
+          <>
+            <MetricCard
+              title="Saldo teórico"
+              value={formatMoney(snapshot.totalSaldoTeorico)}
+              icon={Layers}
+              color="purple"
+            />
+            <MetricCard
+              title="Cartera vigente"
+              value={formatMoney(snapshot.totalCarteraVigente)}
+              icon={TrendingDown}
+              color="yellow"
+              description={`Recuperado: ${formatMoney(snapshot.totalRecuperado)}`}
+            />
+          </>
         )}
         <MetricCard
           title="Créditos activos"

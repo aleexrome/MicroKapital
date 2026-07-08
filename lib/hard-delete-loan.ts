@@ -46,7 +46,7 @@ export async function hardDeleteLoan(
     data: { loanOriginalId: null },
   })
 
-  // 1. Tickets — dependen de Payment, se borran primero.
+  // 1. Ticket + CashBreakdown — dependen de Payment, se borran primero.
   const payments = await tx.payment.findMany({
     where: { loanId },
     select: { id: true },
@@ -60,6 +60,8 @@ export async function hardDeleteLoan(
       data: { ticketOriginalId: null },
     })
     await tx.ticket.deleteMany({ where: { paymentId: { in: paymentIds } } })
+    // CashBreakdown también referencia Payment sin cascade — borrar antes.
+    await tx.cashBreakdown.deleteMany({ where: { paymentId: { in: paymentIds } } })
   }
 
   // 2. Payment (loanId FK)

@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { type Prisma } from '@prisma/client'
-import { createAuditLog } from '@/lib/audit'
+import { hardDeleteLoan } from '@/lib/hard-delete-loan'
 
-const RAZON_RECHAZO = 'Cliente no aceptó las condiciones ofrecidas'
-
+/**
+ * Registra el rechazo del cliente ANTES de que se active el crédito
+ * (estado APPROVED). Antes se marcaba REJECTED con razón; ahora se
+ * hard-deletea todo el préstamo — solicitud, documentos, aprobación —
+ * porque el negocio decidió que las rechazadas no deben guardarse.
+ *
+ * Para SOLIDARIO se propaga a todo el grupo del mismo ciclo (incluye
+ * IN_ACTIVATION porque pudo haberse arrancado en la coordinadora).
+ */
 export async function POST(
   _req: NextRequest,
   { params }: { params: { id: string } }
@@ -15,13 +22,11 @@ export async function POST(
 
   const { rol, companyId, branchId, id: userId } = session.user
 
-  // Mismos roles que pueden activar un crédito aprobado (ver prestamos/[id] — puedeActivar).
   const rolesPermitidos = ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN']
   if (!rolesPermitidos.includes(rol)) {
     return NextResponse.json({ error: 'Sin permisos para registrar rechazo del cliente' }, { status: 403 })
   }
 
-  // Alcance del préstamo por rol — consistente con la UI de detalle.
   const rejectWhere: Prisma.LoanWhereInput = { id: params.id, companyId: companyId! }
   if (rol === 'COORDINADOR' || rol === 'COBRADOR') {
     rejectWhere.cobradorId = userId
@@ -46,12 +51,7 @@ export async function POST(
 
   // ── SOLIDARIO grupal ─────────────────────────────────────────────────────
   // Si el cliente del grupo rechaza, todo el grupo del mismo ciclo debe
-  // quedar cancelado. La búsqueda incluye APPROVED y IN_ACTIVATION porque
-  // pudo haberse iniciado activación y luego usado "Volver atrás" solo en
-  // la coordinadora — las demás integrantes se quedan en IN_ACTIVATION y,
-  // sin esta propagación, caen en limbo. El filtro de ciclo es el mismo
-  // que start-activation: original vs renovación se distinguen por
-  // loanOriginalId.
+  // borrarse. Incluimos APPROVED y IN_ACTIVATION (mismo criterio que antes).
   let loanIdsARechazar: string[] = [loan.id]
   let rechazoGrupal = false
 
@@ -76,30 +76,15 @@ export async function POST(
     }
   }
 
-  await prisma.loan.updateMany({
-    where: { id: { in: loanIdsARechazar } },
-    data: {
-      estado: 'REJECTED',
-      razonRechazo: RAZON_RECHAZO,
-    },
-  })
-
-  createAuditLog({
-    userId,
-    accion: rechazoGrupal ? 'CLIENT_REJECT_GROUP' : 'CLIENT_REJECT_LOAN',
-    tabla: 'Loan',
-    registroId: loan.id,
-    valoresNuevos: {
-      estado: 'REJECTED',
-      razonRechazo: RAZON_RECHAZO,
-      registradoPorId: userId,
-      ...(rechazoGrupal ? { integrantesRechazados: loanIdsARechazar } : {}),
-    },
+  await prisma.$transaction(async (tx) => {
+    for (const id of loanIdsARechazar) {
+      await hardDeleteLoan(tx, id)
+    }
   })
 
   return NextResponse.json({
     message: rechazoGrupal
-      ? `Crédito grupal cancelado — el cliente no aceptó las condiciones (${loanIdsARechazar.length} integrantes)`
-      : 'Crédito cancelado — el cliente no aceptó las condiciones',
+      ? `Crédito grupal cancelado y eliminado — el cliente no aceptó las condiciones (${loanIdsARechazar.length} integrantes)`
+      : 'Crédito cancelado y eliminado — el cliente no aceptó las condiciones',
   })
 }

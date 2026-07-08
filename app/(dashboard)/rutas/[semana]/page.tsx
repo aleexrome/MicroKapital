@@ -122,6 +122,69 @@ const TIPO_LABEL: Record<string, string> = {
   AGIL: 'Ágil', FIDUCIARIO: 'Fiduciario',
 }
 
+// Dom=0, Lun=1, ..., Sáb=6
+const DIAS_ES_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const DIAS_ES_LARGOS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+
+/**
+ * Chip row para filtrar la ruta por día (Sáb → Vie). Cuando ninguna
+ * está activa se ve la semana completa (comportamiento por defecto);
+ * al hacer click en un día, la lista y el print se limitan a ese día.
+ * "Toda la semana" resetea el filtro.
+ */
+function DayFilterChips({
+  dias,
+  active,
+  basePath,
+  preserveU,
+}: {
+  dias: Date[]
+  active: string | null
+  basePath: string
+  preserveU: string | null
+}) {
+  const buildHref = (d: string | null) => {
+    const params = new URLSearchParams()
+    if (preserveU) params.set('u', preserveU)
+    if (d) params.set('d', d)
+    const qs = params.toString()
+    return qs ? `${basePath}?${qs}` : basePath
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <Link
+        href={buildHref(null)}
+        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+          active === null
+            ? 'bg-primary-600 text-white'
+            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+        }`}
+      >
+        Toda la semana
+      </Link>
+      {dias.map((d) => {
+        const key = d.toISOString().slice(0, 10)
+        const isActive = active === key
+        const dia = DIAS_ES_CORTOS[d.getUTCDay()]
+        const num = d.getUTCDate()
+        return (
+          <Link
+            key={key}
+            href={buildHref(key)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              isActive
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {dia} {String(num).padStart(2, '0')}
+          </Link>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── KPI card component (server-side) ─────────────────────────────────────
 
 function KpiCard({
@@ -243,7 +306,7 @@ export default async function RutaDetallePage({
   searchParams,
 }: {
   params: { semana: string }
-  searchParams: { u?: string }
+  searchParams: { u?: string; d?: string }
 }) {
   const session = await getSession()
   if (!session?.user) return null
@@ -394,8 +457,29 @@ export default async function RutaDetallePage({
       }),
     ])
 
-    const { totalAPagar, totalCobrado, cobradosCount, scheduleCount: pactadosCount } = calcCobranza(schedules)
-    const colocacion = loans.reduce((s, l) => s + Number(l.capital), 0)
+    // ── Filtro opcional por día (?d=YYYY-MM-DD) ─────────────────────────
+    // Filtra tanto la lista visible como el print. Si no viene o cae fuera
+    // de la semana Sáb–Vie, se ignora y la vista queda "completa" — que es
+    // el comportamiento por defecto que ya conocemos.
+    const daysOfWeek = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(saturday)
+      d.setUTCDate(d.getUTCDate() + i)
+      return d
+    })
+    const toDayKey = (d: Date) => d.toISOString().slice(0, 10)
+    const validDayKeys = new Set(daysOfWeek.map(toDayKey))
+    const dayFilter = searchParams?.d && validDayKeys.has(searchParams.d)
+      ? searchParams.d
+      : null
+    const filteredSchedules = dayFilter
+      ? schedules.filter((s) => toDayKey(new Date(s.fechaVencimiento)) === dayFilter)
+      : schedules
+    const filteredLoans = dayFilter
+      ? loans.filter((l) => l.fechaDesembolso && toDayKey(new Date(l.fechaDesembolso)) === dayFilter)
+      : loans
+
+    const { totalAPagar, totalCobrado, cobradosCount, scheduleCount: pactadosCount } = calcCobranza(filteredSchedules)
+    const colocacion = filteredLoans.reduce((s, l) => s + Number(l.capital), 0)
     const metaTarget = metaColocacion(totalAPagar)
     const cobranzaPct = calcPct(totalCobrado, totalAPagar)
     const metaPct     = calcPct(colocacion, metaTarget)
@@ -403,7 +487,7 @@ export default async function RutaDetallePage({
     // ── Build print data ────────────────────────────────────────────────
     // El monto cobrado por fila viene de los Payment reales — ver
     // calcCobranza arriba para la justificación.
-    const printCobros: RutaCobroRow[] = schedules.map((s) => {
+    const printCobros: RutaCobroRow[] = filteredSchedules.map((s) => {
       const paid = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
       const montoCobrado = Math.min(paid, Number(s.montoEsperado))
       // prePagado: schedule está PAID/ADVANCE (cobro registrado en algún
@@ -427,7 +511,7 @@ export default async function RutaDetallePage({
         nombreGrupo:   s.loan.loanGroup?.nombre ?? null,
       }
     })
-    const printColocaciones: RutaColocacionRow[] = loans.map((l) => ({
+    const printColocaciones: RutaColocacionRow[] = filteredLoans.map((l) => ({
       clientNombre: l.client.nombreCompleto,
       tipo:         l.tipo,
       esRenovacion: !!l.loanOriginalId,
@@ -481,20 +565,32 @@ export default async function RutaDetallePage({
           />
         </div>
 
+        {/* Day filter chips — opcional */}
+        {schedules.length > 0 && (
+          <DayFilterChips
+            dias={daysOfWeek}
+            active={dayFilter}
+            basePath={`/rutas/${params.semana}`}
+            preserveU={isDrillDown ? targetUserId : null}
+          />
+        )}
+
         {/* Schedule list */}
         <div>
           <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-3">
             <TrendingUp className="h-4 w-4 text-primary-600" />
-            Cobros de la semana
+            {dayFilter ? 'Cobros del día' : 'Cobros de la semana'}
             {pactadosCount > 0 && (
               <span className="text-sm font-normal text-muted-foreground">({pactadosCount} pactados)</span>
             )}
           </h2>
-          {schedules.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center border rounded-lg">Sin cobros pactados esta semana</p>
+          {filteredSchedules.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center border rounded-lg">
+              {dayFilter ? 'Sin cobros pactados este día' : 'Sin cobros pactados esta semana'}
+            </p>
           ) : (
             <div className="border rounded-xl overflow-hidden divide-y bg-white">
-              {schedules.map((s) => {
+              {filteredSchedules.map((s) => {
                 // El indicador visual también deriva de los Payment reales,
                 // para que la lista refleje la misma verdad que el KPI.
                 const paid = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
@@ -529,18 +625,20 @@ export default async function RutaDetallePage({
         <div>
           <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-3">
             <Target className="h-4 w-4 text-primary-600" />
-            Colocación de la semana
-            {loans.length > 0 && (
+            {dayFilter ? 'Colocación del día' : 'Colocación de la semana'}
+            {filteredLoans.length > 0 && (
               <span className="text-sm font-normal text-muted-foreground">
-                ({loans.length} crédito{loans.length !== 1 ? 's' : ''} · {formatMoney(colocacion)})
+                ({filteredLoans.length} crédito{filteredLoans.length !== 1 ? 's' : ''} · {formatMoney(colocacion)})
               </span>
             )}
           </h2>
-          {loans.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center border rounded-lg">Sin créditos colocados esta semana</p>
+          {filteredLoans.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center border rounded-lg">
+              {dayFilter ? 'Sin créditos colocados este día' : 'Sin créditos colocados esta semana'}
+            </p>
           ) : (
             <div className="border rounded-xl overflow-hidden divide-y bg-white">
-              {loans.map((l) => (
+              {filteredLoans.map((l) => (
                 <div key={l.id} className="flex items-center gap-3 px-4 py-3 text-sm">
                   <CheckCircle2 className="h-4 w-4 text-indigo-500 shrink-0" />
                   <span className="flex-1 min-w-0 truncate font-medium">{l.client.nombreCompleto}</span>
@@ -566,7 +664,11 @@ export default async function RutaDetallePage({
         {/* Botón imprimir — detalle por cliente */}
         <div className="flex justify-center pt-2">
           <ImprimirRutaButton
-            weekLabel={weekLabel}
+            weekLabel={
+              dayFilter
+                ? `${weekLabel} · ${DIAS_ES_LARGOS[new Date(dayFilter + 'T00:00:00Z').getUTCDay()]} ${dayFilter.split('-').reverse().join('/')}`
+                : weekLabel
+            }
             scopeLabel={targetUserName}
             cobros={printCobros}
             colocaciones={printColocaciones}

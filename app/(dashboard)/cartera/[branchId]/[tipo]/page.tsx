@@ -41,7 +41,10 @@ export default async function CarteraTipoPage({
   })
   if (!branch) notFound()
 
-  const isDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
+  // MESA_CONTROL ve toda la empresa (mismo alcance que Dirección) — sin este
+  // flag caía al `else` que filtra por `cobradorId: userId` y la lista salía
+  // vacía porque Mesa de Control nunca es cobrador.
+  const isDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'MESA_CONTROL'
   const isGerente  = rol === 'GERENTE_ZONAL' || rol === 'GERENTE'
 
   // Scope check for non-directors

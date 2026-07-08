@@ -174,8 +174,8 @@ function DayFilterChips({
             href={buildHref(key)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               isActive
-                ? 'bg-primary-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-orange-500 text-white border border-orange-500 shadow-sm'
+                : 'bg-transparent text-orange-600 border border-orange-500 hover:bg-orange-500/10'
             }`}
           >
             {dia} {String(num).padStart(2, '0')}

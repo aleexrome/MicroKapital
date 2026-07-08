@@ -157,8 +157,8 @@ function DayFilterChips({
         href={buildHref(null)}
         className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
           active === null
-            ? 'bg-primary-600 text-white border border-primary-600 shadow-sm'
-            : 'bg-card text-foreground border border-border hover:bg-secondary hover:border-primary-400'
+            ? 'bg-orange-500 text-white border border-orange-500 shadow-sm'
+            : 'bg-transparent text-orange-600 border border-orange-500 hover:bg-orange-500/10'
         }`}
       >
         Toda la semana

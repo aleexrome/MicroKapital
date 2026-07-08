@@ -96,6 +96,37 @@ export async function POST(req: NextRequest) {
   })
   if (!client) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
 
+  // ── Anti-duplicado: bloquear si el cliente ya tiene una solicitud abierta ──
+  // Los coordinadores a veces disparaban 2 o 3 submits del mismo formulario
+  // para "asegurarse" de que se envió. Con esto, cualquier segundo intento
+  // mientras exista una solicitud en el pipeline (revisión, regreso o
+  // aprobación) se rechaza con un mensaje claro. Aplica sin importar
+  // qué coordinador la haya creado — es a nivel cliente.
+  const solicitudAbierta = await prisma.loan.findFirst({
+    where: {
+      clientId: data.clientId,
+      companyId: companyId!,
+      estado: { in: ['PENDING_REVIEW', 'RETURNED_TO_COORDINATOR', 'PENDING_APPROVAL'] },
+    },
+    select: { id: true, tipo: true, estado: true, capital: true, createdAt: true },
+  })
+  if (solicitudAbierta) {
+    return NextResponse.json(
+      {
+        error: 'SOLICITUD_DUPLICADA',
+        message: `Este cliente ya tiene una solicitud ${solicitudAbierta.tipo} de $${Number(solicitudAbierta.capital).toFixed(2)} en proceso. Espera a que se resuelva antes de capturar otra.`,
+        solicitudAbierta: {
+          id: solicitudAbierta.id,
+          tipo: solicitudAbierta.tipo,
+          estado: solicitudAbierta.estado,
+          capital: Number(solicitudAbierta.capital),
+          createdAt: solicitudAbierta.createdAt.toISOString(),
+        },
+      },
+      { status: 409 }
+    )
+  }
+
   const targetBranchId = data.branchId ?? branchId ?? session.user.zonaBranchIds?.[0] ?? client.branchId
   if (!targetBranchId) return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
 

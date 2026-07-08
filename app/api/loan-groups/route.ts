@@ -52,6 +52,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Uno o más clientes no encontrados en esta empresa' }, { status: 404 })
   }
 
+  // ── Anti-duplicado: bloquear si ALGÚN integrante ya tiene una solicitud
+  // abierta (misma regla que la ruta individual). Si un solo integrante
+  // choca, se aborta todo el submit del grupo — sería confuso crear el
+  // grupo con parte de los integrantes y dejar a otros afuera.
+  const solicitudesAbiertas = await prisma.loan.findMany({
+    where: {
+      clientId: { in: data.clientIds },
+      companyId: companyId!,
+      estado: { in: ['PENDING_REVIEW', 'RETURNED_TO_COORDINATOR', 'PENDING_APPROVAL'] },
+    },
+    select: {
+      id: true,
+      tipo: true,
+      estado: true,
+      capital: true,
+      clientId: true,
+      client: { select: { nombreCompleto: true } },
+    },
+  })
+  if (solicitudesAbiertas.length > 0) {
+    return NextResponse.json(
+      {
+        error: 'SOLICITUD_DUPLICADA',
+        message:
+          `No se puede crear el grupo — ${solicitudesAbiertas.length === 1 ? 'una integrante ya tiene' : 'algunas integrantes ya tienen'} una solicitud en proceso: ` +
+          solicitudesAbiertas
+            .map((s) => `${s.client.nombreCompleto} (${s.tipo} $${Number(s.capital).toFixed(2)})`)
+            .join(', ') +
+          '. Espera a que se resuelvan antes de reenviar.',
+        integrantesBloqueadas: solicitudesAbiertas.map((s) => ({
+          clientId: s.clientId,
+          clienteNombre: s.client.nombreCompleto,
+          loanId: s.id,
+          tipo: s.tipo,
+          estado: s.estado,
+          capital: Number(s.capital),
+        })),
+      },
+      { status: 409 }
+    )
+  }
+
   // Coordinador, Cobrador, Gerente y Gerente Zonal: se auto-asignan como cobrador
   // Solo Director puede crear grupos con cobrador explícito (requiere UI con selector)
   const isCampo = rol === 'COBRADOR' || rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL' || rol === 'GERENTE'

@@ -165,7 +165,13 @@ export default function NuevaSolicitudPage() {
         })
         if (!res.ok) {
           const err = await res.json()
-          throw new Error(typeof err.error === 'string' ? err.error : 'Error al crear grupo')
+          // Preferimos el `message` humano cuando el backend lo manda
+          // (SOLICITUD_DUPLICADA, BLOQUEADO_POR_LIMBO); si no, caemos al
+          // `error` para retro-compat.
+          const msg = typeof err.message === 'string' ? err.message
+            : typeof err.error === 'string' ? err.error
+            : 'Error al crear grupo'
+          throw new Error(msg)
         }
         const { data } = await res.json()
         const loanIds: string[] = data.loans.map((l: { id: string }) => l.id)
@@ -204,7 +210,10 @@ export default function NuevaSolicitudPage() {
         })
         if (!res.ok) {
           const err = await res.json()
-          throw new Error(typeof err.error === 'string' ? err.error : 'Error al crear solicitud')
+          const msg = typeof err.message === 'string' ? err.message
+            : typeof err.error === 'string' ? err.error
+            : 'Error al crear solicitud'
+          throw new Error(msg)
         }
         const { data } = await res.json()
         await uploadDocs([data.id])

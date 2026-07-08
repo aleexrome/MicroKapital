@@ -19,6 +19,25 @@ const TIPO_CONFIG: Record<TipoDetalle, { title: string; icon: React.ComponentTyp
 }
 
 const DIAS_ES_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const MESES_ES_ABBR = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+/**
+ * Etiqueta compacta para chips de semana Sáb–Vie. Optimizada para caber en
+ * una sola fila: "04 – 10 jul" cuando la semana no cruza mes, "27 jun – 03
+ * jul" cuando sí. Reemplaza el formato largo "4 al 10 de julio de 2026" que
+ * ocupaba demasiado espacio horizontal.
+ */
+function labelSemanaCompacto(sat: Date): string {
+  const fri = new Date(sat)
+  fri.setUTCDate(fri.getUTCDate() + 6)
+  const satDia = String(sat.getUTCDate()).padStart(2, '0')
+  const friDia = String(fri.getUTCDate()).padStart(2, '0')
+  const satMes = MESES_ES_ABBR[sat.getUTCMonth()]
+  const friMes = MESES_ES_ABBR[fri.getUTCMonth()]
+  return sat.getUTCMonth() === fri.getUTCMonth()
+    ? `${satDia}–${friDia} ${friMes}`
+    : `${satDia} ${satMes} – ${friDia} ${friMes}`
+}
 
 export default async function DashboardDetallePage({
   searchParams,
@@ -174,6 +193,8 @@ export default async function DashboardDetallePage({
     const friday = getFriday(rangoInicio)
     rangoFin = new Date(friday)
     rangoFin.setUTCHours(23, 59, 59, 999)
+    // En el encabezado sí queremos el label largo — hay espacio de sobra
+    // ("4 al 10 de julio de 2026"). Los chips usan el compacto.
     rangoLabel = formatWeekLabelSatFri(rangoInicio)
   } else {
     rangoInicio = firstOfMonth
@@ -254,13 +275,14 @@ export default async function DashboardDetallePage({
             <Link
               key={key}
               href={buildHref({ semana: key })}
+              title={formatWeekLabelSatFri(sat)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 isActive
                   ? 'bg-orange-500 text-white border border-orange-500 shadow-sm'
                   : 'bg-transparent text-orange-600 border border-orange-500 hover:bg-orange-500/10'
               }`}
             >
-              {formatWeekLabelSatFri(sat)}
+              {labelSemanaCompacto(sat)}
             </Link>
           )
         })}

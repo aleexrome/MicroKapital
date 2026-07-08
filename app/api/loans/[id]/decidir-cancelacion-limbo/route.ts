@@ -7,6 +7,7 @@ import { v2 as cloudinary } from 'cloudinary'
 import { extractPublicId } from '@/lib/cloudinary'
 import { todayMx } from '@/lib/timezone'
 import { notificarCancelacionLimbo } from '@/lib/limbo-notifications'
+import { hardDeleteLoan } from '@/lib/hard-delete-loan'
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -171,10 +172,8 @@ export async function POST(
         { notas: { contains: 'comisi',   mode: 'insensitive' } },
       ],
     },
-    include: { tickets: true },
     orderBy: { fechaHora: 'desc' },
   })
-  const paymentTicket = payment?.tickets[0] ?? null
 
   if (signedDoc) {
     try {
@@ -189,78 +188,52 @@ export async function POST(
   const fechaCaja = todayMx()
 
   await prisma.$transaction(async (tx) => {
-    // Borrar contrato firmado si existe
+    // Contract.loanDocumentFirmadoId no tiene FK enforcada en Prisma —
+    // rompemos el link antes del hard-delete para no dejar una referencia
+    // colgando en un contrato grupal que otros integrantes siguen usando.
     if (contractWithSigned) {
       await tx.contract.update({
         where: { id: contractWithSigned.id },
         data: { loanDocumentFirmadoId: null },
       })
-      if (signedDoc) {
-        await tx.loanDocument.delete({ where: { id: signedDoc.id } }).catch(() => {})
-      }
     }
 
-    // Cancelar Payment si existe
-    if (payment) {
-      await tx.payment.update({ where: { id: payment.id }, data: { canceledAt: now } })
-      if (paymentTicket) {
-        await tx.ticket.update({
-          where: { id: paymentTicket.id },
-          data: { anulado: true, razonAnulacion: 'Cancelación autorizada por limbo' },
-        })
-      }
-      if (payment.metodoPago === 'CASH' || payment.metodoPago === 'CARD') {
-        const cobro = Number(payment.monto)
-        const cambio = Number(payment.cambioEntregado)
-        const reg = await tx.cashRegister.findUnique({
+    // Revertir caja del Payment de comisión/seguro antes de que el helper
+    // borre el Payment — necesitamos el monto para el decrement.
+    if (payment && (payment.metodoPago === 'CASH' || payment.metodoPago === 'CARD')) {
+      const cobro = Number(payment.monto)
+      const cambio = Number(payment.cambioEntregado)
+      const reg = await tx.cashRegister.findUnique({
+        where: { cobradorId_fecha: { cobradorId: payment.cobradorId, fecha: fechaCaja } },
+      })
+      if (reg) {
+        await tx.cashRegister.update({
           where: { cobradorId_fecha: { cobradorId: payment.cobradorId, fecha: fechaCaja } },
+          data: {
+            cobradoEfectivo: payment.metodoPago === 'CASH' ? { decrement: cobro } : undefined,
+            cobradoTarjeta:  payment.metodoPago === 'CARD' ? { decrement: cobro } : undefined,
+            cambioEntregado: cambio > 0 ? { decrement: cambio } : undefined,
+          },
         })
-        if (reg) {
-          await tx.cashRegister.update({
-            where: { cobradorId_fecha: { cobradorId: payment.cobradorId, fecha: fechaCaja } },
-            data: {
-              cobradoEfectivo: payment.metodoPago === 'CASH' ? { decrement: cobro } : undefined,
-              cobradoTarjeta:  payment.metodoPago === 'CARD' ? { decrement: cobro } : undefined,
-              cambioEntregado: cambio > 0 ? { decrement: cambio } : undefined,
-            },
-          })
-        }
       }
     }
 
-    // Marcar el préstamo como DECLINED
-    await tx.loan.update({
-      where: { id: loan.id },
-      data: {
-        estado: 'DECLINED',
-        activationCanceledAt: now,
-        activationCanceledBy: userId,
-        activationCancelReason: `Cancelación autorizada por limbo: ${comentario}`,
-        seguro: null,
-        seguroMetodoPago: null,
-        seguroPendiente: false,
-      },
-    })
-
-    // Marcar solicitud como APROBADA
-    await tx.solicitudCancelacionLimbo.update({
-      where: { id: solicitud.id },
-      data: {
-        estado: 'APROBADA',
-        aprobadoPor: userId,
-        decididoAt: now,
-        comentarioDecision: comentario,
-      },
-    })
+    // Hard-delete del préstamo (documentos, payments, tickets, schedule,
+    // aprobaciones, notificaciones, contract group members). Como
+    // SolicitudCancelacionLimbo tiene onDelete: Cascade, se borra con
+    // este mismo llamado — el registro de la solicitud desaparece
+    // también, coherente con "no dejar basura".
+    await hardDeleteLoan(tx, loan.id)
   })
 
-  // Notificar al solicitante (cobrador) que aprobamos su solicitud
+  // Notificar al solicitante (cobrador) que aprobamos su solicitud. NO
+  // ponemos loanId porque el préstamo ya no existe — solo dejamos el
+  // aviso con el nombre del cliente en el mensaje.
   try {
     await prisma.notification.create({
       data: {
         companyId: loan.companyId,
         userId: solicitud.solicitadoPor,
-        loanId: loan.id,
         tipo: 'LIMBO_SOLICITUD_APROBADA',
         titulo: 'Solicitud de cancelación aprobada',
         mensaje: `Cliente: ${loan.client.nombreCompleto}. Comentario: ${comentario}`,
@@ -272,7 +245,9 @@ export async function POST(
     console.error('[decidir-cancelacion-limbo] notif solicitante failed:', e)
   }
 
-  // Notificar a GZ + DG/DC sobre la cancelación efectiva
+  // Notificar a GZ + DG/DC sobre la cancelación efectiva. El helper de
+  // limbo-notifications se ejecuta con la copia local `loan` (id no
+  // existe ya en BD, pero la firma del helper no valida BD).
   try {
     await notificarCancelacionLimbo(prisma, {
       loan,
@@ -284,23 +259,9 @@ export async function POST(
     console.error('[decidir-cancelacion-limbo] notificarCancelacionLimbo failed:', e)
   }
 
-  createAuditLog({
-    userId,
-    accion: 'DECIDIR_CANCELACION_LIMBO',
-    tabla: 'Loan',
-    registroId: loan.id,
-    valoresNuevos: {
-      decision: 'APROBADA',
-      comentario,
-      solicitudId: solicitud.id,
-      contractRemoved: contractWithSigned?.id ?? null,
-      paymentCanceled: payment?.id ?? null,
-    },
-  })
-
   return NextResponse.json({
     ok: true,
     decision: 'APROBADA',
-    message: 'Solicitud aprobada — préstamo cancelado',
+    message: 'Solicitud aprobada — préstamo cancelado y eliminado',
   })
 }

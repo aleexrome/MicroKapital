@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { createAuditLog } from '@/lib/audit'
 import { v2 as cloudinary } from 'cloudinary'
 import { extractPublicId } from '@/lib/cloudinary'
 import { todayMx } from '@/lib/timezone'
 import { notificarCancelacionLimbo } from '@/lib/limbo-notifications'
+import { hardDeleteLoan } from '@/lib/hard-delete-loan'
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -122,10 +122,8 @@ export async function POST(
         { notas: { contains: 'comisi',   mode: 'insensitive' } },
       ],
     },
-    include: { tickets: true },
     orderBy: { fechaHora: 'desc' },
   })
-  const paymentTicket = payment?.tickets[0] ?? null
 
   // Borrar archivo de Cloudinary del contrato firmado (best-effort, fuera de tx)
   if (signedDoc) {
@@ -138,81 +136,47 @@ export async function POST(
     }
   }
 
-  const now = new Date()
   const fechaCaja = todayMx()
 
   await prisma.$transaction(async (tx) => {
-    // ── 2. Borrar contrato firmado si existe ───────────────────────────────
+    // ── 1. Si el contrato tenía firmado ligado a un LoanDocument de ESTE
+    // préstamo, primero rompemos el link — el LoanDocument se irá con el
+    // hardDeleteLoan más abajo, pero Contract.loanDocumentFirmadoId no
+    // tiene FK enforcada en Prisma y se quedaría apuntando a un doc
+    // borrado. Además, Contract.loanId puede seguir vivo si hay
+    // ContractGroupMember de otro préstamo del grupo — en ese caso el
+    // helper NO lo borra y la limpieza del link es necesaria.
     if (contractWithSigned) {
       await tx.contract.update({
         where: { id: contractWithSigned.id },
         data: { loanDocumentFirmadoId: null },
       })
-      if (signedDoc) {
-        await tx.loanDocument.delete({ where: { id: signedDoc.id } }).catch(() => {})
-      }
     }
 
-    // ── 3. Cancelar Payment de comisión si existe ──────────────────────────
-    if (payment) {
-      await tx.payment.update({
-        where: { id: payment.id },
-        data: { canceledAt: now },
+    // ── 2. Revertir caja de la comisión / seguro pagado en efectivo/tarjeta
+    // Debe hacerse ANTES de borrar el Payment porque necesitamos el monto.
+    if (payment && (payment.metodoPago === 'CASH' || payment.metodoPago === 'CARD')) {
+      const cobro = Number(payment.monto)
+      const cambio = Number(payment.cambioEntregado)
+      const reg = await tx.cashRegister.findUnique({
+        where: { cobradorId_fecha: { cobradorId: payment.cobradorId, fecha: fechaCaja } },
       })
-      if (paymentTicket) {
-        await tx.ticket.update({
-          where: { id: paymentTicket.id },
+      if (reg) {
+        await tx.cashRegister.update({
+          where: { cobradorId_fecha: { cobradorId: payment.cobradorId, fecha: fechaCaja } },
           data: {
-            anulado: true,
-            razonAnulacion: 'Cancelación de activación',
+            cobradoEfectivo: payment.metodoPago === 'CASH' ? { decrement: cobro } : undefined,
+            cobradoTarjeta:  payment.metodoPago === 'CARD' ? { decrement: cobro } : undefined,
+            cambioEntregado: cambio > 0 ? { decrement: cambio } : undefined,
           },
         })
       }
-      if (payment.metodoPago === 'CASH' || payment.metodoPago === 'CARD') {
-        const cobro = Number(payment.monto)
-        const cambio = Number(payment.cambioEntregado)
-        const reg = await tx.cashRegister.findUnique({
-          where: { cobradorId_fecha: { cobradorId: payment.cobradorId, fecha: fechaCaja } },
-        })
-        if (reg) {
-          await tx.cashRegister.update({
-            where: { cobradorId_fecha: { cobradorId: payment.cobradorId, fecha: fechaCaja } },
-            data: {
-              cobradoEfectivo: payment.metodoPago === 'CASH' ? { decrement: cobro } : undefined,
-              cobradoTarjeta:  payment.metodoPago === 'CARD' ? { decrement: cobro } : undefined,
-              cambioEntregado: cambio > 0 ? { decrement: cambio } : undefined,
-            },
-          })
-        }
-      }
     }
 
-    // ── 4. Marcar el préstamo como DECLINED ────────────────────────────────
-    await tx.loan.update({
-      where: { id: loan.id },
-      data: {
-        estado: 'DECLINED',
-        activationCanceledAt: now,
-        activationCanceledBy: userId,
-        activationCancelReason: reason,
-        // Limpiar campos de seguro
-        seguro: null,
-        seguroMetodoPago: null,
-        seguroPendiente: false,
-      },
-    })
-  })
-
-  createAuditLog({
-    userId,
-    accion: 'CANCEL_ACTIVATION',
-    tabla: 'Loan',
-    registroId: loan.id,
-    valoresNuevos: {
-      reason,
-      contractRemoved: contractWithSigned?.id ?? null,
-      paymentCanceled: payment?.id ?? null,
-    },
+    // ── 3. Hard-delete del préstamo (documentos, payments, tickets, schedule,
+    // aprobaciones, notificaciones, contract group members, todo). El helper
+    // se encarga de borrar en el orden correcto por FKs.
+    await hardDeleteLoan(tx, loan.id)
   })
 
   // Notificar a cobradora + GZ + DG/DC. Best-effort: si falla por algún motivo

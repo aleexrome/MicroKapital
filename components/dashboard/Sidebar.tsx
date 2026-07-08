@@ -150,6 +150,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   {
+    href: '/banca',
+    label: 'Banca',
+    icon: <Landmark className="h-5 w-5" />,
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
+  },
+  {
     href: '/recursos-humanos',
     label: 'Recursos Humanos',
     icon: <BriefcaseBusiness className="h-5 w-5" />,

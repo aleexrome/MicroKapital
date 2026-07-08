@@ -1,0 +1,448 @@
+export const dynamic = 'force-dynamic'
+
+import { getSession } from '@/lib/session'
+import { prisma } from '@/lib/prisma'
+import { redirect } from 'next/navigation'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { MetricCard } from '@/components/dashboard/MetricCard'
+import { BancaSucursalFilter } from '@/components/dashboard/BancaSucursalFilter'
+import { formatMoney, formatDate } from '@/lib/utils'
+import { toMxYMD, parseMxYMD } from '@/lib/timezone'
+import {
+  semanasRecientesSatFri,
+  getFriday,
+  saturdayToId,
+  formatWeekLabelSatFri,
+} from '@/lib/week-utils'
+import { scopedLoanWhere, loanNotDeletedWhere } from '@/lib/access'
+import { Landmark, Banknote, TrendingDown, Wallet } from 'lucide-react'
+
+// Semanas laborales (sábado→viernes) hacia atrás que se muestran (incluye la actual).
+const WEEKS_BACK = 8
+
+// Día calendario CDMX de un timestamp, formateado dd/MM/yyyy.
+function diaMx(d: Date): string {
+  return formatDate(parseMxYMD(toMxYMD(d)))
+}
+
+interface CorteRow {
+  key: string
+  fecha: Date
+  cobrador: string
+  efectivo: number
+  tarjeta: number
+  transferencia: number
+  total: number
+}
+
+interface DesembolsoRow {
+  id: string
+  fecha: Date
+  cobrador: string
+  cliente: string
+  capital: number
+  comision: number
+  montoReal: number
+}
+
+interface BranchAgg {
+  branchId: string
+  branchName: string
+  cortes: Map<string, CorteRow>
+  desembolsos: DesembolsoRow[]
+  totalCortes: number
+  totalDesembolsos: number
+}
+
+interface WeekAgg {
+  key: string
+  saturday: Date
+  branches: Map<string, BranchAgg>
+}
+
+export default async function BancaPage({
+  searchParams,
+}: {
+  searchParams: { sucursal?: string }
+}) {
+  const session = await getSession()
+  if (!session?.user) redirect('/login')
+
+  const { rol, companyId } = session.user
+  // Módulo exclusivo de dirección (Director General y Director Comercial).
+  if (rol !== 'DIRECTOR_GENERAL' && rol !== 'DIRECTOR_COMERCIAL') redirect('/dashboard')
+  if (!companyId) redirect('/dashboard')
+
+  const accessUser = {
+    id: session.user.id,
+    rol,
+    branchId: session.user.branchId,
+    zonaBranchIds: session.user.zonaBranchIds,
+  }
+
+  const sucursalFilter =
+    searchParams.sucursal && searchParams.sucursal !== 'ALL' ? searchParams.sucursal : null
+
+  // Rango: desde el sábado más antiguo mostrado hasta el viernes de la semana actual.
+  const semanas = semanasRecientesSatFri(WEEKS_BACK)
+  const periodoStart = semanas[semanas.length - 1]
+  const periodoEnd = getFriday(semanas[0])
+
+  const branchWhere = sucursalFilter ? { branchId: sucursalFilter } : {}
+
+  const [branches, pagos, desembolsos] = await Promise.all([
+    // Sucursales de la empresa (para el filtro)
+    prisma.branch.findMany({
+      where: { companyId },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: 'asc' },
+    }),
+
+    // Cobros del periodo (mismo criterio que "Corte del Día")
+    prisma.payment.findMany({
+      where: {
+        canceledAt: null,
+        fechaHora: { gte: periodoStart, lte: periodoEnd },
+        loan: {
+          companyId,
+          AND: [scopedLoanWhere(accessUser), loanNotDeletedWhere],
+          ...branchWhere,
+        },
+      },
+      select: {
+        id: true,
+        monto: true,
+        metodoPago: true,
+        statusTransferencia: true,
+        fechaHora: true,
+        cobrador: { select: { id: true, nombre: true } },
+        loan: { select: { branch: { select: { id: true, nombre: true } } } },
+      },
+    }),
+
+    // Desembolsos netos: préstamos desembolsados en el periodo.
+    prisma.loan.findMany({
+      where: {
+        companyId,
+        AND: [scopedLoanWhere(accessUser), loanNotDeletedWhere],
+        ...branchWhere,
+        fechaDesembolso: { gte: periodoStart, lte: periodoEnd },
+        estado: { in: ['ACTIVE', 'LIQUIDATED', 'RESTRUCTURED', 'DEFAULTED'] },
+      },
+      select: {
+        id: true,
+        fechaDesembolso: true,
+        capital: true,
+        comision: true,
+        montoReal: true,
+        cobrador: { select: { id: true, nombre: true } },
+        client: { select: { nombreCompleto: true } },
+        branch: { select: { id: true, nombre: true } },
+      },
+    }),
+  ])
+
+  // ── Rangos de cada semana (sáb→vie) para asignar cada registro ──
+  const weekRanges = semanas.map((sat) => ({
+    sat,
+    friday: getFriday(sat),
+    key: saturdayToId(sat),
+  }))
+  function findWeek(t: Date) {
+    return weekRanges.find((w) => t >= w.sat && t <= w.friday) ?? null
+  }
+
+  const weeks = new Map<string, WeekAgg>()
+  function getBranchAgg(weekKey: string, saturday: Date, branchId: string, branchName: string): BranchAgg {
+    let week = weeks.get(weekKey)
+    if (!week) {
+      week = { key: weekKey, saturday, branches: new Map() }
+      weeks.set(weekKey, week)
+    }
+    let branch = week.branches.get(branchId)
+    if (!branch) {
+      branch = {
+        branchId,
+        branchName,
+        cortes: new Map(),
+        desembolsos: [],
+        totalCortes: 0,
+        totalDesembolsos: 0,
+      }
+      week.branches.set(branchId, branch)
+    }
+    return branch
+  }
+
+  // Cortes: agrupados por (cobrador, día). Solo cuentan efectivo, tarjeta y
+  // transferencia VERIFICADA — idéntico al total de "Corte del Día".
+  for (const p of pagos) {
+    const esTransferValida = p.metodoPago === 'TRANSFER' && p.statusTransferencia === 'VERIFICADO'
+    const cuenta = p.metodoPago === 'CASH' || p.metodoPago === 'CARD' || esTransferValida
+    if (!cuenta) continue
+
+    const fecha = new Date(p.fechaHora)
+    const w = findWeek(fecha)
+    if (!w) continue
+
+    const branch = p.loan.branch
+    const b = getBranchAgg(w.key, w.sat, branch.id, branch.nombre)
+
+    const dayKey = toMxYMD(fecha)
+    const ck = `${p.cobrador.id}|${dayKey}`
+    let corte = b.cortes.get(ck)
+    if (!corte) {
+      corte = {
+        key: ck,
+        fecha: parseMxYMD(dayKey),
+        cobrador: p.cobrador.nombre,
+        efectivo: 0,
+        tarjeta: 0,
+        transferencia: 0,
+        total: 0,
+      }
+      b.cortes.set(ck, corte)
+    }
+    const m = Number(p.monto)
+    if (p.metodoPago === 'CASH') corte.efectivo += m
+    else if (p.metodoPago === 'CARD') corte.tarjeta += m
+    else corte.transferencia += m
+    corte.total += m
+    b.totalCortes += m
+  }
+
+  // Desembolsos netos (montoReal = capital − comisión).
+  for (const d of desembolsos) {
+    if (!d.fechaDesembolso) continue
+    const fecha = new Date(d.fechaDesembolso)
+    const w = findWeek(fecha)
+    if (!w) continue
+
+    const b = getBranchAgg(w.key, w.sat, d.branch.id, d.branch.nombre)
+    const montoReal = Number(d.montoReal)
+    b.desembolsos.push({
+      id: d.id,
+      fecha,
+      cobrador: d.cobrador.nombre,
+      cliente: d.client.nombreCompleto,
+      capital: Number(d.capital),
+      comision: Number(d.comision),
+      montoReal,
+    })
+    b.totalDesembolsos += montoReal
+  }
+
+  const weeksSorted = Array.from(weeks.values()).sort(
+    (a, b) => b.saturday.getTime() - a.saturday.getTime()
+  )
+
+  // Totales del periodo mostrado.
+  let grandCortes = 0
+  let grandDesembolsos = 0
+  for (const w of weeksSorted) {
+    for (const b of Array.from(w.branches.values())) {
+      grandCortes += b.totalCortes
+      grandDesembolsos += b.totalDesembolsos
+    }
+  }
+  const grandNeto = grandCortes - grandDesembolsos
+
+  const sucursalNombre = sucursalFilter
+    ? branches.find((b) => b.id === sucursalFilter)?.nombre ?? null
+    : null
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+            <Landmark className="h-6 w-6 text-primary-700" />
+            Banca
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Corte semanal (sábado a viernes): cortes del día menos desembolsos netos, por sucursal
+            {sucursalNombre ? ` · ${sucursalNombre}` : ' · Empresa completa'}
+          </p>
+        </div>
+        <BancaSucursalFilter branches={branches} selected={sucursalFilter ?? 'ALL'} />
+      </div>
+
+      {/* Resumen del periodo */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <MetricCard
+          title={`Cortes (últimas ${WEEKS_BACK} sem.)`}
+          value={formatMoney(grandCortes)}
+          icon={Banknote}
+          color="green"
+        />
+        <MetricCard
+          title="Desembolsos netos"
+          value={formatMoney(grandDesembolsos)}
+          icon={TrendingDown}
+          color="yellow"
+        />
+        <MetricCard
+          title="Neto para banca"
+          value={formatMoney(grandNeto)}
+          icon={Wallet}
+          color={grandNeto >= 0 ? 'blue' : 'red'}
+        />
+      </div>
+
+      {weeksSorted.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            Sin movimientos en el periodo seleccionado.
+          </CardContent>
+        </Card>
+      ) : (
+        weeksSorted.map((week) => {
+          const branchesSorted = Array.from(week.branches.values()).sort((a, b) =>
+            a.branchName.localeCompare(b.branchName)
+          )
+          const weekCortes = branchesSorted.reduce((s, b) => s + b.totalCortes, 0)
+          const weekDesembolsos = branchesSorted.reduce((s, b) => s + b.totalDesembolsos, 0)
+          const weekNeto = weekCortes - weekDesembolsos
+
+          return (
+            <Card key={week.key}>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-base">
+                  Semana {formatWeekLabelSatFri(week.saturday)}
+                </CardTitle>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">Neto para banca</p>
+                  <p
+                    className={`text-lg font-bold money ${
+                      weekNeto >= 0 ? 'text-primary-800' : 'text-red-600'
+                    }`}
+                  >
+                    {formatMoney(weekNeto)}
+                  </p>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {branchesSorted.map((b) => {
+                  const neto = b.totalCortes - b.totalDesembolsos
+                  const cortesRows = Array.from(b.cortes.values()).sort(
+                    (x, y) => x.fecha.getTime() - y.fecha.getTime() || x.cobrador.localeCompare(y.cobrador)
+                  )
+                  const desembolsosRows = [...b.desembolsos].sort(
+                    (x, y) => x.fecha.getTime() - y.fecha.getTime()
+                  )
+                  return (
+                    <div key={b.branchId} className="rounded-lg border border-border">
+                      {/* Resumen de la sucursal */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border-b border-border bg-secondary/40 px-4 py-3">
+                        <div className="col-span-2 sm:col-span-1">
+                          <p className="text-xs text-muted-foreground">Sucursal</p>
+                          <p className="font-semibold text-foreground">🏢 {b.branchName}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Cortes</p>
+                          <p className="font-semibold text-green-700 money">{formatMoney(b.totalCortes)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Desembolsos</p>
+                          <p className="font-semibold text-yellow-600 money">- {formatMoney(b.totalDesembolsos)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Neto</p>
+                          <p className={`font-bold money ${neto >= 0 ? 'text-primary-800' : 'text-red-600'}`}>
+                            {formatMoney(neto)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Detalle: cortes del día y desembolsos (cobrador, fecha, etc.) */}
+                      <details className="group">
+                        <summary className="cursor-pointer select-none px-4 py-2 text-sm text-primary-700 hover:bg-primary-500/5">
+                          Ver detalle ({cortesRows.length} cortes · {desembolsosRows.length} desembolsos)
+                        </summary>
+                        <div className="space-y-4 px-4 py-3">
+                          {/* Cortes del día */}
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Cortes del día
+                            </p>
+                            {cortesRows.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">Sin cobros.</p>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="text-left text-xs text-muted-foreground">
+                                      <th className="py-1 pr-3 font-medium">Fecha</th>
+                                      <th className="py-1 pr-3 font-medium">Cobrador</th>
+                                      <th className="py-1 pr-3 text-right font-medium">Efectivo</th>
+                                      <th className="py-1 pr-3 text-right font-medium">Tarjeta</th>
+                                      <th className="py-1 pr-3 text-right font-medium">Transf.</th>
+                                      <th className="py-1 text-right font-medium">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border/50">
+                                    {cortesRows.map((c) => (
+                                      <tr key={c.key}>
+                                        <td className="py-1.5 pr-3">{formatDate(c.fecha)}</td>
+                                        <td className="py-1.5 pr-3">{c.cobrador}</td>
+                                        <td className="py-1.5 pr-3 text-right money">{formatMoney(c.efectivo)}</td>
+                                        <td className="py-1.5 pr-3 text-right money">{formatMoney(c.tarjeta)}</td>
+                                        <td className="py-1.5 pr-3 text-right money">{formatMoney(c.transferencia)}</td>
+                                        <td className="py-1.5 text-right font-medium money">{formatMoney(c.total)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Desembolsos netos */}
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Desembolsos netos
+                            </p>
+                            {desembolsosRows.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">Sin desembolsos.</p>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="text-left text-xs text-muted-foreground">
+                                      <th className="py-1 pr-3 font-medium">Fecha</th>
+                                      <th className="py-1 pr-3 font-medium">Cobrador</th>
+                                      <th className="py-1 pr-3 font-medium">Cliente</th>
+                                      <th className="py-1 pr-3 text-right font-medium">Capital</th>
+                                      <th className="py-1 pr-3 text-right font-medium">Comisión</th>
+                                      <th className="py-1 text-right font-medium">Neto</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border/50">
+                                    {desembolsosRows.map((d) => (
+                                      <tr key={d.id}>
+                                        <td className="py-1.5 pr-3">{diaMx(d.fecha)}</td>
+                                        <td className="py-1.5 pr-3">{d.cobrador}</td>
+                                        <td className="py-1.5 pr-3">{d.cliente}</td>
+                                        <td className="py-1.5 pr-3 text-right money">{formatMoney(d.capital)}</td>
+                                        <td className="py-1.5 pr-3 text-right text-yellow-600 money">- {formatMoney(d.comision)}</td>
+                                        <td className="py-1.5 text-right font-medium money">{formatMoney(d.montoReal)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  )
+                })}
+              </CardContent>
+            </Card>
+          )
+        })
+      )}
+    </div>
+  )
+}

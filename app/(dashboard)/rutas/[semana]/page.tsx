@@ -151,13 +151,14 @@ function DayFilterChips({
     return qs ? `${basePath}?${qs}` : basePath
   }
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs font-medium text-muted-foreground mr-1">Filtrar por día:</span>
       <Link
         href={buildHref(null)}
         className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
           active === null
-            ? 'bg-primary-600 text-white'
-            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            ? 'bg-primary-600 text-white border border-primary-600 shadow-sm'
+            : 'bg-card text-foreground border border-border hover:bg-secondary hover:border-primary-400'
         }`}
       >
         Toda la semana

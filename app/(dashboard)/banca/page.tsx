@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { BancaSucursalFilter } from '@/components/dashboard/BancaSucursalFilter'
+import { BancaAddExtraFundButton } from '@/components/dashboard/BancaAddExtraFundButton'
+import { BancaDeleteExtraFundButton } from '@/components/dashboard/BancaDeleteExtraFundButton'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { toMxYMD, parseMxYMD } from '@/lib/timezone'
 import {
@@ -15,7 +17,7 @@ import {
   formatWeekLabelSatFri,
 } from '@/lib/week-utils'
 import { scopedLoanWhere, loanNotDeletedWhere } from '@/lib/access'
-import { Landmark, Banknote, TrendingDown, Wallet } from 'lucide-react'
+import { Landmark, Banknote, TrendingDown, Wallet, PlusCircle } from 'lucide-react'
 
 // Semanas laborales (sábado→viernes) hacia atrás que se muestran (incluye la actual).
 const WEEKS_BACK = 8
@@ -45,13 +47,23 @@ interface DesembolsoRow {
   montoReal: number
 }
 
+interface AdicionalRow {
+  id: string
+  fecha: Date
+  monto: number
+  concepto: string | null
+  creadoPor: string
+}
+
 interface BranchAgg {
   branchId: string
   branchName: string
   cortes: Map<string, CorteRow>
   desembolsos: DesembolsoRow[]
+  adicionales: AdicionalRow[]
   totalCortes: number
   totalDesembolsos: number
+  totalAdicional: number
 }
 
 interface WeekAgg {
@@ -90,7 +102,7 @@ export default async function BancaPage({
 
   const branchWhere = sucursalFilter ? { branchId: sucursalFilter } : {}
 
-  const [branches, pagos, desembolsos] = await Promise.all([
+  const [branches, pagos, desembolsos, adicionales] = await Promise.all([
     // Sucursales de la empresa (para el filtro)
     prisma.branch.findMany({
       where: { companyId },
@@ -140,6 +152,24 @@ export default async function BancaPage({
         branch: { select: { id: true, nombre: true } },
       },
     }),
+
+    // Aportes adicionales que Dirección envió a las sucursales.
+    prisma.branchExtraFund.findMany({
+      where: {
+        companyId,
+        fecha: { gte: periodoStart, lte: periodoEnd },
+        ...branchWhere,
+      },
+      select: {
+        id: true,
+        fecha: true,
+        monto: true,
+        concepto: true,
+        branch: { select: { id: true, nombre: true } },
+        createdBy: { select: { nombre: true } },
+      },
+      orderBy: { fecha: 'asc' },
+    }),
   ])
 
   // ── Rangos de cada semana (sáb→vie) para asignar cada registro ──
@@ -166,8 +196,10 @@ export default async function BancaPage({
         branchName,
         cortes: new Map(),
         desembolsos: [],
+        adicionales: [],
         totalCortes: 0,
         totalDesembolsos: 0,
+        totalAdicional: 0,
       }
       week.branches.set(branchId, branch)
     }
@@ -232,6 +264,24 @@ export default async function BancaPage({
     b.totalDesembolsos += montoReal
   }
 
+  // Aportes adicionales de Dirección — se suman al saldo bancable.
+  for (const a of adicionales) {
+    const fecha = new Date(a.fecha)
+    const w = findWeek(fecha)
+    if (!w) continue
+
+    const b = getBranchAgg(w.key, w.sat, a.branch.id, a.branch.nombre)
+    const monto = Number(a.monto)
+    b.adicionales.push({
+      id: a.id,
+      fecha,
+      monto,
+      concepto: a.concepto,
+      creadoPor: a.createdBy?.nombre ?? '—',
+    })
+    b.totalAdicional += monto
+  }
+
   const weeksSorted = Array.from(weeks.values()).sort(
     (a, b) => b.saturday.getTime() - a.saturday.getTime()
   )
@@ -239,13 +289,15 @@ export default async function BancaPage({
   // Totales del periodo mostrado.
   let grandCortes = 0
   let grandDesembolsos = 0
+  let grandAdicional = 0
   for (const w of weeksSorted) {
     for (const b of Array.from(w.branches.values())) {
       grandCortes += b.totalCortes
       grandDesembolsos += b.totalDesembolsos
+      grandAdicional += b.totalAdicional
     }
   }
-  const grandNeto = grandCortes - grandDesembolsos
+  const grandNeto = grandCortes + grandAdicional - grandDesembolsos
 
   const sucursalNombre = sucursalFilter
     ? branches.find((b) => b.id === sucursalFilter)?.nombre ?? null
@@ -264,16 +316,28 @@ export default async function BancaPage({
             {sucursalNombre ? ` · ${sucursalNombre}` : ' · Empresa completa'}
           </p>
         </div>
-        <BancaSucursalFilter branches={branches} selected={sucursalFilter ?? 'ALL'} />
+        <div className="flex flex-wrap items-center gap-2">
+          <BancaSucursalFilter branches={branches} selected={sucursalFilter ?? 'ALL'} />
+          <BancaAddExtraFundButton
+            branches={branches}
+            defaultBranchId={sucursalFilter ?? undefined}
+          />
+        </div>
       </div>
 
       {/* Resumen del periodo */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title={`Cortes (últimas ${WEEKS_BACK} sem.)`}
           value={formatMoney(grandCortes)}
           icon={Banknote}
           color="green"
+        />
+        <MetricCard
+          title="Monto adicional"
+          value={formatMoney(grandAdicional)}
+          icon={PlusCircle}
+          color="purple"
         />
         <MetricCard
           title="Desembolsos netos"
@@ -302,7 +366,8 @@ export default async function BancaPage({
           )
           const weekCortes = branchesSorted.reduce((s, b) => s + b.totalCortes, 0)
           const weekDesembolsos = branchesSorted.reduce((s, b) => s + b.totalDesembolsos, 0)
-          const weekNeto = weekCortes - weekDesembolsos
+          const weekAdicional = branchesSorted.reduce((s, b) => s + b.totalAdicional, 0)
+          const weekNeto = weekCortes + weekAdicional - weekDesembolsos
 
           return (
             <Card key={week.key}>
@@ -314,7 +379,7 @@ export default async function BancaPage({
                   <p className="text-xs text-muted-foreground">Neto para banca</p>
                   <p
                     className={`text-lg font-bold money ${
-                      weekNeto >= 0 ? 'text-primary-800' : 'text-red-600'
+                      weekNeto >= 0 ? 'text-blue-300' : 'text-red-400'
                     }`}
                   >
                     {formatMoney(weekNeto)}
@@ -323,17 +388,20 @@ export default async function BancaPage({
               </CardHeader>
               <CardContent className="space-y-4">
                 {branchesSorted.map((b) => {
-                  const neto = b.totalCortes - b.totalDesembolsos
+                  const neto = b.totalCortes + b.totalAdicional - b.totalDesembolsos
                   const cortesRows = Array.from(b.cortes.values()).sort(
                     (x, y) => x.fecha.getTime() - y.fecha.getTime() || x.cobrador.localeCompare(y.cobrador)
                   )
                   const desembolsosRows = [...b.desembolsos].sort(
                     (x, y) => x.fecha.getTime() - y.fecha.getTime()
                   )
+                  const adicionalRows = [...b.adicionales].sort(
+                    (x, y) => x.fecha.getTime() - y.fecha.getTime()
+                  )
                   return (
                     <div key={b.branchId} className="rounded-lg border border-border">
                       {/* Resumen de la sucursal */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border-b border-border bg-secondary/40 px-4 py-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 border-b border-border bg-secondary/40 px-4 py-3">
                         <div className="col-span-2 sm:col-span-1">
                           <p className="text-xs text-muted-foreground">Sucursal</p>
                           <p className="font-semibold text-foreground">🏢 {b.branchName}</p>
@@ -343,21 +411,27 @@ export default async function BancaPage({
                           <p className="font-semibold text-green-700 money">{formatMoney(b.totalCortes)}</p>
                         </div>
                         <div>
+                          <p className="text-xs text-muted-foreground">Adicional</p>
+                          <p className="font-semibold text-violet-300 money">
+                            {b.totalAdicional > 0 ? `+ ${formatMoney(b.totalAdicional)}` : formatMoney(0)}
+                          </p>
+                        </div>
+                        <div>
                           <p className="text-xs text-muted-foreground">Desembolsos</p>
                           <p className="font-semibold text-yellow-600 money">- {formatMoney(b.totalDesembolsos)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Neto</p>
-                          <p className={`font-bold money ${neto >= 0 ? 'text-primary-800' : 'text-red-600'}`}>
+                          <p className={`font-bold money ${neto >= 0 ? 'text-blue-300' : 'text-red-400'}`}>
                             {formatMoney(neto)}
                           </p>
                         </div>
                       </div>
 
-                      {/* Detalle: cortes del día y desembolsos (cobrador, fecha, etc.) */}
+                      {/* Detalle: cortes del día, adicionales y desembolsos */}
                       <details className="group">
                         <summary className="cursor-pointer select-none px-4 py-2 text-sm text-primary-700 hover:bg-primary-500/5">
-                          Ver detalle ({cortesRows.length} cortes · {desembolsosRows.length} desembolsos)
+                          Ver detalle ({cortesRows.length} cortes · {adicionalRows.length} adicionales · {desembolsosRows.length} desembolsos)
                         </summary>
                         <div className="space-y-4 px-4 py-3">
                           {/* Cortes del día */}
@@ -389,6 +463,48 @@ export default async function BancaPage({
                                         <td className="py-1.5 pr-3 text-right money">{formatMoney(c.tarjeta)}</td>
                                         <td className="py-1.5 pr-3 text-right money">{formatMoney(c.transferencia)}</td>
                                         <td className="py-1.5 text-right font-medium money">{formatMoney(c.total)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Aportes adicionales de Dirección */}
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Monto adicional
+                            </p>
+                            {adicionalRows.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">Sin aportes.</p>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="text-left text-xs text-muted-foreground">
+                                      <th className="py-1 pr-3 font-medium">Fecha</th>
+                                      <th className="py-1 pr-3 font-medium">Registrado por</th>
+                                      <th className="py-1 pr-3 font-medium">Concepto</th>
+                                      <th className="py-1 pr-3 text-right font-medium">Monto</th>
+                                      <th className="py-1 text-right font-medium w-8"></th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border/50">
+                                    {adicionalRows.map((a) => (
+                                      <tr key={a.id}>
+                                        <td className="py-1.5 pr-3">{diaMx(a.fecha)}</td>
+                                        <td className="py-1.5 pr-3">{a.creadoPor}</td>
+                                        <td className="py-1.5 pr-3 text-muted-foreground">{a.concepto ?? '—'}</td>
+                                        <td className="py-1.5 pr-3 text-right font-medium text-violet-300 money">
+                                          + {formatMoney(a.monto)}
+                                        </td>
+                                        <td className="py-1.5 text-right">
+                                          <BancaDeleteExtraFundButton
+                                            id={a.id}
+                                            label={`de ${formatMoney(a.monto)} en ${diaMx(a.fecha)}`}
+                                          />
+                                        </td>
                                       </tr>
                                     ))}
                                   </tbody>

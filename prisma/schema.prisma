@@ -124,6 +124,7 @@ model Company {
   bankAccounts  CompanyBankAccount[]
   goals         Goal[]
   employees     EmployeeRecord[]
+  extraFunds    BranchExtraFund[]
 }
 
 model License {
@@ -157,6 +158,28 @@ model Branch {
   loanGroups    LoanGroup[]
   cashRegisters CashRegister[]
   tickets       Ticket[]
+  extraFunds    BranchExtraFund[]
+}
+
+// Aporte adicional que Dirección envía a una sucursal fuera del ciclo
+// normal de préstamos. En /banca se suma a los cortes y modifica el
+// "Neto para banca" — refleja movimientos de tesorería tipo "DG mandó
+// $50k extra a Toluca esta semana".
+model BranchExtraFund {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  fecha       DateTime @db.Date
+  monto       Decimal  @db.Decimal(12, 2)
+  concepto    String?
+  createdById String
+  createdBy   User     @relation("BranchExtraFundsCreated", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([branchId, fecha])
+  @@index([companyId, fecha])
 }
 
 model User {
@@ -204,6 +227,7 @@ model User {
   // Solicitudes de cancelación por limbo (anti-fraude)
   solicitudesCancelacionLimbo SolicitudCancelacionLimbo[] @relation("SolicitanteCancelacion")
   decisionesCancelacionLimbo  SolicitudCancelacionLimbo[] @relation("AprobadorCancelacion")
+  extraFundsCreated           BranchExtraFund[]           @relation("BranchExtraFundsCreated")
 
   @@unique([companyId, email])
 }

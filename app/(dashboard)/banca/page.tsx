@@ -33,7 +33,6 @@ interface CorteRow {
   cobrador: string
   efectivo: number
   tarjeta: number
-  transferencia: number
   total: number
 }
 
@@ -125,7 +124,6 @@ export default async function BancaPage({
         id: true,
         monto: true,
         metodoPago: true,
-        statusTransferencia: true,
         fechaHora: true,
         cobrador: { select: { id: true, nombre: true } },
         loan: { select: { branch: { select: { id: true, nombre: true } } } },
@@ -206,11 +204,12 @@ export default async function BancaPage({
     return branch
   }
 
-  // Cortes: agrupados por (cobrador, día). Solo cuentan efectivo, tarjeta y
-  // transferencia VERIFICADA — idéntico al total de "Corte del Día".
+  // Cortes: agrupados por (cobrador, día). Solo cuentan efectivo y tarjeta.
+  // Las transferencias se excluyen — banca es solo del dinero que se
+  // deposita físicamente; las transferencias ya llegan al banco por otro
+  // canal y no forman parte del "Neto para banca".
   for (const p of pagos) {
-    const esTransferValida = p.metodoPago === 'TRANSFER' && p.statusTransferencia === 'VERIFICADO'
-    const cuenta = p.metodoPago === 'CASH' || p.metodoPago === 'CARD' || esTransferValida
+    const cuenta = p.metodoPago === 'CASH' || p.metodoPago === 'CARD'
     if (!cuenta) continue
 
     const fecha = new Date(p.fechaHora)
@@ -230,15 +229,13 @@ export default async function BancaPage({
         cobrador: p.cobrador.nombre,
         efectivo: 0,
         tarjeta: 0,
-        transferencia: 0,
         total: 0,
       }
       b.cortes.set(ck, corte)
     }
     const m = Number(p.monto)
     if (p.metodoPago === 'CASH') corte.efectivo += m
-    else if (p.metodoPago === 'CARD') corte.tarjeta += m
-    else corte.transferencia += m
+    else corte.tarjeta += m
     corte.total += m
     b.totalCortes += m
   }
@@ -450,7 +447,6 @@ export default async function BancaPage({
                                       <th className="py-1 pr-3 font-medium">Cobrador</th>
                                       <th className="py-1 pr-3 text-right font-medium">Efectivo</th>
                                       <th className="py-1 pr-3 text-right font-medium">Tarjeta</th>
-                                      <th className="py-1 pr-3 text-right font-medium">Transf.</th>
                                       <th className="py-1 text-right font-medium">Total</th>
                                     </tr>
                                   </thead>
@@ -461,7 +457,6 @@ export default async function BancaPage({
                                         <td className="py-1.5 pr-3">{c.cobrador}</td>
                                         <td className="py-1.5 pr-3 text-right money">{formatMoney(c.efectivo)}</td>
                                         <td className="py-1.5 pr-3 text-right money">{formatMoney(c.tarjeta)}</td>
-                                        <td className="py-1.5 pr-3 text-right money">{formatMoney(c.transferencia)}</td>
                                         <td className="py-1.5 text-right font-medium money">{formatMoney(c.total)}</td>
                                       </tr>
                                     ))}

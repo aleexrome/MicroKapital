@@ -29,14 +29,6 @@ const createPaymentSchema = z.object({
   // Admin override: permite cobrar más del montoEsperado de la cuota.
   // Sólo DG / SUPER_ADMIN; coordinadores/gerentes nunca pueden sobrepasar.
   excedeMontoConfirmado: z.boolean().optional(),
-  // Cobro de multa/mora — opcional. Si moraPagada=true, el backend cobra
-  // adicionalmente el monto (200 o 500 según detección) con el método
-  // indicado y genera un ticket separado. Si no viene o es false, la
-  // multa/mora se registra como pendiente sin cobrar.
-  moraPagada: z.boolean().optional(),
-  moraMetodoPago: z.enum(['CASH', 'CARD']).optional(),
-  moraCashBreakdown: z.array(cashBreakdownSchema).optional().default([]),
-  moraCambioEntregado: z.number().min(0).optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -355,111 +347,33 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // 8. Multa/Mora: detectar si el pago fue tardío según fecha de
-    // vencimiento vs. now (CDMX). Si aplica se registra el MoraCobro
-    // siempre — sirve para contabilidad. Si moraPagada=true, además
-    // creamos otro Payment para el cobro, otro ticket, y actualizamos
-    // la caja del cobrador.
-    let moraCobroRow: { id: string; tipo: string; monto: number; cobrada: boolean } | null = null
-    let moraTicketNumero: string | null = null
+    // 8. Multa/Mora: si el pago fue tardío según CDMX, se registra la
+    // MoraCobro como PENDIENTE. El cobro es un flujo aparte — el
+    // cobrador captura la mora desde la sub-fila del calendario, no
+    // acoplada a este pago. Único por scheduleId: si ya existía de
+    // un cobro parcial previo o de una captura de mora directa, se
+    // respeta.
     const mora = detectarMora(schedule.fechaVencimiento, now)
-    // Solo una MoraCobro por schedule — si ya se generó en un cobro
-    // parcial previo, no duplicamos.
-    const yaExisteMora = mora
-      ? await tx.moraCobro.findUnique({ where: { scheduleId: schedule.id }, select: { id: true } })
-      : null
-    if (mora && !yaExisteMora) {
-      const cobrarAhora =
-        data.moraPagada === true
-        && (data.moraMetodoPago === 'CASH' || data.moraMetodoPago === 'CARD')
-
-      let paymentCobroMoraId: string | null = null
-      if (cobrarAhora) {
-        const cambio = Number(data.moraCambioEntregado ?? 0)
-        const paymentMora = await tx.payment.create({
+    if (mora) {
+      const yaExisteMora = await tx.moraCobro.findUnique({
+        where: { scheduleId: schedule.id },
+        select: { id: true },
+      })
+      if (!yaExisteMora) {
+        await tx.moraCobro.create({
           data: {
-            loanId: loan.id,
-            // scheduleId null: el cobro de la mora NO es una cuota del
-            // calendario, es un cargo aparte que ramifica del pago origen.
-            scheduleId: null,
-            cobradorId: cobrador.id,
-            clientId: loan.clientId,
-            monto: mora.monto,
-            metodoPago: data.moraMetodoPago!,
-            cambioEntregado: cambio,
-            notas: `${mora.tipo === 'MORA' ? 'Mora' : 'Multa'} por atraso — pago #${schedule.numeroPago}`,
-            fechaHora: now,
-          },
-        })
-        paymentCobroMoraId = paymentMora.id
-
-        // Desglose de efectivo si aplica
-        if (data.moraMetodoPago === 'CASH' && (data.moraCashBreakdown?.length ?? 0) > 0) {
-          await tx.cashBreakdown.createMany({
-            data: data.moraCashBreakdown!.map((d) => ({
-              paymentId: paymentMora.id,
-              denominacion: d.denominacion,
-              cantidad: d.cantidad,
-              subtotal: d.subtotal,
-            })),
-          })
-        }
-
-        // Suma a la caja del cobrador — mismo día CDMX.
-        await tx.cashRegister.upsert({
-          where: { cobradorId_fecha: { cobradorId: cobrador.id, fecha } },
-          create: {
-            cobradorId: cobrador.id,
-            branchId: targetBranchId!,
-            fecha,
-            cobradoEfectivo: data.moraMetodoPago === 'CASH' ? mora.monto : 0,
-            cobradoTarjeta: data.moraMetodoPago === 'CARD' ? mora.monto : 0,
-            cobradoTransferencia: 0,
-            cambioEntregado: cambio,
-          },
-          update: {
-            cobradoEfectivo: data.moraMetodoPago === 'CASH' ? { increment: mora.monto } : undefined,
-            cobradoTarjeta: data.moraMetodoPago === 'CARD' ? { increment: mora.monto } : undefined,
-            cambioEntregado: cambio > 0 ? { increment: cambio } : undefined,
-          },
-        })
-
-        // Ticket separado para la multa/mora.
-        const moraTicketNum = await generateTicketNumber(branchPrefix, year)
-        moraTicketNumero = moraTicketNum
-        await tx.ticket.create({
-          data: {
-            paymentId: paymentMora.id,
             companyId: companyId!,
             branchId: targetBranchId!,
-            numeroTicket: moraTicketNum,
-            impresoPorId: cobrador.id,
-            qrCode: generateTicketQrData(moraTicketNum),
+            loanId: loan.id,
+            scheduleId: schedule.id,
+            clientId: loan.clientId,
+            cobradorId: cobrador.id,
+            tipo: mora.tipo,
+            monto: mora.monto,
+            paymentOrigenId: payment.id,
+            cobrada: false,
           },
         })
-      }
-
-      const moraCobro = await tx.moraCobro.create({
-        data: {
-          companyId: companyId!,
-          branchId: targetBranchId!,
-          loanId: loan.id,
-          scheduleId: schedule.id,
-          clientId: loan.clientId,
-          cobradorId: cobrador.id,
-          tipo: mora.tipo,
-          monto: mora.monto,
-          paymentOrigenId: payment.id,
-          paymentCobroId: paymentCobroMoraId,
-          cobrada: paymentCobroMoraId != null,
-          cobradaAt: paymentCobroMoraId != null ? now : null,
-        },
-      })
-      moraCobroRow = {
-        id: moraCobro.id,
-        tipo: moraCobro.tipo,
-        monto: Number(moraCobro.monto),
-        cobrada: moraCobro.cobrada,
       }
     }
 
@@ -469,8 +383,6 @@ export async function POST(req: NextRequest) {
       companyName: loan.company.nombre,
       branchName: loan.branch.nombre,
       cobradorName: cobrador.nombre,
-      mora: moraCobroRow,
-      moraTicket: moraTicketNumero,
       pending: false as const,
     }
   })

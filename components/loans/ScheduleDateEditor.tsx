@@ -61,6 +61,14 @@ interface ScheduleItem {
   pagadoAt?: Date | string | null
   paymentInfo?: PaymentInfo
   tickets?: { numeroTicket: string; esReimpresion: boolean; impresoAt: string }[]
+  /** Mora/multa asociada al pago (si ya existe en BD). Null si no. */
+  mora?: {
+    id: string
+    tipo: 'MULTA' | 'MORA'
+    monto: number
+    cobrada: boolean
+    cobradaAt?: string | null
+  } | null
 }
 
 interface Props {
@@ -235,27 +243,6 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
             >
               {isVisuallyOverdue ? 'Vencido' : STATUS_LABEL[s.estado]}
             </Badge>
-            {/* Preview de multa/mora — solo para filas aún cobrables que
-                ya cayeron en atraso según la regla (después de 14:00 del
-                día del vencimiento o en día posterior). Al aplicar/capturar
-                el pago, el backend genera la MoraCobro correspondiente. */}
-            {(s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL') && (() => {
-              const preview = detectarMora(_d, new Date())
-              if (!preview) return null
-              return (
-                <Badge
-                  variant="warning"
-                  className={`text-xs shrink-0 ${
-                    preview.tipo === 'MORA' ? 'border-rose-400 text-rose-500 bg-rose-500/10' : 'border-amber-400 text-amber-500 bg-amber-500/10'
-                  }`}
-                  title={preview.tipo === 'MORA'
-                    ? `Mora de ${formatMoney(preview.monto)} por atraso mayor a un día. Se registra al aplicar/capturar el pago.`
-                    : `Multa de ${formatMoney(preview.monto)} por pago después de las 2 pm del día del vencimiento.`}
-                >
-                  {labelMora(preview.tipo)} {formatMoney(preview.monto)}
-                </Badge>
-              )
-            })()}
 
             {/* Fecha y hora de cobro — visible para todos los roles cuando está pagado */}
             {isPaidStatus && s.pagadoAt && (
@@ -394,6 +381,65 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
               <p><span className="font-semibold">Fecha y hora:</span> {new Date(s.paymentInfo.cuando).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
             </div>
           )}
+
+          {/* Sub-fila de multa/mora — indentada bajo el pago. Aparece si
+              (a) ya existe MoraCobro registrada en BD, o
+              (b) la regla la genera "en vivo" y el pago sigue cobrable.
+              Es un movimiento independiente: puede cobrarse aunque el
+              pago principal no se haya pagado. */}
+          {(() => {
+            const preview = detectarMora(_d, new Date())
+            const mora = s.mora ?? (preview
+              ? { tipo: preview.tipo, monto: preview.monto, cobrada: false, id: '', cobradaAt: null }
+              : null)
+            if (!mora) return null
+            const isCobrada = mora.cobrada === true
+            const colorClass = mora.tipo === 'MORA'
+              ? 'border-rose-400/50 text-rose-400 bg-rose-500/10'
+              : 'border-amber-400/50 text-amber-400 bg-amber-500/10'
+            return (
+              <div className="ml-7 mt-1 mb-1 pl-2 border-l-2 border-dashed border-border/50 flex items-center gap-2 text-sm">
+                <span className="text-xs text-muted-foreground shrink-0">└─</span>
+                <Badge
+                  variant="warning"
+                  className={`text-xs shrink-0 ${colorClass}`}
+                >
+                  {labelMora(mora.tipo)}
+                </Badge>
+                <span className="font-medium w-20 shrink-0">{formatMoney(mora.monto)}</span>
+                {isCobrada ? (
+                  <>
+                    <Badge variant="success" className="text-xs shrink-0">Cobrada</Badge>
+                    {mora.cobradaAt && (
+                      <span className="text-xs text-emerald-400/80 shrink-0">
+                        {new Date(mora.cobradaAt).toLocaleString('es-MX', {
+                          day: '2-digit', month: '2-digit', year: '2-digit',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Badge variant="outline" className="text-xs shrink-0 text-muted-foreground">
+                      Pendiente
+                    </Badge>
+                    {canCapture && (
+                      <a
+                        href={`/cobros/capturar-mora/${s.id}`}
+                        className="ml-auto flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-gray-50 transition-colors shrink-0"
+                        title={mora.tipo === 'MORA'
+                          ? 'Cobrar mora de $500'
+                          : 'Cobrar multa de $200'}
+                      >
+                        Cobrar
+                      </a>
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })()}
           </div>
         )
       })}

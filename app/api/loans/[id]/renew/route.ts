@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { calcLoan } from '@/lib/financial-formulas'
 import { createAuditLog } from '@/lib/audit'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
+import { crearNotificacion, getDirectoresIds, getGerentesZonalesIds, getMesaControlIds } from '@/lib/notifications'
 import { z } from 'zod'
 
 const renewSchema = z.object({
@@ -74,16 +75,19 @@ export async function POST(
     )
   }
 
-  // Verificar que no tenga ya una renovación pendiente
+  // Verificar que no tenga ya una renovación abierta. Incluimos los
+  // estados nuevos del flujo Mesa de Control (PENDING_REVIEW +
+  // RETURNED_TO_COORDINATOR) para que si la mesa la regresó y aún no
+  // se resubmit-ea, no se pueda meter una segunda paralela.
   const renovacionExistente = await prisma.loan.findFirst({
     where: {
       loanOriginalId: loanOriginal.id,
-      estado: { in: ['PENDING_APPROVAL', 'APPROVED', 'IN_ACTIVATION'] },
+      estado: { in: ['PENDING_REVIEW', 'RETURNED_TO_COORDINATOR', 'PENDING_APPROVAL', 'APPROVED', 'IN_ACTIVATION'] },
     },
   })
   if (renovacionExistente) {
     return NextResponse.json({
-      error: 'Este crédito ya tiene una renovación pendiente de aprobación',
+      error: 'Este crédito ya tiene una renovación en proceso',
     }, { status: 400 })
   }
 
@@ -168,8 +172,10 @@ export async function POST(
   const notasLoan = data.notas
     ?? `Renovación anticipada — financia ${pagosFinanciadosCount} pago${pagosFinanciadosCount !== 1 ? 's' : ''} del crédito anterior ($${montoFinanciado.toFixed(2)})`
 
-  // Crear nuevo crédito en PENDING_APPROVAL
-  // El crédito anterior SIGUE ACTIVO — se liquida cuando el coordinador active el nuevo crédito
+  // Crear nuevo crédito en PENDING_REVIEW — igual que las solicitudes
+  // nuevas, ahora las renovaciones también pasan por Mesa de Control
+  // antes de llegar al DG. El crédito anterior SIGUE ACTIVO — se
+  // liquida cuando el coordinador active el nuevo crédito.
   const result = await prisma.$transaction(async (tx) => {
     const nuevoLoan = await tx.loan.create({
       data: {
@@ -178,7 +184,7 @@ export async function POST(
         cobradorId: loanOriginal.cobradorId,
         clientId: loanOriginal.client.id,
         tipo: nuevoTipo,
-        estado: 'PENDING_APPROVAL',
+        estado: 'PENDING_REVIEW',
         capital: calc.capital,
         comision: calc.comision,
         montoReal: montoRealAjustado,
@@ -244,8 +250,37 @@ export async function POST(
     },
   })
 
+  // Notificar a Mesa de Control + GZ del branch — mismo criterio que
+  // POST /api/loans para solicitudes nuevas. Fallback a DG/DC si no hay
+  // Mesa de Control activa para no dejar la renovación sin destinatarios.
+  try {
+    const [clienteRow, cobradorRow, mesaControl, gerentes] = await Promise.all([
+      prisma.client.findUnique({ where: { id: loanOriginal.client.id }, select: { nombreCompleto: true } }),
+      prisma.user.findUnique({ where: { id: loanOriginal.cobradorId }, select: { nombre: true } }),
+      getMesaControlIds(prisma, companyId!),
+      getGerentesZonalesIds(prisma, companyId!, loanOriginal.branchId),
+    ])
+    const clienteNombre = clienteRow?.nombreCompleto ?? 'cliente'
+    const cobradorNombre = cobradorRow?.nombre ?? 'cobradora'
+    const destinatarios = mesaControl.length
+      ? [...mesaControl, ...gerentes]
+      : [...(await getDirectoresIds(prisma, companyId!)), ...gerentes]
+    await crearNotificacion(prisma, {
+      companyId: companyId!,
+      destinatariosIds: destinatarios,
+      tipo: 'RENOVACION_NUEVA',
+      nivel: 'IMPORTANTE',
+      titulo: 'Renovación pendiente de revisión',
+      mensaje: `${clienteNombre} por $${Number(calc.capital).toFixed(2)} — Cobradora: ${cobradorNombre}`,
+      loanId: result.id,
+      clientId: loanOriginal.client.id,
+    })
+  } catch (e) {
+    console.error('[renew] notif RENOVACION_NUEVA failed:', e)
+  }
+
   return NextResponse.json({
-    message: 'Renovación solicitada — pendiente de aprobación por el Director General',
+    message: 'Renovación solicitada — pendiente de revisión por Mesa de Control',
     data: {
       nuevoLoanId: result.id,
       montoFinanciado,

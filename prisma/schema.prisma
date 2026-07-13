@@ -125,6 +125,7 @@ model Company {
   goals         Goal[]
   employees     EmployeeRecord[]
   extraFunds    BranchExtraFund[]
+  moraCobros    MoraCobro[]
 }
 
 model License {
@@ -159,6 +160,7 @@ model Branch {
   cashRegisters CashRegister[]
   tickets       Ticket[]
   extraFunds    BranchExtraFund[]
+  moraCobros    MoraCobro[]
 }
 
 // Aporte adicional que Dirección envía a una sucursal fuera del ciclo
@@ -228,6 +230,7 @@ model User {
   solicitudesCancelacionLimbo SolicitudCancelacionLimbo[] @relation("SolicitanteCancelacion")
   decisionesCancelacionLimbo  SolicitudCancelacionLimbo[] @relation("AprobadorCancelacion")
   extraFundsCreated           BranchExtraFund[]           @relation("BranchExtraFundsCreated")
+  morasGeneradas              MoraCobro[]                 @relation("MorasGeneradas")
 
   @@unique([companyId, email])
 }
@@ -266,6 +269,7 @@ model Client {
   payments        Payment[]
   scoreEvents     ScoreEvent[]
   coberturasOtras Payment[]        @relation("CoberturaGrupal")
+  moraCobros      MoraCobro[]
 }
 
 model ClientDocument {
@@ -406,6 +410,7 @@ model Loan {
   // Anti-fraude: alertas escalonadas y solicitudes de cancelación
   notificacionesLimbo       NotificacionLimbo[]
   solicitudCancelacionLimbo SolicitudCancelacionLimbo?
+  moraCobros                MoraCobro[]
 }
 
 model LoanDocument {
@@ -450,9 +455,54 @@ model PaymentSchedule {
   pagadoAt         DateTime?
   createdAt        DateTime       @default(now())
 
-  payments Payment[]
+  payments   Payment[]
+  moraCobros MoraCobro[]
 
   @@unique([loanId, numeroPago])
+}
+
+// Registro de multa ($200 después de 2 PM del día del pago) o mora
+// ($500 al día siguiente en adelante). No bloquea nada — solo se
+// contabiliza. El cobrador puede marcar cobrada = true al capturar
+// el pago principal, en cuyo caso se crea un Payment adicional
+// (paymentCobroId) con su propio ticket. Si no la cobra, queda
+// registrada como pendiente para reportes.
+model MoraCobro {
+  id             String   @id @default(uuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id])
+  branchId       String
+  branch         Branch   @relation(fields: [branchId], references: [id])
+  loanId         String
+  loan           Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  scheduleId     String
+  schedule       PaymentSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client   @relation(fields: [clientId], references: [id])
+  cobradorId     String
+  cobrador       User     @relation("MorasGeneradas", fields: [cobradorId], references: [id])
+  // MULTA ($200 mismo día después de 14:00 CDMX) | MORA ($500 en día
+  // posterior). No se acumula: solo una por schedule.
+  tipo           String
+  monto          Decimal  @db.Decimal(12, 2)
+  // Payment que disparó la generación (el pago tardío del schedule).
+  // Una multa/mora por cada Payment origen (unique) — solo se genera
+  // una vez por cobro tardío.
+  paymentOrigenId String  @unique
+  paymentOrigen   Payment @relation("PaymentGeneraMora", fields: [paymentOrigenId], references: [id], onDelete: Cascade)
+  // Si el cobrador cobró la multa/mora en el mismo request, aquí el
+  // Payment que la respalda. Null si no se cobró.
+  paymentCobroId String?  @unique
+  paymentCobro   Payment? @relation("PaymentCobroMora", fields: [paymentCobroId], references: [id], onDelete: SetNull)
+  cobrada        Boolean  @default(false)
+  cobradaAt      DateTime?
+  createdAt      DateTime @default(now())
+
+  @@unique([scheduleId])
+  @@index([companyId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([cobradorId, createdAt])
+  @@index([loanId])
 }
 
 model Payment {
@@ -490,6 +540,11 @@ model Payment {
 
   cashBreakdown CashBreakdown[]
   tickets       Ticket[]
+  // Relaciones con MoraCobro:
+  //   PaymentGeneraMora  → este Payment fue el que disparó la multa/mora.
+  //   PaymentCobroMora   → este Payment respalda el cobro de la multa/mora.
+  moraGenerada  MoraCobro?     @relation("PaymentGeneraMora")
+  moraCobrada   MoraCobro?     @relation("PaymentCobroMora")
 }
 
 model CashBreakdown {

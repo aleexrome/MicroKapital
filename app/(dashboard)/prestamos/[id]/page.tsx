@@ -73,6 +73,13 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       aprobadoPor: { select: { nombre: true } },
       loanOriginal: { select: { id: true, loanGroupId: true } },
       schedule: { orderBy: { numeroPago: 'asc' } },
+      moraCobros: {
+        orderBy: { createdAt: 'desc' },
+        include: {
+          schedule: { select: { numeroPago: true, fechaVencimiento: true } },
+          cobrador: { select: { nombre: true } },
+        },
+      },
     },
   })
 
@@ -799,6 +806,57 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL' || rol === 'MESA_CONTROL'}
         canObserve={rol === 'MESA_CONTROL' && loan.estado === 'PENDING_REVIEW'}
       />
+
+      {/* Moras y multas del crédito */}
+      {loan.moraCobros.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              Moras y multas
+              <span className="text-sm font-normal text-muted-foreground">
+                ({loan.moraCobros.filter((m) => m.cobrada).length} cobradas · {loan.moraCobros.filter((m) => !m.cobrada).length} pendientes)
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/60 bg-muted/40 text-xs text-muted-foreground">
+                  <th className="text-left px-4 py-2 font-medium">Pago #</th>
+                  <th className="text-left px-4 py-2 font-medium">Tipo</th>
+                  <th className="text-left px-4 py-2 font-medium">Fecha</th>
+                  <th className="text-left px-4 py-2 font-medium">Cobrador</th>
+                  <th className="text-right px-4 py-2 font-medium">Monto</th>
+                  <th className="text-right px-4 py-2 font-medium">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {loan.moraCobros.map((m) => (
+                  <tr key={m.id} className="hover:bg-muted/30">
+                    <td className="px-4 py-2">{m.schedule.numeroPago}</td>
+                    <td className="px-4 py-2">
+                      <span className={m.tipo === 'MORA' ? 'text-rose-500 font-medium' : 'text-amber-500 font-medium'}>
+                        {m.tipo === 'MORA' ? 'Mora' : 'Multa'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground">{formatDate(m.createdAt)}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{m.cobrador.nombre}</td>
+                    <td className="px-4 py-2 text-right font-semibold money">{formatMoney(Number(m.monto))}</td>
+                    <td className="px-4 py-2 text-right">
+                      {m.cobrada ? (
+                        <span className="text-emerald-500 text-xs font-medium">Cobrada</span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">Pendiente</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Evidencia de desembolso. Cuando el préstamo está ACTIVE el
           componente decide qué renderizar:

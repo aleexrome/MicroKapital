@@ -444,7 +444,7 @@ export default async function BancaPage({
 
                       {/* Detalle: cortes del día, adicionales y desembolsos */}
                       <details className="group">
-                        <summary className="cursor-pointer select-none px-4 py-2 text-sm text-primary-700 hover:bg-primary-500/5">
+                        <summary className="cursor-pointer select-none px-4 py-2 text-sm font-medium text-white hover:bg-white/5">
                           Ver detalle ({cortesRows.length} cortes · {adicionalRows.length} adicionales · {desembolsosRows.length} desembolsos)
                         </summary>
                         <div className="space-y-4 px-4 py-3">

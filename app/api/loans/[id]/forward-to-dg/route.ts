@@ -12,6 +12,10 @@ const forwardSchema = z.object({
   // Si viene, recalculamos todos los campos financieros del préstamo con la
   // misma fórmula del producto (misma lógica que la contrapropuesta del DG).
   capital: z.number().positive().optional(),
+  // Solo INDIVIDUAL: porcentaje de comisión de apertura personalizado
+  // (0 a 20). Sobrescribe la tasa automática por ciclo del cálculo.
+  // Se ignora silenciosamente si el préstamo no es INDIVIDUAL.
+  comisionPct: z.number().min(0).max(20).optional(),
 })
 
 export async function POST(
@@ -46,13 +50,16 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 })
   }
-  const { notas, capital } = parsed.data
+  const { notas, capital, comisionPct } = parsed.data
+  const hayCambioCapital = !!capital && Number(capital) !== Number(loan.capital)
+  const hayComisionOverride = comisionPct !== undefined && loan.tipo === 'INDIVIDUAL'
 
   let loanUpdates: Record<string, unknown> = {}
-  if (capital && Number(capital) !== Number(loan.capital)) {
+  if (hayCambioCapital || hayComisionOverride) {
+    const capitalFinal = capital ?? Number(loan.capital)
     const calc = calcLoan(
       loan.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
-      capital,
+      capitalFinal,
       {
         ciclo: loan.ciclo ?? 1,
         tuvoAtraso: loan.tuvoAtraso,
@@ -60,9 +67,16 @@ export async function POST(
         tipoGrupo: (loan.tipoGrupo ?? undefined) as 'REGULAR' | 'RESCATE' | undefined,
       }
     )
+    // Override de comisión para INDIVIDUAL: sobreescribe la tasa automática
+    // por ciclo. montoReal se mantiene como capital (calcIndividual devuelve
+    // montoReal = capital; la comisión se cobra aparte al activar).
+    const comisionFinal = hayComisionOverride
+      ? Math.round(capitalFinal * (comisionPct! / 100) * 100) / 100
+      : calc.comision
+
     loanUpdates = {
       capital: calc.capital,
-      comision: calc.comision,
+      comision: comisionFinal,
       montoReal: calc.montoReal,
       tasaInteres: calc.tasaInteres,
       interes: calc.interes,
@@ -93,7 +107,8 @@ export async function POST(
     valoresNuevos: {
       estado: 'PENDING_APPROVAL',
       revisadoPorId: userId,
-      ...(capital && Number(capital) !== Number(loan.capital) ? { capitalAjustado: capital } : {}),
+      ...(hayCambioCapital ? { capitalAjustado: capital } : {}),
+      ...(hayComisionOverride ? { comisionPctAjustado: comisionPct } : {}),
     },
   })
 

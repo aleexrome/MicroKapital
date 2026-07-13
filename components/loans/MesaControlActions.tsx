@@ -9,7 +9,10 @@ import { formatMoney } from '@/lib/utils'
 
 interface Props {
   loanId: string
+  tipo: 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO'
   capital: number
+  /** Comisión actual del préstamo (0 si es solidario/ágil). */
+  comisionActual: number
 }
 
 /**
@@ -17,12 +20,19 @@ interface Props {
  * PENDING_REVIEW. Puede:
  *  - Ajustar el capital antes de forwardear (opcional, si viene el mismo
  *    no se recalcula nada).
+ *  - INDIVIDUAL: ajustar el porcentaje de comisión (0–20). Aplica solo
+ *    a este tipo — solidario/ágil usan seguro (no editable).
  *  - Enviar a Dirección General → PENDING_APPROVAL.
  *  - Regresar al coordinador con observaciones → RETURNED_TO_COORDINATOR.
  */
-export function MesaControlActions({ loanId, capital }: Props) {
+export function MesaControlActions({ loanId, tipo, capital, comisionActual }: Props) {
   const router = useRouter()
   const { toast } = useToast()
+
+  const esIndividual = tipo === 'INDIVIDUAL'
+  const comisionPctActual = capital > 0
+    ? Math.round((comisionActual / capital) * 10000) / 100
+    : 0
 
   const [modoRegresar, setModoRegresar] = useState(false)
   const [modoForward, setModoForward] = useState(false)
@@ -30,15 +40,26 @@ export function MesaControlActions({ loanId, capital }: Props) {
   const [notasRegresar, setNotasRegresar] = useState('')
   const [notasForward, setNotasForward] = useState('')
   const [capitalNuevo, setCapitalNuevo] = useState<string>(String(capital))
+  const [comisionPctNuevo, setComisionPctNuevo] = useState<string>(String(comisionPctActual))
 
   async function forwardToDg() {
     setProcessing(true)
     try {
       const capitalNum = Number(capitalNuevo)
+      const comisionPctNum = Number(comisionPctNuevo)
       const body: Record<string, unknown> = {}
       if (notasForward.trim()) body.notas = notasForward.trim()
       if (Number.isFinite(capitalNum) && capitalNum > 0 && capitalNum !== capital) {
         body.capital = capitalNum
+      }
+      if (
+        esIndividual
+        && Number.isFinite(comisionPctNum)
+        && comisionPctNum >= 0
+        && comisionPctNum <= 20
+        && Math.abs(comisionPctNum - comisionPctActual) > 0.001
+      ) {
+        body.comisionPct = comisionPctNum
       }
       const res = await fetch(`/api/loans/${loanId}/forward-to-dg`, {
         method: 'POST',
@@ -131,6 +152,24 @@ export function MesaControlActions({ loanId, capital }: Props) {
             recalculan comisión, pago y plazo con la fórmula del producto.
           </p>
         </div>
+        {esIndividual && (
+          <div className="text-sm space-y-1">
+            <label className="block text-blue-900 font-medium">Comisión de apertura (%)</label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="20"
+              value={comisionPctNuevo}
+              onChange={(e) => setComisionPctNuevo(e.target.value)}
+              className="w-full rounded border border-blue-300 px-3 py-2 text-sm"
+            />
+            <p className="text-xs text-blue-800">
+              Original: <span className="font-medium">{comisionPctActual}%</span> ({formatMoney(comisionActual)}).
+              Rango permitido 0–20%. Sobrescribe la comisión automática por ciclo del cliente.
+            </p>
+          </div>
+        )}
         <textarea
           value={notasForward}
           onChange={(e) => setNotasForward(e.target.value)}

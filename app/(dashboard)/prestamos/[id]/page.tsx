@@ -501,7 +501,9 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           {loan.estado === 'PENDING_REVIEW' && (rol === 'MESA_CONTROL' || rol === 'SUPER_ADMIN') && (
             <MesaControlActions
               loanId={loan.id}
+              tipo={loan.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO'}
               capital={Number(loan.capital)}
+              comisionActual={Number(loan.comision)}
             />
           )}
 
@@ -526,6 +528,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               loanId={loan.id}
               tipo={loan.tipo}
               capital={Number(loan.capital)}
+              comisionActual={Number(loan.comision)}
               grupoMiembros={grupoMiembros}
               defaultDiaCobro={loan.diaCobro ?? branchConfigDefaults?.diaCobro ?? ''}
               defaultHoraLimite={loan.horaLimiteCobro ?? branchConfigDefaults?.horaLimiteCobro ?? ''}

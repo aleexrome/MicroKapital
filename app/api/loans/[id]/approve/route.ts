@@ -15,6 +15,10 @@ const approveSchema = z.object({
     capital: z.number().positive(),
     fechaDesembolso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
     fechaPrimerPago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
+    // Solo INDIVIDUAL: porcentaje de comisión personalizado (0-20). Se
+    // ignora si el préstamo no es INDIVIDUAL. Sobrescribe la tasa por
+    // ciclo del cálculo automático.
+    comisionPct: z.number().min(0).max(20).optional(),
   }).optional(),
   // SOLIDARIO: si la UI marca a este integrante como coordinadora del
   // grupo, se setea Loan.esCoordinadora = true (los demás false). El
@@ -93,9 +97,17 @@ export async function POST(
       montoReal = Math.max(0, calc.montoReal - Number(loan.descuentoRenovacion))
     }
 
+    // Override de comisión para INDIVIDUAL: sobreescribe la tasa por
+    // ciclo del cálculo automático. Se ignora para otros tipos.
+    const hayComisionOverride =
+      contrapropuesta.comisionPct !== undefined && loan.tipo === 'INDIVIDUAL'
+    const comisionFinal = hayComisionOverride
+      ? Math.round(contrapropuesta.capital * (contrapropuesta.comisionPct! / 100) * 100) / 100
+      : calc.comision
+
     loanFieldUpdates = {
       capital: calc.capital,
-      comision: calc.comision,
+      comision: comisionFinal,
       montoReal,
       tasaInteres: calc.tasaInteres,
       interes: calc.interes,

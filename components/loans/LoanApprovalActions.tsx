@@ -17,6 +17,8 @@ interface LoanApprovalActionsProps {
   loanId: string
   tipo: string
   capital: number
+  /** Comisión actual del préstamo (para calcular el % default). */
+  comisionActual?: number
   grupoMiembros?: GrupoMiembro[]
   // Día (LUNES..DOMINGO) y hora límite (HH:MM 24h) que DG plasma en el
   // contrato. Default = lo que tenga el préstamo o, si no, la sucursal.
@@ -34,14 +36,19 @@ const DIAS_COBRO: { value: string; label: string }[] = [
   { value: 'DOMINGO',   label: 'Domingo' },
 ]
 
-export function LoanApprovalActions({ loanId, tipo, capital, grupoMiembros, defaultDiaCobro, defaultHoraLimite }: LoanApprovalActionsProps) {
+export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0, grupoMiembros, defaultDiaCobro, defaultHoraLimite }: LoanApprovalActionsProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const esIndividual = tipo === 'INDIVIDUAL'
+  const comisionPctActual = capital > 0
+    ? Math.round((comisionActual / capital) * 10000) / 100
+    : 0
   const [processing, setProcessing] = useState(false)
   const [showReject, setShowReject] = useState(false)
   const [showContrapropuesta, setShowContrapropuesta] = useState(false)
   const [razonRechazo, setRazonRechazo] = useState('')
   const [nuevoCapital, setNuevoCapital] = useState(capital.toString())
+  const [nuevaComisionPct, setNuevaComisionPct] = useState(String(comisionPctActual))
   const [notasDG, setNotasDG] = useState('')
   const [requiereDocumentos, setRequiereDocumentos] = useState(false)
   const [capitalesMiembros, setCapitalesMiembros] = useState<Record<string, string>>(
@@ -133,10 +140,19 @@ export function LoanApprovalActions({ loanId, tipo, capital, grupoMiembros, defa
             setProcessing(false)
             return
           }
+          // Override de comisión para INDIVIDUAL — mandar solo si el DG
+          // cambió el porcentaje respecto al actual y está dentro del rango.
+          const pctNum = Number(nuevaComisionPct)
+          const hayComisionOverride =
+            esIndividual
+            && Number.isFinite(pctNum)
+            && pctNum >= 0 && pctNum <= 20
+            && Math.abs(pctNum - comisionPctActual) > 0.001
           body.contrapropuesta = {
             capital: cap,
             ...(fechaDesembolsoCP ? { fechaDesembolso: fechaDesembolsoCP } : {}),
             ...(fechaPrimerPagoCP ? { fechaPrimerPago: fechaPrimerPagoCP } : {}),
+            ...(hayComisionOverride ? { comisionPct: pctNum } : {}),
           }
         }
         if (notasDG) body.notas = notasDG
@@ -331,16 +347,37 @@ export function LoanApprovalActions({ loanId, tipo, capital, grupoMiembros, defa
               ))}
             </div>
           ) : (
-            <div>
-              <label className="block text-xs text-amber-700 mb-1">Nuevo capital ($)</label>
-              <input
-                type="number"
-                min={1}
-                step={500}
-                className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
-                value={nuevoCapital}
-                onChange={(e) => setNuevoCapital(e.target.value)}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-amber-700 mb-1">Nuevo capital ($)</label>
+                <input
+                  type="number"
+                  min={1}
+                  step={500}
+                  className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
+                  value={nuevoCapital}
+                  onChange={(e) => setNuevoCapital(e.target.value)}
+                />
+              </div>
+              {esIndividual && (
+                <div>
+                  <label className="block text-xs text-amber-700 mb-1">
+                    Comisión de apertura (%)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    step={0.1}
+                    className="border border-amber-300 rounded px-2 py-1.5 text-sm w-full bg-white"
+                    value={nuevaComisionPct}
+                    onChange={(e) => setNuevaComisionPct(e.target.value)}
+                  />
+                  <p className="text-[11px] text-amber-700 mt-1">
+                    Actual: {comisionPctActual}%. Rango 0–20%.
+                  </p>
+                </div>
+              )}
             </div>
           )}
           {/* Fechas definidas por el DG — anclan el calendario al activar */}

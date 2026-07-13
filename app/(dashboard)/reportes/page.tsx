@@ -68,6 +68,15 @@ const REPORTES: ReporteCard[] = [
     iconText: 'text-rose-400',
   },
   {
+    href: '/reportes/moras',
+    titulo: 'Multas y moras cobradas',
+    descripcion: 'Multas de $200 (mismo día > 2 pm) y moras de $500 (día siguiente) generadas y cobradas.',
+    icon: AlertTriangle,
+    color: 'border-amber-500/30',
+    iconBg: 'bg-amber-500/15',
+    iconText: 'text-amber-400',
+  },
+  {
     href: '/reportes/colocacion',
     titulo: 'Colocación',
     descripcion: 'Créditos desembolsados en el periodo seleccionado.',

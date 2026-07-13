@@ -9,14 +9,16 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatMoney } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
-import { ArrowLeft, Banknote, CreditCard, Building2, Printer, Loader2, CheckCircle, Clock } from 'lucide-react'
+import { ArrowLeft, Banknote, CreditCard, Building2, Printer, Loader2, CheckCircle, Clock, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import type { TicketData, CashBreakdownEntry } from '@/types'
+import { detectarMora, labelMora, MULTA_MONTO, MORA_MONTO } from '@/lib/moras'
 
 interface ScheduleDetail {
   id: string
   numeroPago: number
   montoEsperado: string
+  fechaVencimiento: string
   loan: {
     id: string
     tipo: string
@@ -52,6 +54,9 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [selectedAccount, setSelectedAccount] = useState<string>('')
   const [idTransferencia, setIdTransferencia] = useState('')
+  // Checkbox del cobrador: "el cliente pagó la multa/mora también".
+  // Solo aplica cuando el pago cae en el rango que dispara mora.
+  const [cobrarMora, setCobrarMora] = useState(false)
 
   useEffect(() => {
     fetch(`/api/payments/schedule/${params.scheduleId}`)
@@ -82,6 +87,14 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
       if (metodoPago === 'TRANSFER') {
         body.cuentaDestinoId = selectedAccount || undefined
         body.idTransferencia = idTransferencia || undefined
+      }
+
+      // Si el pago cae en multa/mora Y el coordinador marcó el checkbox,
+      // se manda para que el backend registre el cobro adicional (mismo
+      // método CASH/CARD que el pago principal — TRANSFER no soporta).
+      if (mora && cobrarMora && (metodoPago === 'CASH' || metodoPago === 'CARD')) {
+        body.moraPagada = true
+        body.moraMetodoPago = metodoPago
       }
 
       const res = await fetch('/api/payments', {
@@ -157,6 +170,11 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
   }
 
   const monto = Number(schedule.montoEsperado)
+
+  // Detecta si este pago cae en MULTA (mismo día después de 14:00 CDMX)
+  // o MORA (día posterior). Se calcula client-side para preview; el
+  // backend re-valida y es la fuente de verdad.
+  const mora = detectarMora(new Date(schedule.fechaVencimiento), new Date())
 
   // ── PASO: TRANSFERENCIA PENDIENTE DE VERIFICACIÓN ──────────────────────────
   if (step === 'transfer_pending') {
@@ -245,6 +263,42 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
           </div>
         </CardContent>
       </Card>
+
+      {/* ── AVISO DE MULTA / MORA ──────────────────────────────────────────── */}
+      {mora && step === 'method' && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-amber-900">
+                  {labelMora(mora.tipo)} por atraso: {formatMoney(mora.monto)}
+                </p>
+                <p className="text-xs text-amber-800">
+                  {mora.tipo === 'MULTA'
+                    ? `Se pasó de las 2 pm del día del pago. Multa de ${formatMoney(MULTA_MONTO)}.`
+                    : `El pago está atrasado un día o más. Mora de ${formatMoney(MORA_MONTO)}.`}
+                </p>
+              </div>
+            </div>
+            <label className="flex items-start gap-2 pt-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={cobrarMora}
+                onChange={(e) => setCobrarMora(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+              />
+              <span className="text-sm text-amber-900">
+                El cliente pagó la {mora.tipo === 'MULTA' ? 'multa' : 'mora'} — cobrar {formatMoney(mora.monto)} adicionales.
+                Se genera un ticket separado.
+              </span>
+            </label>
+            <p className="text-[11px] text-amber-700 pl-6">
+              Si no la pagó, la {mora.tipo === 'MULTA' ? 'multa' : 'mora'} igual queda registrada como pendiente. No bloquea el pago.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── SELECCIÓN DE MÉTODO ────────────────────────────────────────────── */}
       {step === 'method' && (

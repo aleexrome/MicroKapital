@@ -109,6 +109,7 @@ export default async function DashboardPage({
     liquidadosTotal,
     segurosAgg,
     comisionesAgg,
+    morasAgg,
   ] = await Promise.all([
     prisma.client.count({ where: clientScope }),
     prisma.loan.count({ where: { ...loanScope, estado: 'ACTIVE' } }),
@@ -154,12 +155,34 @@ export default async function DashboardPage({
           _sum: { comision: true },
         }).catch(() => ({ _sum: { comision: null } }))
       : Promise.resolve({ _sum: { comision: null } }),
+    // Multas + moras generadas este mes (solo directores). Trae generado
+    // y cobrado para mostrar los dos números en una tarjeta.
+    isDirector
+      ? prisma.moraCobro.groupBy({
+          by: ['cobrada'],
+          where: {
+            companyId: companyId!,
+            createdAt: { gte: firstOfMonth },
+            loan: loanScope,
+          },
+          _sum: { monto: true },
+          _count: { _all: true },
+        }).catch(() => [] as { cobrada: boolean; _sum: { monto: unknown }; _count: { _all: number } }[])
+      : Promise.resolve([] as { cobrada: boolean; _sum: { monto: unknown }; _count: { _all: number } }[]),
   ])
 
   const cobradoHoy     = Number(cobradoHoyAgg._sum.monto ?? 0)
   const capitalActivo  = Number(capitalActivoAgg._sum.capital ?? 0)
   const totalSeguros   = Number((segurosAgg as { _sum: { seguro: unknown } })._sum.seguro ?? 0)
   const totalComisiones = Number((comisionesAgg as { _sum: { comision: unknown } })._sum.comision ?? 0)
+  // Sumar por estado (cobrada/pendiente). El groupBy devuelve una fila
+  // por cada valor de `cobrada` — puede venir vacío si nadie generó nada.
+  const morasCobradas   = (morasAgg as { cobrada: boolean; _sum: { monto: unknown }; _count: { _all: number } }[]).find((r) => r.cobrada === true)
+  const morasPendientes = (morasAgg as { cobrada: boolean; _sum: { monto: unknown }; _count: { _all: number } }[]).find((r) => r.cobrada === false)
+  const totalMorasCobradas    = Number(morasCobradas?._sum.monto ?? 0)
+  const totalMorasPendientes  = Number(morasPendientes?._sum.monto ?? 0)
+  const countMorasCobradas    = morasCobradas?._count._all ?? 0
+  const countMorasPendientes  = morasPendientes?._count._all ?? 0
 
   // ── Role-specific extra data ──────────────────────────────────────────────────
 
@@ -389,7 +412,7 @@ export default async function DashboardPage({
 
       {/* Seguros y comisiones (directors only) */}
       {isDirector && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <Link href="/dashboard/detalle?tipo=seguros_mes" className="block">
             <Card className="transition-all hover:shadow-md hover:border-border cursor-pointer">
               <CardContent className="p-4 flex items-center gap-4">
@@ -412,6 +435,29 @@ export default async function DashboardPage({
                 <div>
                   <p className="text-xs text-muted-foreground">Comisiones de apertura (este mes)</p>
                   <p className="text-xl font-bold text-orange-400">{formatMoney(totalComisiones)}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/reportes/moras" className="block">
+            <Card className="transition-all hover:shadow-md hover:border-border cursor-pointer">
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className="bg-amber-500/15 rounded-xl p-2.5">
+                  <AlertTriangle className="h-5 w-5 text-amber-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs text-muted-foreground">Multas y moras (este mes)</p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-xl font-bold text-emerald-400">{formatMoney(totalMorasCobradas)}</p>
+                    <span className="text-[10px] text-muted-foreground">
+                      cobradas ({countMorasCobradas})
+                    </span>
+                  </div>
+                  {countMorasPendientes > 0 && (
+                    <p className="text-[11px] text-amber-400">
+                      + {formatMoney(totalMorasPendientes)} pendientes ({countMorasPendientes})
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

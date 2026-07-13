@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
 import { todayMx } from '@/lib/timezone'
+import { detectarMora } from '@/lib/moras'
 import { z } from 'zod'
 
 // El "aplicar pago" lo usa Dirección/Op. Admin para registrar cobros que
@@ -66,6 +67,7 @@ export async function POST(
         select: {
           id: true,
           estado: true,
+          companyId: true,
           clientId: true,
           branchId: true,
           cobradorId: true,
@@ -111,7 +113,7 @@ export async function POST(
     //    final para validar transferencias. El flujo de "Validar en
     //    /transferencias" es para cobros capturados por cobradores
     //    regulares, no para los aplicados por dirección.
-    await tx.payment.create({
+    const payment = await tx.payment.create({
       data: {
         loanId:     schedule.loan.id,
         scheduleId: schedule.id,
@@ -128,6 +130,34 @@ export async function POST(
         } : {}),
       },
     })
+
+    // Detección de multa/mora: si `now` en CDMX ya pasó la hora límite
+    // del día del vencimiento o pasó al día siguiente, generar MoraCobro
+    // como registro pendiente (no cobrada) para reportería. Único por
+    // schedule — si ya existía uno de un intento previo, no duplicamos.
+    const mora = detectarMora(schedule.fechaVencimiento, now)
+    if (mora) {
+      const ya = await tx.moraCobro.findUnique({
+        where: { scheduleId: schedule.id },
+        select: { id: true },
+      })
+      if (!ya) {
+        await tx.moraCobro.create({
+          data: {
+            companyId:       schedule.loan.companyId,
+            branchId:        schedule.loan.branchId,
+            loanId:          schedule.loan.id,
+            scheduleId:      schedule.id,
+            clientId:        schedule.loan.clientId,
+            cobradorId:      cobradorRegistroId,
+            tipo:            mora.tipo,
+            monto:           mora.monto,
+            paymentOrigenId: payment.id,
+            cobrada:         false,
+          },
+        })
+      }
+    }
 
     // 2. Schedule pasa a PAID y caja del cobrador suma — siempre, porque
     //    quien aplicó tiene autoridad para confirmar el cobro al instante.

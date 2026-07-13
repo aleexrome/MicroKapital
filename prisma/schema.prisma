@@ -486,10 +486,12 @@ model MoraCobro {
   tipo           String
   monto          Decimal  @db.Decimal(12, 2)
   // Payment que disparó la generación (el pago tardío del schedule).
-  // Una multa/mora por cada Payment origen (unique) — solo se genera
-  // una vez por cobro tardío.
-  paymentOrigenId String  @unique
-  paymentOrigen   Payment @relation("PaymentGeneraMora", fields: [paymentOrigenId], references: [id], onDelete: Cascade)
+  // Nullable porque la mora puede capturarse ANTES de que se pague el
+  // pago principal — el coordinador puede cobrar mora sola y el pago
+  // se aplica después. El @unique aplica solo entre valores no-null
+  // en Postgres, así que múltiples null no chocan.
+  paymentOrigenId String?  @unique
+  paymentOrigen   Payment? @relation("PaymentGeneraMora", fields: [paymentOrigenId], references: [id], onDelete: Cascade)
   // Si el cobrador cobró la multa/mora en el mismo request, aquí el
   // Payment que la respalda. Null si no se cobró.
   paymentCobroId String?  @unique

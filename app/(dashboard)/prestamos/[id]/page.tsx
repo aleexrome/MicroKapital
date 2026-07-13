@@ -892,16 +892,28 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           <CardContent>
             <ScheduleDateEditor
               loanId={loan.id}
-              schedule={loan.schedule.map((s) => ({
-                id: s.id,
-                numeroPago: s.numeroPago,
-                fechaVencimiento: s.fechaVencimiento,
-                montoEsperado: Number(s.montoEsperado),
-                estado: s.estado as ScheduleStatus,
-                pagadoAt: s.pagadoAt ?? null,
-                paymentInfo: paymentInfoMap[s.id],
-                tickets: ticketMap[s.id] ?? [],
-              }))}
+              schedule={loan.schedule.map((s) => {
+                const m = loan.moraCobros.find((mc) => mc.scheduleId === s.id)
+                return {
+                  id: s.id,
+                  numeroPago: s.numeroPago,
+                  fechaVencimiento: s.fechaVencimiento,
+                  montoEsperado: Number(s.montoEsperado),
+                  estado: s.estado as ScheduleStatus,
+                  pagadoAt: s.pagadoAt ?? null,
+                  paymentInfo: paymentInfoMap[s.id],
+                  tickets: ticketMap[s.id] ?? [],
+                  mora: m
+                    ? {
+                        id: m.id,
+                        tipo: m.tipo as 'MULTA' | 'MORA',
+                        monto: Number(m.monto),
+                        cobrada: m.cobrada,
+                        cobradaAt: m.cobradaAt?.toISOString() ?? null,
+                      }
+                    : null,
+                }
+              })}
               canCapture={puedeCapturar}
               canEditDates={puedeEditarFechas}
               canUndo={puedeDeshacerPago}

@@ -17,6 +17,7 @@ import {
   formatWeekLabelSatFri,
 } from '@/lib/week-utils'
 import { scopedLoanWhere, loanNotDeletedWhere } from '@/lib/access'
+import { calcTarifaApertura } from '@/lib/financial-formulas'
 import { Landmark, Banknote, TrendingDown, Wallet, PlusCircle } from 'lucide-react'
 
 // Semanas laborales (sábado→viernes) hacia atrás que se muestran (incluye la actual).
@@ -42,7 +43,12 @@ interface DesembolsoRow {
   cobrador: string
   cliente: string
   capital: number
-  comision: number
+  // "cargoApertura" cubre comisión (INDIVIDUAL / FIDUCIARIO) o seguro
+  // (SOLIDARIO / ÁGIL). Calculado con calcTarifaApertura para que ambos
+  // aparezcan siempre — antes solo mostrábamos loan.comision, que
+  // queda en 0 para solidario y ágil (su fee vive en loan.seguro).
+  cargoApertura: number
+  cargoConcepto: 'COMISION' | 'SEGURO'
   montoReal: number
 }
 
@@ -141,6 +147,7 @@ export default async function BancaPage({
       },
       select: {
         id: true,
+        tipo: true,
         fechaDesembolso: true,
         capital: true,
         comision: true,
@@ -240,7 +247,10 @@ export default async function BancaPage({
     b.totalCortes += m
   }
 
-  // Desembolsos netos (montoReal = capital − comisión).
+  // Desembolsos netos — el fee "cargoApertura" se calcula con la fórmula
+  // del producto (comisión para INDIVIDUAL/FIDUCIARIO, seguro para
+  // SOLIDARIO/ÁGIL). Antes solo mostrábamos loan.comision y los seguros
+  // de solidario/ágil quedaban en $0 en la vista.
   for (const d of desembolsos) {
     if (!d.fechaDesembolso) continue
     const fecha = new Date(d.fechaDesembolso)
@@ -248,14 +258,21 @@ export default async function BancaPage({
     if (!w) continue
 
     const b = getBranchAgg(w.key, w.sat, d.branch.id, d.branch.nombre)
+    const capitalNum = Number(d.capital)
     const montoReal = Number(d.montoReal)
+    const tarifa = calcTarifaApertura(
+      d.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
+      capitalNum,
+      Number(d.comision),
+    )
     b.desembolsos.push({
       id: d.id,
       fecha,
       cobrador: d.cobrador.nombre,
       cliente: d.client.nombreCompleto,
-      capital: Number(d.capital),
-      comision: Number(d.comision),
+      capital: capitalNum,
+      cargoApertura: tarifa.monto,
+      cargoConcepto: tarifa.concepto,
       montoReal,
     })
     b.totalDesembolsos += montoReal
@@ -524,7 +541,7 @@ export default async function BancaPage({
                                       <th className="py-1 pr-3 font-medium">Cobrador</th>
                                       <th className="py-1 pr-3 font-medium">Cliente</th>
                                       <th className="py-1 pr-3 text-right font-medium">Capital</th>
-                                      <th className="py-1 pr-3 text-right font-medium">Comisión</th>
+                                      <th className="py-1 pr-3 text-right font-medium">Comisión / Seguro</th>
                                       <th className="py-1 text-right font-medium">Neto</th>
                                     </tr>
                                   </thead>
@@ -535,7 +552,12 @@ export default async function BancaPage({
                                         <td className="py-1.5 pr-3">{d.cobrador}</td>
                                         <td className="py-1.5 pr-3">{d.cliente}</td>
                                         <td className="py-1.5 pr-3 text-right money">{formatMoney(d.capital)}</td>
-                                        <td className="py-1.5 pr-3 text-right text-yellow-600 money">- {formatMoney(d.comision)}</td>
+                                        <td
+                                          className="py-1.5 pr-3 text-right text-yellow-600 money"
+                                          title={d.cargoConcepto === 'SEGURO' ? 'Seguro de apertura' : 'Comisión de apertura'}
+                                        >
+                                          - {formatMoney(d.cargoApertura)}
+                                        </td>
                                         <td className="py-1.5 text-right font-medium money">{formatMoney(d.montoReal)}</td>
                                       </tr>
                                     ))}

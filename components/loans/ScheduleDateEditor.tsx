@@ -9,6 +9,7 @@ import { Loader2, Pencil, Check, X, AlertCircle, Undo2, CheckCircle2, Info, Eye 
 import { formatMoney } from '@/lib/utils'
 import { formatDate } from '@/lib/utils'
 import type { ScheduleStatus } from '@prisma/client'
+import { detectarMora, labelMora } from '@/lib/moras'
 
 export interface PaymentInfo {
   quien: string
@@ -234,6 +235,27 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
             >
               {isVisuallyOverdue ? 'Vencido' : STATUS_LABEL[s.estado]}
             </Badge>
+            {/* Preview de multa/mora — solo para filas aún cobrables que
+                ya cayeron en atraso según la regla (después de 14:00 del
+                día del vencimiento o en día posterior). Al aplicar/capturar
+                el pago, el backend genera la MoraCobro correspondiente. */}
+            {(s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL') && (() => {
+              const preview = detectarMora(_d, new Date())
+              if (!preview) return null
+              return (
+                <Badge
+                  variant="warning"
+                  className={`text-xs shrink-0 ${
+                    preview.tipo === 'MORA' ? 'border-rose-400 text-rose-500 bg-rose-500/10' : 'border-amber-400 text-amber-500 bg-amber-500/10'
+                  }`}
+                  title={preview.tipo === 'MORA'
+                    ? `Mora de ${formatMoney(preview.monto)} por atraso mayor a un día. Se registra al aplicar/capturar el pago.`
+                    : `Multa de ${formatMoney(preview.monto)} por pago después de las 2 pm del día del vencimiento.`}
+                >
+                  {labelMora(preview.tipo)} {formatMoney(preview.monto)}
+                </Badge>
+              )
+            })()}
 
             {/* Fecha y hora de cobro — visible para todos los roles cuando está pagado */}
             {isPaidStatus && s.pagadoAt && (

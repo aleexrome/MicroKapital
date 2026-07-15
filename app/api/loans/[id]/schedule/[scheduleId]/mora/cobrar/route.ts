@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
 import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
 import { todayMx } from '@/lib/timezone'
-import { detectarMora, labelMora } from '@/lib/moras'
+import { opcionesMora, opcionParaTipo, labelMora } from '@/lib/moras'
 
 const cashBreakdownSchema = z.object({
   denominacion: z.number().int().positive(),
@@ -14,6 +14,7 @@ const cashBreakdownSchema = z.object({
 })
 
 const schema = z.object({
+  tipo: z.enum(['MULTA', 'MORA']),
   metodoPago: z.enum(['CASH', 'CARD', 'TRANSFER']),
   cambioEntregado: z.number().min(0).default(0),
   cashBreakdown: z.array(cashBreakdownSchema).optional().default([]),
@@ -24,17 +25,16 @@ const schema = z.object({
 /**
  * POST /api/loans/[id]/schedule/[scheduleId]/mora/cobrar
  *
- * Cobra la multa/mora asociada al schedule como movimiento
- * independiente del pago principal. Genera:
- *   - Payment con scheduleId = null y monto de la multa/mora.
- *   - Ticket separado (numeración normal por sucursal).
- *   - MoraCobro cobrada = true (crea o actualiza si ya existía pendiente).
- *   - CashRegister del cobrador +monto (CASH/CARD) — TRANSFER queda
- *     pendiente de verificación por el GZ igual que un pago normal.
- *
- * La multa/mora se puede capturar aunque el pago principal aún no
- * se haya cobrado. Cuando se aplique el pago después, el detector
- * respeta la MoraCobro ya existente y no duplica nada.
+ * Cobra multa o mora asociada al schedule como movimiento independiente
+ * del pago principal. El coordinador escoge tipo (MULTA $200 o MORA $500)
+ * cuando ambas opciones aplican; solo una puede cobrarse por schedule.
+ * Genera:
+ *   - Payment (scheduleId=null) con el monto elegido.
+ *   - Ticket separado (numeración de sucursal).
+ *   - MoraCobro cobrada=true (crea o actualiza si existía pendiente,
+ *     incluso cambiando el tipo).
+ *   - CashRegister del cobrador +monto (CASH/CARD directo, TRANSFER queda
+ *     pendiente de verificación por GZ como un pago normal).
  */
 export async function POST(
   req: NextRequest,
@@ -75,7 +75,6 @@ export async function POST(
   })
   if (!schedule) return NextResponse.json({ error: 'Pago no encontrado' }, { status: 404 })
 
-  // Autorización mismo criterio que /api/payments POST.
   const esOpAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'SUPER_ADMIN' || rol === 'DIRECTOR_COMERCIAL'
   const esGerente = rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
   const esCoordinador = rol === 'COORDINADOR' || rol === 'COBRADOR'
@@ -91,24 +90,23 @@ export async function POST(
   }
   if (!autorizado) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 
-  // Validar que la mora/multa efectivamente aplica ahora.
   const now = new Date()
-  const mora = detectarMora(schedule.fechaVencimiento, now)
-  if (!mora) {
+  const opciones = opcionesMora(schedule.fechaVencimiento, now)
+  const escogida = opcionParaTipo(opciones, data.tipo)
+  if (!escogida) {
     return NextResponse.json(
-      { error: 'Este pago no genera multa ni mora' },
+      { error: `${labelMora(data.tipo)} no aplica para este pago en este momento` },
       { status: 400 },
     )
   }
 
-  // Chequear si ya hay una MoraCobro para el schedule (pendiente o cobrada).
   const existente = await prisma.moraCobro.findUnique({
     where: { scheduleId: schedule.id },
-    select: { id: true, cobrada: true, tipo: true, monto: true },
+    select: { id: true, cobrada: true },
   })
   if (existente?.cobrada) {
     return NextResponse.json(
-      { error: 'Esta multa/mora ya fue cobrada' },
+      { error: 'Este pago ya tiene multa o mora cobrada' },
       { status: 400 },
     )
   }
@@ -124,18 +122,16 @@ export async function POST(
   const esTransferencia = data.metodoPago === 'TRANSFER'
 
   const result = await prisma.$transaction(async (tx) => {
-    // 1. Payment del cobro de la mora — scheduleId null porque no
-    //    corresponde a una cuota del calendario, es un cargo aparte.
     const paymentMora = await tx.payment.create({
       data: {
         loanId: schedule.loan.id,
         scheduleId: null,
         cobradorId: cobrador.id,
         clientId: schedule.loan.clientId,
-        monto: mora.monto,
+        monto: escogida.monto,
         metodoPago: data.metodoPago,
         cambioEntregado: data.cambioEntregado,
-        notas: `${labelMora(mora.tipo)} por atraso — pago #${schedule.numeroPago}`,
+        notas: `${labelMora(escogida.tipo)} por atraso — pago #${schedule.numeroPago}`,
         fechaHora: now,
         ...(esTransferencia
           ? {
@@ -147,7 +143,6 @@ export async function POST(
       },
     })
 
-    // 2. CashBreakdown si CASH
     if (data.metodoPago === 'CASH' && data.cashBreakdown.length > 0) {
       await tx.cashBreakdown.createMany({
         data: data.cashBreakdown.map((d) => ({
@@ -159,12 +154,13 @@ export async function POST(
       })
     }
 
-    // 3. MoraCobro cobrada. Si ya existía como pendiente, la actualizamos.
     let moraCobroId: string
     if (existente) {
       const updated = await tx.moraCobro.update({
         where: { id: existente.id },
         data: {
+          tipo: escogida.tipo,
+          monto: escogida.monto,
           cobrada: true,
           cobradaAt: now,
           paymentCobroId: paymentMora.id,
@@ -181,8 +177,8 @@ export async function POST(
           scheduleId: schedule.id,
           clientId: schedule.loan.clientId,
           cobradorId: cobrador.id,
-          tipo: mora.tipo,
-          monto: mora.monto,
+          tipo: escogida.tipo,
+          monto: escogida.monto,
           paymentOrigenId: null,
           paymentCobroId: paymentMora.id,
           cobrada: true,
@@ -192,28 +188,25 @@ export async function POST(
       moraCobroId = created.id
     }
 
-    // 4. Caja del cobrador — TRANSFER queda como transferencia (por
-    //    verificar). CASH/CARD suma directo.
     await tx.cashRegister.upsert({
       where: { cobradorId_fecha: { cobradorId: cobrador.id, fecha } },
       create: {
         cobradorId: cobrador.id,
         branchId: targetBranchId,
         fecha,
-        cobradoEfectivo: data.metodoPago === 'CASH' ? mora.monto : 0,
-        cobradoTarjeta: data.metodoPago === 'CARD' ? mora.monto : 0,
-        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? mora.monto : 0,
+        cobradoEfectivo: data.metodoPago === 'CASH' ? escogida.monto : 0,
+        cobradoTarjeta: data.metodoPago === 'CARD' ? escogida.monto : 0,
+        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? escogida.monto : 0,
         cambioEntregado: data.cambioEntregado,
       },
       update: {
-        cobradoEfectivo: data.metodoPago === 'CASH' ? { increment: mora.monto } : undefined,
-        cobradoTarjeta: data.metodoPago === 'CARD' ? { increment: mora.monto } : undefined,
-        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? { increment: mora.monto } : undefined,
+        cobradoEfectivo: data.metodoPago === 'CASH' ? { increment: escogida.monto } : undefined,
+        cobradoTarjeta: data.metodoPago === 'CARD' ? { increment: escogida.monto } : undefined,
+        cobradoTransferencia: data.metodoPago === 'TRANSFER' ? { increment: escogida.monto } : undefined,
         cambioEntregado: data.cambioEntregado > 0 ? { increment: data.cambioEntregado } : undefined,
       },
     })
 
-    // 5. Ticket
     const year = now.getFullYear()
     const numeroTicket = await generateTicketNumber(branchPrefix, year)
     const qrCode = generateTicketQrData(numeroTicket)
@@ -238,8 +231,8 @@ export async function POST(
     registroId: result.moraCobroId,
     valoresNuevos: {
       scheduleId: schedule.id,
-      tipo: mora.tipo,
-      monto: mora.monto,
+      tipo: escogida.tipo,
+      monto: escogida.monto,
       metodoPago: data.metodoPago,
       paymentId: result.payment.id,
       ticket: result.ticket.numeroTicket,
@@ -251,7 +244,7 @@ export async function POST(
       data: {
         payment: result.payment,
         ticket: result.ticket,
-        mora: { tipo: mora.tipo, monto: mora.monto },
+        mora: { tipo: escogida.tipo, monto: escogida.monto },
         clienteNombre: schedule.loan.client.nombreCompleto,
         branchName,
         cobradorName: cobrador.nombre,

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { CashBreakdownCalculator } from '@/components/payments/CashBreakdownCalculator'
 import { TicketPreview } from '@/components/payments/TicketPreview'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { ArrowLeft, Banknote, CreditCard, Building2, Printer, Loader2, CheckCircle, Clock, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import type { TicketData, CashBreakdownEntry } from '@/types'
-import { detectarMora, labelMora } from '@/lib/moras'
+import { opcionesMora, opcionParaTipo, labelMora, type MoraTipo } from '@/lib/moras'
 
 interface ScheduleDetail {
   id: string
@@ -41,6 +41,10 @@ type PaymentStep = 'method' | 'cash_calc' | 'confirm_card' | 'confirm_transfer' 
 
 export default function CapturarMoraPage({ params }: { params: { scheduleId: string } }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const tipoParam = searchParams.get('tipo')
+  const tipoSolicitado: MoraTipo | null =
+    tipoParam === 'MULTA' || tipoParam === 'MORA' ? tipoParam : null
   const { toast } = useToast()
   const [schedule, setSchedule] = useState<ScheduleDetail | null>(null)
   const [loadingSchedule, setLoadingSchedule] = useState(true)
@@ -67,9 +71,11 @@ export default function CapturarMoraPage({ params }: { params: { scheduleId: str
     cambio?: number,
   ) {
     if (!schedule) return
+    if (!tipoSolicitado) return
     setSubmitting(true)
     try {
       const body: Record<string, unknown> = {
+        tipo: tipoSolicitado,
         metodoPago,
         cambioEntregado: cambio ?? 0,
         cashBreakdown: cashBreakdown ?? [],
@@ -147,17 +153,19 @@ export default function CapturarMoraPage({ params }: { params: { scheduleId: str
     )
   }
 
-  const preview = detectarMora(new Date(schedule.fechaVencimiento), new Date())
+  const opciones = opcionesMora(new Date(schedule.fechaVencimiento), new Date())
+  const preview = tipoSolicitado ? opcionParaTipo(opciones, tipoSolicitado) : null
   if (!preview) {
+    const razon = !tipoSolicitado
+      ? 'Falta indicar el tipo (multa o mora) en la URL.'
+      : `${labelMora(tipoSolicitado)} no aplica para este pago en este momento.`
     return (
       <div className="p-4 space-y-4 max-w-sm mx-auto">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-amber-500" />
-          <h2 className="text-lg font-bold">Sin multa ni mora</h2>
+          <h2 className="text-lg font-bold">Sin cargo aplicable</h2>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Este pago no genera multa ni mora en este momento — el atraso aún no cumple con la regla.
-        </p>
+        <p className="text-sm text-muted-foreground">{razon}</p>
         <Button asChild variant="outline" className="w-full">
           <Link href={`/prestamos/${schedule.loan.id}`}>Volver al préstamo</Link>
         </Button>

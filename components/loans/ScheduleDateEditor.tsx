@@ -9,7 +9,7 @@ import { Loader2, Pencil, Check, X, AlertCircle, Undo2, CheckCircle2, Info, Eye 
 import { formatMoney } from '@/lib/utils'
 import { formatDate } from '@/lib/utils'
 import type { ScheduleStatus } from '@prisma/client'
-import { detectarMora, labelMora } from '@/lib/moras'
+import { opcionesMora, labelMora, type MoraDeteccion } from '@/lib/moras'
 
 export interface PaymentInfo {
   quien: string
@@ -95,6 +95,9 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
 
   const [openInfoId, setOpenInfoId]         = useState<string | null>(null)
 
+  const [confirmUndoMoraId, setConfirmUndoMoraId] = useState<string | null>(null)
+  const [undoingMora, setUndoingMora]             = useState(false)
+
   function startEdit(s: ScheduleItem) {
     setEditingId(s.id)
     setDateValue(toInputValue(s.fechaVencimiento))
@@ -134,6 +137,25 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
       toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
     } finally {
       setUndoing(false)
+    }
+  }
+
+  async function undoMora(s: ScheduleItem, moraId: string) {
+    setUndoingMora(true)
+    try {
+      const res = await fetch(
+        `/api/loans/${loanId}/schedule/${s.id}/mora/${moraId}`,
+        { method: 'DELETE' },
+      )
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      toast({ title: data.message ?? 'Cobro de multa/mora revertido' })
+      setConfirmUndoMoraId(null)
+      router.refresh()
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+    } finally {
+      setUndoingMora(false)
     }
   }
 
@@ -382,62 +404,114 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
             </div>
           )}
 
-          {/* Sub-fila de multa/mora — indentada bajo el pago. Aparece si
-              (a) ya existe MoraCobro registrada en BD, o
-              (b) la regla la genera "en vivo" y el pago sigue cobrable.
-              Es un movimiento independiente: puede cobrarse aunque el
-              pago principal no se haya pagado. */}
+          {/* Sub-filas de multa y mora — indentadas bajo el pago.
+              - Si ya se cobró una (mora.cobrada), se muestra solo esa
+                fila con "Cobrada" y botón Deshacer para DG/DC.
+              - Si no se ha cobrado, se muestran las opciones que aplican
+                según opcionesMora() y el coordinador escoge cuál cobrar. */}
           {(() => {
-            const preview = detectarMora(_d, new Date())
-            const mora = s.mora ?? (preview
-              ? { tipo: preview.tipo, monto: preview.monto, cobrada: false, id: '', cobradaAt: null }
-              : null)
-            if (!mora) return null
-            const isCobrada = mora.cobrada === true
-            const colorClass = mora.tipo === 'MORA'
-              ? 'border-rose-400/50 text-rose-400 bg-rose-500/10'
-              : 'border-amber-400/50 text-amber-400 bg-amber-500/10'
+            const mora = s.mora
+            if (mora?.cobrada) {
+              const colorClass = mora.tipo === 'MORA'
+                ? 'border-rose-400/50 text-rose-400 bg-rose-500/10'
+                : 'border-amber-400/50 text-amber-400 bg-amber-500/10'
+              const confirmingUndo = confirmUndoMoraId === mora.id
+              return (
+                <div className="ml-7 mt-1 mb-1 pl-2 border-l-2 border-dashed border-border/50 flex items-center gap-2 text-sm">
+                  <span className="text-xs text-muted-foreground shrink-0">└─</span>
+                  <Badge variant="warning" className={`text-xs shrink-0 ${colorClass}`}>
+                    {labelMora(mora.tipo)}
+                  </Badge>
+                  <span className="font-medium w-20 shrink-0">{formatMoney(mora.monto)}</span>
+                  <Badge variant="success" className="text-xs shrink-0">Cobrada</Badge>
+                  {mora.cobradaAt && (
+                    <span className="text-xs text-emerald-400/80 shrink-0">
+                      {new Date(mora.cobradaAt).toLocaleString('es-MX', {
+                        day: '2-digit', month: '2-digit', year: '2-digit',
+                        hour: '2-digit', minute: '2-digit',
+                      })}
+                    </span>
+                  )}
+                  {canUndo && (
+                    <div className="ml-auto shrink-0">
+                      {confirmingUndo ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-amber-400">¿Revertir?</span>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-6 px-2 text-xs"
+                            disabled={undoingMora}
+                            onClick={() => undoMora(s, mora.id)}
+                          >
+                            {undoingMora ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sí'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-xs"
+                            disabled={undoingMora}
+                            onClick={() => setConfirmUndoMoraId(null)}
+                          >
+                            No
+                          </Button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmUndoMoraId(mora.id)}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-amber-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-amber-400/50"
+                          title="Deshacer cobro de multa/mora (DG/DC)"
+                        >
+                          <Undo2 className="h-3 w-3" />
+                          Deshacer
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            const op = opcionesMora(_d, new Date())
+            const filas: MoraDeteccion[] = []
+            if (op.multa) filas.push(op.multa)
+            if (op.mora) filas.push(op.mora)
+            if (filas.length === 0) return null
+
             return (
-              <div className="ml-7 mt-1 mb-1 pl-2 border-l-2 border-dashed border-border/50 flex items-center gap-2 text-sm">
-                <span className="text-xs text-muted-foreground shrink-0">└─</span>
-                <Badge
-                  variant="warning"
-                  className={`text-xs shrink-0 ${colorClass}`}
-                >
-                  {labelMora(mora.tipo)}
-                </Badge>
-                <span className="font-medium w-20 shrink-0">{formatMoney(mora.monto)}</span>
-                {isCobrada ? (
-                  <>
-                    <Badge variant="success" className="text-xs shrink-0">Cobrada</Badge>
-                    {mora.cobradaAt && (
-                      <span className="text-xs text-emerald-400/80 shrink-0">
-                        {new Date(mora.cobradaAt).toLocaleString('es-MX', {
-                          day: '2-digit', month: '2-digit', year: '2-digit',
-                          hour: '2-digit', minute: '2-digit',
-                        })}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Badge variant="outline" className="text-xs shrink-0 text-muted-foreground">
-                      Pendiente
-                    </Badge>
-                    {canCapture && (
-                      <a
-                        href={`/cobros/capturar-mora/${s.id}`}
-                        className="ml-auto flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-gray-50 transition-colors shrink-0"
-                        title={mora.tipo === 'MORA'
-                          ? 'Cobrar mora de $500'
-                          : 'Cobrar multa de $200'}
-                      >
-                        Cobrar
-                      </a>
-                    )}
-                  </>
-                )}
-              </div>
+              <>
+                {filas.map((f: MoraDeteccion) => {
+                  const colorClass = f.tipo === 'MORA'
+                    ? 'border-rose-400/50 text-rose-400 bg-rose-500/10'
+                    : 'border-amber-400/50 text-amber-400 bg-amber-500/10'
+                  return (
+                    <div
+                      key={f.tipo}
+                      className="ml-7 mt-1 mb-1 pl-2 border-l-2 border-dashed border-border/50 flex items-center gap-2 text-sm"
+                    >
+                      <span className="text-xs text-muted-foreground shrink-0">└─</span>
+                      <Badge variant="warning" className={`text-xs shrink-0 ${colorClass}`}>
+                        {labelMora(f.tipo)}
+                      </Badge>
+                      <span className="font-medium w-20 shrink-0">{formatMoney(f.monto)}</span>
+                      <Badge variant="outline" className="text-xs shrink-0 text-muted-foreground">
+                        Pendiente
+                      </Badge>
+                      {canCapture && (
+                        <a
+                          href={`/cobros/capturar-mora/${s.id}?tipo=${f.tipo}`}
+                          className="ml-auto flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-gray-50 transition-colors shrink-0"
+                          title={f.tipo === 'MORA'
+                            ? 'Cobrar mora de $500'
+                            : 'Cobrar multa de $200'}
+                        >
+                          Cobrar
+                        </a>
+                      )}
+                    </div>
+                  )
+                })}
+              </>
             )
           })()}
           </div>

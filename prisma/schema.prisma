@@ -125,6 +125,7 @@ model Company {
   goals         Goal[]
   employees     EmployeeRecord[]
   extraFunds    BranchExtraFund[]
+  withdrawals   BranchWithdrawal[]
   moraCobros    MoraCobro[]
 }
 
@@ -160,6 +161,7 @@ model Branch {
   cashRegisters CashRegister[]
   tickets       Ticket[]
   extraFunds    BranchExtraFund[]
+  withdrawals   BranchWithdrawal[]
   moraCobros    MoraCobro[]
 }
 
@@ -178,6 +180,27 @@ model BranchExtraFund {
   concepto    String?
   createdById String
   createdBy   User     @relation("BranchExtraFundsCreated", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([branchId, fecha])
+  @@index([companyId, fecha])
+}
+
+// Retiro de recurso que Dirección hace desde una sucursal — espejo
+// negativo de BranchExtraFund. En /banca se resta del "Neto para
+// banca" — refleja movimientos tipo "DG retiró $30k de Toluca para
+// llevar a otra sucursal / gastos operativos".
+model BranchWithdrawal {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  fecha       DateTime @db.Date
+  monto       Decimal  @db.Decimal(12, 2)
+  concepto    String?
+  createdById String
+  createdBy   User     @relation("BranchWithdrawalsCreated", fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
 
   @@index([branchId, fecha])
@@ -230,6 +253,7 @@ model User {
   solicitudesCancelacionLimbo SolicitudCancelacionLimbo[] @relation("SolicitanteCancelacion")
   decisionesCancelacionLimbo  SolicitudCancelacionLimbo[] @relation("AprobadorCancelacion")
   extraFundsCreated           BranchExtraFund[]           @relation("BranchExtraFundsCreated")
+  withdrawalsCreated          BranchWithdrawal[]          @relation("BranchWithdrawalsCreated")
   morasGeneradas              MoraCobro[]                 @relation("MorasGeneradas")
 
   @@unique([companyId, email])

@@ -10,6 +10,7 @@ import { LoanDocumentUpload } from '@/components/loans/LoanDocumentUpload'
 import { ClientRenovacionButton } from '@/components/loans/ClientRenovacionButton'
 import { EditarTelefonoDialog } from '@/components/clients/EditarTelefonoDialog'
 import { EditarAvalDialog } from '@/components/loans/EditarAvalDialog'
+import { LoanGroupChip } from '@/components/loans/LoanGroupChip'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 import { formatDate, formatMoney } from '@/lib/utils'
 import { ArrowLeft, Phone, MapPin, User, CreditCard, History, Banknote, Building2, FolderOpen, Users, Pencil, ShieldCheck, FileText } from 'lucide-react'
@@ -65,6 +66,9 @@ export default async function ClienteExpedientePage({
         orderBy: { createdAt: 'desc' },
         include: {
           cobrador: { select: { nombre: true } },
+          // Nombre del grupo (para SOLIDARIO típicamente) — se muestra
+          // como chip clickable en la card del préstamo.
+          loanGroup: { select: { id: true, nombre: true } },
           // Cargar calendario completo (necesario para calcular elegibilidad de renovación)
           schedule: { orderBy: { numeroPago: 'asc' } },
           // Verificar si ya existe una renovación pendiente o aprobada
@@ -319,7 +323,16 @@ export default async function ClienteExpedientePage({
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-medium">{loan.tipo} · {formatMoney(Number(loan.capital))}</p>
+                          <p className="font-medium flex items-center gap-1.5 flex-wrap">
+                            <span>{loan.tipo}</span>
+                            {loan.loanGroup && (
+                              <LoanGroupChip
+                                groupId={loan.loanGroup.id}
+                                name={loan.loanGroup.nombre}
+                              />
+                            )}
+                            <span>· {formatMoney(Number(loan.capital))}</span>
+                          </p>
                           <p className="text-sm text-muted-foreground">
                             Plazo: {loan.plazo} {loan.tipo === 'AGIL' ? 'días' : loan.tipo === 'FIDUCIARIO' ? 'quincenas' : 'semanas'} ·
                             {loan.pagoSemanal ? ` ${formatMoney(Number(loan.pagoSemanal))}/sem` : loan.pagoDiario ? ` ${formatMoney(Number(loan.pagoDiario))}/día` : ` ${formatMoney(Number(loan.pagoQuincenal))}/qna`}

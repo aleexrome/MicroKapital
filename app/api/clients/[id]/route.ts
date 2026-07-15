@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
 
@@ -146,6 +147,61 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'No hay cambios que aplicar' }, { status: 400 })
+  }
+
+  // Si DG está cambiando nombre / INE / CURP, evitar que el resultado
+  // choque con otro cliente existente de la empresa. Mismo criterio que
+  // POST: ignoramos soft-eliminados y comparamos case-insensitive.
+  const dupOr: Prisma.ClientWhereInput[] = []
+  if (typeof update.nombreCompleto === 'string' && update.nombreCompleto !== existing.nombreCompleto) {
+    dupOr.push({ nombreCompleto: { equals: update.nombreCompleto, mode: 'insensitive' } })
+  }
+  if (typeof update.numIne === 'string' && update.numIne !== existing.numIne) {
+    dupOr.push({ numIne: { equals: update.numIne, mode: 'insensitive' } })
+  }
+  if (typeof update.curp === 'string' && update.curp !== existing.curp) {
+    dupOr.push({ curp: { equals: update.curp, mode: 'insensitive' } })
+  }
+  if (dupOr.length > 0) {
+    const duplicado = await prisma.client.findFirst({
+      where: {
+        companyId: companyId!,
+        eliminadoEn: null,
+        id: { not: params.id },
+        OR: dupOr,
+      },
+      select: {
+        id: true,
+        nombreCompleto: true,
+        numIne: true,
+        curp: true,
+        branch: { select: { nombre: true } },
+        cobrador: { select: { nombre: true } },
+      },
+    })
+    if (duplicado) {
+      const eq = (a: string | null | undefined, b: unknown) =>
+        !!a && typeof b === 'string' && a.trim().toUpperCase() === b.trim().toUpperCase()
+      const motivo =
+        eq(duplicado.numIne, update.numIne) ? 'mismo INE'
+        : eq(duplicado.curp, update.curp) ? 'mismo CURP'
+        : 'mismo nombre'
+      const sucursal = duplicado.branch?.nombre ?? 'otra sucursal'
+      const coord = duplicado.cobrador?.nombre ?? 'sin coordinador asignado'
+      return NextResponse.json(
+        {
+          error: `Ya existe otro cliente con ${motivo}: ${duplicado.nombreCompleto} (${sucursal}, coordinador: ${coord}).`,
+          duplicate: {
+            id: duplicado.id,
+            nombreCompleto: duplicado.nombreCompleto,
+            motivo,
+            branchName: duplicado.branch?.nombre ?? null,
+            cobradorName: duplicado.cobrador?.nombre ?? null,
+          },
+        },
+        { status: 409 },
+      )
+    }
   }
 
   const updated = await prisma.client.update({

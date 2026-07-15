@@ -85,6 +85,57 @@ export async function POST(req: NextRequest) {
   const numIne = data.numIne?.trim().toUpperCase() || null
   const curp = data.curp?.trim().toUpperCase() || null
 
+  // Bloquear duplicados a nivel EMPRESA — mismo nombre completo, mismo INE
+  // o mismo CURP identifican al mismo cliente, sin importar sucursal o
+  // coordinador. Si Jaime intenta dar de alta un cliente que ya tiene
+  // Cristina en otra sucursal, aquí lo cachamos y le decimos dónde vive.
+  // Ignoramos clientes soft-eliminados (eliminadoEn != null) para permitir
+  // re-registrar tras purga o si DG decide reactivar.
+  const orClauses: Prisma.ClientWhereInput[] = [
+    { nombreCompleto: { equals: nombreCompleto, mode: 'insensitive' } },
+  ]
+  if (numIne) orClauses.push({ numIne: { equals: numIne, mode: 'insensitive' } })
+  if (curp) orClauses.push({ curp: { equals: curp, mode: 'insensitive' } })
+
+  const duplicado = await prisma.client.findFirst({
+    where: {
+      companyId: companyId!,
+      eliminadoEn: null,
+      OR: orClauses,
+    },
+    select: {
+      id: true,
+      nombreCompleto: true,
+      numIne: true,
+      curp: true,
+      branch: { select: { nombre: true } },
+      cobrador: { select: { nombre: true } },
+    },
+  })
+  if (duplicado) {
+    const eq = (a: string | null, b: string | null) =>
+      !!a && !!b && a.trim().toUpperCase() === b.trim().toUpperCase()
+    const motivo =
+      eq(duplicado.numIne, numIne) ? 'mismo INE'
+      : eq(duplicado.curp, curp) ? 'mismo CURP'
+      : 'mismo nombre'
+    const sucursal = duplicado.branch?.nombre ?? 'otra sucursal'
+    const coord = duplicado.cobrador?.nombre ?? 'sin coordinador asignado'
+    return NextResponse.json(
+      {
+        error: `Ya existe un cliente con ${motivo}: ${duplicado.nombreCompleto} (${sucursal}, coordinador: ${coord}). No se puede registrar dos veces.`,
+        duplicate: {
+          id: duplicado.id,
+          nombreCompleto: duplicado.nombreCompleto,
+          motivo,
+          branchName: duplicado.branch?.nombre ?? null,
+          cobradorName: duplicado.cobrador?.nombre ?? null,
+        },
+      },
+      { status: 409 },
+    )
+  }
+
   // Determinar sucursal — Director puede elegir cualquiera; el resto usa la propia
   const { zonaBranchIds } = session.user
   const targetBranchId = data.branchId ?? branchId ?? zonaBranchIds?.[0]

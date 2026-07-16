@@ -136,7 +136,20 @@ export default async function ClienteExpedientePage({
           <Link href="/clientes"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">{client.nombreCompleto}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 flex-wrap">
+            {client.nombreCompleto}
+            {client.heredadoDeId && (
+              <Badge
+                variant="outline"
+                className="border-violet-400/50 text-violet-300 bg-violet-500/10 text-xs font-normal"
+                title={client.heredadoAt
+                  ? `Reasignado a este coordinador el ${formatDate(client.heredadoAt)}`
+                  : 'Cliente reasignado a este coordinador'}
+              >
+                Heredado
+              </Badge>
+            )}
+          </h1>
           <p className="text-muted-foreground">Expediente del cliente</p>
         </div>
         {/* Edición de expediente — solo DIRECTOR_GENERAL (Stephanie).

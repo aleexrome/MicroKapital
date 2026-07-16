@@ -71,7 +71,8 @@ UPDATE "Payment"        p  SET "clientId" = m.ganador FROM dedup_map m WHERE p."
 UPDATE "MoraCobro"      mc SET "clientId" = m.ganador FROM dedup_map m WHERE mc."clientId" = m.perdedor;
 UPDATE "ClientDocument" d  SET "clientId" = m.ganador FROM dedup_map m WHERE d."clientId"  = m.perdedor;
 UPDATE "ScoreEvent"     s  SET "clientId" = m.ganador FROM dedup_map m WHERE s."clientId"  = m.perdedor;
-UPDATE "Payment"        p  SET "coberturaClientId" = m.ganador FROM dedup_map m WHERE p."coberturaClientId" = m.perdedor;
+-- Cobertura solidaria: el campo real en Payment es cubridoPorClienteId.
+UPDATE "Payment"        p  SET "cubridoPorClienteId" = m.ganador FROM dedup_map m WHERE p."cubridoPorClienteId" = m.perdedor;
 
 
 -- ── Rellenar campos vacíos del ganador con datos del perdedor ────────

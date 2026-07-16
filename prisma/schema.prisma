@@ -233,6 +233,7 @@ model User {
   permisoAplicarPagos Boolean @default(false)
 
   clientsManaged              Client[]                    @relation("CobradoresClientes")
+  clientsHeredadosDe          Client[]                    @relation("HeredadoDeCoordinador")
   clientUser                  Client?                     @relation("ClienteUsuario")
   payments                    Payment[]
   cashRegisters               CashRegister[]
@@ -269,6 +270,13 @@ model Client {
   cobrador           User?     @relation("CobradoresClientes", fields: [cobradorId], references: [id])
   userId             String?   @unique
   user               User?     @relation("ClienteUsuario", fields: [userId], references: [id])
+  // Trazabilidad: cuando se reasigna un cliente a otro coordinador,
+  // guardamos el coordinador de origen y la fecha del cambio. En la UI
+  // se muestra solo el badge "Heredado" (sin exponer al coord original).
+  // En BD sí queda quién lo tenía para reportes internos y auditoría.
+  heredadoDeId       String?
+  heredadoDe         User?     @relation("HeredadoDeCoordinador", fields: [heredadoDeId], references: [id])
+  heredadoAt         DateTime?
   nombreCompleto     String
   numIne             String?
   curp               String?

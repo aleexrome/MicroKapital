@@ -20,7 +20,9 @@
 
 BEGIN;
 
-CREATE TEMP TABLE dedup_map (perdedor uuid, ganador uuid, cliente text, coord text);
+-- perdedor/ganador van como TEXT porque Prisma mapea String @id a text
+-- (no a uuid); igualar tipos evita el error 42883.
+CREATE TEMP TABLE dedup_map (perdedor text, ganador text, cliente text, coord text);
 
 INSERT INTO dedup_map (perdedor, ganador, cliente, coord) VALUES
   -- CURP match, mismo coord

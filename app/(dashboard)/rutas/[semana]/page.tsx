@@ -92,6 +92,31 @@ function calcCobranza(
   return { totalAPagar, totalCobrado, cobradosCount, scheduleCount }
 }
 
+/**
+ * Consolida cobranza + colocación en un solo objeto con los % ya
+ * calculados. Se usa para armar las dos secciones (propia / heredada)
+ * de la tarjeta del coordinador sin repetir la aritmética en cada
+ * lugar.
+ */
+function buildPairStats(
+  schedules: Parameters<typeof calcCobranza>[0],
+  loans: Array<{ capital: Prisma.Decimal | number }>,
+) {
+  const { totalAPagar, totalCobrado, cobradosCount, scheduleCount } = calcCobranza(schedules)
+  const colocacion = loans.reduce((s, l) => s + Number(l.capital), 0)
+  const metaTarget = metaColocacion(totalAPagar)
+  return {
+    totalAPagar,
+    totalCobrado,
+    cobradosCount,
+    scheduleCount,
+    colocacion,
+    metaTarget,
+    cobranzaPct: calcPct(totalCobrado, totalAPagar),
+    metaPct:     calcPct(colocacion, metaTarget),
+  }
+}
+
 // ── status icon ───────────────────────────────────────────────────────────
 
 // Estado visual basado en lo que efectivamente cobramos (Payment.monto),
@@ -221,35 +246,89 @@ function KpiCard({
 
 // ── small coordinator stat card ──────────────────────────────────────────
 
-function CobradorCard({
-  nombre, rolLabel, cobranzaPct, metaPct,
-  totalCobrado, totalAPagar, colocacion, metaTarget,
-  scheduleCount, cobradosCount,
+/**
+ * Sub-bloque Cobranza + Colocación. Se usa tanto para "Su cartera" como
+ * para "Cartera heredada". Se extrajo para poder pintarlos apilados
+ * cuando el coordinador tiene ambas fuentes.
+ */
+function CobradorMetricPair({
+  totalCobrado, totalAPagar, cobranzaPct,
+  colocacion, metaTarget, metaPct,
 }: {
-  nombre: string
-  rolLabel: string
-  cobranzaPct: number
-  metaPct: number
   totalCobrado: number
   totalAPagar: number
+  cobranzaPct: number
   colocacion: number
   metaTarget: number
-  scheduleCount: number
-  cobradosCount: number
+  metaPct: number
 }) {
   const cbBar = barColor(cobranzaPct, 'cobranza')
   const mtBar = barColor(metaPct, 'meta')
   const cbText = textColor(cobranzaPct, 'cobranza')
   const mtText = textColor(metaPct, 'meta')
-
-  // Caso "coordinadora nueva": ya colocó pero todavía no le vence ningún
-  // pago esta semana → totalAPagar = 0 → metaTarget = 0 → la fórmula
-  // colocacion/meta da 0% aunque sí hubo trabajo. Cuando eso pasa,
-  // mostramos el monto colocado de manera absoluta y un guion en el %
-  // para no ensuciar el indicador. La próxima semana, cuando ya tenga
-  // primera cuota vencida, vuelve a la métrica normal.
   const colocacionSinMeta = metaTarget === 0 && colocacion > 0
 
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-muted-foreground">Cobranza</span>
+          <span className={`text-sm font-bold ${cbText}`}>{cobranzaPct}%</span>
+        </div>
+        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className={`h-full ${cbBar} rounded-full`} style={{ width: `${Math.min(100, cobranzaPct)}%` }} />
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-1">{formatMoney(totalCobrado)} / {formatMoney(totalAPagar)}</p>
+      </div>
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-muted-foreground">Colocación</span>
+          <span className={`text-sm font-bold ${colocacionSinMeta ? 'text-emerald-600' : mtText}`}>
+            {colocacionSinMeta ? '—' : `${metaPct}%`}
+          </span>
+        </div>
+        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full ${colocacionSinMeta ? 'bg-emerald-500' : mtBar} rounded-full`}
+            style={{ width: colocacionSinMeta ? '100%' : `${Math.min(100, metaPct)}%` }}
+          />
+        </div>
+        {colocacionSinMeta ? (
+          <p className="text-[11px] text-muted-foreground mt-1">
+            <span className="font-semibold text-emerald-600 money">{formatMoney(colocacion)}</span> colocados · sin meta esta semana
+          </p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground mt-1">{formatMoney(colocacion)} / {formatMoney(metaTarget)}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+interface CobradorPairStats {
+  totalCobrado: number
+  totalAPagar: number
+  cobranzaPct: number
+  colocacion: number
+  metaTarget: number
+  metaPct: number
+  cobradosCount: number
+  scheduleCount: number
+}
+
+function CobradorCard({
+  nombre, rolLabel, propia, heredada, cobradosCount, scheduleCount,
+}: {
+  nombre: string
+  rolLabel: string
+  propia: CobradorPairStats
+  /** Si el coord tiene clientes heredados y hay actividad esta semana en
+   *  ellos, se pinta un bloque adicional. Null si no aplica. */
+  heredada: CobradorPairStats | null
+  /** Contadores combinados (propia + heredada) para el encabezado. */
+  cobradosCount: number
+  scheduleCount: number
+}) {
   return (
     <div className="bg-white border rounded-xl p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -263,39 +342,25 @@ function CobradorCard({
         <p className="text-xs text-muted-foreground">{cobradosCount}/{scheduleCount} cobros</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-muted-foreground">Cobranza</span>
-            <span className={`text-sm font-bold ${cbText}`}>{cobranzaPct}%</span>
+      {heredada ? (
+        <>
+          <div>
+            <p className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">Su cartera</p>
+            <CobradorMetricPair {...propia} />
           </div>
-          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className={`h-full ${cbBar} rounded-full`} style={{ width: `${Math.min(100, cobranzaPct)}%` }} />
+          <div className="pt-2 border-t border-dashed border-border/50">
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Cartera heredada</p>
+              <span className="text-[10px] rounded px-1.5 py-0.5 border border-violet-400/50 text-violet-400 bg-violet-500/10 font-medium">
+                Heredada
+              </span>
+            </div>
+            <CobradorMetricPair {...heredada} />
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1">{formatMoney(totalCobrado)} / {formatMoney(totalAPagar)}</p>
-        </div>
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-muted-foreground">Colocación</span>
-            <span className={`text-sm font-bold ${colocacionSinMeta ? 'text-emerald-600' : mtText}`}>
-              {colocacionSinMeta ? '—' : `${metaPct}%`}
-            </span>
-          </div>
-          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full ${colocacionSinMeta ? 'bg-emerald-500' : mtBar} rounded-full`}
-              style={{ width: colocacionSinMeta ? '100%' : `${Math.min(100, metaPct)}%` }}
-            />
-          </div>
-          {colocacionSinMeta ? (
-            <p className="text-[11px] text-muted-foreground mt-1">
-              <span className="font-semibold text-emerald-600 money">{formatMoney(colocacion)}</span> colocados · sin meta esta semana
-            </p>
-          ) : (
-            <p className="text-[11px] text-muted-foreground mt-1">{formatMoney(colocacion)} / {formatMoney(metaTarget)}</p>
-          )}
-        </div>
-      </div>
+        </>
+      ) : (
+        <CobradorMetricPair {...propia} />
+      )}
     </div>
   )
 }
@@ -734,7 +799,15 @@ export default async function RutaDetallePage({
             where: { fechaHora: { gte: saturday, lte: friday } },
             select: { monto: true },
           },
-          loan: { select: { cobradorId: true } },
+          loan: {
+            select: {
+              cobradorId: true,
+              // heredadoDeId permite partir cobranza / colocación entre
+              // "Su cartera" (heredadoDeId=null) y "Cartera heredada"
+              // en la tarjeta del coordinador.
+              client: { select: { heredadoDeId: true } },
+            },
+          },
         },
       }),
       prisma.loan.findMany({
@@ -745,7 +818,11 @@ export default async function RutaDetallePage({
           fechaDesembolso: { gte: saturday, lte: friday },
           AND: [loanNotDeletedWhere],
         },
-        select: { capital: true, cobradorId: true },
+        select: {
+          capital: true,
+          cobradorId: true,
+          client: { select: { heredadoDeId: true } },
+        },
       }),
     ])
 
@@ -762,18 +839,37 @@ export default async function RutaDetallePage({
       const aggregator = GERENTES_AGREGADOS_POR_SUCURSAL.has(u.id)
       const uSched  = aggregator ? wSchedules : wSchedules.filter((s) => s.loan.cobradorId === u.id)
       const uLoans  = aggregator ? wLoans     : wLoans.filter((l) => l.cobradorId === u.id)
-      const { totalAPagar, totalCobrado, cobradosCount, scheduleCount } = calcCobranza(uSched)
-      const colocacion  = uLoans.reduce((s, l) => s + Number(l.capital), 0)
-      const metaTarget  = metaColocacion(totalAPagar)
+
+      // Partición: cliente heredado (heredadoDeId != null) vs propio.
+      // Los gerentes-agregadores no distinguen — su vista sigue mostrando
+      // el total de la sucursal en una sola sección.
+      const isHeredado = (x: { loan?: { client: { heredadoDeId: string | null } }; client?: { heredadoDeId: string | null } }) =>
+        Boolean((x.loan?.client ?? x.client!)?.heredadoDeId)
+
+      const propiaSched = aggregator ? uSched : uSched.filter((s) => !isHeredado(s))
+      const propiaLoans = aggregator ? uLoans : uLoans.filter((l) => !isHeredado(l))
+      const heredSched  = aggregator ? [] : uSched.filter((s) => isHeredado(s))
+      const heredLoans  = aggregator ? [] : uLoans.filter((l) => isHeredado(l))
+
+      const propia = buildPairStats(propiaSched, propiaLoans)
+      const hered  = buildPairStats(heredSched,  heredLoans)
+      const hayHered = !aggregator && (heredSched.length > 0 || heredLoans.length > 0)
+
       return {
         id: u.id,
         nombre: u.nombre,
         rolLabel: ROL_LABEL_MAP[u.rol] ?? u.rol,
-        totalAPagar, totalCobrado, cobradosCount,
-        colocacion, metaTarget,
-        cobranzaPct: calcPct(totalCobrado, totalAPagar),
-        metaPct:     calcPct(colocacion, metaTarget),
-        scheduleCount,
+        // Totales combinados para encabezado + agregado de sucursal.
+        totalAPagar: propia.totalAPagar + hered.totalAPagar,
+        totalCobrado: propia.totalCobrado + hered.totalCobrado,
+        cobradosCount: propia.cobradosCount + hered.cobradosCount,
+        colocacion: propia.colocacion + hered.colocacion,
+        metaTarget: propia.metaTarget + hered.metaTarget,
+        cobranzaPct: calcPct(propia.totalCobrado + hered.totalCobrado, propia.totalAPagar + hered.totalAPagar),
+        metaPct:     calcPct(propia.colocacion + hered.colocacion,       propia.metaTarget + hered.metaTarget),
+        scheduleCount: propia.scheduleCount + hered.scheduleCount,
+        propia,
+        heredada: hayHered ? hered : null,
       }
     })
 
@@ -899,7 +995,15 @@ export default async function RutaDetallePage({
           },
           // branchId hace falta para que las tarjetas de gerentes sin
           // cartera propia agreguen únicamente su sucursal.
-          loan: { select: { cobradorId: true, branchId: true } },
+          // heredadoDeId permite partir la card en "Su cartera" vs
+          // "Cartera heredada" cuando aplica.
+          loan: {
+            select: {
+              cobradorId: true,
+              branchId: true,
+              client: { select: { heredadoDeId: true } },
+            },
+          },
         },
       }),
       prisma.loan.findMany({
@@ -910,7 +1014,12 @@ export default async function RutaDetallePage({
           fechaDesembolso: { gte: saturday, lte: friday },
           AND: [loanNotDeletedWhere],
         },
-        select: { capital: true, cobradorId: true, branchId: true },
+        select: {
+          capital: true,
+          cobradorId: true,
+          branchId: true,
+          client: { select: { heredadoDeId: true } },
+        },
       }),
     ])
 
@@ -938,20 +1047,33 @@ export default async function RutaDetallePage({
       const uLoans = aggregator
         ? wLoans.filter((l) => aggregatorBranchIds!.includes(l.branchId))
         : wLoans.filter((l) => l.cobradorId === u.id)
-      const { totalAPagar, totalCobrado, cobradosCount, scheduleCount } = calcCobranza(uSched)
-      const colocacion = uLoans.reduce((s, l) => s + Number(l.capital), 0)
-      const metaTarget = metaColocacion(totalAPagar)
+
+      const isHeredado = (x: { loan?: { client: { heredadoDeId: string | null } }; client?: { heredadoDeId: string | null } }) =>
+        Boolean((x.loan?.client ?? x.client!)?.heredadoDeId)
+      const propiaSched = aggregator ? uSched : uSched.filter((s) => !isHeredado(s))
+      const propiaLoans = aggregator ? uLoans : uLoans.filter((l) => !isHeredado(l))
+      const heredSched  = aggregator ? [] : uSched.filter((s) => isHeredado(s))
+      const heredLoans  = aggregator ? [] : uLoans.filter((l) => isHeredado(l))
+      const propia = buildPairStats(propiaSched, propiaLoans)
+      const hered  = buildPairStats(heredSched,  heredLoans)
+      const hayHered = !aggregator && (heredSched.length > 0 || heredLoans.length > 0)
+
       return {
         id: u.id,
         nombre: u.nombre,
         rolLabel: ROL_LABEL_MAP[u.rol] ?? u.rol,
         branchId: u.branchId ?? '',
         aggregator,
-        totalAPagar, totalCobrado, cobradosCount,
-        colocacion, metaTarget,
-        cobranzaPct: calcPct(totalCobrado, totalAPagar),
-        metaPct:     calcPct(colocacion, metaTarget),
-        scheduleCount,
+        totalAPagar: propia.totalAPagar + hered.totalAPagar,
+        totalCobrado: propia.totalCobrado + hered.totalCobrado,
+        cobradosCount: propia.cobradosCount + hered.cobradosCount,
+        colocacion: propia.colocacion + hered.colocacion,
+        metaTarget: propia.metaTarget + hered.metaTarget,
+        cobranzaPct: calcPct(propia.totalCobrado + hered.totalCobrado, propia.totalAPagar + hered.totalAPagar),
+        metaPct:     calcPct(propia.colocacion + hered.colocacion,       propia.metaTarget + hered.metaTarget),
+        scheduleCount: propia.scheduleCount + hered.scheduleCount,
+        propia,
+        heredada: hayHered ? hered : null,
       }
     })
 

@@ -12,6 +12,7 @@ import {
 import { formatMoney } from '@/lib/utils'
 import { idToSaturday, getFriday, formatWeekLabelSatFri } from '@/lib/week-utils'
 import { ImprimirReporteMCButton } from '@/components/reportes/ImprimirReporteMCButton'
+import { EditarNotaMCButton } from '@/components/reportes/EditarNotaMCButton'
 
 const TIPO_LABEL: Record<string, string> = {
   SOLIDARIO: 'Solidario',
@@ -118,7 +119,7 @@ export default async function ReporteMesaControlSemanaPage({
     if (!loan) return []
     const out: Array<{ label: string; texto: string }> = []
     if (loan.revisionNotasGenerales) {
-      out.push({ label: 'General', texto: loan.revisionNotasGenerales })
+      out.push({ label: 'Observación MC', texto: loan.revisionNotasGenerales })
     }
     for (const d of loan.documents) {
       out.push({ label: DOC_LABEL[d.tipo] ?? d.tipo, texto: d.revisionNota! })
@@ -146,6 +147,7 @@ export default async function ReporteMesaControlSemanaPage({
       tipo: loan ? TIPO_LABEL[loan.tipo] ?? loan.tipo : '—',
       capital: loan ? Number(loan.capital) : 0,
       observaciones: juntarObservaciones(loan),
+      notaMC: loan?.revisionNotasGenerales ?? null,
     }
   })
 
@@ -348,17 +350,28 @@ export default async function ReporteMesaControlSemanaPage({
                         )}
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground max-w-md">
-                        {f.observaciones.length === 0 ? (
-                          <span className="text-muted-foreground/50">—</span>
-                        ) : (
-                          <ul className="space-y-1">
-                            {f.observaciones.map((o, i) => (
-                              <li key={i} className="italic">
-                                <span className="not-italic font-semibold text-foreground/80">{o.label}:</span>{' '}{o.texto}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            {f.observaciones.length === 0 ? (
+                              <span className="text-muted-foreground/50">—</span>
+                            ) : (
+                              <ul className="space-y-1">
+                                {f.observaciones.map((o, i) => (
+                                  <li key={i} className="italic">
+                                    <span className="not-italic font-semibold text-foreground/80">{o.label}:</span>{' '}{o.texto}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                          {f.loanId && (
+                            <EditarNotaMCButton
+                              loanId={f.loanId}
+                              clienteNombre={f.cliente}
+                              initialNota={f.notaMC}
+                            />
+                          )}
+                        </div>
                       </td>
                       {permiteVerTodos && (
                         <td className="px-3 py-2 text-xs text-muted-foreground">{f.mcNombre}</td>

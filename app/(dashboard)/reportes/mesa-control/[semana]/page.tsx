@@ -73,6 +73,7 @@ export default async function ReporteMesaControlSemanaPage({
           id: true,
           tipo: true,
           capital: true,
+          revisionNotasGenerales: true,
           client:   { select: { nombreCompleto: true } },
           cobrador: { select: { nombre: true } },
           branch:   { select: { nombre: true } },
@@ -96,6 +97,7 @@ export default async function ReporteMesaControlSemanaPage({
       sucursal: loan?.branch?.nombre ?? '—',
       tipo: loan ? TIPO_LABEL[loan.tipo] ?? loan.tipo : '—',
       capital: loan ? Number(loan.capital) : 0,
+      observaciones: loan?.revisionNotasGenerales ?? '',
     }
   })
 
@@ -193,6 +195,7 @@ export default async function ReporteMesaControlSemanaPage({
                     <th className="px-3 py-2 text-left">Tipo</th>
                     <th className="px-3 py-2 text-right">Capital</th>
                     <th className="px-3 py-2 text-left">Decisión MC</th>
+                    <th className="px-3 py-2 text-left">Observaciones</th>
                     {permiteVerTodos && <th className="px-3 py-2 text-left">Revisó</th>}
                   </tr>
                 </thead>
@@ -219,6 +222,13 @@ export default async function ReporteMesaControlSemanaPage({
                           <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-400">
                             <RotateCcw className="h-3 w-3" /> Regresada
                           </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-xs">
+                        {f.observaciones ? (
+                          <span className="italic">{f.observaciones}</span>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
                         )}
                       </td>
                       {permiteVerTodos && (

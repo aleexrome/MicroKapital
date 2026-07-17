@@ -101,6 +101,7 @@ export default async function DashboardPage({
 
   const [
     totalClientes,
+    clientesActivos,
     prestamosActivos,
     cobradoHoyAgg,
     carteraVencida,
@@ -112,6 +113,11 @@ export default async function DashboardPage({
     morasAgg,
   ] = await Promise.all([
     prisma.client.count({ where: clientScope }),
+    // "Clientes activos" = clientes con al menos un préstamo ACTIVE
+    // dentro del alcance del rol. Todo cliente sin cartera viva no cuenta.
+    prisma.client.count({
+      where: { ...clientScope, loans: { some: { estado: 'ACTIVE' } } },
+    }),
     prisma.loan.count({ where: { ...loanScope, estado: 'ACTIVE' } }),
     // Cobrado hoy = suma de Payment reales (efectivo, tarjeta y transferencia).
     // Antes se sumaba PaymentSchedule.montoPagado de schedules PAID/ADVANCE,
@@ -379,12 +385,19 @@ export default async function DashboardPage({
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <MetricCard
-          title="Clientes activos"
+          title="Clientes"
           value={totalClientes.toLocaleString('es-MX')}
           icon={Users}
           color="blue"
+          href="/clientes"
+        />
+        <MetricCard
+          title="Clientes activos"
+          value={clientesActivos.toLocaleString('es-MX')}
+          icon={Users}
+          color="green"
           href="/clientes"
         />
         <MetricCard

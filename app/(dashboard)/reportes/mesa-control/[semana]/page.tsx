@@ -64,7 +64,13 @@ export default async function ReporteMesaControlSemanaPage({
     orderBy: { createdAt: 'asc' },
   })
 
-  // 2. Hidratar Loan info por lote
+  // 2. Hidratar Loan info + observaciones a documentos por lote.
+  //    Las observaciones de MC pueden vivir en:
+  //      - Loan.revisionNotasGenerales (nota libre general)
+  //      - LoanDocument.revisionNota    (por documento del préstamo)
+  //      - ClientDocument.revisionNota  (por documento del cliente)
+  //    Un préstamo aprobado sin nota general puede tener aún observaciones
+  //    en documentos específicos — todas cuentan como "observaciones de MC".
   const loanIds = Array.from(new Set(audit.map((a) => a.registroId).filter((x): x is string => !!x)))
   const loans = loanIds.length
     ? await prisma.loan.findMany({
@@ -73,14 +79,56 @@ export default async function ReporteMesaControlSemanaPage({
           id: true,
           tipo: true,
           capital: true,
+          clientId: true,
           revisionNotasGenerales: true,
           client:   { select: { nombreCompleto: true } },
           cobrador: { select: { nombre: true } },
           branch:   { select: { nombre: true } },
+          documents: {
+            where: { revisionNota: { not: null } },
+            select: { tipo: true, revisionNota: true },
+          },
         },
       })
     : []
   const loanMap = new Map(loans.map((l) => [l.id, l]))
+
+  // Observaciones a documentos del CLIENTE de cada loan (INE, comprobante,
+  // foto, etc.) — se traen por lote agrupadas por clientId.
+  const clientIds = Array.from(new Set(loans.map((l) => l.clientId)))
+  const clientDocs = clientIds.length
+    ? await prisma.clientDocument.findMany({
+        where: { clientId: { in: clientIds }, revisionNota: { not: null } },
+        select: { clientId: true, tipo: true, revisionNota: true },
+      })
+    : []
+  const clientDocsByClient = new Map<string, typeof clientDocs>()
+  for (const d of clientDocs) {
+    const arr = clientDocsByClient.get(d.clientId) ?? []
+    arr.push(d)
+    clientDocsByClient.set(d.clientId, arr)
+  }
+
+  const DOC_LABEL: Record<string, string> = {
+    INE_FRONT: 'INE (frente)', INE_BACK: 'INE (reverso)', PHOTO: 'Foto',
+    CONTRACT: 'Contrato', PROOF_ADDRESS: 'Comprobante domicilio', OTHER: 'Otro',
+  }
+
+  function juntarObservaciones(loan: typeof loans[number] | null): Array<{ label: string; texto: string }> {
+    if (!loan) return []
+    const out: Array<{ label: string; texto: string }> = []
+    if (loan.revisionNotasGenerales) {
+      out.push({ label: 'General', texto: loan.revisionNotasGenerales })
+    }
+    for (const d of loan.documents) {
+      out.push({ label: DOC_LABEL[d.tipo] ?? d.tipo, texto: d.revisionNota! })
+    }
+    const clientDocsForLoan = clientDocsByClient.get(loan.clientId) ?? []
+    for (const d of clientDocsForLoan) {
+      out.push({ label: DOC_LABEL[d.tipo] ?? d.tipo, texto: d.revisionNota! })
+    }
+    return out
+  }
 
   // 3. Armar filas por evento (una fila por acción; una solicitud puede
   //    aparecer varias veces si fue regresada y luego forwardeada)
@@ -97,7 +145,7 @@ export default async function ReporteMesaControlSemanaPage({
       sucursal: loan?.branch?.nombre ?? '—',
       tipo: loan ? TIPO_LABEL[loan.tipo] ?? loan.tipo : '—',
       capital: loan ? Number(loan.capital) : 0,
-      observaciones: loan?.revisionNotasGenerales ?? '',
+      observaciones: juntarObservaciones(loan),
     }
   })
 
@@ -224,11 +272,17 @@ export default async function ReporteMesaControlSemanaPage({
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-xs">
-                        {f.observaciones ? (
-                          <span className="italic">{f.observaciones}</span>
-                        ) : (
+                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-md">
+                        {f.observaciones.length === 0 ? (
                           <span className="text-muted-foreground/50">—</span>
+                        ) : (
+                          <ul className="space-y-1">
+                            {f.observaciones.map((o, i) => (
+                              <li key={i} className="italic">
+                                <span className="not-italic font-semibold text-foreground/80">{o.label}:</span>{' '}{o.texto}
+                              </li>
+                            ))}
+                          </ul>
                         )}
                       </td>
                       {permiteVerTodos && (

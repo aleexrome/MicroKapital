@@ -7,8 +7,9 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { AlertTriangle, ClipboardList, CheckCircle, Building2, User } from 'lucide-react'
+import { AlertTriangle, ClipboardList, CheckCircle, Building2, User, RotateCcw, BarChart3 } from 'lucide-react'
 import { loanNotDeletedWhere } from '@/lib/access'
+import { getSaturday, getFriday } from '@/lib/week-utils'
 
 const ROLES_PERMITIDOS = ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN']
 
@@ -55,9 +56,21 @@ export default async function MesaControlPage() {
   if (!session?.user) redirect('/login')
   if (!ROLES_PERMITIDOS.includes(session.user.rol)) redirect('/prestamos')
 
-  const { companyId } = session.user
+  const { companyId, rol, id: userId } = session.user
 
-  const [pendientes, regresadas] = await Promise.all([
+  // Scope de métricas semanales:
+  //   - MC → solo su propia actividad
+  //   - DG / DC / SA → toda la mesa (todos los usuarios con rol MC)
+  const permiteVerTodos = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
+  const userFilterMetric = permiteVerTodos
+    ? { user: { companyId: companyId!, rol: 'MESA_CONTROL' as const } }
+    : { userId }
+
+  // Semana en curso (Sáb-Vie CDMX)
+  const satActual = getSaturday(new Date())
+  const friActual = getFriday(satActual)
+
+  const [pendientes, regresadas, semanaAudit] = await Promise.all([
     prisma.loan.findMany({
       where: {
         companyId: companyId!,
@@ -92,10 +105,23 @@ export default async function MesaControlPage() {
         branch: { select: { nombre: true } },
       },
     }),
+    prisma.auditLog.findMany({
+      where: {
+        accion: { in: ['MESA_CONTROL_FORWARD', 'MESA_CONTROL_RETURN'] },
+        createdAt: { gte: satActual, lte: friActual },
+        ...userFilterMetric,
+      },
+      select: { accion: true },
+    }),
   ])
 
   const pendientesAgrupadas = agrupar(pendientes)
   const regresadasAgrupadas = agrupar(regresadas)
+
+  const semAprobadas  = semanaAudit.filter((a) => a.accion === 'MESA_CONTROL_FORWARD').length
+  const semRegresadas = semanaAudit.filter((a) => a.accion === 'MESA_CONTROL_RETURN').length
+  const semTotal      = semAprobadas + semRegresadas
+  const semPct        = semTotal > 0 ? Math.round((semAprobadas / semTotal) * 100) : 0
 
   return (
     <div className="p-6 space-y-6">
@@ -107,6 +133,58 @@ export default async function MesaControlPage() {
         <p className="text-muted-foreground">
           Revisa expedientes de solicitudes antes de enviarlas a aprobación de Dirección General.
         </p>
+      </div>
+
+      {/* KPIs de la semana (Sáb-Vie CDMX). Para MC: su propia actividad.
+          Para DG/DC: agregado de toda la mesa de control. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="rounded-xl p-2.5 bg-yellow-500/15">
+              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Por revisar</p>
+              <p className="text-2xl font-bold text-yellow-500">{pendientes.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="rounded-xl p-2.5 bg-emerald-500/15">
+              <CheckCircle className="h-4 w-4 text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Aprobadas (semana)</p>
+              <p className="text-2xl font-bold text-emerald-400">{semAprobadas}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="rounded-xl p-2.5 bg-amber-500/15">
+              <RotateCcw className="h-4 w-4 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Regresadas (semana)</p>
+              <p className="text-2xl font-bold text-amber-400">{semRegresadas}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Link href="/reportes/mesa-control" className="block">
+          <Card className="hover:shadow-md hover:border-primary-500/40 transition-all">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="rounded-xl p-2.5 bg-primary-500/15">
+                <BarChart3 className="h-4 w-4 text-primary-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">% Aprobación</p>
+                <p className="text-2xl font-bold text-primary-400">{semPct}%</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Ver reporte →</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <section className="space-y-4">

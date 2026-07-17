@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import {
   Target, DollarSign, Wallet, AlertTriangle, TrendingUp,
-  CheckCircle2, BadgeCheck, ChevronRight,
+  CheckCircle2, BadgeCheck, ChevronRight, ClipboardCheck,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +14,7 @@ const ALLOWED_ROLES = [
   'SUPER_ADMIN',
   'DIRECTOR_GENERAL',
   'DIRECTOR_COMERCIAL',
+  'MESA_CONTROL',
   'GERENTE_ZONAL',
   'GERENTE',
   'COORDINADOR',
@@ -28,6 +29,9 @@ interface ReporteCard {
   color: string
   iconBg: string
   iconText: string
+  /** Si se define, solo los roles listados ven la tarjeta. Sin este
+   *  campo, la tarjeta es visible para todos los ALLOWED_ROLES. */
+  soloRoles?: readonly string[]
 }
 
 const REPORTES: ReporteCard[] = [
@@ -94,7 +98,29 @@ const REPORTES: ReporteCard[] = [
     iconBg: 'bg-violet-500/15',
     iconText: 'text-violet-400',
   },
+  {
+    href: '/reportes/mesa-control',
+    titulo: 'Mesa de Control',
+    descripcion: 'Solicitudes revisadas por semana: aprobadas vs regresadas. Hoja imprimible.',
+    icon: ClipboardCheck,
+    color: 'border-primary-500/30',
+    iconBg: 'bg-primary-500/15',
+    iconText: 'text-primary-300',
+    soloRoles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
+  },
 ]
+
+// Roles operativos: MC solo debe ver "Mesa de Control" en el índice
+// (los demás reportes son operativos de cobranza que no le competen).
+const OPERATIVOS_QUE_MC_NO_VE = new Set([
+  '/reportes/cumplimiento',
+  '/reportes/cartera',
+  '/reportes/cobranza',
+  '/reportes/mora',
+  '/reportes/moras',
+  '/reportes/colocacion',
+  '/reportes/liquidaciones',
+])
 
 const ADMIN_ROLES = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL']
 
@@ -128,7 +154,13 @@ export default async function ReportesPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {REPORTES.map((r) => (
+        {REPORTES
+          .filter((r) => {
+            if (r.soloRoles && !r.soloRoles.includes(rol)) return false
+            if (rol === 'MESA_CONTROL' && OPERATIVOS_QUE_MC_NO_VE.has(r.href)) return false
+            return true
+          })
+          .map((r) => (
           <Link key={r.href} href={r.href} className="block group">
             <Card className={`overflow-hidden border ${r.color} hover:border-opacity-80 transition-all hover:shadow-glow`}>
               <CardContent className="p-5">

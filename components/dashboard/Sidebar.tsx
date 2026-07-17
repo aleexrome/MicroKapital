@@ -147,7 +147,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/reportes',
     label: 'Reportes',
     icon: <BarChart3 className="h-5 w-5" />,
-    roles: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
+    roles: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'MESA_CONTROL'],
   },
   {
     href: '/banca',

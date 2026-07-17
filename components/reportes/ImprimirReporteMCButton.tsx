@@ -46,6 +46,10 @@ function fmtFechaHora(iso: string) {
 }
 
 const STYLE = `
+  /* @page a top-level para que TODOS los navegadores fijen la
+     orientación default a horizontal (algunos ignoran @page cuando
+     está anidado dentro de @media print). */
+  @page { size: A4 landscape; margin: 1.2cm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 20px; position: relative; }
   .brand-logo { position: absolute; top: 8px; right: 20px; height: 120px; }
@@ -75,10 +79,7 @@ const STYLE = `
   .empty { color: #999; font-style: italic; padding: 20px 0; text-align: center; font-size: 12px; }
   .footer { margin-top: 16px; font-size: 10px; color: #888; text-align: right; }
   @media print {
-    @page { margin: 1.2cm; size: landscape; }
-    body { padding: 0; }
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 `
 

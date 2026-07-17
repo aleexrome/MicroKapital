@@ -54,9 +54,16 @@ export default async function DashboardPage({
 }) {
   const session = await getSession()
   if (!session?.user || session.user.rol === 'COBRADOR') redirect('/cobros/agenda')
-  if (session.user.rol === 'MESA_CONTROL') redirect('/mesa-control')
 
   const { rol, companyId, branchId: userBranchId, id: userId } = session.user
+
+  // MESA_CONTROL tiene dashboard propio (métricas de su trabajo de
+  // revisión, no de cobranza). Se resuelve inline con un early return
+  // para no cargar los queries pesados del dashboard operativo.
+  if (rol === 'MESA_CONTROL') {
+    const { MesaControlDashboard } = await import('@/components/dashboard/MesaControlDashboard')
+    return <MesaControlDashboard companyId={companyId!} userId={userId} />
+  }
 
   // SUPER_ADMIN puede filtrar por sucursal vía ?sucursal=
   const superAdminBranchFilter = rol === 'SUPER_ADMIN' ? (searchParams.sucursal ?? null) : null

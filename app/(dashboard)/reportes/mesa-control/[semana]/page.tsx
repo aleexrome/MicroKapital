@@ -162,7 +162,51 @@ export default async function ReporteMesaControlSemanaPage({
     : 'Mi actividad de revisión'
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6 print:p-0 print:max-w-none">
+    <div className="p-6 max-w-4xl mx-auto space-y-6 print:p-0 print:max-w-none print-mc-report">
+      {/* CSS de impresión — fuerza colores y logo en header. Se define
+          inline para no ensuciar el global stylesheet. */}
+      <style>{`
+        @media print {
+          .print-mc-report {
+            color: #000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print-mc-report * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print-mc-report .print-badge-aprobada {
+            background-color: #d1fae5 !important;
+            color: #047857 !important;
+            padding: 2px 6px !important;
+            border-radius: 4px !important;
+          }
+          .print-mc-report .print-badge-regresada {
+            background-color: #fef3c7 !important;
+            color: #b45309 !important;
+            padding: 2px 6px !important;
+            border-radius: 4px !important;
+          }
+          .print-mc-report .print-kpi-card {
+            border: 1px solid #d1d5db !important;
+            border-radius: 8px !important;
+            padding: 12px !important;
+          }
+          .print-mc-report .print-kpi-aprobadas { color: #059669 !important; }
+          .print-mc-report .print-kpi-regresadas { color: #d97706 !important; }
+          .print-mc-report .print-kpi-pct { color: #4f46e5 !important; }
+          .print-mc-report table thead {
+            background-color: #f3f4f6 !important;
+            color: #374151 !important;
+          }
+          .print-mc-report table tbody tr {
+            border-bottom: 1px solid #e5e7eb !important;
+          }
+        }
+        @page { margin: 12mm; }
+      `}</style>
+
       {/* Header + botón imprimir (oculto en print) */}
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div className="flex items-center gap-3">
@@ -180,46 +224,57 @@ export default async function ReporteMesaControlSemanaPage({
         <ImprimirReporteMCButton />
       </div>
 
-      {/* Header versión print — colorless, tipografía compacta */}
+      {/* Header versión print — con logo MK y branding sobrio */}
       <div className="hidden print:block mb-4">
-        <h1 className="text-lg font-bold">Reporte Mesa de Control</h1>
-        <p className="text-xs text-gray-600">{weekLabel} · {scopeLabel}</p>
+        <div className="flex items-start justify-between border-b border-gray-300 pb-3 mb-3">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">MicroKapital Financiera</h1>
+            <p className="text-sm font-semibold text-gray-800 mt-1">Reporte Mesa de Control</p>
+            <p className="text-xs text-gray-600 mt-0.5">{weekLabel} · {scopeLabel}</p>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://res.cloudinary.com/djs8dtzrq/image/upload/v1777329446/PHOTO-2026-04-27-16-21-06-removebg-preview_fczmpb.png"
+            alt="MicroKapital"
+            style={{ height: '64px', width: 'auto' }}
+          />
+        </div>
       </div>
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 print:grid-cols-4">
-        <Card className="print:border print:shadow-none">
+        <Card className="print:border print:shadow-none print-kpi-card">
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Total revisadas</p>
-            <p className="text-2xl font-bold text-foreground">{total}</p>
+            <p className="text-xs text-muted-foreground print:text-gray-700">Total revisadas</p>
+            <p className="text-2xl font-bold text-foreground print:text-black">{total}</p>
           </CardContent>
         </Card>
-        <Card className="print:border print:shadow-none">
+        <Card className="print:border print:shadow-none print-kpi-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-              <p className="text-xs text-muted-foreground">Aprobadas</p>
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 print-kpi-aprobadas" />
+              <p className="text-xs text-muted-foreground print:text-gray-700">Aprobadas</p>
             </div>
-            <p className="text-2xl font-bold text-emerald-400">{aprobadas}</p>
-            <p className="text-[11px] text-muted-foreground mt-1 money">{formatMoney(capitalAprobado)}</p>
+            <p className="text-2xl font-bold text-emerald-400 print-kpi-aprobadas">{aprobadas}</p>
+            <p className="text-[11px] text-muted-foreground print:text-gray-700 mt-1 money">{formatMoney(capitalAprobado)}</p>
           </CardContent>
         </Card>
-        <Card className="print:border print:shadow-none">
+        <Card className="print:border print:shadow-none print-kpi-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <RotateCcw className="h-3.5 w-3.5 text-amber-400" />
-              <p className="text-xs text-muted-foreground">Regresadas</p>
+              <RotateCcw className="h-3.5 w-3.5 text-amber-400 print-kpi-regresadas" />
+              <p className="text-xs text-muted-foreground print:text-gray-700">Regresadas</p>
             </div>
-            <p className="text-2xl font-bold text-amber-400">{regresadas}</p>
+            <p className="text-2xl font-bold text-amber-400 print-kpi-regresadas">{regresadas}</p>
           </CardContent>
         </Card>
-        <Card className="print:border print:shadow-none">
+        <Card className="print:border print:shadow-none print-kpi-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <Percent className="h-3.5 w-3.5 text-primary-400" />
-              <p className="text-xs text-muted-foreground">% Aprobación</p>
+              <Percent className="h-3.5 w-3.5 text-primary-400 print-kpi-pct" />
+              <p className="text-xs text-muted-foreground print:text-gray-700">% Aprobación</p>
             </div>
-            <p className="text-2xl font-bold text-primary-400">{pct}%</p>
+            <p className="text-2xl font-bold text-primary-400 print-kpi-pct">{pct}%</p>
           </CardContent>
         </Card>
       </div>
@@ -263,11 +318,11 @@ export default async function ReporteMesaControlSemanaPage({
                       <td className="px-3 py-2 text-right money">{formatMoney(f.capital)}</td>
                       <td className="px-3 py-2">
                         {f.accion === 'MESA_CONTROL_FORWARD' ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400">
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 print-badge-aprobada">
                             <CheckCircle2 className="h-3 w-3" /> Aprobada
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-400">
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-400 print-badge-regresada">
                             <RotateCcw className="h-3 w-3" /> Regresada
                           </span>
                         )}

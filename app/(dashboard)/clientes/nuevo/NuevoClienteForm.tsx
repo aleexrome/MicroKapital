@@ -26,8 +26,14 @@ export function NuevoClienteForm({
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
 
+  // El nombre se captura en 3 campos (Nombres, Apellido paterno, Apellido
+  // materno) para forzar consistencia en el orden — antes venia un solo
+  // campo libre y cada capturista lo escribia distinto. Al enviar se
+  // concatena a `nombreCompleto` que sigue siendo la columna en BD.
   const [form, setForm] = useState({
-    nombreCompleto: '',
+    nombres: '',
+    apellidoPaterno: '',
+    apellidoMaterno: '',
     telefono: '',
     telefonoAlt: '',
     email: '',
@@ -43,7 +49,10 @@ export function NuevoClienteForm({
   // Campos que se fuerzan a MAYÚSCULAS en tiempo real al teclear — así el
   // capturista ve de inmediato cómo queda el registro y no importa si tiene
   // activadas minúsculas en el teclado.
-  const UPPER_FIELDS = new Set(['nombreCompleto', 'referenciaNombre', 'numIne', 'curp'])
+  const UPPER_FIELDS = new Set([
+    'nombres', 'apellidoPaterno', 'apellidoMaterno',
+    'referenciaNombre', 'numIne', 'curp',
+  ])
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target
@@ -63,14 +72,40 @@ export function NuevoClienteForm({
       return
     }
 
+    // Concatenar Nombres + Apellido Paterno + Apellido Materno con un
+    // espacio (colapsa espacios repetidos si un campo está vacío).
+    const nombreCompleto = [form.nombres, form.apellidoPaterno, form.apellidoMaterno]
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(' ')
+      .toUpperCase()
+
+    if (!form.nombres.trim() || !form.apellidoPaterno.trim()) {
+      toast({
+        title: 'Nombre incompleto',
+        description: 'Captura al menos los nombres y el apellido paterno.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setLoading(true)
 
     try {
+      // Se envían nombreCompleto ya concatenado y en mayúsculas — los
+      // campos internos (nombres / apellidoPaterno / apellidoMaterno)
+      // NO se persisten en BD por ahora, solo estructuran la captura.
+      const {
+        nombres: _n, apellidoPaterno: _p, apellidoMaterno: _m,
+        ...rest
+      } = form
+      void _n; void _p; void _m
       const res = await fetch('/api/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...form,
+          ...rest,
+          nombreCompleto,
           // No mandamos branchId vacío — el API lo deduce del usuario.
           branchId: form.branchId || undefined,
         }),
@@ -86,7 +121,7 @@ export function NuevoClienteForm({
       }
 
       const { data } = await res.json()
-      toast({ title: 'Cliente registrado', description: form.nombreCompleto })
+      toast({ title: 'Cliente registrado', description: nombreCompleto })
       router.push(`/clientes/${data.id}`)
     } catch (err) {
       toast({
@@ -144,14 +179,39 @@ export function NuevoClienteForm({
           <CardHeader><CardTitle className="text-base">Datos personales</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 space-y-2">
-              <Label htmlFor="nombreCompleto">Nombre completo *</Label>
+              <Label htmlFor="nombres">Nombre(s) *</Label>
               <Input
-                id="nombreCompleto"
-                name="nombreCompleto"
-                value={form.nombreCompleto}
+                id="nombres"
+                name="nombres"
+                value={form.nombres}
                 onChange={handleChange}
                 required
-                placeholder="NOMBRE Y APELLIDOS"
+                placeholder="MARÍA DEL CARMEN"
+                autoCapitalize="characters"
+                style={{ textTransform: 'uppercase' }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="apellidoPaterno">Apellido paterno *</Label>
+              <Input
+                id="apellidoPaterno"
+                name="apellidoPaterno"
+                value={form.apellidoPaterno}
+                onChange={handleChange}
+                required
+                placeholder="ALTAMIRANO"
+                autoCapitalize="characters"
+                style={{ textTransform: 'uppercase' }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="apellidoMaterno">Apellido materno</Label>
+              <Input
+                id="apellidoMaterno"
+                name="apellidoMaterno"
+                value={form.apellidoMaterno}
+                onChange={handleChange}
+                placeholder="ANDRADE"
                 autoCapitalize="characters"
                 style={{ textTransform: 'uppercase' }}
               />

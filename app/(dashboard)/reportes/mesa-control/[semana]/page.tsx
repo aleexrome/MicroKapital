@@ -221,7 +221,27 @@ export default async function ReporteMesaControlSemanaPage({
             <p className="text-sm text-muted-foreground">{weekLabel} · {scopeLabel}</p>
           </div>
         </div>
-        <ImprimirReporteMCButton />
+        <ImprimirReporteMCButton
+          weekLabel={weekLabel}
+          scopeLabel={scopeLabel}
+          mostrarColumnaRevisor={permiteVerTodos}
+          aprobadas={aprobadas}
+          regresadas={regresadas}
+          total={total}
+          pct={pct}
+          capitalAprobado={capitalAprobado}
+          filas={filas.map((f) => ({
+            fechaISO: f.fecha.toISOString(),
+            cliente: f.cliente,
+            sucursal: f.sucursal,
+            cobrador: f.cobrador,
+            tipo: f.tipo,
+            capital: f.capital,
+            accion: f.accion,
+            mcNombre: f.mcNombre,
+            observaciones: f.observaciones,
+          }))}
+        />
       </div>
 
       {/* Header versión print — con logo MK y branding sobrio */}

@@ -17,7 +17,8 @@ import type { PrismaClient } from '@prisma/client'
 // branches en zonaBranchIds o, en su defecto, su propio branchId).
 export const GERENTES_AGREGADOS_POR_SUCURSAL = new Set<string>([
   '3d189694-644b-4b28-b28d-2762a8bad0fb', // Edgar Solís Pérez
-  'e31f210d-332a-40c8-81c2-fef20589cebc', // Héctor Eulises Rodríguez Guzmán
+  // Héctor Eulises Rodríguez Guzmán — desactivado 17/jul/2026, ya no
+  // trabaja en la empresa. Se conserva el comentario para trazabilidad.
 ])
 
 // ─── Meta de colocación ────────────────────────────────────────────────────

@@ -931,15 +931,21 @@ export default async function RutaDetallePage({
               ?u=<userId>. Desde ahí el Gerente puede imprimir la lista
               detallada por cliente (la misma que ve el coordinador). */}
           <div className="space-y-3">
-            {stats.map((s) => (
-              <Link
-                key={s.id}
-                href={`/rutas/${params.semana}?u=${s.id}`}
-                className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
-              >
-                <CobradorCard {...s} />
-              </Link>
-            ))}
+            {/* Cards con "Cartera heredada" son más altas — se ordenan al
+                final para que no dejen hueco al lado de otras más cortas
+                en el grid de 2 columnas. */}
+            {stats
+              .slice()
+              .sort((a, b) => (a.heredada ? 1 : 0) - (b.heredada ? 1 : 0))
+              .map((s) => (
+                <Link
+                  key={s.id}
+                  href={`/rutas/${params.semana}?u=${s.id}`}
+                  className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
+                >
+                  <CobradorCard {...s} />
+                </Link>
+              ))}
           </div>
         </div>
 
@@ -1161,15 +1167,18 @@ export default async function RutaDetallePage({
                 )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {branchUsers.map((u) => (
-                  <Link
-                    key={u.id}
-                    href={`/rutas/${params.semana}?u=${u.id}`}
-                    className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
-                  >
-                    <CobradorCard {...u} />
-                  </Link>
-                ))}
+                {branchUsers
+                  .slice()
+                  .sort((a, b) => (a.heredada ? 1 : 0) - (b.heredada ? 1 : 0))
+                  .map((u) => (
+                    <Link
+                      key={u.id}
+                      href={`/rutas/${params.semana}?u=${u.id}`}
+                      className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
+                    >
+                      <CobradorCard {...u} />
+                    </Link>
+                  ))}
               </div>
             </div>
           )
@@ -1186,15 +1195,18 @@ export default async function RutaDetallePage({
                 <h2 className="text-base font-semibold text-gray-900">Sin sucursal asignada</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {noBranch.map((u) => (
-                  <Link
-                    key={u.id}
-                    href={`/rutas/${params.semana}?u=${u.id}`}
-                    className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
-                  >
-                    <CobradorCard {...u} />
-                  </Link>
-                ))}
+                {noBranch
+                  .slice()
+                  .sort((a, b) => (a.heredada ? 1 : 0) - (b.heredada ? 1 : 0))
+                  .map((u) => (
+                    <Link
+                      key={u.id}
+                      href={`/rutas/${params.semana}?u=${u.id}`}
+                      className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
+                    >
+                      <CobradorCard {...u} />
+                    </Link>
+                  ))}
               </div>
             </div>
           )

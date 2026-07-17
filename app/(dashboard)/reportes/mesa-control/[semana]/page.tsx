@@ -132,7 +132,11 @@ export default async function ReporteMesaControlSemanaPage({
   }
 
   // 3. Armar filas por evento (una fila por acción; una solicitud puede
-  //    aparecer varias veces si fue regresada y luego forwardeada)
+  //    aparecer varias veces si fue regresada y luego forwardeada).
+  //    Los contadores agregados (aprobadas/regresadas) usan TODO el audit
+  //    — MC hizo la revisión aunque el préstamo se borre después. La
+  //    tabla en cambio oculta filas de préstamos ya borrados porque no
+  //    aportan info útil al DG/MC leyendo el reporte.
   const filas = audit.map((a) => {
     const loan = a.registroId ? loanMap.get(a.registroId) ?? null : null
     return {
@@ -153,6 +157,9 @@ export default async function ReporteMesaControlSemanaPage({
 
   const aprobadas = filas.filter((f) => f.accion === 'MESA_CONTROL_FORWARD').length
   const regresadas = filas.filter((f) => f.accion === 'MESA_CONTROL_RETURN').length
+  // Filas visibles (tabla + hoja imprimible): oculta préstamos ya
+  // eliminados que solo tienen la entry de audit sin datos útiles.
+  const filasVisibles = filas.filter((f) => f.loanId && loanMap.has(f.loanId))
   const total = aprobadas + regresadas
   const pct = total > 0 ? Math.round((aprobadas / total) * 100) : 0
   const capitalAprobado = filas
@@ -164,7 +171,7 @@ export default async function ReporteMesaControlSemanaPage({
     : 'Mi actividad de revisión'
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6 print:p-0 print:max-w-none print-mc-report">
+    <div className="p-6 max-w-7xl mx-auto space-y-6 print:p-0 print:max-w-none print-mc-report">
       {/* CSS de impresión — fuerza colores y logo en header. Se define
           inline para no ensuciar el global stylesheet. */}
       <style>{`
@@ -232,7 +239,7 @@ export default async function ReporteMesaControlSemanaPage({
           total={total}
           pct={pct}
           capitalAprobado={capitalAprobado}
-          filas={filas.map((f) => ({
+          filas={filasVisibles.map((f) => ({
             fechaISO: f.fecha.toISOString(),
             cliente: f.cliente,
             sucursal: f.sucursal,
@@ -304,7 +311,7 @@ export default async function ReporteMesaControlSemanaPage({
       {/* Tabla detallada */}
       <Card className="print:border print:shadow-none">
         <CardContent className="p-0">
-          {filas.length === 0 ? (
+          {filasVisibles.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted-foreground">
               Sin actividad de revisión en esta semana.
             </div>
@@ -325,7 +332,7 @@ export default async function ReporteMesaControlSemanaPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {filas.map((f) => (
+                  {filasVisibles.map((f) => (
                     <tr key={f.auditId} className="hover:bg-secondary/20 print:hover:bg-transparent">
                       <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
                         {f.fecha.toLocaleString('es-MX', {

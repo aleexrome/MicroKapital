@@ -931,21 +931,15 @@ export default async function RutaDetallePage({
               ?u=<userId>. Desde ahí el Gerente puede imprimir la lista
               detallada por cliente (la misma que ve el coordinador). */}
           <div className="space-y-3">
-            {/* Cards con "Cartera heredada" son más altas — se ordenan al
-                final para que no dejen hueco al lado de otras más cortas
-                en el grid de 2 columnas. */}
-            {stats
-              .slice()
-              .sort((a, b) => (a.heredada ? 1 : 0) - (b.heredada ? 1 : 0))
-              .map((s) => (
-                <Link
-                  key={s.id}
-                  href={`/rutas/${params.semana}?u=${s.id}`}
-                  className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
-                >
-                  <CobradorCard {...s} />
-                </Link>
-              ))}
+            {stats.map((s) => (
+              <Link
+                key={s.id}
+                href={`/rutas/${params.semana}?u=${s.id}`}
+                className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
+              >
+                <CobradorCard {...s} />
+              </Link>
+            ))}
           </div>
         </div>
 
@@ -1166,11 +1160,14 @@ export default async function RutaDetallePage({
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {branchUsers
-                  .slice()
-                  .sort((a, b) => (a.heredada ? 1 : 0) - (b.heredada ? 1 : 0))
-                  .map((u) => (
+              {/* Masonry manual: cards con "Cartera heredada" (más altas)
+                  van a la columna derecha; las demás (cortas) apiladas a
+                  la izquierda. Así una card alta no deja hueco al lado
+                  de otras cortas en el grid regular. En móvil (una sola
+                  columna) el orden es cortas primero, luego heredadas. */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+                <div className="space-y-3">
+                  {branchUsers.filter((u) => !u.heredada).map((u) => (
                     <Link
                       key={u.id}
                       href={`/rutas/${params.semana}?u=${u.id}`}
@@ -1179,6 +1176,18 @@ export default async function RutaDetallePage({
                       <CobradorCard {...u} />
                     </Link>
                   ))}
+                </div>
+                <div className="space-y-3">
+                  {branchUsers.filter((u) => u.heredada).map((u) => (
+                    <Link
+                      key={u.id}
+                      href={`/rutas/${params.semana}?u=${u.id}`}
+                      className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
+                    >
+                      <CobradorCard {...u} />
+                    </Link>
+                  ))}
+                </div>
               </div>
             </div>
           )
@@ -1194,11 +1203,9 @@ export default async function RutaDetallePage({
                 <Building2 className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-base font-semibold text-gray-900">Sin sucursal asignada</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {noBranch
-                  .slice()
-                  .sort((a, b) => (a.heredada ? 1 : 0) - (b.heredada ? 1 : 0))
-                  .map((u) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+                <div className="space-y-3">
+                  {noBranch.filter((u) => !u.heredada).map((u) => (
                     <Link
                       key={u.id}
                       href={`/rutas/${params.semana}?u=${u.id}`}
@@ -1207,6 +1214,18 @@ export default async function RutaDetallePage({
                       <CobradorCard {...u} />
                     </Link>
                   ))}
+                </div>
+                <div className="space-y-3">
+                  {noBranch.filter((u) => u.heredada).map((u) => (
+                    <Link
+                      key={u.id}
+                      href={`/rutas/${params.semana}?u=${u.id}`}
+                      className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
+                    >
+                      <CobradorCard {...u} />
+                    </Link>
+                  ))}
+                </div>
               </div>
             </div>
           )

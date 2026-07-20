@@ -215,6 +215,9 @@ interface SidebarProps {
   companyName?: string
   branchName?: string
   treeData?: BranchTreeData[]
+  /** Bypass del filtro por rol para el item /banca — se activa cuando
+   *  el usuario tiene bancaViewerBranchId asignado (solo lectura). */
+  puedeVerBanca?: boolean
   onNavClick?: () => void
 }
 
@@ -224,6 +227,7 @@ export function Sidebar({
   companyName,
   branchName,
   treeData = [],
+  puedeVerBanca = false,
   onNavClick,
 }: SidebarProps) {
   const pathname = usePathname()
@@ -238,7 +242,12 @@ export function Sidebar({
     })
   }
 
-  const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(userRole))
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    // Bypass: viewers de banca ven /banca aunque su rol no esté en la
+    // lista base del item.
+    if (item.href === '/banca' && puedeVerBanca) return true
+    return item.roles.includes(userRole)
+  })
   const showTree = TREE_ROLES.includes(userRole) && treeData.length > 0
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')

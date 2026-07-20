@@ -163,6 +163,7 @@ model Branch {
   extraFunds    BranchExtraFund[]
   withdrawals   BranchWithdrawal[]
   moraCobros    MoraCobro[]
+  bancaViewers  User[]             @relation("BancaViewers")
 }
 
 // Aporte adicional que Dirección envía a una sucursal fuera del ciclo
@@ -231,6 +232,12 @@ model User {
   zonaBranchIds       Json?
   // Permiso especial: puede aplicar / deshacer pagos en su sucursal (sin ser DG/SA)
   permisoAplicarPagos Boolean @default(false)
+  // Acceso de solo lectura a /banca filtrado a UNA sucursal específica.
+  // Se usa para dar a coordinadores / gerentes zonales visibilidad de
+  // la banca de su sucursal sin permitirles crear adicionales / retiros.
+  // null = sin acceso (default).
+  bancaViewerBranchId String?
+  bancaViewerBranch   Branch? @relation("BancaViewers", fields: [bancaViewerBranchId], references: [id])
 
   clientsManaged              Client[]                    @relation("CobradoresClientes")
   clientsHeredadosDe          Client[]                    @relation("HeredadoDeCoordinador")

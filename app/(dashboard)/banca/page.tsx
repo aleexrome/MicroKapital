@@ -97,10 +97,23 @@ export default async function BancaPage({
   const session = await getSession()
   if (!session?.user) redirect('/login')
 
-  const { rol, companyId } = session.user
-  // Módulo exclusivo de dirección (Director General y Director Comercial).
-  if (rol !== 'DIRECTOR_GENERAL' && rol !== 'DIRECTOR_COMERCIAL') redirect('/dashboard')
+  const { rol, companyId, id: userId } = session.user
   if (!companyId) redirect('/dashboard')
+
+  // Acceso: DG/DC ven todo y pueden agregar/eliminar. Otros usuarios
+  // pueden ver /banca en modo solo lectura si tienen bancaViewerBranchId
+  // asignado — se les filtra a esa sucursal y se ocultan botones de
+  // acción / borrado.
+  const esDireccion = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
+  const viewer = esDireccion
+    ? null
+    : await prisma.user.findUnique({
+        where: { id: userId },
+        select: { bancaViewerBranchId: true },
+      })
+  const viewerBranchId = viewer?.bancaViewerBranchId ?? null
+  if (!esDireccion && !viewerBranchId) redirect('/dashboard')
+  const soloLectura = !esDireccion
 
   const accessUser = {
     id: session.user.id,
@@ -109,8 +122,11 @@ export default async function BancaPage({
     zonaBranchIds: session.user.zonaBranchIds,
   }
 
-  const sucursalFilter =
-    searchParams.sucursal && searchParams.sucursal !== 'ALL' ? searchParams.sucursal : null
+  // Viewers están forzados a su branch; se ignora ?sucursal= porque no
+  // debe poder cambiar el filtro. DG/DC sí respeta el query param.
+  const sucursalFilter = soloLectura
+    ? viewerBranchId
+    : (searchParams.sucursal && searchParams.sucursal !== 'ALL' ? searchParams.sucursal : null)
 
   // Rango: desde el sábado más antiguo mostrado hasta el viernes de la semana actual.
   const semanas = semanasRecientesSatFri(WEEKS_BACK)
@@ -383,15 +399,24 @@ export default async function BancaPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <BancaSucursalFilter branches={branches} selected={sucursalFilter ?? 'ALL'} />
-          <BancaAddExtraFundButton
-            branches={branches}
-            defaultBranchId={sucursalFilter ?? undefined}
-          />
-          <BancaAddWithdrawalButton
-            branches={branches}
-            defaultBranchId={sucursalFilter ?? undefined}
-          />
+          {!soloLectura && (
+            <>
+              <BancaSucursalFilter branches={branches} selected={sucursalFilter ?? 'ALL'} />
+              <BancaAddExtraFundButton
+                branches={branches}
+                defaultBranchId={sucursalFilter ?? undefined}
+              />
+              <BancaAddWithdrawalButton
+                branches={branches}
+                defaultBranchId={sucursalFilter ?? undefined}
+              />
+            </>
+          )}
+          {soloLectura && (
+            <span className="text-xs rounded-full border border-primary-500/40 bg-primary-500/10 text-primary-300 px-2.5 py-1 font-medium">
+              Solo lectura · {sucursalNombre}
+            </span>
+          )}
         </div>
       </div>
 
@@ -584,10 +609,12 @@ export default async function BancaPage({
                                           + {formatMoney(a.monto)}
                                         </td>
                                         <td className="py-1.5 text-right">
-                                          <BancaDeleteExtraFundButton
-                                            id={a.id}
-                                            label={`de ${formatMoney(a.monto)} en ${diaMx(a.fecha)}`}
-                                          />
+                                          {!soloLectura && (
+                                            <BancaDeleteExtraFundButton
+                                              id={a.id}
+                                              label={`de ${formatMoney(a.monto)} en ${diaMx(a.fecha)}`}
+                                            />
+                                          )}
                                         </td>
                                       </tr>
                                     ))}
@@ -626,10 +653,12 @@ export default async function BancaPage({
                                           - {formatMoney(r.monto)}
                                         </td>
                                         <td className="py-1.5 text-right">
-                                          <BancaDeleteWithdrawalButton
-                                            id={r.id}
-                                            label={`de ${formatMoney(r.monto)} en ${diaMx(r.fecha)}`}
-                                          />
+                                          {!soloLectura && (
+                                            <BancaDeleteWithdrawalButton
+                                              id={r.id}
+                                              label={`de ${formatMoney(r.monto)} en ${diaMx(r.fecha)}`}
+                                            />
+                                          )}
                                         </td>
                                       </tr>
                                     ))}

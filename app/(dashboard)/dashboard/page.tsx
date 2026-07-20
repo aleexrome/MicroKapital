@@ -16,6 +16,7 @@ import {
   TrendingUp,
   ShieldCheck,
   Percent,
+  Sparkles,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -368,11 +369,24 @@ export default async function DashboardPage({
       {/* Banner anti-fraude — préstamos en limbo > 72h */}
       {limboStatus.bloqueado && <BannerLimbo prestamosEnLimbo={limboStatus.prestamosEnLimbo} />}
 
-      {/* Header */}
+      {/* Header — saludo personalizado para Director General (Stephanie).
+          Los demás roles siguen viendo el título "Dashboard" tal cual. */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-muted-foreground">{formatDate(new Date(), "EEEE d 'de' MMMM, yyyy")}</p>
+          {rol === 'DIRECTOR_GENERAL' ? (
+            <>
+              <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                <Sparkles className="h-6 w-6 text-primary-400" />
+                Hola, Jefa
+              </h1>
+              <p className="text-sm text-muted-foreground">{formatDate(new Date(), "EEEE d 'de' MMMM, yyyy")}</p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+              <p className="text-muted-foreground">{formatDate(new Date(), "EEEE d 'de' MMMM, yyyy")}</p>
+            </>
+          )}
         </div>
         {rol === 'SUPER_ADMIN' && (
           <BranchFilter branches={allBranches} selected={superAdminBranchFilter} />

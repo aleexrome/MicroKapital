@@ -130,6 +130,21 @@ export default async function DashboardLayout({
     treeData = []
   }
 
+  // Viewer de banca por sucursal: si el user tiene bancaViewerBranchId
+  // seteado, aparece el link /banca en el sidebar (aunque no sea DG/DC).
+  let puedeVerBanca = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
+  if (!puedeVerBanca) {
+    try {
+      const u = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { bancaViewerBranchId: true },
+      })
+      puedeVerBanca = !!u?.bancaViewerBranchId
+    } catch (e) {
+      console.error('[Layout] Error fetching bancaViewerBranchId:', e)
+    }
+  }
+
   return (
     <>
       <DashboardShell
@@ -139,6 +154,7 @@ export default async function DashboardLayout({
         companyName={company?.nombre ?? ''}
         branchName={branch?.nombre ?? ''}
         treeData={treeData}
+        puedeVerBanca={puedeVerBanca}
       >
         {children}
       </DashboardShell>

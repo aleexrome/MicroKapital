@@ -14,6 +14,9 @@ interface DashboardShellProps {
   companyName?: string
   branchName?: string
   treeData?: BranchTreeData[]
+  /** Si true, el usuario tiene acceso de solo lectura a /banca aunque
+   *  no sea DG/DC. Habilita el item en el sidebar. */
+  puedeVerBanca?: boolean
   children: React.ReactNode
 }
 
@@ -24,11 +27,12 @@ export function DashboardShell({
   companyName,
   branchName,
   treeData = [],
+  puedeVerBanca = false,
   children,
 }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const sidebarProps = { userRole, userName, companyName, branchName, treeData }
+  const sidebarProps = { userRole, userName, companyName, branchName, treeData, puedeVerBanca }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

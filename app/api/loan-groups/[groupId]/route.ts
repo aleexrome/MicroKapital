@@ -130,6 +130,29 @@ export async function DELETE(
     return NextResponse.json({ error: 'El grupo ya estaba eliminado' }, { status: 400 })
   }
 
+  // Guardrail (mismo criterio que Client): si el grupo tiene préstamos en
+  // vuelo requerimos ?force=true para que la UI pida una 2a confirmación.
+  const force = req.nextUrl.searchParams.get('force') === 'true'
+  if (!force) {
+    const [activos, pendientes, regresados] = await Promise.all([
+      prisma.loan.count({ where: { loanGroupId: params.groupId, estado: 'ACTIVE' } }),
+      prisma.loan.count({ where: { loanGroupId: params.groupId, estado: 'PENDING_APPROVAL' } }),
+      prisma.loan.count({ where: { loanGroupId: params.groupId, estado: 'RETURNED_TO_COORDINATOR' } }),
+    ])
+    const total = activos + pendientes + regresados
+    if (total > 0) {
+      const partes: string[] = []
+      if (activos > 0)    partes.push(`${activos} activo${activos === 1 ? '' : 's'}`)
+      if (pendientes > 0) partes.push(`${pendientes} pendiente${pendientes === 1 ? '' : 's'} en Mesa de Control`)
+      if (regresados > 0) partes.push(`${regresados} regresado${regresados === 1 ? '' : 's'} al coordinador`)
+      return NextResponse.json({
+        error: `Este grupo tiene ${partes.join(', ')}. Si lo eliminas, esos créditos quedan huérfanos y desaparecen de la cobranza.`,
+        requiresConfirm: true,
+        loans: { activos, pendientes, regresados },
+      }, { status: 409 })
+    }
+  }
+
   const now = new Date()
   await prisma.loanGroup.update({
     where: { id: params.groupId },
@@ -142,7 +165,7 @@ export async function DELETE(
     tabla: 'LoanGroup',
     registroId: params.groupId,
     valoresAnteriores: { nombre: group.nombre, eliminadoEn: null },
-    valoresNuevos: { eliminadoEn: now.toISOString() },
+    valoresNuevos: { eliminadoEn: now.toISOString(), forceUsed: force },
     ipAddress: req.headers.get('x-forwarded-for') ?? undefined,
   })
 

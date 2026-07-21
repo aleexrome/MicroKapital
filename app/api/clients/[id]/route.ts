@@ -243,6 +243,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
  * con poner el campo en NULL para reactivarlo. Pasados los 14 días el
  * cron `/api/cron/purge-deleted` hace hard delete.
  *
+ * Guardrail: si el cliente tiene préstamos ACTIVE / PENDING_APPROVAL /
+ * RETURNED_TO_COORDINATOR y no llega `?force=true`, respondemos 409 con
+ * los conteos para que la UI pida una segunda confirmación explícita.
+ * Nace del incidente en el que DG borró clientes con crédito vigente
+ * pensando que eran nuevos, dejando préstamos huérfanos.
+ *
  * Solo DIRECTOR_GENERAL.
  */
 export async function DELETE(
@@ -273,6 +279,27 @@ export async function DELETE(
     return NextResponse.json({ error: 'El cliente ya estaba eliminado' }, { status: 400 })
   }
 
+  const force = req.nextUrl.searchParams.get('force') === 'true'
+  if (!force) {
+    const [activos, pendientes, regresados] = await Promise.all([
+      prisma.loan.count({ where: { clientId: params.id, estado: 'ACTIVE' } }),
+      prisma.loan.count({ where: { clientId: params.id, estado: 'PENDING_APPROVAL' } }),
+      prisma.loan.count({ where: { clientId: params.id, estado: 'RETURNED_TO_COORDINATOR' } }),
+    ])
+    const total = activos + pendientes + regresados
+    if (total > 0) {
+      const partes: string[] = []
+      if (activos > 0)    partes.push(`${activos} activo${activos === 1 ? '' : 's'}`)
+      if (pendientes > 0) partes.push(`${pendientes} pendiente${pendientes === 1 ? '' : 's'} en Mesa de Control`)
+      if (regresados > 0) partes.push(`${regresados} regresado${regresados === 1 ? '' : 's'} al coordinador`)
+      return NextResponse.json({
+        error: `Este cliente tiene ${partes.join(', ')}. Si lo eliminas, esos créditos quedan huérfanos y desaparecen de la cobranza.`,
+        requiresConfirm: true,
+        loans: { activos, pendientes, regresados },
+      }, { status: 409 })
+    }
+  }
+
   const now = new Date()
   await prisma.client.update({
     where: { id: params.id },
@@ -285,7 +312,7 @@ export async function DELETE(
     tabla: 'Client',
     registroId: params.id,
     valoresAnteriores: { nombreCompleto: existing.nombreCompleto, eliminadoEn: null },
-    valoresNuevos: { eliminadoEn: now.toISOString() },
+    valoresNuevos: { eliminadoEn: now.toISOString(), forceUsed: force },
     ipAddress: req.headers.get('x-forwarded-for') ?? undefined,
   })
 

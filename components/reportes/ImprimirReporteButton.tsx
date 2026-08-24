@@ -5,11 +5,17 @@ import { Button } from '@/components/ui/button'
 
 const LOGO_URL = 'https://res.cloudinary.com/djs8dtzrq/image/upload/v1777329446/PHOTO-2026-04-27-16-21-06-removebg-preview_fczmpb.png'
 
+/** Marcador de fila-encabezado de grupo dentro de una tabla. Se
+ *  renderiza como una fila de ancho completo (colspan = #columnas) con
+ *  fondo distinto, para separar bloques como grupos solidarios o
+ *  "Individuales y Ágiles". El zebra-striping se reinicia después. */
+export type SeccionGroupHeader = { groupHeader: string }
+
 export interface SeccionTabla {
   tipo: 'tabla'
   titulo: string
   headers: string[]                          // primera fila de encabezados
-  rows: Array<Array<string | number>>
+  rows: Array<Array<string | number> | SeccionGroupHeader>
   /** Indices de columnas que deben alinearse a la derecha (números/montos) */
   rightAlign?: number[]
   /** Fila de totales opcional (mismo número de cells que headers) */
@@ -71,12 +77,22 @@ export function ImprimirReporteButton({ data, landscape = false }: Props) {
       const headerHtml = s.headers.map((h, i) =>
         `<th${(s.rightAlign ?? []).includes(i) ? ' class="right"' : ''}>${escapeHtml(h)}</th>`
       ).join('')
-      const bodyHtml = s.rows.map((row, ri) => `
-        <tr class="${ri % 2 === 1 ? 'alt' : ''}">
+      // Zebra-striping continuo sobre filas normales; los group headers
+      // no cuentan para el contador.
+      let dataIdx = 0
+      const bodyHtml = s.rows.map((row) => {
+        if ('groupHeader' in row) {
+          dataIdx = 0
+          return `<tr class="group-header"><td colspan="${s.headers.length}">${escapeHtml(row.groupHeader)}</td></tr>`
+        }
+        const cls = dataIdx++ % 2 === 1 ? 'alt' : ''
+        return `
+        <tr class="${cls}">
           ${row.map((cell, ci) =>
             `<td${(s.rightAlign ?? []).includes(ci) ? ' class="right"' : ''}>${escapeHtml(String(cell))}</td>`
           ).join('')}
-        </tr>`).join('')
+        </tr>`
+      }).join('')
       const footerHtml = s.footer
         ? `<tfoot><tr>${s.footer.map((cell, ci) =>
             `<td${(s.rightAlign ?? []).includes(ci) ? ' class="right"' : ''}>${escapeHtml(String(cell))}</td>`
@@ -122,6 +138,10 @@ export function ImprimirReporteButton({ data, landscape = false }: Props) {
     th { background: #1a3a5c; color: #fff; padding: 6px 8px; text-align: left; font-size: 11px; }
     td { padding: 5px 8px; border-bottom: 1px solid #e0e0e0; }
     tr.alt td { background: #f7f7f7; }
+    tr.group-header td {
+      background: #e8eef5; color: #1a3a5c; font-weight: 700;
+      padding: 7px 8px; font-size: 12px; letter-spacing: .02em;
+    }
     .right { text-align: right; }
     tfoot td { border-top: 2px solid #1a3a5c; font-weight: bold; background: #f0f4f8; }
     .metricas {

@@ -25,6 +25,44 @@ const BUCKET_COLORS: Record<string, string> = {
   '16+':  '#f43f5e',
 }
 
+const TIPO_LABEL: Record<string, string> = {
+  SOLIDARIO: 'Solidario',
+  INDIVIDUAL: 'Individual',
+  AGIL: 'Ágil',
+  FIDUCIARIO: 'Fiduciario',
+}
+
+type ClienteMoraRow = {
+  clientId: string
+  nombre: string
+  tipo: string
+  branchNombre: string
+  cobradorNombre: string
+  pagosVencidos: number
+  diasMax: number
+  monto: number
+}
+
+function renderClienteRow(c: ClienteMoraRow) {
+  return (
+    <tr key={c.clientId} className="hover:bg-secondary/30">
+      <td className="px-4 py-2 font-medium truncate">{c.nombre}</td>
+      <td className="px-4 py-2 text-muted-foreground truncate">{TIPO_LABEL[c.tipo] ?? c.tipo}</td>
+      <td className="px-4 py-2 text-muted-foreground truncate">{c.branchNombre}</td>
+      <td className="px-4 py-2 text-muted-foreground truncate">{c.cobradorNombre}</td>
+      <td className="px-4 py-2 text-right tabular-nums">{c.pagosVencidos}</td>
+      <td className={`px-4 py-2 text-right tabular-nums ${
+        c.diasMax > 15 ? 'text-rose-500 font-semibold'
+        : c.diasMax > 7 ? 'text-orange-500'
+        : 'text-amber-500'
+      }`}>{c.diasMax}</td>
+      <td className="px-4 py-2 text-right money tabular-nums text-rose-400">
+        {formatMoney(c.monto)}
+      </td>
+    </tr>
+  )
+}
+
 export default async function MoraReportePage({
   searchParams,
 }: {
@@ -94,17 +132,62 @@ export default async function MoraReportePage({
     },
     // Detalle cliente por cliente — la sección que Dirección pidió
     // para poder ver e imprimir quiénes son los deudores concretos.
-    {
-      tipo: 'tabla',
-      titulo: 'Clientes en mora',
-      headers: ['Cliente', 'Sucursal', 'Cobrador', 'Pagos', 'Días máx', 'Mora'],
-      rightAlign: [3, 4, 5],
-      rows: snapshot.clientes.map((c) => [
-        c.nombre, c.branchNombre, c.cobradorNombre,
-        c.pagosVencidos, c.diasMax, formatMoney(c.monto),
-      ]),
-      footer: ['Total', '', '', snapshot.numSchedules, '', formatMoney(snapshot.total)],
-    },
+    // Se agrupa igual que el print de rutas:
+    //   - primero los grupos solidarios (una fila-encabezado por grupo
+    //     con nombre, integrantes y total del grupo), y
+    //   - al final un bloque "Individuales y Ágiles" con los que no
+    //     pertenecen a un grupo solidario.
+    (() => {
+      const clientes = snapshot.clientes
+      const solidarios = clientes.filter((c) => c.tipo === 'SOLIDARIO')
+      const otros      = clientes.filter((c) => c.tipo !== 'SOLIDARIO')
+
+      const grupos = new Map<string, typeof clientes>()
+      for (const c of solidarios) {
+        const key = c.nombreGrupo ?? 'Sin grupo asignado'
+        const arr = grupos.get(key) ?? []
+        arr.push(c)
+        grupos.set(key, arr)
+      }
+      const nombresOrdenados = Array.from(grupos.keys())
+        .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+
+      const rows: Array<Array<string | number> | { groupHeader: string }> = []
+      for (const nombre of nombresOrdenados) {
+        const filas = grupos.get(nombre)!
+        const totalGrupo = filas.reduce((s, c) => s + c.monto, 0)
+        rows.push({
+          groupHeader: `Grupo: ${nombre} · ${filas.length} integrante${filas.length === 1 ? '' : 's'} · Total ${formatMoney(totalGrupo)}`,
+        })
+        for (const c of filas) {
+          rows.push([
+            c.nombre, TIPO_LABEL[c.tipo] ?? c.tipo, c.branchNombre, c.cobradorNombre,
+            c.pagosVencidos, c.diasMax, formatMoney(c.monto),
+          ])
+        }
+      }
+      if (otros.length > 0) {
+        const totalOtros = otros.reduce((s, c) => s + c.monto, 0)
+        rows.push({
+          groupHeader: `Individuales y Ágiles · ${otros.length} · Total ${formatMoney(totalOtros)}`,
+        })
+        for (const c of otros) {
+          rows.push([
+            c.nombre, TIPO_LABEL[c.tipo] ?? c.tipo, c.branchNombre, c.cobradorNombre,
+            c.pagosVencidos, c.diasMax, formatMoney(c.monto),
+          ])
+        }
+      }
+
+      return {
+        tipo: 'tabla' as const,
+        titulo: 'Clientes en mora',
+        headers: ['Cliente', 'Producto', 'Sucursal', 'Cobrador', 'Pagos', 'Días máx', 'Mora'],
+        rightAlign: [4, 5, 6],
+        rows,
+        footer: ['Total', '', '', '', snapshot.numSchedules, '', formatMoney(snapshot.total)],
+      }
+    })(),
   ]
 
   return (
@@ -225,6 +308,7 @@ export default async function MoraReportePage({
                 <thead className="bg-secondary/40 text-muted-foreground text-xs uppercase tracking-wide sticky top-0">
                   <tr>
                     <th className="text-left px-4 py-2.5">Cliente</th>
+                    <th className="text-left px-4 py-2.5">Producto</th>
                     <th className="text-left px-4 py-2.5">Sucursal</th>
                     <th className="text-left px-4 py-2.5">Cobrador</th>
                     <th className="text-right px-4 py-2.5">Pagos</th>
@@ -233,26 +317,52 @@ export default async function MoraReportePage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {snapshot.clientes.map((c) => (
-                    <tr key={c.clientId} className="hover:bg-secondary/30">
-                      <td className="px-4 py-2 font-medium truncate">{c.nombre}</td>
-                      <td className="px-4 py-2 text-muted-foreground truncate">{c.branchNombre}</td>
-                      <td className="px-4 py-2 text-muted-foreground truncate">{c.cobradorNombre}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{c.pagosVencidos}</td>
-                      <td className={`px-4 py-2 text-right tabular-nums ${
-                        c.diasMax > 15 ? 'text-rose-500 font-semibold'
-                        : c.diasMax > 7 ? 'text-orange-500'
-                        : 'text-amber-500'
-                      }`}>{c.diasMax}</td>
-                      <td className="px-4 py-2 text-right money tabular-nums text-rose-400">
-                        {formatMoney(c.monto)}
-                      </td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    // Mismo agrupamiento que el print: primero grupos
+                    // solidarios (con header por grupo + total), después
+                    // Individuales y Ágiles al final.
+                    const solidarios = snapshot.clientes.filter((c) => c.tipo === 'SOLIDARIO')
+                    const otros      = snapshot.clientes.filter((c) => c.tipo !== 'SOLIDARIO')
+                    const grupos = new Map<string, typeof snapshot.clientes>()
+                    for (const c of solidarios) {
+                      const key = c.nombreGrupo ?? 'Sin grupo asignado'
+                      const arr = grupos.get(key) ?? []
+                      arr.push(c)
+                      grupos.set(key, arr)
+                    }
+                    const nombres = Array.from(grupos.keys())
+                      .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+
+                    const filas: React.ReactNode[] = []
+                    for (const nombre of nombres) {
+                      const g = grupos.get(nombre)!
+                      const total = g.reduce((s, c) => s + c.monto, 0)
+                      filas.push(
+                        <tr key={`gh-${nombre}`} className="bg-primary-900/20 text-primary-100">
+                          <td colSpan={7} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide">
+                            Grupo: {nombre} · {g.length} integrante{g.length === 1 ? '' : 's'} · Total {formatMoney(total)}
+                          </td>
+                        </tr>,
+                      )
+                      for (const c of g) filas.push(renderClienteRow(c))
+                    }
+                    if (otros.length > 0) {
+                      const total = otros.reduce((s, c) => s + c.monto, 0)
+                      filas.push(
+                        <tr key="gh-otros" className="bg-primary-900/20 text-primary-100">
+                          <td colSpan={7} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide">
+                            Individuales y Ágiles · {otros.length} · Total {formatMoney(total)}
+                          </td>
+                        </tr>,
+                      )
+                      for (const c of otros) filas.push(renderClienteRow(c))
+                    }
+                    return filas
+                  })()}
                 </tbody>
                 <tfoot className="bg-secondary/30 text-sm font-semibold">
                   <tr>
-                    <td className="px-4 py-2.5" colSpan={3}>Total</td>
+                    <td className="px-4 py-2.5" colSpan={4}>Total</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{snapshot.numSchedules}</td>
                     <td className="px-4 py-2.5"></td>
                     <td className="px-4 py-2.5 text-right money tabular-nums text-rose-400">

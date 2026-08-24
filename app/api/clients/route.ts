@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client'
 import { scopedClientWhere } from '@/lib/access'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
+import { normalizeNameForSearch } from '@/lib/text-normalize'
 
 const createClientSchema = z.object({
   nombreCompleto: z.string().min(2, 'Nombre requerido'),
@@ -30,6 +31,9 @@ export async function GET(req: NextRequest) {
   const { companyId } = session.user
 
   const q = req.nextUrl.searchParams.get('q')
+  // Normalizar la búsqueda para que "gonzalez" y "González" hagan match
+  // sobre nombreNormalizado (que ya vive sin acentos y en mayúsculas).
+  const qNorm = q ? normalizeNameForSearch(q) : null
 
   // Alcance por rol/sucursal — fail-closed si el rol requiere sucursal pero
   // no tiene ninguna asignada (evita que la GERENTE de Tenancingo vea los
@@ -38,7 +42,7 @@ export async function GET(req: NextRequest) {
     companyId: companyId!,
     activo: true,
     AND: [scopedClientWhere(session.user)],
-    ...(q ? { nombreCompleto: { contains: q, mode: 'insensitive' } } : {}),
+    ...(qNorm ? { nombreNormalizado: { contains: qNorm } } : {}),
   }
 
   const clients = await prisma.client.findMany({
@@ -165,6 +169,8 @@ export async function POST(req: NextRequest) {
       branchId: targetBranchId,
       cobradorId: cobradorId ?? null,
       nombreCompleto,
+      // Copia normalizada (sin acentos, mayúsculas) para el buscador.
+      nombreNormalizado: normalizeNameForSearch(nombreCompleto),
       telefono: data.telefono || null,
       telefonoAlt: data.telefonoAlt || null,
       email: data.email || null,

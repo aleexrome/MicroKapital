@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
+import { normalizeNameForSearch } from '@/lib/text-normalize'
 
 /**
  * GET — used by aval-check and other client lookups.
@@ -117,7 +118,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // Normalizacion -- mismo criterio que POST: nombres en MAYUSCULAS + trim.
   const update: Record<string, unknown> = {}
   if (data.nombreCompleto !== undefined) {
-    update.nombreCompleto = data.nombreCompleto.trim().toUpperCase()
+    const nombre = data.nombreCompleto.trim().toUpperCase()
+    update.nombreCompleto = nombre
+    // Mantener la copia sin acentos en sync para el buscador.
+    update.nombreNormalizado = normalizeNameForSearch(nombre)
   }
   if (data.referenciaNombre !== undefined) {
     update.referenciaNombre = data.referenciaNombre

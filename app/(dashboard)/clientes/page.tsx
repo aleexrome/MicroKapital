@@ -8,6 +8,7 @@ import { ScoreBadge } from '@/components/clients/ScoreBadge'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { Card, CardContent } from '@/components/ui/card'
 import { todayMx } from '@/lib/timezone'
+import { normalizeNameForSearch } from '@/lib/text-normalize'
 import { UserPlus, Search, Filter } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -51,7 +52,9 @@ export default async function ClientesPage({
   }
 
   if (searchParams.q) {
-    where.nombreCompleto = { contains: searchParams.q, mode: 'insensitive' }
+    // Buscamos contra nombreNormalizado (mayúsculas, sin acentos) para
+    // que "gonzalez" encuentre a "González" y viceversa.
+    where.nombreNormalizado = { contains: normalizeNameForSearch(searchParams.q) }
   }
 
   // ── Filtros adicionales de UI. El alcance base ya limita el universo

@@ -20,6 +20,12 @@ export async function GET(
           cobrador: { select: { nombre: true } },
           cashBreakdown: true,
           schedule: { select: { numeroPago: true } },
+          // Cuando el Payment es el cobro de una MoraCobro (multa o mora),
+          // esta relación existe. La usamos para poner CONCEPTO en el
+          // ticket ("MULTA por atraso" / "MORA por atraso").
+          moraCobrada: {
+            select: { tipo: true, schedule: { select: { numeroPago: true } } },
+          },
           loan: {
             select: {
               id: true,

@@ -893,7 +893,8 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             <ScheduleDateEditor
               loanId={loan.id}
               schedule={loan.schedule.map((s) => {
-                const m = loan.moraCobros.find((mc) => mc.scheduleId === s.id)
+                // Un schedule puede tener hasta 2 moras (una MULTA + una MORA).
+                const ms = loan.moraCobros.filter((mc) => mc.scheduleId === s.id)
                 return {
                   id: s.id,
                   numeroPago: s.numeroPago,
@@ -903,15 +904,13 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                   pagadoAt: s.pagadoAt ?? null,
                   paymentInfo: paymentInfoMap[s.id],
                   tickets: ticketMap[s.id] ?? [],
-                  mora: m
-                    ? {
-                        id: m.id,
-                        tipo: m.tipo as 'MULTA' | 'MORA',
-                        monto: Number(m.monto),
-                        cobrada: m.cobrada,
-                        cobradaAt: m.cobradaAt?.toISOString() ?? null,
-                      }
-                    : null,
+                  moras: ms.map((m) => ({
+                    id: m.id,
+                    tipo: m.tipo as 'MULTA' | 'MORA',
+                    monto: Number(m.monto),
+                    cobrada: m.cobrada,
+                    cobradaAt: m.cobradaAt?.toISOString() ?? null,
+                  })),
                 }
               })}
               canCapture={puedeCapturar}

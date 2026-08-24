@@ -350,13 +350,12 @@ export async function POST(req: NextRequest) {
     // 8. Multa/Mora: si el pago fue tardío según CDMX, se registra la
     // MoraCobro como PENDIENTE. El cobro es un flujo aparte — el
     // cobrador captura la mora desde la sub-fila del calendario, no
-    // acoplada a este pago. Único por scheduleId: si ya existía de
-    // un cobro parcial previo o de una captura de mora directa, se
-    // respeta.
+    // acoplada a este pago. Único por (schedule, tipo): pueden coexistir
+    // una MULTA y una MORA para el mismo schedule.
     const mora = detectarMora(schedule.fechaVencimiento, now)
     if (mora) {
       const yaExisteMora = await tx.moraCobro.findUnique({
-        where: { scheduleId: schedule.id },
+        where: { scheduleId_tipo: { scheduleId: schedule.id, tipo: mora.tipo } },
         select: { id: true },
       })
       if (!yaExisteMora) {

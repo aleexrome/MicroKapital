@@ -52,7 +52,7 @@ CLIENTE: ${data.cliente}
 PRÉSTAMO: #${data.loanId.slice(-8).toUpperCase()}
 TIPO: ${data.tipoPrestamo}
 PAGO No.: ${data.numeroPago} de ${data.totalPagos}
-${dash}
+${data.concepto ? `CONCEPTO: ${data.concepto === 'MULTA' ? 'MULTA POR ATRASO' : 'MORA POR ATRASO'}\n` : ''}${dash}
 MONTO PAGADO:  ${padLeft(formatMoney(data.montoPagado), 12)}
 FORMA DE PAGO: ${data.metodoPago}
 ${dash}

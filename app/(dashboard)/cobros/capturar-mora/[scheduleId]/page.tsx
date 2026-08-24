@@ -122,6 +122,7 @@ export default function CapturarMoraPage({ params }: { params: { scheduleId: str
         cambio,
         desglose: cashBreakdown,
         qrCode: data.ticket.qrCode,
+        concepto: data.mora.tipo as 'MULTA' | 'MORA',
       })
       setStep('done')
     } catch (err) {

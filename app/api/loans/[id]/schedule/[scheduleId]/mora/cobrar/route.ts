@@ -100,13 +100,15 @@ export async function POST(
     )
   }
 
+  // Cada schedule puede tener a lo más una MULTA y una MORA independientes
+  // (Direccion pidió poder cobrar las dos). Buscamos por (schedule, tipo).
   const existente = await prisma.moraCobro.findUnique({
-    where: { scheduleId: schedule.id },
+    where: { scheduleId_tipo: { scheduleId: schedule.id, tipo: data.tipo } },
     select: { id: true, cobrada: true },
   })
   if (existente?.cobrada) {
     return NextResponse.json(
-      { error: 'Este pago ya tiene multa o mora cobrada' },
+      { error: `Este pago ya tiene ${labelMora(data.tipo).toLowerCase()} cobrada` },
       { status: 400 },
     )
   }
@@ -159,6 +161,8 @@ export async function POST(
       const updated = await tx.moraCobro.update({
         where: { id: existente.id },
         data: {
+          // tipo ya coincide (buscamos con scheduleId+tipo), pero lo
+          // repetimos por claridad — es idempotente.
           tipo: escogida.tipo,
           monto: escogida.monto,
           cobrada: true,

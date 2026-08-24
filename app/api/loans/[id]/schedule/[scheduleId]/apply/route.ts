@@ -134,11 +134,12 @@ export async function POST(
     // Detección de multa/mora: si `now` en CDMX ya pasó la hora límite
     // del día del vencimiento o pasó al día siguiente, generar MoraCobro
     // como registro pendiente (no cobrada) para reportería. Único por
-    // schedule — si ya existía uno de un intento previo, no duplicamos.
+    // (schedule, tipo) — si ya existía uno de un intento previo del mismo
+    // tipo, no duplicamos (pero pueden coexistir MULTA + MORA).
     const mora = detectarMora(schedule.fechaVencimiento, now)
     if (mora) {
       const ya = await tx.moraCobro.findUnique({
-        where: { scheduleId: schedule.id },
+        where: { scheduleId_tipo: { scheduleId: schedule.id, tipo: mora.tipo } },
         select: { id: true },
       })
       if (!ya) {

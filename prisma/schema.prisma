@@ -285,6 +285,11 @@ model Client {
   heredadoDe         User?     @relation("HeredadoDeCoordinador", fields: [heredadoDeId], references: [id])
   heredadoAt         DateTime?
   nombreCompleto     String
+  // Copia del nombreCompleto ya normalizada (mayúsculas, SIN acentos y
+  // sin espacios extra) para que el buscador matchee sin importar si
+  // el usuario escribe "gonzalez" o "González". Se mantiene en sync
+  // desde el POST/PATCH de cliente. Indexada para queries rápidas.
+  nombreNormalizado  String    @default("")
   numIne             String?
   curp               String?
   telefono           String?
@@ -309,6 +314,8 @@ model Client {
   scoreEvents     ScoreEvent[]
   coberturasOtras Payment[]        @relation("CoberturaGrupal")
   moraCobros      MoraCobro[]
+
+  @@index([companyId, nombreNormalizado])
 }
 
 model ClientDocument {

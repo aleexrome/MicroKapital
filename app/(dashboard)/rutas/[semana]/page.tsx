@@ -20,6 +20,7 @@ import {
   ImprimirRutaButton,
   type RutaCobroRow, type RutaColocacionRow,
 } from '@/components/rutas/ImprimirRutaButton'
+import { CobrosFilterableSection } from '@/components/rutas/CobrosFilterableSection'
 import {
   GERENTES_AGREGADOS_POR_SUCURSAL,
   metaColocacion,
@@ -641,51 +642,23 @@ export default async function RutaDetallePage({
           />
         )}
 
-        {/* Schedule list */}
-        <div>
-          <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-3">
-            <TrendingUp className="h-4 w-4 text-primary-600" />
-            {dayFilter ? 'Cobros del día' : 'Cobros de la semana'}
-            {pactadosCount > 0 && (
-              <span className="text-sm font-normal text-muted-foreground">({pactadosCount} pactados)</span>
-            )}
-          </h2>
-          {filteredSchedules.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center border rounded-lg">
-              {dayFilter ? 'Sin cobros pactados este día' : 'Sin cobros pactados esta semana'}
-            </p>
-          ) : (
-            <div className="border rounded-xl overflow-hidden divide-y bg-white">
-              {filteredSchedules.map((s) => {
-                // El indicador visual también deriva de los Payment reales,
-                // para que la lista refleje la misma verdad que el KPI.
-                const paid = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
-                const expected = Number(s.montoEsperado)
-                const isCobrado = paid >= expected
-                const isPartial = !isCobrado && paid > 0
-                // Pre-pagado: schedule estaba PAID/ADVANCE de antes pero el
-                // Payment fue de semana previa (renovación absorbida o cobro
-                // anticipado). NO debe mostrarse como cobrado de esta semana.
-                const isPrePagado = !isCobrado && !isPartial && (s.estado === 'PAID' || s.estado === 'ADVANCE')
-                const montoCobrado = Math.min(paid, expected)
-                return (
-                  <div
-                    key={s.id}
-                    className={`flex items-center gap-3 px-4 py-3 text-sm ${isCobrado || isPrePagado ? 'opacity-60' : ''}`}
-                  >
-                    <StatusIcon schedule={s} paidAmount={paid} />
-                    <span className="flex-1 min-w-0 truncate font-medium">{s.loan.client.nombreCompleto}</span>
-                    <Badge variant="outline" className="text-xs shrink-0">{TIPO_LABEL[s.loan.tipo] ?? s.loan.tipo}</Badge>
-                    <span className="font-semibold w-20 text-right shrink-0">{formatMoney(expected)}</span>
-                    <span className={`text-xs w-20 text-right shrink-0 ${isCobrado ? 'text-green-600 font-medium' : isPartial ? 'text-amber-600 font-medium' : isPrePagado ? 'italic text-muted-foreground' : 'text-muted-foreground'}`}>
-                      {isCobrado || isPartial ? formatMoney(montoCobrado) : isPrePagado ? 'Pre-pagado' : ESTADO_LABEL[s.estado] ?? s.estado}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        {/* Schedule list — con filtro Todos/Pendientes/Pagados/Pre-pagados
+            y print del subset seleccionado (la sección de colocación queda
+            aparte porque no se filtra por cobro). */}
+        <CobrosFilterableSection
+          weekLabel={
+            dayFilter
+              ? `${weekLabel} · ${DIAS_ES_LARGOS[new Date(dayFilter + 'T00:00:00Z').getUTCDay()]} ${dayFilter.split('-').reverse().join('/')}`
+              : weekLabel
+          }
+          scopeLabel={targetUserName}
+          cobros={printCobros}
+          colocaciones={printColocaciones}
+          colocacionTotal={colocacion}
+          metaTarget={metaTarget}
+          metaPct={metaPct}
+          headerLabel={dayFilter ? 'Cobros del día' : 'Cobros de la semana'}
+        />
 
         {/* Colocación list */}
         <div>
@@ -727,25 +700,9 @@ export default async function RutaDetallePage({
           )}
         </div>
 
-        {/* Botón imprimir — detalle por cliente */}
-        <div className="flex justify-center pt-2">
-          <ImprimirRutaButton
-            weekLabel={
-              dayFilter
-                ? `${weekLabel} · ${DIAS_ES_LARGOS[new Date(dayFilter + 'T00:00:00Z').getUTCDay()]} ${dayFilter.split('-').reverse().join('/')}`
-                : weekLabel
-            }
-            scopeLabel={targetUserName}
-            cobros={printCobros}
-            colocaciones={printColocaciones}
-            totalAPagar={totalAPagar}
-            totalCobrado={totalCobrado}
-            colocacionTotal={colocacion}
-            metaTarget={metaTarget}
-            cobranzaPct={cobranzaPct}
-            metaPct={metaPct}
-          />
-        </div>
+        {/* El botón imprimir vive dentro de CobrosFilterableSection y
+            respeta el filtro activo (Todos / Pendientes / Pagados /
+            Pre-pagados). */}
       </div>
     )
   }

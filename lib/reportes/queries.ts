@@ -297,6 +297,9 @@ export interface MoraSnapshot {
   // Detalle línea-por-cliente para la vista y el reporte impreso.
   // Un cliente puede tener varios pagos vencidos: agregamos su mora
   // total, el conteo de pagos y el máximo de días de atraso.
+  // El tipo y grupo son del "primer" loan vencido del cliente (en la
+  // práctica un cliente tiene un solo crédito activo por tipo, y para
+  // el reporte impreso alcanza con esa dimensión para agrupar).
   clientes: Array<{
     clientId: string
     nombre: string
@@ -304,6 +307,8 @@ export interface MoraSnapshot {
     cobradorNombre: string
     branchId: string
     branchNombre: string
+    tipo: LoanType
+    nombreGrupo: string | null
     pagosVencidos: number
     monto: number
     diasMax: number
@@ -332,7 +337,9 @@ export async function getMoraSnapshot(
           branchId: true,
           cobradorId: true,
           clientId: true,
+          tipo: true,
           client: { select: { nombreCompleto: true } },
+          loanGroup: { select: { nombre: true } },
         },
       },
     },
@@ -361,6 +368,8 @@ export async function getMoraSnapshot(
     nombre: string
     cobradorId: string
     branchId: string
+    tipo: LoanType
+    nombreGrupo: string | null
     pagosVencidos: number
     monto: number
     diasMax: number
@@ -398,6 +407,8 @@ export async function getMoraSnapshot(
         nombre: s.loan.client.nombreCompleto,
         cobradorId: s.loan.cobradorId,
         branchId: s.loan.branchId,
+        tipo: s.loan.tipo,
+        nombreGrupo: s.loan.loanGroup?.nombre ?? null,
         pagosVencidos: 1,
         monto: pendiente,
         diasMax: diasAtraso,

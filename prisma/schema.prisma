@@ -521,7 +521,9 @@ model MoraCobro {
   cobradorId     String
   cobrador       User     @relation("MorasGeneradas", fields: [cobradorId], references: [id])
   // MULTA ($200 mismo día después de 14:00 CDMX) | MORA ($500 en día
-  // posterior). No se acumula: solo una por schedule.
+  // posterior). Se puede tener a lo más una MULTA y una MORA por
+  // schedule (constraint (scheduleId, tipo)) — Direccion pidió poder
+  // cobrar las dos por separado cuando el atraso lo amerita.
   tipo           String
   monto          Decimal  @db.Decimal(12, 2)
   // Payment que disparó la generación (el pago tardío del schedule).
@@ -539,7 +541,7 @@ model MoraCobro {
   cobradaAt      DateTime?
   createdAt      DateTime @default(now())
 
-  @@unique([scheduleId])
+  @@unique([scheduleId, tipo])
   @@index([companyId, createdAt])
   @@index([branchId, createdAt])
   @@index([cobradorId, createdAt])

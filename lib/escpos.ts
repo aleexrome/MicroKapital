@@ -114,6 +114,9 @@ export interface PrintTicketOptions {
   recibido?: string
   cambio?: string
   qrCode?: string
+  /** MULTA / MORA para tickets de recargo. Se imprime como línea CONCEPTO
+   *  debajo del número de pago para diferenciar de un pago regular. */
+  concepto?: 'MULTA' | 'MORA'
   /** Bitmap 1-bit del logo; se imprime centrado al inicio del ticket */
   logo?: { pixels: Uint8Array; widthPx: number; heightPx: number }
 }
@@ -143,6 +146,9 @@ export function buildTicketBytes(opts: PrintTicketOptions): Uint8Array {
     ...line(`CLIENTE: ${opts.cliente.slice(0, W - 9)}`),
     ...line(`TIPO: ${opts.tipoPrestamo}`),
     ...line(`PAGO No.: ${opts.numeroPago} de ${opts.totalPagos}`),
+    ...(opts.concepto
+      ? line(`CONCEPTO: ${opts.concepto === 'MULTA' ? 'MULTA POR ATRASO' : 'MORA POR ATRASO'}`)
+      : []),
     ...divider('-', W),
     ...CMD.BOLD_ON,
     ...line(padRight('MONTO:', opts.montoPagado, W)),

@@ -32,6 +32,10 @@ export default function ThermalPrintPage() {
         if (!data) { setLoading(false); return }
 
         const p = data.payment
+        // Si este payment respalda una multa/mora, el schedule vive en la
+        // relación moraCobrada (p.scheduleId=null en ese caso).
+        const conceptoTipo: 'MULTA' | 'MORA' | undefined = p.moraCobrada?.tipo
+        const numeroPagoMora: number | undefined = p.moraCobrada?.schedule?.numeroPago
         setTicketData({
           numeroTicket: data.numeroTicket,
           fecha: new Date(data.impresoAt),
@@ -41,7 +45,7 @@ export default function ThermalPrintPage() {
           cliente: p.client.nombreCompleto,
           loanId: p.loan.id,
           tipoPrestamo: p.loan.tipo,
-          numeroPago: p.schedule?.numeroPago ?? 1,
+          numeroPago: p.schedule?.numeroPago ?? numeroPagoMora ?? 1,
           totalPagos: p.loan.plazo,
           montoPagado: Number(p.monto),
           metodoPago: p.metodoPago === 'CASH' ? 'Efectivo' : 'Tarjeta',
@@ -49,6 +53,7 @@ export default function ThermalPrintPage() {
           cambio: p.metodoPago === 'CASH' ? Number(p.cambioEntregado) : undefined,
           desglose: p.cashBreakdown,
           qrCode: data.qrCode ?? undefined,
+          concepto: conceptoTipo,
         })
         setLoading(false)
       })
@@ -84,6 +89,7 @@ export default function ThermalPrintPage() {
         recibido: ticketData.recibido !== undefined ? formatMoney(ticketData.recibido) : undefined,
         cambio: ticketData.cambio !== undefined ? formatMoney(ticketData.cambio) : undefined,
         qrCode: ticketData.qrCode,
+        concepto: ticketData.concepto,
         logo,
       })
       await printViaBluetooth(bytes)

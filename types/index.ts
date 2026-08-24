@@ -76,6 +76,10 @@ export interface TicketData {
   cambio?: number
   desglose?: CashBreakdownEntry[]
   qrCode?: string
+  /** Concepto del pago: MULTA / MORA / undefined para pago regular.
+   *  Se muestra en el ticket para distinguir un cobro de recargo del
+   *  pago regular del schedule. */
+  concepto?: 'MULTA' | 'MORA'
 }
 
 export interface ScoreInfo {

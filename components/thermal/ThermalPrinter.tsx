@@ -44,6 +44,11 @@ function buildEscPosBuffer(ticket: TicketData): Uint8Array {
   cmds.push(...textToBytes(`PRESTAMO: #${ticket.loanId.slice(-8).toUpperCase()}`), LF)
   cmds.push(...textToBytes(`TIPO: ${ticket.tipoPrestamo}`), LF)
   cmds.push(...textToBytes(`PAGO No.: ${ticket.numeroPago} de ${ticket.totalPagos}`), LF)
+  if (ticket.concepto) {
+    cmds.push(...textToBytes(
+      `CONCEPTO: ${ticket.concepto === 'MULTA' ? 'MULTA POR ATRASO' : 'MORA POR ATRASO'}`,
+    ), LF)
+  }
   cmds.push(...textToBytes('--------------------------------'), LF)
   cmds.push(...textToBytes(`MONTO PAGADO:  $${ticket.montoPagado.toFixed(2)}`), LF)
   cmds.push(...textToBytes(`FORMA DE PAGO: ${ticket.metodoPago}`), LF)
@@ -187,6 +192,9 @@ export function ThermalPrinter({ ticketData, onPrintSuccess }: ThermalPrinterPro
       `COBRADOR: ${ticketData.cobrador}`,
       `CLIENTE: ${ticketData.cliente}`,
       `PAGO ${ticketData.numeroPago}/${ticketData.totalPagos}`,
+      ...(ticketData.concepto
+        ? [`CONCEPTO: ${ticketData.concepto === 'MULTA' ? 'MULTA POR ATRASO' : 'MORA POR ATRASO'}`]
+        : []),
       `MONTO: $${ticketData.montoPagado.toFixed(2)}`,
       `MÉTODO: ${ticketData.metodoPago}`,
     ].join('\n')

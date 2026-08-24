@@ -92,6 +92,19 @@ export default async function MoraReportePage({
       rightAlign: [1, 2],
       rows: snapshot.porCobrador.map((c) => [c.nombre, c.count, formatMoney(c.monto)]),
     },
+    // Detalle cliente por cliente — la sección que Dirección pidió
+    // para poder ver e imprimir quiénes son los deudores concretos.
+    {
+      tipo: 'tabla',
+      titulo: 'Clientes en mora',
+      headers: ['Cliente', 'Sucursal', 'Cobrador', 'Pagos', 'Días máx', 'Mora'],
+      rightAlign: [3, 4, 5],
+      rows: snapshot.clientes.map((c) => [
+        c.nombre, c.branchNombre, c.cobradorNombre,
+        c.pagosVencidos, c.diasMax, formatMoney(c.monto),
+      ]),
+      footer: ['Total', '', '', snapshot.numSchedules, '', formatMoney(snapshot.total)],
+    },
   ]
 
   return (
@@ -191,6 +204,62 @@ export default async function MoraReportePage({
                     </tr>
                   ))}
                 </tbody>
+              </table>
+            </CardContent>
+          </Card>
+
+          {/* Detalle cliente por cliente — muestra a quién visitar y cuánto
+              debe. Respeta los filtros activos (sucursal / cobrador) y también
+              se imprime en el reporte de arriba. */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                Clientes en mora
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  ({snapshot.clientes.length} cliente{snapshot.clientes.length === 1 ? '' : 's'})
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0 overflow-x-auto max-h-[36rem] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-secondary/40 text-muted-foreground text-xs uppercase tracking-wide sticky top-0">
+                  <tr>
+                    <th className="text-left px-4 py-2.5">Cliente</th>
+                    <th className="text-left px-4 py-2.5">Sucursal</th>
+                    <th className="text-left px-4 py-2.5">Cobrador</th>
+                    <th className="text-right px-4 py-2.5">Pagos</th>
+                    <th className="text-right px-4 py-2.5">Días máx</th>
+                    <th className="text-right px-4 py-2.5">Mora</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {snapshot.clientes.map((c) => (
+                    <tr key={c.clientId} className="hover:bg-secondary/30">
+                      <td className="px-4 py-2 font-medium truncate">{c.nombre}</td>
+                      <td className="px-4 py-2 text-muted-foreground truncate">{c.branchNombre}</td>
+                      <td className="px-4 py-2 text-muted-foreground truncate">{c.cobradorNombre}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{c.pagosVencidos}</td>
+                      <td className={`px-4 py-2 text-right tabular-nums ${
+                        c.diasMax > 15 ? 'text-rose-500 font-semibold'
+                        : c.diasMax > 7 ? 'text-orange-500'
+                        : 'text-amber-500'
+                      }`}>{c.diasMax}</td>
+                      <td className="px-4 py-2 text-right money tabular-nums text-rose-400">
+                        {formatMoney(c.monto)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-secondary/30 text-sm font-semibold">
+                  <tr>
+                    <td className="px-4 py-2.5" colSpan={3}>Total</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{snapshot.numSchedules}</td>
+                    <td className="px-4 py-2.5"></td>
+                    <td className="px-4 py-2.5 text-right money tabular-nums text-rose-400">
+                      {formatMoney(snapshot.total)}
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </CardContent>
           </Card>

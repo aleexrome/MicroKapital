@@ -294,6 +294,20 @@ export interface MoraSnapshot {
   buckets: { rango: '1-7' | '8-15' | '16+'; monto: number; count: number }[]
   porSucursal: Array<{ branchId: string; nombre: string; monto: number; count: number }>
   porCobrador: Array<{ cobradorId: string; nombre: string; monto: number; count: number }>
+  // Detalle línea-por-cliente para la vista y el reporte impreso.
+  // Un cliente puede tener varios pagos vencidos: agregamos su mora
+  // total, el conteo de pagos y el máximo de días de atraso.
+  clientes: Array<{
+    clientId: string
+    nombre: string
+    cobradorId: string
+    cobradorNombre: string
+    branchId: string
+    branchNombre: string
+    pagosVencidos: number
+    monto: number
+    diasMax: number
+  }>
 }
 
 export async function getMoraSnapshot(
@@ -318,6 +332,7 @@ export async function getMoraSnapshot(
           branchId: true,
           cobradorId: true,
           clientId: true,
+          client: { select: { nombreCompleto: true } },
         },
       },
     },
@@ -338,6 +353,18 @@ export async function getMoraSnapshot(
   const branchAcc = new Map<string, { monto: number; count: number }>()
   const cobradorAcc = new Map<string, { monto: number; count: number }>()
   const clientesUnicos = new Set<string>()
+  // Agregado por cliente para el detalle línea-por-cliente. Un cliente
+  // puede tener varios schedules vencidos: sumamos monto, contamos pagos
+  // y guardamos el máximo de días de atraso.
+  const clienteAcc = new Map<string, {
+    clientId: string
+    nombre: string
+    cobradorId: string
+    branchId: string
+    pagosVencidos: number
+    monto: number
+    diasMax: number
+  }>()
   let total = 0
 
   for (const s of overdues) {
@@ -359,6 +386,23 @@ export async function getMoraSnapshot(
     const ca = cobradorAcc.get(s.loan.cobradorId) ?? { monto: 0, count: 0 }
     ca.monto += pendiente; ca.count += 1
     cobradorAcc.set(s.loan.cobradorId, ca)
+
+    const cli = clienteAcc.get(s.loan.clientId)
+    if (cli) {
+      cli.pagosVencidos += 1
+      cli.monto += pendiente
+      if (diasAtraso > cli.diasMax) cli.diasMax = diasAtraso
+    } else {
+      clienteAcc.set(s.loan.clientId, {
+        clientId: s.loan.clientId,
+        nombre: s.loan.client.nombreCompleto,
+        cobradorId: s.loan.cobradorId,
+        branchId: s.loan.branchId,
+        pagosVencidos: 1,
+        monto: pendiente,
+        diasMax: diasAtraso,
+      })
+    }
   }
 
   return {
@@ -375,6 +419,13 @@ export async function getMoraSnapshot(
       .sort((a, b) => b.monto - a.monto),
     porCobrador: Array.from(cobradorAcc.entries())
       .map(([id, acc]) => ({ cobradorId: id, nombre: cobradorMap.get(id) ?? '—', ...acc }))
+      .sort((a, b) => b.monto - a.monto),
+    clientes: Array.from(clienteAcc.values())
+      .map((c) => ({
+        ...c,
+        cobradorNombre: cobradorMap.get(c.cobradorId) ?? '—',
+        branchNombre: branchMap.get(c.branchId) ?? '—',
+      }))
       .sort((a, b) => b.monto - a.monto),
   }
 }

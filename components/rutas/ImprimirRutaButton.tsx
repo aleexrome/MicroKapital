@@ -205,13 +205,18 @@ export function ImprimirRutaButton({
       const rowParts: string[] = []
       for (const nombreGrupo of nombresGruposOrdenados) {
         const filas = gruposMap.get(nombreGrupo)!
-        rowParts.push(`<tr class="group-header"><td colspan="8">Grupo: ${nombreGrupo} · ${filas.length} integrante${filas.length === 1 ? '' : 's'}</td></tr>`)
+        // Total pactado del grupo — lo que la cobradora debe reunir cuando
+        // visita al grupo. Suma directa de montoEsperado (no cobrado),
+        // porque la lista impresa es la agenda de cobros de la semana.
+        const totalGrupo = filas.reduce((acc, r) => acc + r.montoEsperado, 0)
+        rowParts.push(`<tr class="group-header"><td colspan="8">Grupo: ${nombreGrupo} · ${filas.length} integrante${filas.length === 1 ? '' : 's'} · Total ${fmt(totalGrupo)}</td></tr>`)
         for (const r of filas) {
           rowParts.push(renderCobroRow(r, rowIdx++))
         }
       }
       if (otros.length > 0) {
-        rowParts.push(`<tr class="group-header"><td colspan="8">Individuales y Ágiles · ${otros.length}</td></tr>`)
+        const totalOtros = otros.reduce((acc, r) => acc + r.montoEsperado, 0)
+        rowParts.push(`<tr class="group-header"><td colspan="8">Individuales y Ágiles · ${otros.length} · Total ${fmt(totalOtros)}</td></tr>`)
         for (const r of otros) {
           rowParts.push(renderCobroRow(r, rowIdx++))
         }

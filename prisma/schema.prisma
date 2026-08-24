@@ -164,6 +164,7 @@ model Branch {
   withdrawals   BranchWithdrawal[]
   moraCobros    MoraCobro[]
   bancaViewers  User[]             @relation("BancaViewers")
+  bankAccounts  BankAccountBranch[]
 }
 
 // Aporte adicional que Dirección envía a una sucursal fuera del ciclo
@@ -618,6 +619,27 @@ model CompanyBankAccount {
   createdAt    DateTime @default(now())
 
   payments Payment[]
+  // Sucursales que pueden usar esta cuenta al capturar una
+  // transferencia. Vacío = ninguna (equivale a no aparecer en el
+  // dropdown). Tenancingo — al ser central — se etiqueta en todas las
+  // cuentas de forma explícita.
+  branches BankAccountBranch[]
+}
+
+/**
+ * Tabla puente cuenta-bancaria ↔ sucursal. Una cuenta puede estar
+ * asignada a varias sucursales (ej. una cuenta central usada por 4
+ * sucursales) y cada sucursal ve solo las cuentas asignadas.
+ */
+model BankAccountBranch {
+  bankAccountId String
+  bankAccount   CompanyBankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  branchId      String
+  branch        Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdAt     DateTime           @default(now())
+
+  @@id([bankAccountId, branchId])
+  @@index([branchId])
 }
 
 model Ticket {

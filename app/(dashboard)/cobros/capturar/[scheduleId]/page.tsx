@@ -58,7 +58,9 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
     fetch(`/api/payments/schedule/${params.scheduleId}`)
       .then((r) => r.json())
       .then((d) => { setSchedule(d.data); setLoadingSchedule(false) })
-    fetch('/api/bank-accounts')
+    // Bank accounts filtradas a la sucursal del préstamo (backend
+    // resuelve branchId desde el scheduleId).
+    fetch(`/api/bank-accounts?scheduleId=${params.scheduleId}`)
       .then((r) => r.json())
       .then((d) => { if (d.data?.length) { setBankAccounts(d.data); setSelectedAccount(d.data[0].id) } })
   }, [params.scheduleId])

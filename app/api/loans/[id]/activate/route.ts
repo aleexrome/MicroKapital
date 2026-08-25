@@ -153,14 +153,19 @@ export async function POST(
     if (!rolesVerificacion.includes(rol)) {
       return NextResponse.json({ error: 'Sin permisos para verificar transferencias' }, { status: 403 })
     }
-    if (rol === 'GERENTE' || rol === 'GERENTE_ZONAL') {
+    if (rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'MESA_CONTROL') {
       const branch = await prisma.branch.findUnique({
         where: { id: loan.branchId },
         select: { verificacionCentralizada: true },
       })
-      if (branch?.verificacionCentralizada) {
+      if ((rol === 'GERENTE' || rol === 'GERENTE_ZONAL') && branch?.verificacionCentralizada) {
         return NextResponse.json({
           error: 'Las transferencias de esta sucursal deben ser verificadas por Dirección General o Mesa de Control.',
+        }, { status: 403 })
+      }
+      if (rol === 'MESA_CONTROL' && !branch?.verificacionCentralizada) {
+        return NextResponse.json({
+          error: 'Esta sucursal la verifica el Gerente Zonal, no Mesa de Control.',
         }, { status: 403 })
       }
     }

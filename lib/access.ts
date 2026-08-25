@@ -218,23 +218,26 @@ export function canViewInterestData(rol: UserRole): boolean {
  * capturado en la sucursal dada?
  *
  * Reglas:
- * - DG / DC / MC / SUPER_ADMIN: pueden verificar en cualquier sucursal.
- * - GERENTE_ZONAL / GERENTE: pueden verificar SOLO si la sucursal NO
- *   está marcada como verificacionCentralizada, y su zona incluye esa
- *   sucursal.
+ * - DG / DC / SUPER_ADMIN: pueden verificar en cualquier sucursal
+ *   (autoridad máxima; ven todo por escalación).
+ * - MESA_CONTROL: verifica SOLO en sucursales con verificacionCentralizada
+ *   (Veracruz, Minatitlán, Martínez de la Torre). En las demás lo hace
+ *   el GZ, para no cruzar responsabilidades.
+ * - GERENTE_ZONAL / GERENTE: verifican SOLO si la sucursal NO es
+ *   centralizada y su zona la incluye.
  * - Cualquier otro rol: no puede.
- *
- * `branch.verificacionCentralizada` proviene de Direccion: hoy es true
- * para Veracruz, Minatitlán y Martínez de la Torre (las verifica
- * Stephanie o Carol).
  */
 export function canVerifyTransfer(
   user: AccessUser,
   branch: { id: string; verificacionCentralizada: boolean },
 ): boolean {
   const rol = user.rol
-  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
-      || rol === 'MESA_CONTROL' || rol === 'SUPER_ADMIN') return true
+  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN') {
+    return true
+  }
+  if (rol === 'MESA_CONTROL') {
+    return branch.verificacionCentralizada
+  }
   if (rol === 'GERENTE_ZONAL' || rol === 'GERENTE') {
     if (branch.verificacionCentralizada) return false
     const zones = user.zonaBranchIds?.length

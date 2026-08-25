@@ -71,13 +71,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Pago no encontrado o ya verificado' }, { status: 404 })
   }
 
-  // Bloqueo específico para GZ/GERENTE en sucursales centralizadas
-  // (Veracruz, Minatitlán, Martínez de la Torre). Esas las verifican
-  // Stephanie o Carol.
+  // Bloqueo por sucursal:
+  // - GZ/GERENTE no verifica sucursales centralizadas.
+  // - MC solo verifica sucursales centralizadas (para no cruzar con GZ).
   if ((rol === 'GERENTE' || rol === 'GERENTE_ZONAL')
       && payment.loan.branch.verificacionCentralizada) {
     return NextResponse.json({
       error: 'Las transferencias de esta sucursal deben ser verificadas por Dirección General o Mesa de Control.',
+    }, { status: 403 })
+  }
+  if (rol === 'MESA_CONTROL' && !payment.loan.branch.verificacionCentralizada) {
+    return NextResponse.json({
+      error: 'Esta sucursal la verifica el Gerente Zonal, no Mesa de Control.',
     }, { status: 403 })
   }
 

@@ -39,7 +39,13 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
   const { toast } = useToast()
   const [processing, setProcessing] = useState<string | null>(null)
 
-  const pendientes = rows.filter((r) => r.statusTransferencia === 'PENDIENTE')
+  // Para MC y GZ mostramos solo los pendientes que ellos deben verificar
+  // (así la bandeja no se llena con transferencias fuera de su alcance).
+  // DG/DC/SUPER_ADMIN ven todos los pendientes como referencia.
+  const esAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
+  const pendientes = rows.filter((r) =>
+    r.statusTransferencia === 'PENDIENTE' && (esAdmin || r.puedeVerificar),
+  )
   const verificadas = rows.filter((r) => r.statusTransferencia === 'VERIFICADO')
 
   async function handleVerify(paymentId: string) {

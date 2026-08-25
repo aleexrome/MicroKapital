@@ -67,9 +67,17 @@ export default function EstadoCuentaPage() {
     </div>
   )
 
-  const totalPagado = loan.payments.reduce((s, p) => s + p.monto, 0)
-  const totalEsperado = loan.schedule.reduce((s, c) => s + Number(c.montoEsperado), 0)
-  const saldoPendiente = Math.max(0, totalEsperado - totalPagado)
+  // Los totales del estado de cuenta se derivan del CALENDARIO (schedule),
+  // no de loan.payments — así el "Total cobrado" coincide con la suma
+  // visible de la columna Monto, y el "Saldo pendiente" refleja lo que
+  // realmente falta por cobrar (mora/tarifas de apertura son otro flujo
+  // y no distorsionan estas cifras).
+  const totalCobrado = loan.schedule
+    .filter((s) => s.estado === 'PAID' || s.estado === 'ADVANCE')
+    .reduce((s, c) => s + (Number(c.montoPagado) || Number(c.montoEsperado)), 0)
+  const saldoPendiente = loan.schedule
+    .filter((s) => !(s.estado === 'PAID' || s.estado === 'ADVANCE' || s.estado === 'FINANCIADO'))
+    .reduce((s, c) => s + Math.max(0, Number(c.montoEsperado) - Number(c.montoPagado)), 0)
   const cuotasPagadas = loan.schedule.filter((s) => s.estado === 'PAID' || s.estado === 'ADVANCE').length
   const cuotasFinanciadas = loan.schedule.filter((s) => s.estado === 'FINANCIADO').length
   const cuotasPendientes = loan.schedule.length - cuotasPagadas - cuotasFinanciadas
@@ -143,9 +151,6 @@ export default function EstadoCuentaPage() {
             <div><span className="text-gray-500">Cobrador: </span><span>{loan.cobrador.nombre}</span></div>
             <div><span className="text-gray-500">Desembolso: </span><span>{loan.fechaDesembolso ? formatDate(loan.fechaDesembolso) : '—'}</span></div>
             <div><span className="text-gray-500">Capital: </span><span className="font-bold">{formatMoney(loan.capital)}</span></div>
-            {loan.comision > 0 && <div><span className="text-gray-500">Comisión: </span><span>-{formatMoney(loan.comision)}</span></div>}
-            <div><span className="text-gray-500">Entregado: </span><span className="font-bold">{formatMoney(loan.montoReal)}</span></div>
-            <div><span className="text-gray-500">Total cobrado: </span><span className="font-bold text-green-700">{formatMoney(totalPagado)}</span></div>
             {!esConcluido && (
               <div><span className="text-gray-500">Saldo pendiente: </span><span className="font-bold text-amber-700">{formatMoney(saldoPendiente)}</span></div>
             )}
@@ -200,7 +205,7 @@ export default function EstadoCuentaPage() {
             <tfoot>
               <tr className="bg-gray-100 font-bold">
                 <td colSpan={3} className="border px-2 py-1">Total cobrado</td>
-                <td className="border px-2 py-1 text-right">{formatMoney(totalPagado)}</td>
+                <td className="border px-2 py-1 text-right">{formatMoney(totalCobrado)}</td>
                 <td colSpan={3} className="border px-2 py-1"></td>
               </tr>
               {!esConcluido && (

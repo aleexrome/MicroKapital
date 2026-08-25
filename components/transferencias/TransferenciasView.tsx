@@ -39,14 +39,14 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
   const { toast } = useToast()
   const [processing, setProcessing] = useState<string | null>(null)
 
-  // Para MC y GZ mostramos solo los pendientes que ellos deben verificar
-  // (así la bandeja no se llena con transferencias fuera de su alcance).
-  // DG/DC/SUPER_ADMIN ven todos los pendientes como referencia.
+  // Para MC y GZ mostramos solo las transferencias (pendientes y
+  // verificadas) que caen en las sucursales que ellos deben atender —
+  // así la vista es una bandeja limpia por rol.
+  // DG/DC/SUPER_ADMIN ven todo como referencia global.
   const esAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
-  const pendientes = rows.filter((r) =>
-    r.statusTransferencia === 'PENDIENTE' && (esAdmin || r.puedeVerificar),
-  )
-  const verificadas = rows.filter((r) => r.statusTransferencia === 'VERIFICADO')
+  const enScope = (r: TransferRow) => esAdmin || r.puedeVerificar
+  const pendientes = rows.filter((r) => r.statusTransferencia === 'PENDIENTE' && enScope(r))
+  const verificadas = rows.filter((r) => r.statusTransferencia === 'VERIFICADO' && enScope(r))
 
   async function handleVerify(paymentId: string) {
     setProcessing(paymentId)

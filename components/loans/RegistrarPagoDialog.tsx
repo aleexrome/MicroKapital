@@ -61,7 +61,7 @@ export function RegistrarPagoDialog({
 
   useEffect(() => {
     if (!open) return
-    fetch('/api/bank-accounts')
+    fetch(`/api/bank-accounts?loanId=${loanId}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.data?.length) {

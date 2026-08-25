@@ -62,9 +62,12 @@ export function LoanActivateButton({
   const [selectedAccount, setSelectedAccount] = useState('')
   const [idTransferencia, setIdTransferencia] = useState('')
 
-  // Fetch bank accounts on mount
+  // Fetch bank accounts on mount, filtradas a la sucursal del préstamo.
   useEffect(() => {
-    fetch(bankAccountsUrl)
+    const url = bankAccountsUrl.includes('?')
+      ? `${bankAccountsUrl}&loanId=${loanId}`
+      : `${bankAccountsUrl}?loanId=${loanId}`
+    fetch(url)
       .then((r) => r.json())
       .then((d) => {
         if (d.data?.length) {

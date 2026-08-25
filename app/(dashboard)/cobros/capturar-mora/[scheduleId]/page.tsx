@@ -60,7 +60,7 @@ export default function CapturarMoraPage({ params }: { params: { scheduleId: str
     fetch(`/api/payments/schedule/${params.scheduleId}`)
       .then((r) => r.json())
       .then((d) => { setSchedule(d.data); setLoadingSchedule(false) })
-    fetch('/api/bank-accounts')
+    fetch(`/api/bank-accounts?scheduleId=${params.scheduleId}`)
       .then((r) => r.json())
       .then((d) => { if (d.data?.length) { setBankAccounts(d.data); setSelectedAccount(d.data[0].id) } })
   }, [params.scheduleId])

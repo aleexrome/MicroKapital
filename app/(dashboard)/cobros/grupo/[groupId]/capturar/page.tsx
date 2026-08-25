@@ -87,7 +87,7 @@ export default function CapturarGrupoPage() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
-    fetch('/api/bank-accounts')
+    fetch(`/api/bank-accounts?groupId=${groupId}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.data?.length) {

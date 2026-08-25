@@ -22,6 +22,10 @@ export interface TransferRow {
   verificadoPor: { nombre: string } | null
   client: { nombreCompleto: string }
   loan: { tipo: string }
+  /** Este viewer puede verificar ESTA fila específica (respeta la flag
+   *  verificacionCentralizada de la sucursal del préstamo). */
+  puedeVerificar: boolean
+  sucursalNombre: string
 }
 
 interface Props {
@@ -122,9 +126,10 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
                             {p.cuentaDestino.banco} — CLABE: {p.cuentaDestino.clabe}
                           </p>
                         )}
+                        <p><span className="text-muted-foreground">Sucursal:</span> {p.sucursalNombre}</p>
                       </div>
                     </div>
-                    {puedeVerificar && (
+                    {p.puedeVerificar ? (
                       <Button
                         size="sm"
                         variant="success"
@@ -135,7 +140,13 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
                           ? <Loader2 className="h-4 w-4 animate-spin" />
                           : <><CheckCircle className="h-4 w-4" /> Verificar</>}
                       </Button>
-                    )}
+                    ) : puedeVerificar ? (
+                      // El usuario puede verificar en general, pero no ESTA
+                      // (sucursal centralizada fuera de su alcance).
+                      <span className="text-xs italic text-muted-foreground shrink-0">
+                        Verifica Dirección / Mesa de Control
+                      </span>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>

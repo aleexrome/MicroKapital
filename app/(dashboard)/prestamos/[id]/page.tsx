@@ -602,8 +602,14 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             </div>
           )}
 
-          {/* Gerente verificando transferencia pendiente — flujo legacy del activate */}
-          {loan.estado === 'IN_ACTIVATION' && loan.seguroPendiente && (rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN') && (
+          {/* Verificador de transferencia pendiente. DG/DC/MC pueden en
+              cualquier sucursal; GZ/GERENTE solo si la sucursal no es
+              centralizada — el server aplica el bloqueo real. */}
+          {loan.estado === 'IN_ACTIVATION' && loan.seguroPendiente && (
+            rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' ||
+            rol === 'MESA_CONTROL' ||
+            rol === 'GERENTE' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN'
+          ) && (
             <div className="pt-1">
               <LoanActivateButton
                 loanId={loan.id}

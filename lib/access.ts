@@ -212,3 +212,35 @@ export function canViewInterestData(rol: UserRole): boolean {
     || rol === 'DIRECTOR_COMERCIAL'
     || rol === 'SUPER_ADMIN'
 }
+
+/**
+ * Puede este usuario verificar la transferencia PENDIENTE de un pago
+ * capturado en la sucursal dada?
+ *
+ * Reglas:
+ * - DG / DC / MC / SUPER_ADMIN: pueden verificar en cualquier sucursal.
+ * - GERENTE_ZONAL / GERENTE: pueden verificar SOLO si la sucursal NO
+ *   está marcada como verificacionCentralizada, y su zona incluye esa
+ *   sucursal.
+ * - Cualquier otro rol: no puede.
+ *
+ * `branch.verificacionCentralizada` proviene de Direccion: hoy es true
+ * para Veracruz, Minatitlán y Martínez de la Torre (las verifica
+ * Stephanie o Carol).
+ */
+export function canVerifyTransfer(
+  user: AccessUser,
+  branch: { id: string; verificacionCentralizada: boolean },
+): boolean {
+  const rol = user.rol
+  if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
+      || rol === 'MESA_CONTROL' || rol === 'SUPER_ADMIN') return true
+  if (rol === 'GERENTE_ZONAL' || rol === 'GERENTE') {
+    if (branch.verificacionCentralizada) return false
+    const zones = user.zonaBranchIds?.length
+      ? user.zonaBranchIds
+      : user.branchId ? [user.branchId] : []
+    return zones.includes(branch.id)
+  }
+  return false
+}

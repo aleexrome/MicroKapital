@@ -142,12 +142,27 @@ export async function POST(
   const fechaDesembolso = loan.fechaDesembolso
     ?? (data.fechaDesembolso ? parseMxYMD(data.fechaDesembolso) : todayMx())
 
-  // Gerente verifica transferencia pendiente: no tiene metodoPago, loan ya tiene seguroPendiente
+  // Verificador confirma transferencia pendiente: no tiene metodoPago,
+  // loan ya tiene seguroPendiente. Roles permitidos:
+  //   - DG / DC / MC / SUPER_ADMIN: en cualquier sucursal.
+  //   - GERENTE_ZONAL / GERENTE: solo si la sucursal del préstamo NO
+  //     está marcada como verificacionCentralizada (Veracruz, Minatitlán,
+  //     MdlT quedan reservadas para Stephanie o Carol).
   if (!data.metodoPago && loan.seguroPendiente) {
-    // Verificar que el rol pueda verificar transferencias
-    const rolesVerificacion = ['GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN']
+    const rolesVerificacion = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'MESA_CONTROL', 'GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN']
     if (!rolesVerificacion.includes(rol)) {
       return NextResponse.json({ error: 'Sin permisos para verificar transferencias' }, { status: 403 })
+    }
+    if (rol === 'GERENTE' || rol === 'GERENTE_ZONAL') {
+      const branch = await prisma.branch.findUnique({
+        where: { id: loan.branchId },
+        select: { verificacionCentralizada: true },
+      })
+      if (branch?.verificacionCentralizada) {
+        return NextResponse.json({
+          error: 'Las transferencias de esta sucursal deben ser verificadas por Dirección General o Mesa de Control.',
+        }, { status: 403 })
+      }
     }
 
     // Marcar el pago de transferencia como verificado

@@ -153,6 +153,12 @@ model Branch {
   telefono  String?
   activa    Boolean  @default(true)
   createdAt DateTime @default(now())
+  // Cuando es true, las transferencias que caen en esta sucursal SOLO
+  // pueden ser verificadas por DG, DC, MC o SUPER_ADMIN. El GZ de la
+  // zona queda excluido. Nace del ajuste de Dirección: Veracruz,
+  // Minatitlán y Martínez de la Torre las verifica Stephanie o Carol,
+  // no los gerentes locales.
+  verificacionCentralizada Boolean @default(false)
 
   users         User[]
   clients       Client[]
@@ -626,11 +632,9 @@ model CompanyBankAccount {
   branches BankAccountBranch[]
 }
 
-/**
- * Tabla puente cuenta-bancaria ↔ sucursal. Una cuenta puede estar
- * asignada a varias sucursales (ej. una cuenta central usada por 4
- * sucursales) y cada sucursal ve solo las cuentas asignadas.
- */
+// Tabla puente cuenta-bancaria ↔ sucursal. Una cuenta puede estar
+// asignada a varias sucursales (ej. una cuenta central usada por 4
+// sucursales) y cada sucursal ve solo las cuentas asignadas.
 model BankAccountBranch {
   bankAccountId String
   bankAccount   CompanyBankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)

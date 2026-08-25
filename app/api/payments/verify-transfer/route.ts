@@ -21,10 +21,13 @@ export async function POST(req: NextRequest) {
   // Quiénes pueden verificar transferencias:
   //   - DIRECTOR_GENERAL / DIRECTOR_COMERCIAL: autoridad máxima, sin
   //     restricción de sucursal.
-  //   - GERENTE_ZONAL / GERENTE: solo en las sucursales de su zona.
+  //   - MESA_CONTROL: autoridad de verificación cruzada — puede en cualquier
+  //     sucursal (Direccion pidio que Carol pueda cubrir a los GZ).
+  //   - GERENTE_ZONAL / GERENTE: solo en sucursales de su zona Y solo si
+  //     la sucursal NO está marcada como verificacionCentralizada.
   //   - SUPER_ADMIN: técnico.
   // Coordinadores y cobradores NO pueden verificar (capturan, no aprueban).
-  const rolesPermitidos = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE_ZONAL', 'GERENTE', 'SUPER_ADMIN']
+  const rolesPermitidos = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'MESA_CONTROL', 'GERENTE_ZONAL', 'GERENTE', 'SUPER_ADMIN']
   if (!rolesPermitidos.includes(rol)) {
     return NextResponse.json({ error: 'Sin permisos para verificar transferencias' }, { status: 403 })
   }
@@ -35,7 +38,8 @@ export async function POST(req: NextRequest) {
 
   const { paymentId } = parsed.data
 
-  // Scope de sucursal — gerente solo puede verificar pagos de su sucursal
+  // Scope de sucursal — GZ/GERENTE solo verifica en su zona; además
+  // quedan bloqueados en sucursales con verificacionCentralizada=true.
   const branchScope: Record<string, unknown> = {}
   if (rol === 'GERENTE' || rol === 'GERENTE_ZONAL') {
     const branchIds = session.user.zonaBranchIds?.length
@@ -56,7 +60,7 @@ export async function POST(req: NextRequest) {
       loan: {
         include: {
           client: true,
-          branch: { select: { nombre: true } },
+          branch: { select: { id: true, nombre: true, verificacionCentralizada: true } },
           schedule: { where: { estado: { in: ['PENDING', 'OVERDUE', 'PARTIAL'] } } },
         },
       },
@@ -65,6 +69,16 @@ export async function POST(req: NextRequest) {
 
   if (!payment || !payment.schedule) {
     return NextResponse.json({ error: 'Pago no encontrado o ya verificado' }, { status: 404 })
+  }
+
+  // Bloqueo específico para GZ/GERENTE en sucursales centralizadas
+  // (Veracruz, Minatitlán, Martínez de la Torre). Esas las verifican
+  // Stephanie o Carol.
+  if ((rol === 'GERENTE' || rol === 'GERENTE_ZONAL')
+      && payment.loan.branch.verificacionCentralizada) {
+    return NextResponse.json({
+      error: 'Las transferencias de esta sucursal deben ser verificadas por Dirección General o Mesa de Control.',
+    }, { status: 403 })
   }
 
   const verificador = await prisma.user.findFirst({

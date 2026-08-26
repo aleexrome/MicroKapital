@@ -190,6 +190,11 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   // Mapa de scheduleId → tickets (original + reimpresiones) para mostrar botones "Ver ticket"
   type TicketItem = { numeroTicket: string; esReimpresion: boolean; impresoAt: string }
   const ticketMap: Record<string, TicketItem[]> = {}
+  // Mapa de scheduleId → cada Payment individual, para desglosar
+  // parciales debajo del pago en el calendario ("Pago 5 · $200 el 12/03,
+  // $300 el 15/03, adeudo $400").
+  type ParcialItem = { id: string; monto: number; fechaHora: string; ticketNumero: string | null }
+  const parcialesMap: Record<string, ParcialItem[]> = {}
 
   const puedeVerInfoPago = canViewInterestData(rol)
 
@@ -243,13 +248,22 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       }
     }
 
-    // Tickets — independiente del rol, todos los ven en sus filas
+    // Tickets + parciales — independiente del rol, todos los ven en sus filas
     const pagos = await prisma.payment.findMany({
       where: { scheduleId: { in: scheduleIds } },
-      select: { id: true, scheduleId: true },
+      select: {
+        id: true, scheduleId: true, monto: true, fechaHora: true,
+        tickets: {
+          where: { anulado: false, esReimpresion: false },
+          select: { numeroTicket: true },
+          take: 1,
+        },
+      },
+      orderBy: { fechaHora: 'asc' },
     })
     const paymentIds = pagos.map((p) => p.id)
     if (paymentIds.length > 0) {
+      // Ticket map (los que se muestran en el schedule row: todos, incluso reimpresiones)
       const tickets = await prisma.ticket.findMany({
         where: { paymentId: { in: paymentIds }, anulado: false },
         select: { paymentId: true, numeroTicket: true, esReimpresion: true, impresoAt: true },
@@ -264,10 +278,21 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           impresoAt: t.impresoAt.toISOString(),
         })
       }
+      // Parciales map: cada Payment del schedule con su monto/fecha/ticket.
+      // Si un schedule tiene un solo Payment (caso más común), igual va —
+      // la UI decide si desglosa según cuántos parciales tenga.
       for (const p of pagos) {
-        if (p.scheduleId && paymentToTickets[p.id]) {
+        if (!p.scheduleId) continue
+        if (paymentToTickets[p.id]) {
           ticketMap[p.scheduleId] = paymentToTickets[p.id]
         }
+        if (!parcialesMap[p.scheduleId]) parcialesMap[p.scheduleId] = []
+        parcialesMap[p.scheduleId].push({
+          id: p.id,
+          monto: Number(p.monto),
+          fechaHora: p.fechaHora.toISOString(),
+          ticketNumero: p.tickets[0]?.numeroTicket ?? null,
+        })
       }
     }
   }
@@ -906,10 +931,12 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                   numeroPago: s.numeroPago,
                   fechaVencimiento: s.fechaVencimiento,
                   montoEsperado: Number(s.montoEsperado),
+                  montoPagado: Number(s.montoPagado ?? 0),
                   estado: s.estado as ScheduleStatus,
                   pagadoAt: s.pagadoAt ?? null,
                   paymentInfo: paymentInfoMap[s.id],
                   tickets: ticketMap[s.id] ?? [],
+                  parciales: parcialesMap[s.id] ?? [],
                   moras: ms.map((m) => ({
                     id: m.id,
                     tipo: m.tipo as 'MULTA' | 'MORA',

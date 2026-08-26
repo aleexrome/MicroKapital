@@ -26,7 +26,11 @@ export function ReprintTicketButton({ ticketId }: ReprintTicketButtonProps) {
       }
       const { data } = await res.json()
       toast({ title: 'Reimpresion generada', description: `Nuevo ticket: ${data.numeroTicket}` })
-      router.push(`/verificar/${encodeURIComponent(data.numeroTicket)}`)
+      // Vamos directo al flujo de impresion (Bluetooth / PDF), no a otra
+      // vista de verificacion. Antes ibamos a /verificar y los usuarios
+      // pensaban que no funcionaba y le picaban Reimprimir varias veces
+      // generando duplicados sin que saliera fisicamente el ticket.
+      router.push(`/thermal-print?ticketId=${data.id}`)
     } catch (err) {
       toast({
         title: 'Error',

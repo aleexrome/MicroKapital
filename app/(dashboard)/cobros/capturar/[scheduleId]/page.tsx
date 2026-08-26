@@ -17,6 +17,7 @@ interface ScheduleDetail {
   id: string
   numeroPago: number
   montoEsperado: string
+  montoPagado: string
   fechaVencimiento: string
   loan: {
     id: string
@@ -39,14 +40,21 @@ interface BankAccount {
   numeroCuenta: string
 }
 
-type PaymentStep = 'method' | 'cash_calc' | 'confirm_card' | 'confirm_transfer' | 'done' | 'transfer_pending'
+type PaymentStep = 'modo' | 'method' | 'cash_calc' | 'confirm_card' | 'confirm_transfer' | 'done' | 'transfer_pending'
+type ModoCobro = 'total' | 'parcial'
 
 export default function CapturarPagoPage({ params }: { params: { scheduleId: string } }) {
   const router = useRouter()
   const { toast } = useToast()
   const [schedule, setSchedule] = useState<ScheduleDetail | null>(null)
   const [loadingSchedule, setLoadingSchedule] = useState(true)
-  const [step, setStep] = useState<PaymentStep>('method')
+  // Flujo: primero se elige Total vs Parcial (arma el monto a cobrar),
+  // luego se elige el método (efectivo/tarjeta/transferencia).
+  const [step, setStep] = useState<PaymentStep>('modo')
+  const [modo, setModo] = useState<ModoCobro | null>(null)
+  // Monto en pesos como string (facilita input libre). Se valida contra
+  // el faltante al confirmar.
+  const [montoInput, setMontoInput] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
   const [ticketData, setTicketData] = useState<TicketData | null>(null)
   const [ticketId, setTicketId] = useState<string | null>(null)
@@ -71,13 +79,19 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
     cambio?: number
   ) {
     if (!schedule) return
+    // Requiere haber definido monto (via modo).
+    const montoAPagar = getMontoAPagar()
+    if (montoAPagar <= 0) {
+      toast({ title: 'Monto inválido', variant: 'destructive' })
+      return
+    }
     setSubmitting(true)
 
     try {
       const body: Record<string, unknown> = {
         scheduleId: schedule.id,
         metodoPago,
-        monto: Number(schedule.montoEsperado),
+        monto: montoAPagar,
         cambioEntregado: cambio ?? 0,
         cashBreakdown: cashBreakdown ?? [],
       }
@@ -120,9 +134,9 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
         tipoPrestamo: schedule.loan.tipo,
         numeroPago: schedule.numeroPago,
         totalPagos: schedule.loan.plazo,
-        montoPagado: Number(schedule.montoEsperado),
+        montoPagado: montoAPagar,
         metodoPago: metodoPago === 'CASH' ? 'Efectivo' : metodoPago === 'CARD' ? 'Tarjeta' : 'Transferencia',
-        recibido: metodoPago === 'CASH' ? Number(schedule.montoEsperado) + (cambio ?? 0) : undefined,
+        recibido: metodoPago === 'CASH' ? montoAPagar + (cambio ?? 0) : undefined,
         cambio: cambio,
         desglose: cashBreakdown,
         qrCode: data.ticket.qrCode,
@@ -159,7 +173,23 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
     )
   }
 
-  const monto = Number(schedule.montoEsperado)
+  // Faltante = lo que aun se puede cobrar en esta cuota. Al elegir
+  // Total precargamos justamente el faltante; al elegir Parcial el
+  // coord ingresa un monto libre pero acotado a este maximo.
+  const montoEsperado = Number(schedule.montoEsperado)
+  const montoYaPagado = Number(schedule.montoPagado ?? 0)
+  const montoFaltante = Math.max(0, montoEsperado - montoYaPagado)
+  // Monto que efectivamente cobraremos en este submit — depende del modo.
+  function getMontoAPagar(): number {
+    if (modo === 'total') return montoFaltante
+    if (modo === 'parcial') {
+      const n = Number(montoInput)
+      if (!Number.isFinite(n) || n <= 0) return 0
+      return Math.min(n, montoFaltante)
+    }
+    return 0
+  }
+  const monto = getMontoAPagar() || montoFaltante
 
   // ── PASO: TRANSFERENCIA PENDIENTE DE VERIFICACIÓN ──────────────────────────
   if (step === 'transfer_pending') {
@@ -243,36 +273,115 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
             <span className="text-sm text-muted-foreground">Pago {schedule.numeroPago}/{schedule.loan.plazo}</span>
           </div>
           <div className="mt-3 text-center">
-            <p className="text-xs text-muted-foreground">Monto a cobrar</p>
+            <p className="text-xs text-muted-foreground">
+              {modo === 'parcial' ? 'Cobro parcial — monto a cobrar' : 'Monto a cobrar'}
+            </p>
             <p className="text-3xl font-bold text-primary-700 money">{formatMoney(monto)}</p>
+            {montoYaPagado > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Ya cobrado <strong className="text-emerald-700">{formatMoney(montoYaPagado)}</strong> de {formatMoney(montoEsperado)} · faltante <strong className="text-amber-700">{formatMoney(montoFaltante)}</strong>
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
 
+      {/* ── ELECCIÓN DE MODO: TOTAL vs PARCIAL ─────────────────────────────── */}
+      {step === 'modo' && (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-gray-800">
+            ¿Cuánto va a pagar el cliente?
+          </p>
+          <button
+            type="button"
+            onClick={() => { setModo('total'); setMontoInput(''); setStep('method') }}
+            className="w-full text-left rounded-xl border-2 border-gray-200 hover:border-primary-400 hover:bg-primary-50 transition-colors p-4"
+          >
+            <p className="font-semibold text-primary-700">Cobro total</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Cobra el faltante completo: <strong className="text-primary-700 money">{formatMoney(montoFaltante)}</strong>
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setModo('parcial')}
+            className={`w-full text-left rounded-xl border-2 transition-colors p-4 ${
+              modo === 'parcial'
+                ? 'border-amber-500 bg-amber-50'
+                : 'border-gray-200 hover:border-amber-400 hover:bg-amber-50/50'
+            }`}
+          >
+            <p className="font-semibold text-amber-700">Cobro parcial</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              El cliente da un monto menor. Puedes capturar cuantos parciales necesites hasta liquidar la cuota.
+            </p>
+          </button>
+
+          {modo === 'parcial' && (
+            <div className="space-y-2 border-t border-border/40 pt-3">
+              <label className="text-sm font-medium">Monto que trae el cliente</label>
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-amber-700">$</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={1}
+                  max={montoFaltante}
+                  step="1"
+                  placeholder="0.00"
+                  value={montoInput}
+                  onChange={(e) => setMontoInput(e.target.value)}
+                  className="flex-1 rounded-lg border-2 border-amber-300 focus:border-amber-500 focus:outline-none px-3 py-2 text-lg font-semibold"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Máximo permitido: <strong>{formatMoney(montoFaltante)}</strong>
+              </p>
+              <Button
+                className="w-full"
+                disabled={getMontoAPagar() <= 0}
+                onClick={() => setStep('method')}
+              >
+                Continuar
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── SELECCIÓN DE MÉTODO ────────────────────────────────────────────── */}
       {step === 'method' && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-3">
           <button
-            onClick={() => setStep('cash_calc')}
-            className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-gray-200 hover:border-primary-400 hover:bg-primary-50 transition-colors"
+            type="button"
+            onClick={() => setStep('modo')}
+            className="text-xs text-primary-700 hover:underline"
           >
-            <Banknote className="h-7 w-7 text-primary-600" />
-            <span className="font-medium text-sm">Efectivo</span>
+            ← Cambiar monto
           </button>
-          <button
-            onClick={() => setStep('confirm_card')}
-            className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-gray-200 hover:border-primary-400 hover:bg-primary-50 transition-colors"
-          >
-            <CreditCard className="h-7 w-7 text-primary-600" />
-            <span className="font-medium text-sm">Tarjeta</span>
-          </button>
-          <button
-            onClick={() => setStep('confirm_transfer')}
-            className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-gray-200 hover:border-primary-400 hover:bg-primary-50 transition-colors"
-          >
-            <Building2 className="h-7 w-7 text-primary-600" />
-            <span className="font-medium text-sm">Transferencia</span>
-          </button>
+          <div className="grid grid-cols-3 gap-3">
+            <button
+              onClick={() => setStep('cash_calc')}
+              className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-gray-200 hover:border-primary-400 hover:bg-primary-50 transition-colors"
+            >
+              <Banknote className="h-7 w-7 text-primary-600" />
+              <span className="font-medium text-sm">Efectivo</span>
+            </button>
+            <button
+              onClick={() => setStep('confirm_card')}
+              className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-gray-200 hover:border-primary-400 hover:bg-primary-50 transition-colors"
+            >
+              <CreditCard className="h-7 w-7 text-primary-600" />
+              <span className="font-medium text-sm">Tarjeta</span>
+            </button>
+            <button
+              onClick={() => setStep('confirm_transfer')}
+              className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-gray-200 hover:border-primary-400 hover:bg-primary-50 transition-colors"
+            >
+              <Building2 className="h-7 w-7 text-primary-600" />
+              <span className="font-medium text-sm">Transferencia</span>
+            </button>
+          </div>
         </div>
       )}
 

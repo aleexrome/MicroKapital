@@ -57,10 +57,23 @@ interface ScheduleItem {
   numeroPago: number
   fechaVencimiento: Date | string
   montoEsperado: number
+  /** Suma acumulada de todos los parciales cobrados en esta cuota.
+   *  Opcional para retro-compatibilidad con vistas que no envían el
+   *  desglose (ej. GrupoCalendar); si no viene, se asume 0. */
+  montoPagado?: number
   estado: ScheduleStatus
   pagadoAt?: Date | string | null
   paymentInfo?: PaymentInfo
   tickets?: { numeroTicket: string; esReimpresion: boolean; impresoAt: string }[]
+  /** Historial de cada parcial cobrado (fecha, monto, ticket). Se
+   *  muestra desglosado en sub-filas cuando hay más de un cobro o
+   *  cuando la cuota está en PARTIAL. */
+  parciales?: Array<{
+    id: string
+    monto: number
+    fechaHora: string
+    ticketNumero: string | null
+  }>
   /** Moras/multas asociadas al pago. Puede haber hasta 2 (una MULTA y
    *  una MORA) porque el mismo schedule puede acumular ambos recargos. */
   moras?: Array<{
@@ -404,6 +417,50 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
               <p><span className="font-semibold">Fecha y hora:</span> {new Date(s.paymentInfo.cuando).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
             </div>
           )}
+
+          {/* Desglose de parciales — se muestra cuando hay más de un
+              cobro en la cuota, o cuando está en estado PARTIAL (aunque
+              sea un solo cobro). Cada sub-fila indica fecha, monto y
+              ticket. Al final se agrega una línea con el adeudo actual. */}
+          {(() => {
+            const parciales = s.parciales ?? []
+            const mostrarDesglose = parciales.length > 1 || s.estado === 'PARTIAL'
+            if (!mostrarDesglose || parciales.length === 0) return null
+            const adeudo = Math.max(0, s.montoEsperado - (s.montoPagado ?? 0))
+            return (
+              <div className="ml-7 mt-1 mb-1 pl-2 border-l-2 border-dashed border-emerald-400/40 space-y-1">
+                {parciales.map((p, i) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-2 text-xs text-emerald-900"
+                  >
+                    <span className="text-muted-foreground shrink-0">
+                      {i + 1 === parciales.length ? '└─' : '├─'}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {new Date(p.fechaHora).toLocaleString('es-MX', {
+                        day: '2-digit', month: '2-digit', year: '2-digit',
+                        hour: '2-digit', minute: '2-digit',
+                      })}
+                    </span>
+                    <span className="font-medium text-emerald-700">{formatMoney(p.monto)}</span>
+                    {p.ticketNumero && (
+                      <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                        {p.ticketNumero}
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {adeudo > 0 && (
+                  <div className="flex items-center gap-2 text-xs pt-1 border-t border-border/30">
+                    <span className="text-muted-foreground shrink-0">→</span>
+                    <span className="text-muted-foreground">Adeudo de esta cuota:</span>
+                    <span className="ml-auto font-semibold text-amber-700">{formatMoney(adeudo)}</span>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Sub-filas de multa y mora — indentadas bajo el pago.
               Cada schedule puede tener HASTA DOS moras cobrables (una

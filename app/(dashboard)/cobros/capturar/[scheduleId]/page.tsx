@@ -276,10 +276,10 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
             <p className="text-xs text-muted-foreground">
               {modo === 'parcial' ? 'Cobro parcial — monto a cobrar' : 'Monto a cobrar'}
             </p>
-            <p className="text-3xl font-bold text-primary-700 money">{formatMoney(monto)}</p>
+            <p className="text-3xl font-bold text-primary-400 money">{formatMoney(monto)}</p>
             {montoYaPagado > 0 && (
               <p className="mt-1 text-xs text-muted-foreground">
-                Ya cobrado <strong className="text-emerald-700">{formatMoney(montoYaPagado)}</strong> de {formatMoney(montoEsperado)} · faltante <strong className="text-amber-700">{formatMoney(montoFaltante)}</strong>
+                Ya cobrado <strong className="text-emerald-400">{formatMoney(montoYaPagado)}</strong> de {formatMoney(montoEsperado)} · faltante <strong className="text-amber-400">{formatMoney(montoFaltante)}</strong>
               </p>
             )}
           </div>
@@ -289,17 +289,17 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
       {/* ── ELECCIÓN DE MODO: TOTAL vs PARCIAL ─────────────────────────────── */}
       {step === 'modo' && (
         <div className="space-y-3">
-          <p className="text-sm font-medium text-gray-800">
+          <p className="text-sm font-medium text-foreground">
             ¿Cuánto va a pagar el cliente?
           </p>
           <button
             type="button"
             onClick={() => { setModo('total'); setMontoInput(''); setStep('method') }}
-            className="w-full text-left rounded-xl border-2 border-gray-200 hover:border-primary-400 hover:bg-primary-50 transition-colors p-4"
+            className="w-full text-left rounded-xl border-2 border-border hover:border-primary-500/60 hover:bg-primary-500/10 transition-colors p-4"
           >
-            <p className="font-semibold text-primary-700">Cobro total</p>
+            <p className="font-semibold text-primary-400">Cobro total</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Cobra el faltante completo: <strong className="text-primary-700 money">{formatMoney(montoFaltante)}</strong>
+              Cobra el faltante completo: <strong className="text-primary-400 money">{formatMoney(montoFaltante)}</strong>
             </p>
           </button>
           <button
@@ -307,11 +307,11 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
             onClick={() => setModo('parcial')}
             className={`w-full text-left rounded-xl border-2 transition-colors p-4 ${
               modo === 'parcial'
-                ? 'border-amber-500 bg-amber-50'
-                : 'border-gray-200 hover:border-amber-400 hover:bg-amber-50/50'
+                ? 'border-amber-400/60 bg-amber-500/10'
+                : 'border-border hover:border-amber-400/60 hover:bg-amber-500/5'
             }`}
           >
-            <p className="font-semibold text-amber-700">Cobro parcial</p>
+            <p className="font-semibold text-amber-400">Cobro parcial</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               El cliente da un monto menor. Puedes capturar cuantos parciales necesites hasta liquidar la cuota.
             </p>
@@ -319,9 +319,9 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
 
           {modo === 'parcial' && (
             <div className="space-y-2 border-t border-border/40 pt-3">
-              <label className="text-sm font-medium">Monto que trae el cliente</label>
+              <label className="text-sm font-medium text-foreground">Monto que trae el cliente</label>
               <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-amber-700">$</span>
+                <span className="text-lg font-bold text-amber-400">$</span>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -331,11 +331,11 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
                   placeholder="0.00"
                   value={montoInput}
                   onChange={(e) => setMontoInput(e.target.value)}
-                  className="flex-1 rounded-lg border-2 border-amber-300 focus:border-amber-500 focus:outline-none px-3 py-2 text-lg font-semibold"
+                  className="flex-1 rounded-lg border-2 border-amber-400/40 focus:border-amber-400 focus:outline-none bg-background text-foreground px-3 py-2 text-lg font-semibold"
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Máximo permitido: <strong>{formatMoney(montoFaltante)}</strong>
+                Máximo permitido: <strong className="text-foreground">{formatMoney(montoFaltante)}</strong>
               </p>
               <Button
                 className="w-full"
@@ -355,7 +355,7 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
           <button
             type="button"
             onClick={() => setStep('modo')}
-            className="text-xs text-primary-700 hover:underline"
+            className="text-xs text-primary-400 hover:underline"
           >
             ← Cambiar monto
           </button>

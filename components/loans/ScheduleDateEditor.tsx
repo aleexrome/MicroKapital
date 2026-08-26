@@ -432,7 +432,7 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
                 {parciales.map((p, i) => (
                   <div
                     key={p.id}
-                    className="flex items-center gap-2 text-xs text-emerald-900"
+                    className="flex items-center gap-2 text-xs"
                   >
                     <span className="text-muted-foreground shrink-0">
                       {i + 1 === parciales.length ? '└─' : '├─'}
@@ -443,7 +443,7 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
                         hour: '2-digit', minute: '2-digit',
                       })}
                     </span>
-                    <span className="font-medium text-emerald-700">{formatMoney(p.monto)}</span>
+                    <span className="font-medium text-emerald-400">{formatMoney(p.monto)}</span>
                     {p.ticketNumero && (
                       <span className="ml-auto text-[10px] text-muted-foreground font-mono">
                         {p.ticketNumero}
@@ -455,7 +455,7 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
                   <div className="flex items-center gap-2 text-xs pt-1 border-t border-border/30">
                     <span className="text-muted-foreground shrink-0">→</span>
                     <span className="text-muted-foreground">Adeudo de esta cuota:</span>
-                    <span className="ml-auto font-semibold text-amber-700">{formatMoney(adeudo)}</span>
+                    <span className="ml-auto font-semibold text-amber-400">{formatMoney(adeudo)}</span>
                   </div>
                 )}
               </div>

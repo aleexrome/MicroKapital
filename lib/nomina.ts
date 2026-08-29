@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
+import { loanNotDeletedWhere } from '@/lib/access'
 import {
   GERENTES_AGREGADOS_POR_SUCURSAL,
   metaColocacion,
@@ -156,7 +157,14 @@ export async function calcularNominaSemana(
       where: {
         fechaVencimiento: { gte: saturday, lte: friday },
         estado: { not: 'FINANCIADO' },
-        loan: { companyId, estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] } },
+        loan: {
+          companyId,
+          estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
+          // Sin este filtro la nómina pagaría comisiones/bonos por pagos
+          // de clientes o grupos soft-deleted que la coordinadora no ve
+          // en su propia ruta.
+          AND: [loanNotDeletedWhere],
+        },
       },
       select: {
         montoEsperado: true,
@@ -173,6 +181,7 @@ export async function calcularNominaSemana(
         companyId,
         fechaDesembolso: { gte: saturday, lte: cutoff },
         estado: { in: ['ACTIVE', 'LIQUIDATED'] },
+        AND: [loanNotDeletedWhere],
       },
       select: {
         id: true,

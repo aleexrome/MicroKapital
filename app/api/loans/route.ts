@@ -31,6 +31,11 @@ const createLoanSchema = z.object({
   avalNombre: z.string().optional(),
   avalTelefono: z.string().optional(),
   avalRelacion: z.string().optional(),
+  // Propuesta del coord del día y hora de cobro. Opcional: si no llega,
+  // caemos al default de la sucursal (BranchContractConfig). DG puede
+  // editar después al aprobar.
+  diaCobro: z.enum(['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO', 'DOMINGO']).optional(),
+  horaLimiteCobro: z.string().regex(/^\d{2}:\d{2}$/, 'Formato HH:MM').optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -191,8 +196,9 @@ export async function POST(req: NextRequest) {
         avalNombre: data.avalNombre ?? null,
         avalTelefono: data.avalTelefono ?? null,
         avalRelacion: data.avalRelacion ?? null,
-        diaCobro: branchDefaults?.diaCobro ?? null,
-        horaLimiteCobro: branchDefaults?.horaLimiteCobro ?? null,
+        // Coord elige día/hora — si no vienen, cae al default de sucursal.
+        diaCobro: data.diaCobro ?? branchDefaults?.diaCobro ?? null,
+        horaLimiteCobro: data.horaLimiteCobro ?? branchDefaults?.horaLimiteCobro ?? null,
         notas: data.notas ?? null,
       },
     })

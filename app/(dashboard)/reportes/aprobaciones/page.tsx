@@ -10,6 +10,7 @@ import { ArrowLeft, ClipboardList, AlertTriangle } from 'lucide-react'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { parseMxYMD, todayMx } from '@/lib/timezone'
 import { ImprimirReporteButton, type SeccionReporte } from '@/components/reportes/ImprimirReporteButton'
+import { EditableFechaPrimerPago } from '@/components/reportes/EditableFechaPrimerPago'
 import type { Prisma } from '@prisma/client'
 
 const ALLOWED_ROLES = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'] as const
@@ -322,8 +323,11 @@ export default async function ReporteAprobacionesPage({
                       <td className={`px-4 py-2 text-xs ${l.fechaDesembolso ? 'text-muted-foreground' : 'text-amber-500 font-medium'}`}>
                         {l.fechaDesembolso ? formatDate(l.fechaDesembolso) : '⚠ Falta'}
                       </td>
-                      <td className={`px-4 py-2 text-xs ${l.fechaPrimerPago ? 'text-muted-foreground' : 'text-amber-500 font-medium'}`}>
-                        {l.fechaPrimerPago ? formatDate(l.fechaPrimerPago) : '⚠ Falta'}
+                      <td className="px-4 py-2 text-xs">
+                        <EditableFechaPrimerPago
+                          loanId={l.id}
+                          fechaActual={l.fechaPrimerPago}
+                        />
                       </td>
                     </tr>
                   )

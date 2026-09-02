@@ -135,3 +135,77 @@ export function generarFechasQuincenales(fechaInicio: Date, cantidad: number): D
   }
   return fechas
 }
+
+/**
+ * Genera N fechas quincenales para créditos FIDUCIARIO con la regla
+ * bimensual fija: los pagos SIEMPRE caen el 15 y el 30 de cada mes.
+ *
+ * Reglas:
+ *   - Desembolso día 1..14  → primer pago = 15 del mismo mes.
+ *   - Desembolso día 15     → primer pago = 30 del mismo mes.
+ *   - Desembolso día 16..29 → primer pago = 30 del mismo mes.
+ *   - Desembolso día 30+    → primer pago = 15 del mes siguiente.
+ *   - Los siguientes pagos alternan 15 ↔ 30 (cada vez que se toca el 30
+ *     avanzamos al 15 del mes siguiente).
+ *   - En febrero, el "30" se sustituye por el último día real del mes
+ *     (28 o 29 en bisiesto).
+ *   - Si un pago cae en sábado o domingo se recorre al viernes anterior
+ *     inmediato. El día "conceptual" (15 ó 30) no cambia — solo la
+ *     fecha final de pago.
+ */
+export function generarFechasFiduciario(fechaDesembolso: Date, cantidad: number): Date[] {
+  const d = fechaDesembolso.getUTCDate()
+  let year = fechaDesembolso.getUTCFullYear()
+  let month = fechaDesembolso.getUTCMonth()
+  // Día conceptual del próximo pago: 15 (primera quincena) o 30 (segunda).
+  let dayConcept: 15 | 30
+
+  if (d < 15) {
+    dayConcept = 15
+  } else if (d < 30) {
+    // Incluye día 15 (según regla: desembolso ese mismo día → siguiente = 30).
+    dayConcept = 30
+  } else {
+    dayConcept = 15
+    // Avanzar al mes siguiente.
+    const next = new Date(Date.UTC(year, month + 1, 1))
+    year = next.getUTCFullYear()
+    month = next.getUTCMonth()
+  }
+
+  const fechas: Date[] = []
+  for (let i = 0; i < cantidad; i++) {
+    // Fecha "conceptual" — el 30 se recorta al último día real del mes si
+    // no llega (febrero 28/29).
+    let dayReal: number = dayConcept
+    if (dayConcept === 30) {
+      const probe = new Date(Date.UTC(year, month, 30))
+      if (probe.getUTCMonth() !== month) {
+        // No hubo día 30 → último día del mes.
+        dayReal = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+      }
+    }
+    const conceptFecha = new Date(Date.UTC(year, month, dayReal))
+    fechas.push(recorrerAViernesSiFinDeSemana(conceptFecha))
+
+    // Avanzar al siguiente pago conceptual.
+    if (dayConcept === 15) {
+      dayConcept = 30
+    } else {
+      dayConcept = 15
+      const nextMonth = new Date(Date.UTC(year, month + 1, 1))
+      year = nextMonth.getUTCFullYear()
+      month = nextMonth.getUTCMonth()
+    }
+  }
+
+  return fechas
+}
+
+/** Sábado → viernes; Domingo → viernes. Lunes-Viernes se queda igual. */
+function recorrerAViernesSiFinDeSemana(fecha: Date): Date {
+  const dow = fecha.getUTCDay() // 0=Dom, 6=Sáb
+  if (dow === 6) return addDays(fecha, -1)
+  if (dow === 0) return addDays(fecha, -2)
+  return fecha
+}

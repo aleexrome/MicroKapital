@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { Plus, CreditCard, Filter } from 'lucide-react'
+import { Plus, CreditCard, Filter, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Prisma, type LoanStatus, type UserRole } from '@prisma/client'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
@@ -148,6 +148,12 @@ export default async function PrestamosPage({
 
   const canCreate = ['COORDINADOR', 'COBRADOR', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN'].includes(rol)
 
+  // DG/DC (y SA) tienen acceso al reporte de aprobaciones — sirve para
+  // rastrear qué créditos aprobaron y cuáles quedaron sin fechas.
+  const puedeVerReporteAprobaciones = rol === 'DIRECTOR_GENERAL'
+    || rol === 'DIRECTOR_COMERCIAL'
+    || rol === 'SUPER_ADMIN'
+
   // Si la cobradora está bloqueada por limbo > 72h, deshabilitamos el botón
   // de crear con tooltip explicativo. DG/DC/SA no se autobloqquean.
   const limboCheck = (rol === 'COORDINADOR' || rol === 'COBRADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL')
@@ -164,24 +170,34 @@ export default async function PrestamosPage({
             {totalFiltered} registro(s) · página {page} de {totalPages}
           </p>
         </div>
-        {canCreate && (
-          limboCheck.bloqueado ? (
-            <Button
-              disabled
-              title={`Bloqueado: ${limboCheck.prestamosEnLimbo.length} préstamo(s) pendiente(s) > 72h. Activa o cancela antes de crear nuevos.`}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Nuevo crédito
-            </Button>
-          ) : (
-            <Button asChild>
-              <Link href="/prestamos/nuevo">
-                <Plus className="h-4 w-4 mr-1" />
-                Nuevo crédito
+        <div className="flex items-center gap-2">
+          {puedeVerReporteAprobaciones && (
+            <Button asChild variant="outline">
+              <Link href="/reportes/aprobaciones">
+                <ClipboardList className="h-4 w-4 mr-1" />
+                Reporte
               </Link>
             </Button>
-          )
-        )}
+          )}
+          {canCreate && (
+            limboCheck.bloqueado ? (
+              <Button
+                disabled
+                title={`Bloqueado: ${limboCheck.prestamosEnLimbo.length} préstamo(s) pendiente(s) > 72h. Activa o cancela antes de crear nuevos.`}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Nuevo crédito
+              </Button>
+            ) : (
+              <Button asChild>
+                <Link href="/prestamos/nuevo">
+                  <Plus className="h-4 w-4 mr-1" />
+                  Nuevo crédito
+                </Link>
+              </Button>
+            )
+          )}
+        </div>
       </div>
 
       {/* Filtros de sucursal / coordinador (mismo patrón que /clientes) */}

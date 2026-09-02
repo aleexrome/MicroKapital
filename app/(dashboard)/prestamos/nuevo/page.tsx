@@ -55,6 +55,10 @@ export default function NuevaSolicitudPage() {
   const [tipo, setTipo] = useState<LoanTipo>('INDIVIDUAL')
   const [capital, setCapital] = useState('')
   const [notas, setNotas] = useState('')
+  // Propuesta del día y hora de cobro — DG puede editar al aprobar,
+  // pero el coord asume la responsabilidad de proponer.
+  const [diaCobro, setDiaCobro] = useState<'' | 'LUNES' | 'MARTES' | 'MIERCOLES' | 'JUEVES' | 'VIERNES' | 'SABADO' | 'DOMINGO'>('')
+  const [horaLimiteCobro, setHoraLimiteCobro] = useState('')
   const [loading, setLoading] = useState(false)
   const [calc, setCalc] = useState<LoanCalculation | null>(null)
 
@@ -161,6 +165,8 @@ export default function NuevaSolicitudPage() {
             capitales: miembrosValidos.map((m) => Number(m.capital)),
             tipoGrupo,
             notas: notas || undefined,
+            diaCobro: diaCobro || undefined,
+            horaLimiteCobro: horaLimiteCobro || undefined,
           }),
         })
         if (!res.ok) {
@@ -188,6 +194,8 @@ export default function NuevaSolicitudPage() {
           tipo,
           capital: capitalNum,
           notas: notas || undefined,
+          diaCobro: diaCobro || undefined,
+          horaLimiteCobro: horaLimiteCobro || undefined,
         }
         if (tipo === 'INDIVIDUAL') {
           body.ciclo = ciclo
@@ -511,6 +519,38 @@ export default function NuevaSolicitudPage() {
                 </div>
               </div>
             )}
+
+            {/* Propuesta del coord del día y hora de cobro. DG puede
+                ajustar al aprobar, pero la propuesta inicial nace con
+                el coord — así se evitan créditos aprobados sin fecha. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Día de cobro (propuesta)</Label>
+                <select
+                  value={diaCobro}
+                  onChange={(e) => setDiaCobro(e.target.value as typeof diaCobro)}
+                  className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background text-foreground h-10"
+                >
+                  <option value="">— Sin proponer —</option>
+                  <option value="LUNES">Lunes</option>
+                  <option value="MARTES">Martes</option>
+                  <option value="MIERCOLES">Miércoles</option>
+                  <option value="JUEVES">Jueves</option>
+                  <option value="VIERNES">Viernes</option>
+                  <option value="SABADO">Sábado</option>
+                  <option value="DOMINGO">Domingo</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Hora límite de cobro</Label>
+                <Input
+                  type="time"
+                  value={horaLimiteCobro}
+                  onChange={(e) => setHoraLimiteCobro(e.target.value)}
+                  placeholder="HH:MM"
+                />
+              </div>
+            </div>
 
             <div className="space-y-1.5">
               <Label>Notas (opcional)</Label>

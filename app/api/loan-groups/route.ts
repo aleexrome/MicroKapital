@@ -12,6 +12,10 @@ const buildSchema = (minIntegrantes: number) =>
     capitales: z.array(z.number().positive()).min(minIntegrantes, 'Mínimo 4 capitales').max(5, 'Máximo 5 capitales'),
     tipoGrupo: z.enum(['REGULAR', 'RESCATE']).default('REGULAR'),
     notas: z.string().optional(),
+    // Propuesta del coord del dia y hora — se propaga a todos los prestamos
+    // del grupo. Fallback: BranchContractConfig de la sucursal.
+    diaCobro: z.enum(['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO', 'DOMINGO']).optional(),
+    horaLimiteCobro: z.string().regex(/^\d{2}:\d{2}$/, 'Formato HH:MM').optional(),
   }).refine((d) => d.clientIds.length === d.capitales.length, {
     message: 'El número de capitales debe coincidir con el número de integrantes',
     path: ['capitales'],
@@ -103,6 +107,14 @@ export async function POST(req: NextRequest) {
   const targetBranchId = branchId ?? session.user.zonaBranchIds?.[0] ?? clients[0].branchId
   if (!targetBranchId) return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
 
+  // Default de sucursal para dia/hora — se usa si el coord no propuso.
+  const branchDefaults = await prisma.branchContractConfig.findUnique({
+    where: { branchId: targetBranchId },
+    select: { diaCobro: true, horaLimiteCobro: true },
+  })
+  const diaCobroFinal = data.diaCobro ?? branchDefaults?.diaCobro ?? null
+  const horaCobroFinal = data.horaLimiteCobro ?? branchDefaults?.horaLimiteCobro ?? null
+
   const result = await prisma.$transaction(async (tx) => {
     // 1. Crear el grupo solidario
     const group = await tx.loanGroup.create({
@@ -140,6 +152,8 @@ export async function POST(req: NextRequest) {
             pagoQuincenal: null,
             plazo: calc.plazo,
             tipoGrupo: data.tipoGrupo,
+            diaCobro: diaCobroFinal,
+            horaLimiteCobro: horaCobroFinal,
             notas: data.notas ?? null,
           },
         })

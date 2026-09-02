@@ -887,6 +887,14 @@ model BranchContractConfig {
   horaLimiteCobro String
   folioYear       Int      @default(2026)
   folioLastNumber Int      @default(0)
+  // Override de comisión para créditos INDIVIDUAL en renovación (ciclo >= 2
+  // y sin atraso) en esta sucursal. Fracción 0..1, ej. 0.10 = 10%.
+  // Cuando es null, aplica la regla global (ciclos 2/3+ = 7%). Direccion
+  // pidió que Veracruz mantenga 10% permanente en todas las renovaciones,
+  // sin importar el ciclo — este campo lo habilita sin tocar las demas.
+  // El caso "tuvoAtraso=true" siempre queda en 12% (más punitivo), no lo
+  // toca este override.
+  comisionRenovacionFija Decimal? @db.Decimal(5, 4)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

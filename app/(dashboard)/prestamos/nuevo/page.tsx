@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -88,6 +88,16 @@ export default function NuevaSolicitudPage() {
   const [queuedDocs, setQueuedDocs] = useState<QueuedDoc[]>([])
   const [newDocTipo, setNewDocTipo]  = useState('SOLICITUD')
   const fileInputRef                 = useRef<HTMLInputElement>(null)
+
+  // Config de sucursal para la preview (override de comisión en renovaciones).
+  // La API /api/my-branch-config resuelve la sucursal del usuario.
+  const [comisionRenovacionFija, setComisionRenovacionFija] = useState<number | null>(null)
+  useEffect(() => {
+    fetch('/api/my-branch-config')
+      .then((r) => r.json())
+      .then((d) => setComisionRenovacionFija(d.data?.comisionRenovacionFija ?? null))
+      .catch(() => {})
+  }, [])
 
   const handleCalc = useCallback((c: LoanCalculation) => setCalc(c), [])
 
@@ -642,6 +652,7 @@ export default function NuevaSolicitudPage() {
             ciclo={tipo === 'INDIVIDUAL' ? ciclo : undefined}
             tuvoAtraso={tipo === 'INDIVIDUAL' ? tuvoAtraso : undefined}
             clienteIrregular={tipo === 'AGIL' ? clienteIrregular : undefined}
+            comisionRenovacionFija={tipo === 'INDIVIDUAL' ? comisionRenovacionFija : null}
             onCalc={handleCalc}
           />
         )}

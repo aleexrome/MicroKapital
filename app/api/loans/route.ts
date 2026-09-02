@@ -87,14 +87,6 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
 
-  // Todas las tasas de interés están fijas en las fórmulas de cada producto.
-  const calc = calcLoan(data.tipo, data.capital, {
-    ciclo: data.ciclo,
-    tuvoAtraso: data.tuvoAtraso,
-    clienteIrregular: data.clienteIrregular,
-    tipoGrupo: data.tipoGrupo,
-  })
-
   // Verificar que el cliente pertenezca a la empresa
   const client = await prisma.client.findFirst({
     where: { id: data.clientId, companyId: companyId! },
@@ -159,11 +151,23 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Día y hora de cobro: copiamos de la sucursal al crear, para que DG
-  // los vea pre-llenados al aprobar y solo confirme/ajuste si quiere.
+  // Config de la sucursal — copiamos el día/hora al crear para que DG los
+  // vea prellenados, y aplicamos el override de comisión en renovaciones
+  // si la sucursal lo tiene (ej. Veracruz: 10% permanente).
   const branchDefaults = await prisma.branchContractConfig.findUnique({
     where: { branchId: targetBranchId },
-    select: { diaCobro: true, horaLimiteCobro: true },
+    select: { diaCobro: true, horaLimiteCobro: true, comisionRenovacionFija: true },
+  })
+
+  // Cálculo financiero: aplica el override de la sucursal si aplica.
+  const calc = calcLoan(data.tipo, data.capital, {
+    ciclo: data.ciclo,
+    tuvoAtraso: data.tuvoAtraso,
+    clienteIrregular: data.clienteIrregular,
+    tipoGrupo: data.tipoGrupo,
+    comisionRenovacionFija: branchDefaults?.comisionRenovacionFija
+      ? Number(branchDefaults.comisionRenovacionFija)
+      : null,
   })
 
   const loan = await prisma.$transaction(async (tx) => {

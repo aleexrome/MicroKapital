@@ -152,6 +152,12 @@ export async function POST(
   const nuevoTipo = data.tipo ?? loanOriginal.tipo
 
   // Calcular el nuevo crédito — las tasas están fijas en las fórmulas.
+  // Override de comisión INDIVIDUAL para sucursales con regla propia
+  // (ej. Veracruz mantiene 10% permanente en renovaciones).
+  const branchConfig = await prisma.branchContractConfig.findUnique({
+    where: { branchId: loanOriginal.branchId },
+    select: { comisionRenovacionFija: true },
+  })
   const nuevoCiclo = data.ciclo ?? (loanOriginal.ciclo ?? 1)
 
   const calc = calcLoan(
@@ -162,6 +168,9 @@ export async function POST(
       tuvoAtraso: data.tuvoAtraso ?? loanOriginal.tuvoAtraso,
       clienteIrregular: data.clienteIrregular ?? loanOriginal.clienteIrregular,
       tipoGrupo: (data.tipoGrupo ?? loanOriginal.tipoGrupo ?? undefined) as 'REGULAR' | 'RESCATE' | undefined,
+      comisionRenovacionFija: branchConfig?.comisionRenovacionFija
+        ? Number(branchConfig.comisionRenovacionFija)
+        : null,
     }
   )
 

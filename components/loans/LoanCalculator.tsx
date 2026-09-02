@@ -13,6 +13,8 @@ interface LoanCalculatorProps {
   tuvoAtraso?: boolean
   clienteIrregular?: boolean
   tipoGrupo?: 'REGULAR' | 'RESCATE'
+  /** Override de comisión INDIVIDUAL en renovaciones por sucursal. */
+  comisionRenovacionFija?: number | null
   onCalc?: (calc: LoanCalculation) => void
   /**
    * Si false, oculta el desglose del interés y el total a pagar (solo
@@ -22,7 +24,8 @@ interface LoanCalculatorProps {
 }
 
 export function LoanCalculator({
-  tipo, capital, ciclo, tuvoAtraso, clienteIrregular, tipoGrupo, onCalc,
+  tipo, capital, ciclo, tuvoAtraso, clienteIrregular, tipoGrupo,
+  comisionRenovacionFija, onCalc,
   showInterest = false,
 }: LoanCalculatorProps) {
   const [calc, setCalc] = useState<LoanCalculation | null>(null)
@@ -31,11 +34,11 @@ export function LoanCalculator({
     if (!capital || capital <= 0) { setCalc(null); return }
 
     const result = calcLoan(tipo, capital, {
-      ciclo, tuvoAtraso, clienteIrregular, tipoGrupo,
+      ciclo, tuvoAtraso, clienteIrregular, tipoGrupo, comisionRenovacionFija,
     })
     setCalc(result)
     onCalc?.(result)
-  }, [tipo, capital, ciclo, tuvoAtraso, clienteIrregular, tipoGrupo, onCalc])
+  }, [tipo, capital, ciclo, tuvoAtraso, clienteIrregular, tipoGrupo, comisionRenovacionFija, onCalc])
 
   if (!calc || capital <= 0) return null
 

@@ -80,6 +80,12 @@ export async function POST(
   let esContrapropuesta = false
 
   if (contrapropuesta) {
+    // Override de comisión INDIVIDUAL para sucursales con regla propia
+    // (ej. Veracruz mantiene 10% permanente en renovaciones).
+    const branchConfig = await prisma.branchContractConfig.findUnique({
+      where: { branchId: loan.branchId },
+      select: { comisionRenovacionFija: true },
+    })
     const calc = calcLoan(
       loan.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
       contrapropuesta.capital,
@@ -88,6 +94,9 @@ export async function POST(
         tuvoAtraso: loan.tuvoAtraso,
         clienteIrregular: loan.clienteIrregular,
         tipoGrupo: (loan.tipoGrupo ?? undefined) as 'REGULAR' | 'RESCATE' | undefined,
+        comisionRenovacionFija: branchConfig?.comisionRenovacionFija
+          ? Number(branchConfig.comisionRenovacionFija)
+          : null,
       }
     )
 

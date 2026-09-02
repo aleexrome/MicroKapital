@@ -53,12 +53,23 @@ export function calcSolidario(
 // Tasa: $170 por cada mil = 0.170 sobre el capital
 // Comisión por apertura varía según ciclo del cliente:
 //   Ciclo 1:  10% · Ciclo 2: 7% · Ciclo 3+: 7% · Con atraso: 12%
+// Sucursales con override (BranchContractConfig.comisionRenovacionFija)
+// pueden fijar otro % para todas las renovaciones (ciclo >= 2 y sin
+// atraso). Ej. Veracruz mantiene 10% permanente.
 // La comisión se cobra aparte al activar (el cliente recibe el capital completo)
 // Validaciones: $4,000–$20,000 · edad 18–64 · titular + 1 aval (2 avales si >$15,000)
 
-export function calcComisionIndividual(ciclo: number, tuvoAtraso: boolean): number {
+export function calcComisionIndividual(
+  ciclo: number,
+  tuvoAtraso: boolean,
+  comisionRenovacionFija?: number | null,
+): number {
   if (tuvoAtraso) return 0.12
   if (ciclo === 1) return 0.10
+  // Renovacion (ciclo >= 2) — si la sucursal tiene override valido, aplica.
+  if (typeof comisionRenovacionFija === 'number' && comisionRenovacionFija > 0) {
+    return comisionRenovacionFija
+  }
   if (ciclo === 2) return 0.07
   return 0.07 // ciclo 3+
 }
@@ -66,11 +77,12 @@ export function calcComisionIndividual(ciclo: number, tuvoAtraso: boolean): numb
 export function calcIndividual(
   capital: number,
   ciclo = 1,
-  tuvoAtraso = false
+  tuvoAtraso = false,
+  comisionRenovacionFija?: number | null,
 ): LoanCalculation {
   const plazo = 12
   const tasaInteres = 0.170
-  const tasaComision = calcComisionIndividual(ciclo, tuvoAtraso)
+  const tasaComision = calcComisionIndividual(ciclo, tuvoAtraso, comisionRenovacionFija)
   const comision = roundTwo(capital * tasaComision)
   const montoReal = capital
   const totalPago = roundTwo(capital * tasaInteres * plazo)
@@ -189,6 +201,9 @@ interface CalcOpciones {
   tuvoAtraso?: boolean
   clienteIrregular?: boolean
   tipoGrupo?: 'REGULAR' | 'RESCATE'
+  /** Override de comisión INDIVIDUAL en renovaciones para sucursales con
+   *  regla especial (BranchContractConfig.comisionRenovacionFija). */
+  comisionRenovacionFija?: number | null
 }
 
 export function calcLoan(
@@ -200,7 +215,12 @@ export function calcLoan(
     case 'SOLIDARIO':
       return calcSolidario(capital, opciones.tipoGrupo ?? 'REGULAR')
     case 'INDIVIDUAL':
-      return calcIndividual(capital, opciones.ciclo ?? 1, opciones.tuvoAtraso ?? false)
+      return calcIndividual(
+        capital,
+        opciones.ciclo ?? 1,
+        opciones.tuvoAtraso ?? false,
+        opciones.comisionRenovacionFija,
+      )
     case 'AGIL':
       return calcAgil(capital, opciones.clienteIrregular ?? false)
     case 'FIDUCIARIO':

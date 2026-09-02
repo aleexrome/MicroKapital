@@ -57,6 +57,11 @@ export async function POST(
   let loanUpdates: Record<string, unknown> = {}
   if (hayCambioCapital || hayComisionOverride) {
     const capitalFinal = capital ?? Number(loan.capital)
+    // Override de comisión INDIVIDUAL para sucursales con regla propia.
+    const branchConfig = await prisma.branchContractConfig.findUnique({
+      where: { branchId: loan.branchId },
+      select: { comisionRenovacionFija: true },
+    })
     const calc = calcLoan(
       loan.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
       capitalFinal,
@@ -65,6 +70,9 @@ export async function POST(
         tuvoAtraso: loan.tuvoAtraso,
         clienteIrregular: loan.clienteIrregular,
         tipoGrupo: (loan.tipoGrupo ?? undefined) as 'REGULAR' | 'RESCATE' | undefined,
+        comisionRenovacionFija: branchConfig?.comisionRenovacionFija
+          ? Number(branchConfig.comisionRenovacionFija)
+          : null,
       }
     )
     // Override de comisión para INDIVIDUAL: sobreescribe la tasa automática

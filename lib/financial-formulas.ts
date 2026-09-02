@@ -8,20 +8,20 @@ function roundTwo(n: number): number {
 //
 // Plazo: 8 semanas, pago semanal
 // Tasa fija según tipo de grupo:
-//   Grupo REGULAR:  $175 por cada mil = 0.175 sobre el capital
-//   Grupo RESCATE:  $195 por cada mil = 0.195 sobre el capital
+//   Grupo REGULAR (Puntual): $175 por cada mil = 0.175 sobre el capital
+//   Grupo RESCATE:           $195 por cada mil = 0.195 sobre el capital
 // Seguro de apertura (cobrar al cliente por separado, no sobre el capital):
-//   Capital $2,000–$4,000  → $200
-//   Capital $5,000–$9,000  → $250
-//   Capital $10,000–$14,000 → $300
-//   Capital $15,000–$19,000 → $350
+//   Capital $2,000–$4,000  → $250
+//   Capital $5,000–$9,000  → $300
+//   Capital $10,000–$14,000 → $350
+//   Capital $15,000–$19,000 → $400
 // Validaciones: mín 4 integrantes, máx 5 · $2,000–$25,000 · edad 18–64 · solo mujeres
 
 export function calcSeguroSolidario(capital: number): number {
-  if (capital >= 2000 && capital <= 4000) return 200
-  if (capital >= 5000 && capital <= 9000) return 250
-  if (capital >= 10000 && capital <= 14000) return 300
-  if (capital >= 15000 && capital <= 19000) return 350
+  if (capital >= 2000 && capital <= 4000) return 250
+  if (capital >= 5000 && capital <= 9000) return 300
+  if (capital >= 10000 && capital <= 14000) return 350
+  if (capital >= 15000 && capital <= 19000) return 400
   return 0
 }
 
@@ -52,7 +52,7 @@ export function calcSolidario(
 // Plazo: 12 semanas, pago semanal
 // Tasa: $170 por cada mil = 0.170 sobre el capital
 // Comisión por apertura varía según ciclo del cliente:
-//   Ciclo 1:  10% · Ciclo 2: 7% · Ciclo 3+: 5% · Con atraso: 12%
+//   Ciclo 1:  10% · Ciclo 2: 7% · Ciclo 3+: 7% · Con atraso: 12%
 // La comisión se cobra aparte al activar (el cliente recibe el capital completo)
 // Validaciones: $4,000–$20,000 · edad 18–64 · titular + 1 aval (2 avales si >$15,000)
 
@@ -60,7 +60,7 @@ export function calcComisionIndividual(ciclo: number, tuvoAtraso: boolean): numb
   if (tuvoAtraso) return 0.12
   if (ciclo === 1) return 0.10
   if (ciclo === 2) return 0.07
-  return 0.05 // ciclo 3+
+  return 0.07 // ciclo 3+
 }
 
 export function calcIndividual(
@@ -96,17 +96,17 @@ export function calcIndividual(
 //   Cliente regular:   $65 por cada mil = 0.065 sobre el capital
 //   Cliente irregular: $75 por cada mil = 0.075 sobre el capital
 // Seguro de apertura (cobrar al cliente por separado):
-//   Capital $2,000–$5,000  → $200
-//   Capital $6,000–$9,000  → $250
-//   Capital $10,000–$14,000 → $300
-//   Capital $15,000–$19,000 → $350
+//   Capital $2,000–$5,000  → $150
+//   Capital $6,000–$9,000  → $200
+//   Capital $10,000–$14,000 → $250
+//   Capital $15,000–$19,000 → $300
 // Validaciones: $2,000–$20,000 · edad 18–45 · titular + 1 aval
 
 export function calcSeguroAgil(capital: number): number {
-  if (capital >= 2000 && capital <= 5000) return 100
-  if (capital >= 6000 && capital <= 9000) return 150
-  if (capital >= 10000 && capital <= 14000) return 200
-  if (capital >= 15000 && capital <= 19000) return 250
+  if (capital >= 2000 && capital <= 5000) return 150
+  if (capital >= 6000 && capital <= 9000) return 200
+  if (capital >= 10000 && capital <= 14000) return 250
+  if (capital >= 15000 && capital <= 19000) return 300
   return 0
 }
 

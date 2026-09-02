@@ -11,7 +11,7 @@ import { formatMoney, formatDate } from '@/lib/utils'
 import { parseMxYMD, todayMx } from '@/lib/timezone'
 import { ImprimirReporteButton, type SeccionReporte } from '@/components/reportes/ImprimirReporteButton'
 import { EditableFechaPrimerPago } from '@/components/reportes/EditableFechaPrimerPago'
-import type { Prisma } from '@prisma/client'
+import type { Prisma, LoanType } from '@prisma/client'
 
 const ALLOWED_ROLES = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'] as const
 
@@ -29,11 +29,14 @@ const ESTADO_LABEL: Record<string, string> = {
   REJECTED: 'Rechazado',
 }
 
+const PRODUCTO_OPCIONES: LoanType[] = ['SOLIDARIO', 'INDIVIDUAL', 'AGIL', 'FIDUCIARIO']
+
 interface SearchParams {
   desde?: string
   hasta?: string
   sucursal?: string
   cobrador?: string
+  producto?: string
   soloSinFechas?: string
 }
 
@@ -63,12 +66,16 @@ export default async function ReporteAprobacionesPage({
   hastaEnd.setUTCDate(hastaEnd.getUTCDate() + 1)
 
   const soloSinFechas = searchParams.soloSinFechas === '1'
+  const productoFiltro = PRODUCTO_OPCIONES.includes(searchParams.producto as LoanType)
+    ? (searchParams.producto as LoanType)
+    : null
 
   const where: Prisma.LoanWhereInput = {
     companyId: companyId!,
     aprobadoAt: { gte: desde, lt: hastaEnd },
     ...(searchParams.sucursal ? { branchId: searchParams.sucursal } : {}),
     ...(searchParams.cobrador ? { cobradorId: searchParams.cobrador } : {}),
+    ...(productoFiltro ? { tipo: productoFiltro } : {}),
     ...(soloSinFechas
       ? { OR: [{ fechaDesembolso: null }, { fechaPrimerPago: null }] }
       : {}),
@@ -88,10 +95,12 @@ export default async function ReporteAprobacionesPage({
         fechaDesembolso: true,
         fechaPrimerPago: true,
         createdAt: true,
+        loanGroupId: true,
         client: { select: { nombreCompleto: true } },
         cobrador: { select: { nombre: true } },
         aprobadoPor: { select: { nombre: true } },
         branch: { select: { nombre: true } },
+        loanGroup: { select: { nombre: true } },
       },
     }),
     prisma.branch.findMany({
@@ -135,7 +144,9 @@ export default async function ReporteAprobacionesPage({
       rightAlign: [3],
       rows: loans.map((l) => [
         l.aprobadoAt ? formatDate(l.aprobadoAt) : '—',
-        l.client.nombreCompleto,
+        l.tipo === 'SOLIDARIO' && l.loanGroup?.nombre
+          ? `${l.client.nombreCompleto} — Grupo ${l.loanGroup.nombre}`
+          : l.client.nombreCompleto,
         TIPO_LABEL[l.tipo] ?? l.tipo,
         formatMoney(Number(l.capital)),
         l.branch?.nombre ?? '—',
@@ -180,6 +191,9 @@ export default async function ReporteAprobacionesPage({
                 : []),
               ...(searchParams.cobrador
                 ? [{ label: 'Cobrador', valor: cobradores.find((c) => c.id === searchParams.cobrador)?.nombre ?? '—' }]
+                : []),
+              ...(productoFiltro
+                ? [{ label: 'Producto', valor: TIPO_LABEL[productoFiltro] ?? productoFiltro }]
                 : []),
               ...(soloSinFechas ? [{ label: 'Filtro', valor: 'Solo sin fechas' }] : []),
             ],
@@ -232,6 +246,19 @@ export default async function ReporteAprobacionesPage({
             <option value="">Todos</option>
             {cobradores.map((c) => (
               <option key={c.id} value={c.id}>{c.nombre}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Producto</label>
+          <select
+            name="producto"
+            defaultValue={productoFiltro ?? ''}
+            className="border border-input rounded-md px-3 py-1.5 text-sm h-9 min-w-[140px] bg-background"
+          >
+            <option value="">Todos</option>
+            {PRODUCTO_OPCIONES.map((p) => (
+              <option key={p} value={p}>{TIPO_LABEL[p] ?? p}</option>
             ))}
           </select>
         </div>
@@ -304,6 +331,11 @@ export default async function ReporteAprobacionesPage({
                         <Link href={`/prestamos/${l.id}`} className="hover:underline text-primary-400">
                           {l.client.nombreCompleto}
                         </Link>
+                        {l.tipo === 'SOLIDARIO' && l.loanGroup?.nombre && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Grupo: <span className="text-violet-400 font-medium">{l.loanGroup.nombre}</span>
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-2">{TIPO_LABEL[l.tipo] ?? l.tipo}</td>
                       <td className="px-4 py-2 text-right font-semibold money">{formatMoney(Number(l.capital))}</td>

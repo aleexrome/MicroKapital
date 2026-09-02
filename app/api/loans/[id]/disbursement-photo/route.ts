@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
 import { v2 as cloudinary } from 'cloudinary'
 import {
-  generarFechasSemanales, generarFechasHabiles, generarFechasQuincenales,
+  generarFechasSemanales, generarFechasHabiles, generarFechasFiduciario,
   generarFechasSemanalesDesde, generarFechasHabilesDesde,
 } from '@/lib/business-days'
 import { todayMx } from '@/lib/timezone'
@@ -267,7 +267,8 @@ export async function POST(
           ? generarFechasHabilesDesde(fechaPrimerPagoRef, plazo)
           : generarFechasHabiles(fechaDesembolso, plazo)
       } else if (target.tipo === 'FIDUCIARIO') {
-        fechas = generarFechasQuincenales(fechaDesembolso, plazo)
+        // Regla fija fiduciario: 15 y 30 de cada mes con ajuste a viernes.
+        fechas = generarFechasFiduciario(fechaDesembolso, plazo)
       } else {
         fechas = fechaPrimerPagoRef
           ? generarFechasSemanalesDesde(fechaPrimerPagoRef, plazo)

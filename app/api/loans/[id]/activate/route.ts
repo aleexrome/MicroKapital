@@ -3,7 +3,7 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { type Prisma } from '@prisma/client'
 import {
-  generarFechasSemanales, generarFechasHabiles, generarFechasQuincenales,
+  generarFechasSemanales, generarFechasHabiles, generarFechasFiduciario,
   generarFechasSemanalesDesde, generarFechasHabilesDesde,
 } from '@/lib/business-days'
 import { createAuditLog } from '@/lib/audit'
@@ -255,7 +255,10 @@ export async function POST(
       ? generarFechasHabilesDesde(fechaPrimerPagoRef, Number(loan.plazo))
       : generarFechasHabiles(fechaDesembolso, Number(loan.plazo))
   } else if (loan.tipo === 'FIDUCIARIO') {
-    fechas = generarFechasQuincenales(fechaDesembolso, Number(loan.plazo))
+    // Fiduciario tiene calendario fijo: 15 y 30 de cada mes, con
+    // ajuste al viernes anterior cuando cae en fin de semana.
+    // La fechaPrimerPago del Loan se ignora — la regla nace del desembolso.
+    fechas = generarFechasFiduciario(fechaDesembolso, Number(loan.plazo))
   } else {
     fechas = fechaPrimerPagoRef
       ? generarFechasSemanalesDesde(fechaPrimerPagoRef, Number(loan.plazo))

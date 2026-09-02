@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { calcLoan } from '@/lib/financial-formulas'
 import { createAuditLog } from '@/lib/audit'
+import { normalizeNameForSearch } from '@/lib/text-normalize'
 
 const buildSchema = (minIntegrantes: number) =>
   z.object({
@@ -47,6 +48,38 @@ export async function POST(req: NextRequest) {
   }
 
   const data = parsed.data
+
+  // Anti-duplicado de nombre a nivel EMPRESA — dos grupos con el mismo
+  // nombre en distintas sucursales generaban confusion al buscar (ej.
+  // "BRISAS" en Veracruz y "Brisas" en Toluca). Comparamos sin acentos
+  // ni casing y bloqueamos si ya existe uno activo en la empresa.
+  // Prisma no soporta unaccent nativo, asi que traemos los grupos activos
+  // de la empresa y filtramos en app.
+  const nombreNormalizado = normalizeNameForSearch(data.nombre)
+  const gruposEmpresa = await prisma.loanGroup.findMany({
+    where: {
+      eliminadoEn: null,
+      branch: { companyId: companyId! },
+    },
+    select: {
+      id: true,
+      nombre: true,
+      branch: { select: { nombre: true } },
+      cobrador: { select: { nombre: true } },
+    },
+  })
+  const match = gruposEmpresa.find((g) => normalizeNameForSearch(g.nombre) === nombreNormalizado)
+  if (match) {
+    return NextResponse.json({
+      error: 'NOMBRE_GRUPO_DUPLICADO',
+      message: `Ya existe un grupo con el nombre "${match.nombre}" en la sucursal ${match.branch.nombre} (coordinadora: ${match.cobrador.nombre}). Elige otro nombre para evitar confusión.`,
+      duplicate: {
+        nombre: match.nombre,
+        branchName: match.branch.nombre,
+        cobradorName: match.cobrador.nombre,
+      },
+    }, { status: 409 })
+  }
 
   // Verificar que todos los clientes pertenecen a la empresa
   const clients = await prisma.client.findMany({

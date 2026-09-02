@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
+import { normalizeNameForSearch } from '@/lib/text-normalize'
 
 const ROLES_EDITAN_NOMBRE = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'] as const
 
@@ -63,6 +64,35 @@ export async function PATCH(
   }
   if (group.nombre === nombreNormalizado) {
     return NextResponse.json({ message: 'El nombre no cambió', nombre: group.nombre })
+  }
+
+  // Anti-duplicado a nivel EMPRESA — mismo criterio que el POST, ignoramos
+  // acentos y el propio grupo (para permitir re-normalizar mayusculas).
+  const nombreCanon = normalizeNameForSearch(nombreNormalizado)
+  const gruposEmpresa = await prisma.loanGroup.findMany({
+    where: {
+      eliminadoEn: null,
+      branch: { companyId: companyId! },
+      id: { not: params.groupId },
+    },
+    select: {
+      id: true,
+      nombre: true,
+      branch: { select: { nombre: true } },
+      cobrador: { select: { nombre: true } },
+    },
+  })
+  const match = gruposEmpresa.find((g) => normalizeNameForSearch(g.nombre) === nombreCanon)
+  if (match) {
+    return NextResponse.json({
+      error: 'NOMBRE_GRUPO_DUPLICADO',
+      message: `Ya existe un grupo con el nombre "${match.nombre}" en la sucursal ${match.branch.nombre} (coordinadora: ${match.cobrador.nombre}). Elige otro nombre.`,
+      duplicate: {
+        nombre: match.nombre,
+        branchName: match.branch.nombre,
+        cobradorName: match.cobrador.nombre,
+      },
+    }, { status: 409 })
   }
 
   await prisma.loanGroup.update({

@@ -70,15 +70,17 @@ export default async function ReporteAprobacionesPage({
     ? (searchParams.producto as LoanType)
     : null
 
+  // Nota: el filtro "solo sin fechas" se aplica en memoria después de
+  // resolver la fecha efectiva (Loan.fechaPrimerPago ?? schedule[0].
+  // fechaVencimiento). Si filtráramos en la BD por fechaPrimerPago null,
+  // marcaríamos como "sin fechas" créditos que ya tienen fecha real en
+  // el calendario aunque el campo del Loan haya quedado en null.
   const where: Prisma.LoanWhereInput = {
     companyId: companyId!,
     aprobadoAt: { gte: desde, lt: hastaEnd },
     ...(searchParams.sucursal ? { branchId: searchParams.sucursal } : {}),
     ...(searchParams.cobrador ? { cobradorId: searchParams.cobrador } : {}),
     ...(productoFiltro ? { tipo: productoFiltro } : {}),
-    ...(soloSinFechas
-      ? { OR: [{ fechaDesembolso: null }, { fechaPrimerPago: null }] }
-      : {}),
   }
 
   const [loans, branches, cobradores, empresa] = await Promise.all([
@@ -101,6 +103,14 @@ export default async function ReporteAprobacionesPage({
         aprobadoPor: { select: { nombre: true } },
         branch: { select: { nombre: true } },
         loanGroup: { select: { nombre: true } },
+        // Primera cuota del calendario — sirve como "fecha real" cuando
+        // Loan.fechaPrimerPago quedó en null pero el schedule sí se generó
+        // al activar. Evita mostrar "Falta" cuando en realidad hay fecha.
+        schedule: {
+          where: { numeroPago: 1 },
+          select: { fechaVencimiento: true },
+          take: 1,
+        },
       },
     }),
     prisma.branch.findMany({
@@ -121,7 +131,18 @@ export default async function ReporteAprobacionesPage({
     prisma.company.findUnique({ where: { id: companyId! }, select: { nombre: true } }),
   ])
 
-  const filasIncompletas = loans.filter((l) => !l.fechaDesembolso || !l.fechaPrimerPago)
+  // Fecha real del primer pago: Loan.fechaPrimerPago si existe, si no
+  // la fechaVencimiento del pago #1 del calendario (que es lo que ve el
+  // cliente). Solo se considera "sin fecha" cuando NINGUNA fuente aplica.
+  const loansConFecha = loans.map((l) => ({
+    ...l,
+    fechaPrimerPagoEfectiva: l.fechaPrimerPago ?? l.schedule[0]?.fechaVencimiento ?? null,
+    fechaDesembolsoEfectiva: l.fechaDesembolso ?? null,
+  }))
+  const loansVisibles = soloSinFechas
+    ? loansConFecha.filter((l) => !l.fechaPrimerPagoEfectiva)
+    : loansConFecha
+  const filasIncompletas = loansConFecha.filter((l) => !l.fechaPrimerPagoEfectiva)
 
   const desdeYmd = desde.toISOString().slice(0, 10)
   const hastaYmd = hasta.toISOString().slice(0, 10)
@@ -132,17 +153,17 @@ export default async function ReporteAprobacionesPage({
       tipo: 'metricas',
       titulo: 'Resumen',
       items: [
-        { label: 'Aprobaciones', valor: loans.length.toLocaleString('es-MX') },
-        { label: 'Sin fechas capturadas', valor: filasIncompletas.length.toLocaleString('es-MX') },
-        { label: 'Capital aprobado', valor: formatMoney(loans.reduce((s, l) => s + Number(l.capital), 0)) },
+        { label: 'Aprobaciones', valor: loansVisibles.length.toLocaleString('es-MX') },
+        { label: 'Sin fecha de primer pago', valor: filasIncompletas.length.toLocaleString('es-MX') },
+        { label: 'Capital aprobado', valor: formatMoney(loansVisibles.reduce((s, l) => s + Number(l.capital), 0)) },
       ],
     },
     {
       tipo: 'tabla',
       titulo: 'Detalle de aprobaciones',
-      headers: ['Aprobado', 'Cliente', 'Producto', 'Capital', 'Sucursal', 'Cobrador', 'Aprobó', 'Estado', 'F. Desembolso', 'F. Primer pago', 'Fechas'],
+      headers: ['Aprobado', 'Cliente', 'Producto', 'Capital', 'Sucursal', 'Cobrador', 'Aprobó', 'Estado', 'F. Desembolso', 'F. Primer pago'],
       rightAlign: [3],
-      rows: loans.map((l) => [
+      rows: loansVisibles.map((l) => [
         l.aprobadoAt ? formatDate(l.aprobadoAt) : '—',
         l.tipo === 'SOLIDARIO' && l.loanGroup?.nombre
           ? `${l.client.nombreCompleto} — Grupo ${l.loanGroup.nombre}`
@@ -153,9 +174,8 @@ export default async function ReporteAprobacionesPage({
         l.cobrador.nombre,
         l.aprobadoPor?.nombre ?? '—',
         ESTADO_LABEL[l.estado] ?? l.estado,
-        l.fechaDesembolso ? formatDate(l.fechaDesembolso) : '—',
-        l.fechaPrimerPago ? formatDate(l.fechaPrimerPago) : '—',
-        !l.fechaDesembolso || !l.fechaPrimerPago ? '⚠ Faltan' : 'Completas',
+        l.fechaDesembolsoEfectiva ? formatDate(l.fechaDesembolsoEfectiva) : '—',
+        l.fechaPrimerPagoEfectiva ? formatDate(l.fechaPrimerPagoEfectiva) : '—',
       ]),
     },
   ]
@@ -173,9 +193,9 @@ export default async function ReporteAprobacionesPage({
               Reporte de aprobaciones
             </h1>
             <p className="text-muted-foreground text-sm">
-              {formatDate(desde)} – {formatDate(hasta)} · {loans.length} crédito(s)
+              {formatDate(desde)} – {formatDate(hasta)} · {loansVisibles.length} crédito(s)
               {filasIncompletas.length > 0 && (
-                <> · <span className="text-amber-500 font-medium">{filasIncompletas.length} sin fechas</span></>
+                <> · <span className="text-amber-500 font-medium">{filasIncompletas.length} sin fecha de primer pago</span></>
               )}
             </p>
           </div>
@@ -275,17 +295,19 @@ export default async function ReporteAprobacionesPage({
         <Button type="submit" variant="secondary" size="sm" className="h-9">Filtrar</Button>
       </form>
 
-      {/* Alerta si hay filas incompletas */}
+      {/* Alerta si hay filas sin ninguna fecha real (ni en Loan ni en el
+          calendario del cliente). Los que sí tienen fecha en el schedule
+          se muestran normal aunque Loan.fechaPrimerPago esté null. */}
       {filasIncompletas.length > 0 && (
         <Card className="border-amber-500/40 bg-amber-500/5">
           <CardContent className="p-4 flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="text-sm">
               <p className="font-medium text-amber-500">
-                Hay {filasIncompletas.length} crédito(s) aprobado(s) sin fecha de desembolso o primer pago
+                Hay {filasIncompletas.length} crédito(s) sin fecha de primer pago capturada
               </p>
               <p className="text-muted-foreground mt-0.5">
-                Estos aparecen resaltados en la tabla. En el detalle del préstamo puedes capturar las fechas o regenerar el contrato.
+                Estos aún no tienen calendario generado. Edita la fecha desde esta tabla o desde el detalle del préstamo.
               </p>
             </div>
           </CardContent>
@@ -296,7 +318,7 @@ export default async function ReporteAprobacionesPage({
       <Card>
         <CardHeader><CardTitle className="text-base">Detalle</CardTitle></CardHeader>
         <CardContent className="p-0 overflow-x-auto">
-          {loans.length === 0 ? (
+          {loansVisibles.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-10">
               Sin aprobaciones en el rango seleccionado.
             </p>
@@ -317,12 +339,14 @@ export default async function ReporteAprobacionesPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
-                {loans.map((l) => {
-                  const incompleto = !l.fechaDesembolso || !l.fechaPrimerPago
+                {loansVisibles.map((l) => {
+                  // Solo resaltamos las filas donde en verdad no hay fecha
+                  // real del primer pago (ni en Loan ni en el calendario).
+                  const sinFecha = !l.fechaPrimerPagoEfectiva
                   return (
                     <tr
                       key={l.id}
-                      className={`hover:bg-secondary/30 ${incompleto ? 'bg-amber-500/5' : ''}`}
+                      className={`hover:bg-secondary/30 ${sinFecha ? 'bg-amber-500/5' : ''}`}
                     >
                       <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">
                         {l.aprobadoAt ? formatDate(l.aprobadoAt) : '—'}
@@ -352,13 +376,13 @@ export default async function ReporteAprobacionesPage({
                           {ESTADO_LABEL[l.estado] ?? l.estado}
                         </span>
                       </td>
-                      <td className={`px-4 py-2 text-xs ${l.fechaDesembolso ? 'text-muted-foreground' : 'text-amber-500 font-medium'}`}>
-                        {l.fechaDesembolso ? formatDate(l.fechaDesembolso) : '⚠ Falta'}
+                      <td className="px-4 py-2 text-xs text-muted-foreground">
+                        {l.fechaDesembolsoEfectiva ? formatDate(l.fechaDesembolsoEfectiva) : '—'}
                       </td>
                       <td className="px-4 py-2 text-xs">
                         <EditableFechaPrimerPago
                           loanId={l.id}
-                          fechaActual={l.fechaPrimerPago}
+                          fechaActual={l.fechaPrimerPagoEfectiva}
                         />
                       </td>
                     </tr>

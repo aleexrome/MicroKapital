@@ -3,13 +3,24 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
+import { armarNombreCompleto, armarDomicilioLibre } from '@/lib/persona-address'
 
 const updateAvalSchema = z.object({
-  avalNombre:      z.string().optional().nullable(),
-  avalTelefono:    z.string().optional().nullable(),
-  avalTelefonoAlt: z.string().optional().nullable(),
-  avalDireccion:   z.string().optional().nullable(),
-  avalRelacion:    z.string().optional().nullable(),
+  avalNombre:             z.string().optional().nullable(),
+  avalNombres:            z.string().optional().nullable(),
+  avalApellidoPaterno:    z.string().optional().nullable(),
+  avalApellidoMaterno:    z.string().optional().nullable(),
+  avalTelefono:           z.string().optional().nullable(),
+  avalTelefonoAlt:        z.string().optional().nullable(),
+  avalDireccion:          z.string().optional().nullable(),
+  avalDomicilioCalle:     z.string().optional().nullable(),
+  avalDomicilioNumExt:    z.string().optional().nullable(),
+  avalDomicilioNumInt:    z.string().optional().nullable(),
+  avalDomicilioColonia:   z.string().optional().nullable(),
+  avalDomicilioMunicipio: z.string().optional().nullable(),
+  avalDomicilioEstado:    z.string().optional().nullable(),
+  avalDomicilioCP:        z.string().optional().nullable(),
+  avalRelacion:           z.string().optional().nullable(),
 })
 
 /**
@@ -44,9 +55,19 @@ export async function PATCH(
       id: true,
       tipo: true,
       avalNombre: true,
+      avalNombres: true,
+      avalApellidoPaterno: true,
+      avalApellidoMaterno: true,
       avalTelefono: true,
       avalTelefonoAlt: true,
       avalDireccion: true,
+      avalDomicilioCalle: true,
+      avalDomicilioNumExt: true,
+      avalDomicilioNumInt: true,
+      avalDomicilioColonia: true,
+      avalDomicilioMunicipio: true,
+      avalDomicilioEstado: true,
+      avalDomicilioCP: true,
       avalRelacion: true,
     },
   })
@@ -70,7 +91,20 @@ export async function PATCH(
   // Normalizacion: nombres y relacion en MAYUSCULAS + trim; telefonos y
   // direccion solo trim (la direccion puede llevar minusculas/numeros).
   const update: Record<string, unknown> = {}
-  if (data.avalNombre !== undefined) {
+  // Descomposicion del nombre del aval — mismo patron que Client.
+  const hayNombreSubcampo = data.avalNombres !== undefined
+    || data.avalApellidoPaterno !== undefined
+    || data.avalApellidoMaterno !== undefined
+  if (hayNombreSubcampo) {
+    const nombres         = ((data.avalNombres         ?? loan.avalNombres         ?? '') || '').trim().toUpperCase() || null
+    const apellidoPaterno = ((data.avalApellidoPaterno ?? loan.avalApellidoPaterno ?? '') || '').trim().toUpperCase() || null
+    const apellidoMaterno = ((data.avalApellidoMaterno ?? loan.avalApellidoMaterno ?? '') || '').trim().toUpperCase() || null
+    update.avalNombres = nombres
+    update.avalApellidoPaterno = apellidoPaterno
+    update.avalApellidoMaterno = apellidoMaterno
+    const armado = armarNombreCompleto({ nombres, apellidoPaterno, apellidoMaterno })
+    if (armado) update.avalNombre = armado
+  } else if (data.avalNombre !== undefined) {
     const v = (data.avalNombre ?? '').trim().toUpperCase()
     update.avalNombre = v === '' ? null : v
   }
@@ -82,7 +116,35 @@ export async function PATCH(
     const v = (data.avalTelefonoAlt ?? '').trim()
     update.avalTelefonoAlt = v === '' ? null : v
   }
-  if (data.avalDireccion !== undefined) {
+  // Descomposicion del domicilio del aval.
+  const hayDomSubcampo = data.avalDomicilioCalle !== undefined
+    || data.avalDomicilioNumExt !== undefined
+    || data.avalDomicilioNumInt !== undefined
+    || data.avalDomicilioColonia !== undefined
+    || data.avalDomicilioMunicipio !== undefined
+    || data.avalDomicilioEstado !== undefined
+    || data.avalDomicilioCP !== undefined
+  if (hayDomSubcampo) {
+    const dCalle     = ((data.avalDomicilioCalle     ?? loan.avalDomicilioCalle     ?? '') || '').trim().toUpperCase() || null
+    const dNumExt    = ((data.avalDomicilioNumExt    ?? loan.avalDomicilioNumExt    ?? '') || '').trim().toUpperCase() || null
+    const dNumInt    = ((data.avalDomicilioNumInt    ?? loan.avalDomicilioNumInt    ?? '') || '').trim().toUpperCase() || null
+    const dColonia   = ((data.avalDomicilioColonia   ?? loan.avalDomicilioColonia   ?? '') || '').trim().toUpperCase() || null
+    const dMunicipio = ((data.avalDomicilioMunicipio ?? loan.avalDomicilioMunicipio ?? '') || '').trim().toUpperCase() || null
+    const dEstado    = ((data.avalDomicilioEstado    ?? loan.avalDomicilioEstado    ?? '') || '').trim().toUpperCase() || null
+    const dCP        = ((data.avalDomicilioCP        ?? loan.avalDomicilioCP        ?? '') || '').trim() || null
+    update.avalDomicilioCalle     = dCalle
+    update.avalDomicilioNumExt    = dNumExt
+    update.avalDomicilioNumInt    = dNumInt
+    update.avalDomicilioColonia   = dColonia
+    update.avalDomicilioMunicipio = dMunicipio
+    update.avalDomicilioEstado    = dEstado
+    update.avalDomicilioCP        = dCP
+    const armado = armarDomicilioLibre({
+      calle: dCalle, numExt: dNumExt, numInt: dNumInt,
+      colonia: dColonia, municipio: dMunicipio, estado: dEstado, cp: dCP,
+    })
+    if (armado) update.avalDireccion = armado
+  } else if (data.avalDireccion !== undefined) {
     const v = (data.avalDireccion ?? '').trim()
     update.avalDireccion = v === '' ? null : v
   }

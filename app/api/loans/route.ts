@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client'
 import { scopedLoanWhere } from '@/lib/access'
 import { z } from 'zod'
 import { calcLoan } from '@/lib/financial-formulas'
+import { armarNombreCompleto, armarDomicilioLibre } from '@/lib/persona-address'
 import { generarFechasSemanales, generarFechasHabiles } from '@/lib/business-days'
 import { createAuditLog } from '@/lib/audit'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
@@ -27,9 +28,23 @@ const createLoanSchema = z.object({
   tipoGarantia: z.enum(['MUEBLE', 'INMUEBLE']).optional(),
   descripcionGarantia: z.string().optional(),
   valorGarantia: z.number().positive().optional(),
-  // Aval (INDIVIDUAL y FIDUCIARIO)
-  avalNombre: z.string().optional(),
+  // Aval (INDIVIDUAL y FIDUCIARIO). El coord captura ahora los subcampos
+  // por separado; el backend arma avalNombre / avalDireccion como concat
+  // para retro-compat con contratos y prints viejos.
+  avalNombre:             z.string().optional(),
+  avalNombres:            z.string().optional(),
+  avalApellidoPaterno:    z.string().optional(),
+  avalApellidoMaterno:    z.string().optional(),
   avalTelefono: z.string().optional(),
+  avalTelefonoAlt: z.string().optional(),
+  avalDireccion:          z.string().optional(),
+  avalDomicilioCalle:     z.string().optional(),
+  avalDomicilioNumExt:    z.string().optional(),
+  avalDomicilioNumInt:    z.string().optional(),
+  avalDomicilioColonia:   z.string().optional(),
+  avalDomicilioMunicipio: z.string().optional(),
+  avalDomicilioEstado:    z.string().optional(),
+  avalDomicilioCP:        z.string().optional(),
   avalRelacion: z.string().optional(),
   // Propuesta del coord del día y hora de cobro. Opcional: si no llega,
   // caemos al default de la sucursal (BranchContractConfig). DG puede
@@ -197,8 +212,38 @@ export async function POST(req: NextRequest) {
         tipoGarantia: data.tipoGarantia ?? null,
         descripcionGarantia: data.descripcionGarantia ?? null,
         valorGarantia: data.valorGarantia ?? null,
-        avalNombre: data.avalNombre ?? null,
+        // Aval — captura estructurada + concat en avalNombre/avalDireccion
+        // para retro-compat (contratos y prints viejos leen el string libre).
+        avalNombre: (data.avalNombres || data.avalApellidoPaterno || data.avalApellidoMaterno)
+          ? (armarNombreCompleto({
+              nombres: data.avalNombres,
+              apellidoPaterno: data.avalApellidoPaterno,
+              apellidoMaterno: data.avalApellidoMaterno,
+            }) ?? data.avalNombre ?? null)
+          : (data.avalNombre?.trim().toUpperCase() || null),
+        avalNombres:         data.avalNombres?.trim().toUpperCase() || null,
+        avalApellidoPaterno: data.avalApellidoPaterno?.trim().toUpperCase() || null,
+        avalApellidoMaterno: data.avalApellidoMaterno?.trim().toUpperCase() || null,
         avalTelefono: data.avalTelefono ?? null,
+        avalTelefonoAlt: data.avalTelefonoAlt ?? null,
+        avalDireccion: (data.avalDomicilioCalle || data.avalDomicilioColonia || data.avalDomicilioMunicipio)
+          ? (armarDomicilioLibre({
+              calle: data.avalDomicilioCalle,
+              numExt: data.avalDomicilioNumExt,
+              numInt: data.avalDomicilioNumInt,
+              colonia: data.avalDomicilioColonia,
+              municipio: data.avalDomicilioMunicipio,
+              estado: data.avalDomicilioEstado,
+              cp: data.avalDomicilioCP,
+            }) ?? data.avalDireccion ?? null)
+          : (data.avalDireccion?.trim().toUpperCase() || null),
+        avalDomicilioCalle:     data.avalDomicilioCalle?.trim().toUpperCase() || null,
+        avalDomicilioNumExt:    data.avalDomicilioNumExt?.trim().toUpperCase() || null,
+        avalDomicilioNumInt:    data.avalDomicilioNumInt?.trim().toUpperCase() || null,
+        avalDomicilioColonia:   data.avalDomicilioColonia?.trim().toUpperCase() || null,
+        avalDomicilioMunicipio: data.avalDomicilioMunicipio?.trim().toUpperCase() || null,
+        avalDomicilioEstado:    data.avalDomicilioEstado?.trim().toUpperCase() || null,
+        avalDomicilioCP:        data.avalDomicilioCP?.trim() || null,
         avalRelacion: data.avalRelacion ?? null,
         // Coord elige día/hora — si no vienen, cae al default de sucursal.
         diaCobro: data.diaCobro ?? branchDefaults?.diaCobro ?? null,

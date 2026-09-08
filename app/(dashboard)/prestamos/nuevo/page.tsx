@@ -80,9 +80,22 @@ export default function NuevaSolicitudPage() {
   const [tipoGarantia, setTipoGarantia]     = useState<'MUEBLE' | 'INMUEBLE'>('INMUEBLE')
   const [descGarantia, setDescGarantia]     = useState('')
   const [valorGarantia, setValorGarantia]   = useState('')
-  const [avalNombre, setAvalNombre]         = useState('')
-  const [avalTelefono, setAvalTelefono]     = useState('')
-  const [avalRelacion, setAvalRelacion]     = useState('')
+  // Aval — descomposicion nombre + domicilio (PR ####).
+  // La solicitud fisica pide nombres/apellidos y direccion desglosada; el
+  // backend concatena hacia avalNombre/avalDireccion para retro-compat.
+  const [avalNombres, setAvalNombres]                 = useState('')
+  const [avalApellidoPaterno, setAvalApellidoPaterno] = useState('')
+  const [avalApellidoMaterno, setAvalApellidoMaterno] = useState('')
+  const [avalTelefono, setAvalTelefono]               = useState('')
+  const [avalTelefonoAlt, setAvalTelefonoAlt]         = useState('')
+  const [avalDomicilioCalle, setAvalDomicilioCalle]         = useState('')
+  const [avalDomicilioNumExt, setAvalDomicilioNumExt]       = useState('')
+  const [avalDomicilioNumInt, setAvalDomicilioNumInt]       = useState('')
+  const [avalDomicilioColonia, setAvalDomicilioColonia]     = useState('')
+  const [avalDomicilioMunicipio, setAvalDomicilioMunicipio] = useState('')
+  const [avalDomicilioEstado, setAvalDomicilioEstado]       = useState('')
+  const [avalDomicilioCP, setAvalDomicilioCP]               = useState('')
+  const [avalRelacion, setAvalRelacion]               = useState('')
 
   // Cola de documentos
   const [queuedDocs, setQueuedDocs] = useState<QueuedDoc[]>([])
@@ -207,18 +220,38 @@ export default function NuevaSolicitudPage() {
           diaCobro: diaCobro || undefined,
           horaLimiteCobro: horaLimiteCobro || undefined,
         }
+        // Aval — payload compartido entre los 3 tipos con aval. Mandamos
+        // los subcampos y dejamos que el backend arme avalNombre /
+        // avalDireccion (retro-compat con prints y llamadas viejas).
+        const hasAvalName = !!(avalNombres || avalApellidoPaterno || avalApellidoMaterno)
+        const avalPayload: Record<string, unknown> = {}
+        if (hasAvalName) {
+          avalPayload.avalNombres         = avalNombres || undefined
+          avalPayload.avalApellidoPaterno = avalApellidoPaterno || undefined
+          avalPayload.avalApellidoMaterno = avalApellidoMaterno || undefined
+          avalPayload.avalTelefono        = avalTelefono || undefined
+          avalPayload.avalTelefonoAlt     = avalTelefonoAlt || undefined
+          avalPayload.avalRelacion        = avalRelacion || undefined
+          avalPayload.avalDomicilioCalle     = avalDomicilioCalle || undefined
+          avalPayload.avalDomicilioNumExt    = avalDomicilioNumExt || undefined
+          avalPayload.avalDomicilioNumInt    = avalDomicilioNumInt || undefined
+          avalPayload.avalDomicilioColonia   = avalDomicilioColonia || undefined
+          avalPayload.avalDomicilioMunicipio = avalDomicilioMunicipio || undefined
+          avalPayload.avalDomicilioEstado    = avalDomicilioEstado || undefined
+          avalPayload.avalDomicilioCP        = avalDomicilioCP || undefined
+        }
         if (tipo === 'INDIVIDUAL') {
           body.ciclo = ciclo
           body.tuvoAtraso = tuvoAtraso
-          if (avalNombre) { body.avalNombre = avalNombre; body.avalTelefono = avalTelefono || undefined; body.avalRelacion = avalRelacion || undefined }
+          Object.assign(body, avalPayload)
         } else if (tipo === 'AGIL') {
           body.clienteIrregular = clienteIrregular
-          if (avalNombre) { body.avalNombre = avalNombre; body.avalTelefono = avalTelefono || undefined; body.avalRelacion = avalRelacion || undefined }
+          Object.assign(body, avalPayload)
         } else if (tipo === 'FIDUCIARIO') {
           body.tipoGarantia = tipoGarantia
           body.descripcionGarantia = descGarantia || undefined
           body.valorGarantia = valorGarantia ? parseFloat(valorGarantia) : undefined
-          if (avalNombre) { body.avalNombre = avalNombre; body.avalTelefono = avalTelefono || undefined; body.avalRelacion = avalRelacion || undefined }
+          Object.assign(body, avalPayload)
         }
 
         const res = await fetch('/api/loans', {
@@ -500,20 +533,55 @@ export default function NuevaSolicitudPage() {
 
             {/* Aval */}
             {(tipo === 'INDIVIDUAL' || tipo === 'AGIL' || tipo === 'FIDUCIARIO') && (
-              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-4">
                 <p className="text-sm font-semibold flex items-center gap-2">
                   <UserCheck className="h-4 w-4 text-primary" />
                   Datos del aval
                   <span className="text-xs font-normal text-muted-foreground">(garantía personal requerida)</span>
                 </p>
+
+                {/* Nombre desglosado — mismo patron que la ficha de cliente */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Nombre completo *</Label>
-                    <Input value={avalNombre} onChange={(e) => setAvalNombre(e.target.value)} placeholder="Nombre del aval" required />
+                    <Label>Nombre(s) *</Label>
+                    <Input
+                      value={avalNombres}
+                      onChange={(e) => setAvalNombres(e.target.value.toUpperCase())}
+                      style={{ textTransform: 'uppercase' }}
+                      placeholder="MARIA GUADALUPE"
+                      required
+                    />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>Apellido paterno *</Label>
+                    <Input
+                      value={avalApellidoPaterno}
+                      onChange={(e) => setAvalApellidoPaterno(e.target.value.toUpperCase())}
+                      style={{ textTransform: 'uppercase' }}
+                      placeholder="HERNANDEZ"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Apellido materno</Label>
+                    <Input
+                      value={avalApellidoMaterno}
+                      onChange={(e) => setAvalApellidoMaterno(e.target.value.toUpperCase())}
+                      style={{ textTransform: 'uppercase' }}
+                      placeholder="LOPEZ"
+                    />
+                  </div>
+                </div>
+
+                {/* Contacto — teléfono principal + alterno + relación */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <Label>Teléfono</Label>
                     <Input value={avalTelefono} onChange={(e) => setAvalTelefono(e.target.value)} placeholder="10 dígitos" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Teléfono alterno</Label>
+                    <Input value={avalTelefonoAlt} onChange={(e) => setAvalTelefonoAlt(e.target.value)} placeholder="10 dígitos" />
                   </div>
                   <div className="space-y-1.5">
                     <Label>Relación</Label>
@@ -525,6 +593,74 @@ export default function NuevaSolicitudPage() {
                       <option value="CONOCIDO">Conocido / Amigo</option>
                       <option value="OTRO">Otro</option>
                     </select>
+                  </div>
+                </div>
+
+                {/* Domicilio del aval — desglosado */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Domicilio del aval</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
+                    <div className="sm:col-span-4 space-y-1.5">
+                      <Label>Calle</Label>
+                      <Input
+                        value={avalDomicilioCalle}
+                        onChange={(e) => setAvalDomicilioCalle(e.target.value.toUpperCase())}
+                        style={{ textTransform: 'uppercase' }}
+                        placeholder="AV. REFORMA"
+                      />
+                    </div>
+                    <div className="sm:col-span-1 space-y-1.5">
+                      <Label>No. Ext.</Label>
+                      <Input
+                        value={avalDomicilioNumExt}
+                        onChange={(e) => setAvalDomicilioNumExt(e.target.value)}
+                        placeholder="123"
+                      />
+                    </div>
+                    <div className="sm:col-span-1 space-y-1.5">
+                      <Label>No. Int.</Label>
+                      <Input
+                        value={avalDomicilioNumInt}
+                        onChange={(e) => setAvalDomicilioNumInt(e.target.value.toUpperCase())}
+                        style={{ textTransform: 'uppercase' }}
+                        placeholder="4"
+                      />
+                    </div>
+                    <div className="sm:col-span-3 space-y-1.5">
+                      <Label>Colonia</Label>
+                      <Input
+                        value={avalDomicilioColonia}
+                        onChange={(e) => setAvalDomicilioColonia(e.target.value.toUpperCase())}
+                        style={{ textTransform: 'uppercase' }}
+                        placeholder="CENTRO"
+                      />
+                    </div>
+                    <div className="sm:col-span-3 space-y-1.5">
+                      <Label>Municipio / Alcaldía</Label>
+                      <Input
+                        value={avalDomicilioMunicipio}
+                        onChange={(e) => setAvalDomicilioMunicipio(e.target.value.toUpperCase())}
+                        style={{ textTransform: 'uppercase' }}
+                        placeholder="TOLUCA"
+                      />
+                    </div>
+                    <div className="sm:col-span-4 space-y-1.5">
+                      <Label>Estado</Label>
+                      <Input
+                        value={avalDomicilioEstado}
+                        onChange={(e) => setAvalDomicilioEstado(e.target.value.toUpperCase())}
+                        style={{ textTransform: 'uppercase' }}
+                        placeholder="EDO. MEX."
+                      />
+                    </div>
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <Label>CP</Label>
+                      <Input
+                        value={avalDomicilioCP}
+                        onChange={(e) => setAvalDomicilioCP(e.target.value)}
+                        placeholder="50000"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

@@ -297,12 +297,32 @@ model Client {
   // el usuario escribe "gonzalez" o "González". Se mantiene en sync
   // desde el POST/PATCH de cliente. Indexada para queries rápidas.
   nombreNormalizado  String    @default("")
+  // Descomposición del nombre — captura estructurada por DG para
+  // reportes / contratos. Nullable en históricos (aún viven en
+  // nombreCompleto libre). Los nuevos capturados por el formulario
+  // llegan aquí + siguen escribiendo nombreCompleto para retro-compat.
+  nombres            String?
+  apellidoPaterno    String?
+  apellidoMaterno    String?
   numIne             String?
   curp               String?
   telefono           String?
   telefonoAlt        String?
   email              String?
   domicilio          String?
+  // Descomposición del domicilio — captura estructurada para armar
+  // contratos y filtrar por colonia/CP/municipio en reportes. Nullable
+  // en históricos (siguen viviendo en `domicilio` libre); los nuevos
+  // capturados llegan aquí + concatenados también en `domicilio` para
+  // que el resto del sistema (búsqueda, prints, exportaciones viejas)
+  // no cambie de comportamiento.
+  domicilioCalle     String?
+  domicilioNumExt    String?
+  domicilioNumInt    String?
+  domicilioColonia   String?
+  domicilioMunicipio String?
+  domicilioEstado    String?
+  domicilioCP        String?
   referenciaNombre   String?
   referenciaTelefono String?
   fechaNacimiento    DateTime?
@@ -418,11 +438,24 @@ model Loan {
   desembolsoLat          Float? // Latitud GPS del desembolso
   desembolsoLng          Float? // Longitud GPS del desembolso
   desembolsoFotoAt       DateTime? // Cuándo se subió la evidencia
-  // Aval
+  // Aval — nombre en un solo string libre para retro-compat + los
+  // subcampos estructurados que llenan los nuevos formularios. Direccion
+  // el aval no comparte tabla con Client, asi que su descomposicion
+  // vive aqui mismo en Loan (todos nullable para no romper historicos).
   avalNombre             String?
+  avalNombres            String?
+  avalApellidoPaterno    String?
+  avalApellidoMaterno    String?
   avalTelefono           String?
   avalTelefonoAlt        String?
   avalDireccion          String?
+  avalDomicilioCalle     String?
+  avalDomicilioNumExt    String?
+  avalDomicilioNumInt    String?
+  avalDomicilioColonia   String?
+  avalDomicilioMunicipio String?
+  avalDomicilioEstado    String?
+  avalDomicilioCP        String?
   avalRelacion           String? // "CONYUGE", "FAMILIAR", "CONOCIDO", etc.
   // Aprobación
   aprobadoPorId          String?

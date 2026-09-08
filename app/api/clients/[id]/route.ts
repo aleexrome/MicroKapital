@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
 import { normalizeNameForSearch } from '@/lib/text-normalize'
+import { armarNombreCompleto, armarDomicilioLibre } from '@/lib/persona-address'
 
 /**
  * GET — used by aval-check and other client lookups.
@@ -41,10 +42,20 @@ export async function GET(
 
 const updateClientSchema = z.object({
   nombreCompleto:     z.string().min(2, 'Nombre requerido').optional(),
+  nombres:            z.string().optional().nullable(),
+  apellidoPaterno:    z.string().optional().nullable(),
+  apellidoMaterno:    z.string().optional().nullable(),
   telefono:           z.string().optional().nullable(),
   telefonoAlt:        z.string().optional().nullable(),
   email:              z.string().email().optional().or(z.literal('')).nullable(),
   domicilio:          z.string().optional().nullable(),
+  domicilioCalle:     z.string().optional().nullable(),
+  domicilioNumExt:    z.string().optional().nullable(),
+  domicilioNumInt:    z.string().optional().nullable(),
+  domicilioColonia:   z.string().optional().nullable(),
+  domicilioMunicipio: z.string().optional().nullable(),
+  domicilioEstado:    z.string().optional().nullable(),
+  domicilioCP:        z.string().optional().nullable(),
   numIne:             z.string().optional().nullable(),
   curp:               z.string().optional().nullable(),
   referenciaNombre:   z.string().optional().nullable(),
@@ -117,7 +128,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   // Normalizacion -- mismo criterio que POST: nombres en MAYUSCULAS + trim.
   const update: Record<string, unknown> = {}
-  if (data.nombreCompleto !== undefined) {
+  // Descomposicion del nombre: si vienen los subcampos los guardamos y
+  // regeneramos nombreCompleto para mantener el string libre en sync.
+  const hayNombreSubcampo = data.nombres !== undefined
+    || data.apellidoPaterno !== undefined
+    || data.apellidoMaterno !== undefined
+  if (hayNombreSubcampo) {
+    const nombres         = (data.nombres ?? existing.nombres ?? '')?.trim().toUpperCase() || null
+    const apellidoPaterno = (data.apellidoPaterno ?? existing.apellidoPaterno ?? '')?.trim().toUpperCase() || null
+    const apellidoMaterno = (data.apellidoMaterno ?? existing.apellidoMaterno ?? '')?.trim().toUpperCase() || null
+    update.nombres = nombres
+    update.apellidoPaterno = apellidoPaterno
+    update.apellidoMaterno = apellidoMaterno
+    const armado = armarNombreCompleto({ nombres, apellidoPaterno, apellidoMaterno })
+    if (armado) {
+      update.nombreCompleto = armado
+      update.nombreNormalizado = normalizeNameForSearch(armado)
+    }
+  }
+  if (data.nombreCompleto !== undefined && !hayNombreSubcampo) {
     const nombre = data.nombreCompleto.trim().toUpperCase()
     update.nombreCompleto = nombre
     // Mantener la copia sin acentos en sync para el buscador.
@@ -136,11 +165,45 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
   // Campos libres: solo trim, sin normalizar caja
-  for (const key of ['telefono', 'telefonoAlt', 'email', 'domicilio', 'referenciaTelefono'] as const) {
+  for (const key of ['telefono', 'telefonoAlt', 'email', 'referenciaTelefono'] as const) {
     if (data[key] !== undefined) {
       const v = (data[key] ?? '').trim()
       update[key] = v === '' ? null : v
     }
+  }
+  // Descomposicion del domicilio — mismo patron: cuando llega algún
+  // subcampo se guardan todos + se regenera el string libre. Si llegó el
+  // domicilio libre directo, se respeta tal cual (compat con scripts).
+  const hayDomicilioSubcampo = data.domicilioCalle !== undefined
+    || data.domicilioNumExt !== undefined
+    || data.domicilioNumInt !== undefined
+    || data.domicilioColonia !== undefined
+    || data.domicilioMunicipio !== undefined
+    || data.domicilioEstado !== undefined
+    || data.domicilioCP !== undefined
+  if (hayDomicilioSubcampo) {
+    const dCalle     = ((data.domicilioCalle     ?? existing.domicilioCalle     ?? '') || '').trim().toUpperCase() || null
+    const dNumExt    = ((data.domicilioNumExt    ?? existing.domicilioNumExt    ?? '') || '').trim().toUpperCase() || null
+    const dNumInt    = ((data.domicilioNumInt    ?? existing.domicilioNumInt    ?? '') || '').trim().toUpperCase() || null
+    const dColonia   = ((data.domicilioColonia   ?? existing.domicilioColonia   ?? '') || '').trim().toUpperCase() || null
+    const dMunicipio = ((data.domicilioMunicipio ?? existing.domicilioMunicipio ?? '') || '').trim().toUpperCase() || null
+    const dEstado    = ((data.domicilioEstado    ?? existing.domicilioEstado    ?? '') || '').trim().toUpperCase() || null
+    const dCP        = ((data.domicilioCP        ?? existing.domicilioCP        ?? '') || '').trim() || null
+    update.domicilioCalle     = dCalle
+    update.domicilioNumExt    = dNumExt
+    update.domicilioNumInt    = dNumInt
+    update.domicilioColonia   = dColonia
+    update.domicilioMunicipio = dMunicipio
+    update.domicilioEstado    = dEstado
+    update.domicilioCP        = dCP
+    const armado = armarDomicilioLibre({
+      calle: dCalle, numExt: dNumExt, numInt: dNumInt,
+      colonia: dColonia, municipio: dMunicipio, estado: dEstado, cp: dCP,
+    })
+    if (armado) update.domicilio = armado
+  } else if (data.domicilio !== undefined) {
+    const v = (data.domicilio ?? '').trim()
+    update.domicilio = v === '' ? null : v
   }
   if (data.fechaNacimiento !== undefined) {
     update.fechaNacimiento = data.fechaNacimiento ? new Date(data.fechaNacimiento) : null

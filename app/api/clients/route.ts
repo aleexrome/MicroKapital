@@ -6,13 +6,28 @@ import { scopedClientWhere } from '@/lib/access'
 import { z } from 'zod'
 import { createAuditLog } from '@/lib/audit'
 import { normalizeNameForSearch } from '@/lib/text-normalize'
+import { armarNombreCompleto, armarDomicilioLibre } from '@/lib/persona-address'
 
 const createClientSchema = z.object({
-  nombreCompleto: z.string().min(2, 'Nombre requerido'),
+  // nombreCompleto es opcional cuando llegan los subcampos — lo
+  // reconstruimos con armarNombreCompleto para preservar el campo libre.
+  nombreCompleto: z.string().optional(),
+  // Descomposicion nueva del nombre
+  nombres:         z.string().optional(),
+  apellidoPaterno: z.string().optional(),
+  apellidoMaterno: z.string().optional(),
   telefono: z.string().optional(),
   telefonoAlt: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
   domicilio: z.string().optional(),
+  // Descomposicion nueva del domicilio
+  domicilioCalle:     z.string().optional(),
+  domicilioNumExt:    z.string().optional(),
+  domicilioNumInt:    z.string().optional(),
+  domicilioColonia:   z.string().optional(),
+  domicilioMunicipio: z.string().optional(),
+  domicilioEstado:    z.string().optional(),
+  domicilioCP:        z.string().optional(),
   numIne: z.string().optional(),
   curp: z.string().optional(),
   referenciaNombre: z.string().optional(),
@@ -84,10 +99,36 @@ export async function POST(req: NextRequest) {
   // minúsculas y la cartera se veía inconsistente. Normalizar al guardar
   // garantiza consistencia sin importar cómo escriban en el formulario —
   // también defiende si el API se llama desde otro lado (p. ej. script).
-  const nombreCompleto = data.nombreCompleto.trim().toUpperCase()
+  const nombres         = data.nombres?.trim().toUpperCase() || null
+  const apellidoPaterno = data.apellidoPaterno?.trim().toUpperCase() || null
+  const apellidoMaterno = data.apellidoMaterno?.trim().toUpperCase() || null
+  // Si el formulario mandó subcampos, armamos el nombreCompleto desde
+  // ellos (para que el string libre se mantenga en sync). Si sólo mandó
+  // el nombreCompleto (retro-compat: llamadas desde script viejo), lo
+  // usamos tal cual.
+  const nombreCompletoArmado = armarNombreCompleto({ nombres, apellidoPaterno, apellidoMaterno })
+  const nombreCompleto = (nombreCompletoArmado ?? data.nombreCompleto ?? '').trim().toUpperCase()
+  if (!nombreCompleto || nombreCompleto.length < 2) {
+    return NextResponse.json({ error: 'Nombre requerido (nombres + apellido paterno como mínimo)' }, { status: 400 })
+  }
   const referenciaNombre = data.referenciaNombre?.trim().toUpperCase() || null
   const numIne = data.numIne?.trim().toUpperCase() || null
   const curp = data.curp?.trim().toUpperCase() || null
+
+  // Descomposicion del domicilio + concat para retro-compat.
+  const domicilioCalle     = data.domicilioCalle?.trim().toUpperCase() || null
+  const domicilioNumExt    = data.domicilioNumExt?.trim().toUpperCase() || null
+  const domicilioNumInt    = data.domicilioNumInt?.trim().toUpperCase() || null
+  const domicilioColonia   = data.domicilioColonia?.trim().toUpperCase() || null
+  const domicilioMunicipio = data.domicilioMunicipio?.trim().toUpperCase() || null
+  const domicilioEstado    = data.domicilioEstado?.trim().toUpperCase() || null
+  const domicilioCP        = data.domicilioCP?.trim() || null
+  const domicilioArmado = armarDomicilioLibre({
+    calle: domicilioCalle, numExt: domicilioNumExt, numInt: domicilioNumInt,
+    colonia: domicilioColonia, municipio: domicilioMunicipio,
+    estado: domicilioEstado, cp: domicilioCP,
+  })
+  const domicilio = domicilioArmado ?? (data.domicilio?.trim() || null)
 
   // Bloquear duplicados a nivel EMPRESA — mismo nombre completo, mismo INE
   // o mismo CURP identifican al mismo cliente, sin importar sucursal o
@@ -169,12 +210,22 @@ export async function POST(req: NextRequest) {
       branchId: targetBranchId,
       cobradorId: cobradorId ?? null,
       nombreCompleto,
+      nombres,
+      apellidoPaterno,
+      apellidoMaterno,
       // Copia normalizada (sin acentos, mayúsculas) para el buscador.
       nombreNormalizado: normalizeNameForSearch(nombreCompleto),
       telefono: data.telefono || null,
       telefonoAlt: data.telefonoAlt || null,
       email: data.email || null,
-      domicilio: data.domicilio || null,
+      domicilio,
+      domicilioCalle,
+      domicilioNumExt,
+      domicilioNumInt,
+      domicilioColonia,
+      domicilioMunicipio,
+      domicilioEstado,
+      domicilioCP,
       numIne,
       curp,
       referenciaNombre,

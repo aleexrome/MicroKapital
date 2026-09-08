@@ -37,7 +37,15 @@ export function NuevoClienteForm({
     telefono: '',
     telefonoAlt: '',
     email: '',
-    domicilio: '',
+    // Domicilio descompuesto — se envía por subcampos y el backend arma
+    // el `domicilio` libre para retro-compat (contratos y prints viejos).
+    domicilioCalle: '',
+    domicilioNumExt: '',
+    domicilioNumInt: '',
+    domicilioColonia: '',
+    domicilioMunicipio: '',
+    domicilioEstado: '',
+    domicilioCP: '',
     numIne: '',
     curp: '',
     referenciaNombre: '',
@@ -51,6 +59,8 @@ export function NuevoClienteForm({
   // activadas minúsculas en el teclado.
   const UPPER_FIELDS = new Set([
     'nombres', 'apellidoPaterno', 'apellidoMaterno',
+    'domicilioCalle', 'domicilioNumInt', 'domicilioColonia',
+    'domicilioMunicipio', 'domicilioEstado',
     'referenciaNombre', 'numIne', 'curp',
   ])
 
@@ -92,19 +102,14 @@ export function NuevoClienteForm({
     setLoading(true)
 
     try {
-      // Se envían nombreCompleto ya concatenado y en mayúsculas — los
-      // campos internos (nombres / apellidoPaterno / apellidoMaterno)
-      // NO se persisten en BD por ahora, solo estructuran la captura.
-      const {
-        nombres: _n, apellidoPaterno: _p, apellidoMaterno: _m,
-        ...rest
-      } = form
-      void _n; void _p; void _m
+      // Mandamos nombreCompleto (concatenado, retro-compat) + los
+      // subcampos que ya se guardan por separado en BD. Igual con el
+      // domicilio: mandamos los 7 subcampos y el backend arma el string.
       const res = await fetch('/api/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...rest,
+          ...form,
           nombreCompleto,
           // No mandamos branchId vacío — el API lo deduce del usuario.
           branchId: form.branchId || undefined,
@@ -232,9 +237,38 @@ export function NuevoClienteForm({
               <Label htmlFor="fechaNacimiento">Fecha de nacimiento</Label>
               <Input id="fechaNacimiento" name="fechaNacimiento" type="date" value={form.fechaNacimiento} onChange={handleChange} />
             </div>
-            <div className="sm:col-span-2 space-y-2">
-              <Label htmlFor="domicilio">Domicilio</Label>
-              <Input id="domicilio" name="domicilio" value={form.domicilio} onChange={handleChange} placeholder="Calle, número, colonia, municipio" />
+            {/* Domicilio descompuesto — DG y coord capturan campo a campo
+                para poder reportar por colonia / municipio / CP. El
+                backend re-arma el string libre para contratos viejos. */}
+            <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-6 gap-3">
+              <div className="sm:col-span-4 space-y-2">
+                <Label htmlFor="domicilioCalle">Calle</Label>
+                <Input id="domicilioCalle" name="domicilioCalle" value={form.domicilioCalle} onChange={handleChange} placeholder="Av. Reforma" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="domicilioNumExt">No. Ext.</Label>
+                <Input id="domicilioNumExt" name="domicilioNumExt" value={form.domicilioNumExt} onChange={handleChange} placeholder="123" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="domicilioNumInt">No. Int.</Label>
+                <Input id="domicilioNumInt" name="domicilioNumInt" value={form.domicilioNumInt} onChange={handleChange} placeholder="4" />
+              </div>
+              <div className="sm:col-span-3 space-y-2">
+                <Label htmlFor="domicilioColonia">Colonia</Label>
+                <Input id="domicilioColonia" name="domicilioColonia" value={form.domicilioColonia} onChange={handleChange} placeholder="Centro" />
+              </div>
+              <div className="sm:col-span-3 space-y-2">
+                <Label htmlFor="domicilioMunicipio">Municipio / Alcaldía</Label>
+                <Input id="domicilioMunicipio" name="domicilioMunicipio" value={form.domicilioMunicipio} onChange={handleChange} placeholder="Toluca" />
+              </div>
+              <div className="sm:col-span-4 space-y-2">
+                <Label htmlFor="domicilioEstado">Estado</Label>
+                <Input id="domicilioEstado" name="domicilioEstado" value={form.domicilioEstado} onChange={handleChange} placeholder="México" />
+              </div>
+              <div className="sm:col-span-2 space-y-2">
+                <Label htmlFor="domicilioCP">CP</Label>
+                <Input id="domicilioCP" name="domicilioCP" value={form.domicilioCP} onChange={handleChange} placeholder="50000" inputMode="numeric" />
+              </div>
             </div>
           </CardContent>
         </Card>

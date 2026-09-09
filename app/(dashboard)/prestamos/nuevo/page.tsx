@@ -71,6 +71,16 @@ export default function NuevaSolicitudPage() {
   const [miembros, setMiembros]       = useState<Miembro[]>([
     { ...MIEMBRO_VACIO }, { ...MIEMBRO_VACIO }, { ...MIEMBRO_VACIO }, { ...MIEMBRO_VACIO },
   ])
+  // Chequeo en vivo del nombre del grupo. Antes esta validacion vivia
+  // solo en el POST; el coord se enteraba hasta el final que el nombre
+  // chocaba. Ahora GET /api/loan-groups/check-name responde con debounce
+  // mientras se captura, y el submit se deshabilita si esta tomado.
+  type NombreCheck =
+    | { status: 'idle' }
+    | { status: 'checking' }
+    | { status: 'available' }
+    | { status: 'taken'; match: { nombre: string; branchName: string; cobradorName: string } }
+  const [nombreCheck, setNombreCheck] = useState<NombreCheck>({ status: 'idle' })
 
   // Campos por tipo
   const [tipoGrupo, setTipoGrupo]           = useState<'REGULAR' | 'RESCATE'>('REGULAR')
@@ -111,6 +121,46 @@ export default function NuevaSolicitudPage() {
       .then((d) => setComisionRenovacionFija(d.data?.comisionRenovacionFija ?? null))
       .catch(() => {})
   }, [])
+
+  // Debounce del chequeo de nombre. Ignora carreras — si el usuario sigue
+  // escribiendo, la respuesta de una peticion vieja se descarta con el
+  // flag `abort`. Aplica solo en SOLIDARIO; en el resto el estado queda
+  // idle y la UI del check ni se pinta.
+  useEffect(() => {
+    if (tipo !== 'SOLIDARIO') {
+      setNombreCheck({ status: 'idle' })
+      return
+    }
+    // Mismo stripping que el backend: '*' inicial no cuenta como nombre.
+    const nombre = nombreGrupo.trimStart().replace(/^\*+/, '').trim()
+    if (nombre.length < 2) {
+      setNombreCheck({ status: 'idle' })
+      return
+    }
+    setNombreCheck({ status: 'checking' })
+    let abort = false
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/loan-groups/check-name?nombre=${encodeURIComponent(nombre)}`)
+        if (abort) return
+        const data = await res.json()
+        if (abort) return
+        if (data.available) {
+          setNombreCheck({ status: 'available' })
+        } else if (data.match) {
+          setNombreCheck({ status: 'taken', match: data.match })
+        } else {
+          setNombreCheck({ status: 'idle' })
+        }
+      } catch {
+        if (!abort) setNombreCheck({ status: 'idle' })
+      }
+    }, 350)
+    return () => {
+      abort = true
+      clearTimeout(t)
+    }
+  }, [nombreGrupo, tipo])
 
   const handleCalc = useCallback((c: LoanCalculation) => setCalc(c), [])
 
@@ -282,7 +332,9 @@ export default function NuevaSolicitudPage() {
 
   const canSubmit = !loading && (
     tipo === 'SOLIDARIO'
-      ? miembrosValidos.length >= minIntegrantes && miembrosValidos.every((m) => Number(m.capital) >= 100)
+      ? miembrosValidos.length >= minIntegrantes
+        && miembrosValidos.every((m) => Number(m.capital) >= 100)
+        && nombreCheck.status !== 'taken'
       : !!capital && !!clienteId
   )
 
@@ -343,12 +395,45 @@ export default function NuevaSolicitudPage() {
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <Label>Nombre del grupo (opcional)</Label>
-                  <Input
-                    value={nombreGrupo}
-                    onChange={(e) => setNombreGrupo(e.target.value.toUpperCase())}
-                    style={{ textTransform: 'uppercase' }}
-                    placeholder="EJ: LAS FLORES, GRUPO ESPERANZA..."
-                  />
+                  <div className="relative">
+                    <Input
+                      value={nombreGrupo}
+                      onChange={(e) => setNombreGrupo(e.target.value.toUpperCase())}
+                      style={{ textTransform: 'uppercase' }}
+                      placeholder="EJ: LAS FLORES, GRUPO ESPERANZA..."
+                      aria-invalid={nombreCheck.status === 'taken'}
+                      className={
+                        nombreCheck.status === 'taken'
+                          ? 'border-red-500 focus-visible:ring-red-500 pr-9'
+                          : nombreCheck.status === 'available'
+                          ? 'border-green-500 focus-visible:ring-green-500 pr-9'
+                          : 'pr-9'
+                      }
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+                      {nombreCheck.status === 'checking' && (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
+                      {nombreCheck.status === 'available' && (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      )}
+                      {nombreCheck.status === 'taken' && (
+                        <X className="h-4 w-4 text-red-500" />
+                      )}
+                    </span>
+                  </div>
+                  {nombreCheck.status === 'taken' && (
+                    <p className="text-xs text-red-500 flex items-start gap-1">
+                      <span>⚠</span>
+                      <span>
+                        Ya existe un grupo <strong>{nombreCheck.match.nombre}</strong> en {nombreCheck.match.branchName}
+                        {' '}(coordinador: {nombreCheck.match.cobradorName}). Elige otro nombre.
+                      </span>
+                    </p>
+                  )}
+                  {nombreCheck.status === 'available' && (
+                    <p className="text-xs text-green-600">Nombre disponible.</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

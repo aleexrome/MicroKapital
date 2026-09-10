@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { formatMoney, formatDateTime } from '@/lib/utils'
-import { CheckCircle, Loader2, Building2, Clock, ShieldCheck } from 'lucide-react'
+import { CheckCircle, Loader2, Building2, Clock, ShieldCheck, Search, Filter, X } from 'lucide-react'
 import type { UserRole } from '@prisma/client'
 
 export interface TransferRow {
@@ -44,9 +46,88 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
   // así la vista es una bandeja limpia por rol.
   // DG/DC/SUPER_ADMIN ven todo como referencia global.
   const esAdmin = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
+  const mostrarFiltros = esAdmin || rol === 'MESA_CONTROL'
   const enScope = (r: TransferRow) => esAdmin || r.puedeVerificar
-  const pendientes = rows.filter((r) => r.statusTransferencia === 'PENDIENTE' && enScope(r))
-  const verificadas = rows.filter((r) => r.statusTransferencia === 'VERIFICADO' && enScope(r))
+
+  // ── Filtros (solo para DG/DC/SA/MC) ─────────────────────────────────
+  // El estado se guarda plano en useState — no vale la pena reducer para
+  // 6 controles. Los coord/gerentes no ven el panel y por tanto el filtro
+  // queda en su valor default (todo pasa).
+  const [q, setQ] = useState('')
+  const [branchFilter, setBranchFilter] = useState<string>('__ALL__')
+  const [cobradorFilter, setCobradorFilter] = useState<string>('__ALL__')
+  const [estadoFilter, setEstadoFilter] = useState<'__ALL__' | 'PENDIENTE' | 'VERIFICADO'>('__ALL__')
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
+  const [orden, setOrden] = useState<'fecha-desc' | 'fecha-asc' | 'monto-desc' | 'monto-asc'>('fecha-desc')
+
+  // Opciones para los dropdowns — solo lo que aparece en las filas del scope.
+  const sucursales = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of rows) if (enScope(r)) set.add(r.sucursalNombre)
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, esAdmin])
+  const cobradores = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of rows) if (enScope(r)) set.add(r.cobrador.nombre)
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, esAdmin])
+
+  const filtroActivo = q.trim() !== ''
+    || branchFilter !== '__ALL__'
+    || cobradorFilter !== '__ALL__'
+    || estadoFilter !== '__ALL__'
+    || fechaDesde !== ''
+    || fechaHasta !== ''
+  function resetFiltros() {
+    setQ('')
+    setBranchFilter('__ALL__')
+    setCobradorFilter('__ALL__')
+    setEstadoFilter('__ALL__')
+    setFechaDesde('')
+    setFechaHasta('')
+  }
+
+  // Un solo pipeline: filtrar + ordenar; luego se parte en pendientes /
+  // verificadas. Así los dos badges de conteo respetan el filtro.
+  const filtradasOrdenadas = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    const desde = fechaDesde ? new Date(fechaDesde + 'T00:00:00') : null
+    const hasta = fechaHasta ? new Date(fechaHasta + 'T23:59:59') : null
+    const filtered = rows.filter((r) => {
+      if (!enScope(r)) return false
+      if (branchFilter !== '__ALL__' && r.sucursalNombre !== branchFilter) return false
+      if (cobradorFilter !== '__ALL__' && r.cobrador.nombre !== cobradorFilter) return false
+      if (estadoFilter !== '__ALL__' && r.statusTransferencia !== estadoFilter) return false
+      if (desde || hasta) {
+        const d = new Date(r.fechaHora)
+        if (desde && d < desde) return false
+        if (hasta && d > hasta) return false
+      }
+      if (needle) {
+        const hay = `${r.client.nombreCompleto} ${r.idTransferencia ?? ''} ${r.cobrador.nombre}`
+          .toLowerCase()
+        if (!hay.includes(needle)) return false
+      }
+      return true
+    })
+    filtered.sort((a, b) => {
+      switch (orden) {
+        case 'fecha-asc':  return new Date(a.fechaHora).getTime() - new Date(b.fechaHora).getTime()
+        case 'monto-desc': return Number(b.monto) - Number(a.monto)
+        case 'monto-asc':  return Number(a.monto) - Number(b.monto)
+        case 'fecha-desc':
+        default:           return new Date(b.fechaHora).getTime() - new Date(a.fechaHora).getTime()
+      }
+    })
+    return filtered
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, q, branchFilter, cobradorFilter, estadoFilter, fechaDesde, fechaHasta, orden, esAdmin])
+
+  const pendientes = filtradasOrdenadas.filter((r) => r.statusTransferencia === 'PENDIENTE')
+  const verificadas = filtradasOrdenadas.filter((r) => r.statusTransferencia === 'VERIFICADO')
 
   async function handleVerify(paymentId: string) {
     setProcessing(paymentId)
@@ -90,6 +171,113 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
         <h1 className="text-2xl font-bold text-gray-900">Transferencias</h1>
         <p className="text-muted-foreground">{subtitulo}</p>
       </div>
+
+      {/* ── FILTROS ────────────────────────────────────────────────────── */}
+      {mostrarFiltros && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Filtros</span>
+              <span className="text-xs text-muted-foreground">
+                {filtradasOrdenadas.length} resultado{filtradasOrdenadas.length !== 1 ? 's' : ''}
+              </span>
+              {filtroActivo && (
+                <button
+                  type="button"
+                  onClick={resetFiltros}
+                  className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <X className="h-3 w-3" /> Limpiar filtros
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Búsqueda */}
+              <div className="space-y-1 lg:col-span-2">
+                <Label className="text-xs">Buscar cliente / referencia / cobrador</Label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Nombre, referencia..."
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+              {/* Sucursal */}
+              <div className="space-y-1">
+                <Label className="text-xs">Sucursal</Label>
+                <select
+                  value={branchFilter}
+                  onChange={(e) => setBranchFilter(e.target.value)}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="__ALL__">Todas</option>
+                  {sucursales.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              {/* Cobrador */}
+              <div className="space-y-1">
+                <Label className="text-xs">Cobrador</Label>
+                <select
+                  value={cobradorFilter}
+                  onChange={(e) => setCobradorFilter(e.target.value)}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="__ALL__">Todos</option>
+                  {cobradores.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              {/* Estado */}
+              <div className="space-y-1">
+                <Label className="text-xs">Estado</Label>
+                <select
+                  value={estadoFilter}
+                  onChange={(e) => setEstadoFilter(e.target.value as typeof estadoFilter)}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="__ALL__">Todos</option>
+                  <option value="PENDIENTE">Pendientes</option>
+                  <option value="VERIFICADO">Verificadas</option>
+                </select>
+              </div>
+              {/* Rango de fechas */}
+              <div className="space-y-1">
+                <Label className="text-xs">Desde</Label>
+                <Input
+                  type="date"
+                  value={fechaDesde}
+                  onChange={(e) => setFechaDesde(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Hasta</Label>
+                <Input
+                  type="date"
+                  value={fechaHasta}
+                  onChange={(e) => setFechaHasta(e.target.value)}
+                />
+              </div>
+              {/* Orden */}
+              <div className="space-y-1">
+                <Label className="text-xs">Ordenar por</Label>
+                <select
+                  value={orden}
+                  onChange={(e) => setOrden(e.target.value as typeof orden)}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="fecha-desc">Más reciente</option>
+                  <option value="fecha-asc">Más antigua</option>
+                  <option value="monto-desc">Monto (mayor a menor)</option>
+                  <option value="monto-asc">Monto (menor a mayor)</option>
+                </select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── PENDIENTES ─────────────────────────────────────────────────── */}
       <section className="space-y-3">

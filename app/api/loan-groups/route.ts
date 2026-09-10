@@ -53,8 +53,12 @@ export async function POST(req: NextRequest) {
   // nombre en distintas sucursales generaban confusion al buscar (ej.
   // "BRISAS" en Veracruz y "Brisas" en Toluca). Comparamos sin acentos
   // ni casing y bloqueamos si ya existe uno activo en la empresa.
-  // Prisma no soporta unaccent nativo, asi que traemos los grupos activos
-  // de la empresa y filtramos en app.
+  //
+  // Excepcion "reutilizable": el mismo coord puede volver a usar el
+  // nombre si su grupo anterior con ese nombre ya esta liquidado por
+  // completo. Es una renovacion de grupo solidario donde la gente se
+  // identifica por el nombre (BRISAS, LAS FLORES). Mismo criterio que
+  // GET /api/loan-groups/check-name.
   const nombreNormalizado = normalizeNameForSearch(data.nombre)
   const gruposEmpresa = await prisma.loanGroup.findMany({
     where: {
@@ -64,21 +68,32 @@ export async function POST(req: NextRequest) {
     select: {
       id: true,
       nombre: true,
-      branch: { select: { nombre: true } },
+      cobradorId: true,
+      branch:   { select: { nombre: true } },
       cobrador: { select: { nombre: true } },
+      loans:    { select: { estado: true } },
     },
   })
-  const match = gruposEmpresa.find((g) => normalizeNameForSearch(g.nombre) === nombreNormalizado)
-  if (match) {
-    return NextResponse.json({
-      error: 'NOMBRE_GRUPO_DUPLICADO',
-      message: `Ya existe un grupo con el nombre "${match.nombre}" en la sucursal ${match.branch.nombre} (coordinadora: ${match.cobrador.nombre}). Elige otro nombre para evitar confusión.`,
-      duplicate: {
-        nombre: match.nombre,
-        branchName: match.branch.nombre,
-        cobradorName: match.cobrador.nombre,
-      },
-    }, { status: 409 })
+  const matches = gruposEmpresa.filter((g) => normalizeNameForSearch(g.nombre) === nombreNormalizado)
+  if (matches.length > 0) {
+    const todosPropios = matches.every((g) => g.cobradorId === userId)
+    const todosLiquidados = matches.every(
+      (g) => g.loans.length > 0 && g.loans.every((l) => l.estado === 'LIQUIDATED'),
+    )
+    const reutilizable = todosPropios && todosLiquidados
+    if (!reutilizable) {
+      const match = matches[0]
+      return NextResponse.json({
+        error: 'NOMBRE_GRUPO_DUPLICADO',
+        message: `Ya existe un grupo con el nombre "${match.nombre}" en la sucursal ${match.branch.nombre} (coordinadora: ${match.cobrador.nombre}). Elige otro nombre para evitar confusión.`,
+        duplicate: {
+          nombre: match.nombre,
+          branchName: match.branch.nombre,
+          cobradorName: match.cobrador.nombre,
+        },
+      }, { status: 409 })
+    }
+    // Reutilizable → sigue el flujo normal de creacion (deja pasar).
   }
 
   // Verificar que todos los clientes pertenecen a la empresa

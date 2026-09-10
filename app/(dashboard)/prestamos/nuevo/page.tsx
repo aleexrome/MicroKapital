@@ -79,6 +79,7 @@ export default function NuevaSolicitudPage() {
     | { status: 'idle' }
     | { status: 'checking' }
     | { status: 'available' }
+    | { status: 'reusable'; match: { nombre: string; branchName: string; cobradorName: string } }
     | { status: 'taken'; match: { nombre: string; branchName: string; cobradorName: string } }
   const [nombreCheck, setNombreCheck] = useState<NombreCheck>({ status: 'idle' })
 
@@ -145,7 +146,9 @@ export default function NuevaSolicitudPage() {
         if (abort) return
         const data = await res.json()
         if (abort) return
-        if (data.available) {
+        if (data.available && data.reusable && data.match) {
+          setNombreCheck({ status: 'reusable', match: data.match })
+        } else if (data.available) {
           setNombreCheck({ status: 'available' })
         } else if (data.match) {
           setNombreCheck({ status: 'taken', match: data.match })
@@ -405,7 +408,7 @@ export default function NuevaSolicitudPage() {
                       className={
                         nombreCheck.status === 'taken'
                           ? 'border-red-500 focus-visible:ring-red-500 pr-9'
-                          : nombreCheck.status === 'available'
+                          : nombreCheck.status === 'available' || nombreCheck.status === 'reusable'
                           ? 'border-green-500 focus-visible:ring-green-500 pr-9'
                           : 'pr-9'
                       }
@@ -414,7 +417,7 @@ export default function NuevaSolicitudPage() {
                       {nombreCheck.status === 'checking' && (
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                       )}
-                      {nombreCheck.status === 'available' && (
+                      {(nombreCheck.status === 'available' || nombreCheck.status === 'reusable') && (
                         <CheckCircle2 className="h-4 w-4 text-green-500" />
                       )}
                       {nombreCheck.status === 'taken' && (
@@ -428,6 +431,14 @@ export default function NuevaSolicitudPage() {
                       <span>
                         Ya existe un grupo <strong>{nombreCheck.match.nombre}</strong> en {nombreCheck.match.branchName}
                         {' '}(coordinador: {nombreCheck.match.cobradorName}). Elige otro nombre.
+                      </span>
+                    </p>
+                  )}
+                  {nombreCheck.status === 'reusable' && (
+                    <p className="text-xs text-green-600 flex items-start gap-1">
+                      <span>♻</span>
+                      <span>
+                        Nombre reutilizable — tu grupo anterior <strong>{nombreCheck.match.nombre}</strong> ya está liquidado.
                       </span>
                     </p>
                   )}

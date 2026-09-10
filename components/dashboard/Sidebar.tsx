@@ -34,8 +34,6 @@ import {
   CalendarClock,
   BriefcaseBusiness,
   ClipboardList,
-  Clock,
-  Lock,
 } from 'lucide-react'
 import type { BranchTreeData } from '@/types/tree'
 
@@ -71,18 +69,10 @@ const NAV_ITEMS: NavItem[] = [
     icon: <ClipboardList className="h-5 w-5" />,
     roles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
-  {
-    href: '/limbo',
-    label: 'Préstamos en limbo',
-    icon: <Clock className="h-5 w-5" />,
-    roles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
-  },
-  {
-    href: '/coordinadores-bloqueados',
-    label: 'Coordinadores bloqueados',
-    icon: <Lock className="h-5 w-5" />,
-    roles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
-  },
+  // 'Préstamos en limbo' y 'Coordinadores bloqueados' se sacaron del sidebar:
+  // ya tienen su widget en el Dashboard y desde ahí se entra a la lista, así
+  // que la entrada de menú era ruido. Las rutas /limbo y /coordinadores-bloqueados
+  // siguen existiendo y siendo clickeables desde el widget del dashboard.
   {
     href: '/prestamos/aprobaciones',
     label: 'Aprobaciones',

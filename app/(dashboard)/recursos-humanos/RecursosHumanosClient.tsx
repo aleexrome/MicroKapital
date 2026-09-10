@@ -6,11 +6,15 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { EmpleadoFormDialog, type EmpleadoData } from '@/components/rh/EmpleadoFormDialog'
 import { EliminarEmpleadoButton } from '@/components/rh/EliminarEmpleadoButton'
+import { AccesoSwitch } from '@/components/rh/AccesoSwitch'
 import { Search } from 'lucide-react'
 
 interface Props {
   empleados: EmpleadoData[]
   sucursalesSugeridas: string[]
+  /** Id del director viendo la pagina — la propia fila muestra "Tú"
+   *  en vez del switch para evitar auto-kickeo. */
+  viewerUserId: string
 }
 
 function formatDate(value: string | null): string {
@@ -53,7 +57,7 @@ function PerfilBadge({ perfil, cobranzaSemanal }: { perfil?: 'JUNIOR' | 'EXCELEN
   )
 }
 
-export function RecursosHumanosClient({ empleados, sucursalesSugeridas }: Props) {
+export function RecursosHumanosClient({ empleados, sucursalesSugeridas, viewerUserId }: Props) {
   const [q, setQ] = useState('')
 
   const filtrados = useMemo(() => {
@@ -117,6 +121,12 @@ export function RecursosHumanosClient({ empleados, sucursalesSugeridas }: Props)
                     <th className="text-left py-2 px-2 font-medium">Entrada</th>
                     <th className="text-left py-2 px-2 font-medium">Perfil</th>
                     <th className="text-left py-2 px-2 font-medium">Estatus</th>
+                    <th
+                      className="text-center py-2 px-2 font-medium"
+                      title="Habilita o deshabilita el acceso al sistema. Al apagarlo, el usuario sale en su próxima acción."
+                    >
+                      Acceso
+                    </th>
                     <th className="text-right py-2 px-2 font-medium">Acciones</th>
                   </tr>
                 </thead>
@@ -136,6 +146,23 @@ export function RecursosHumanosClient({ empleados, sucursalesSugeridas }: Props)
                         <Badge variant={emp.estatus === 'ACTIVO' ? 'default' : 'outline'}>
                           {emp.estatus === 'ACTIVO' ? 'Activo' : 'Baja'}
                         </Badge>
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        {emp.userId ? (
+                          <AccesoSwitch
+                            userId={emp.userId}
+                            nombre={emp.nombre}
+                            activo={!!emp.credencialActiva}
+                            disabled={emp.userId === viewerUserId}
+                          />
+                        ) : (
+                          <span
+                            className="text-xs text-muted-foreground italic"
+                            title="Este empleado no tiene cuenta de app"
+                          >
+                            —
+                          </span>
+                        )}
                       </td>
                       <td className="py-2 px-2 text-right">
                         <div className="flex justify-end gap-1">

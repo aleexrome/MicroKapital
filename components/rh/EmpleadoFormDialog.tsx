@@ -28,9 +28,14 @@ export interface EmpleadoData {
   telefono2:            string | null
   fechaEntrada:         string | null  // ISO o YYYY-MM-DD
   fechaBaja:            string | null
-  // Campos derivados (solo display, no se envían al PATCH).
+  // Campos derivados (solo display, no se envían al PATCH del EmployeeRecord).
   perfil?:              'JUNIOR' | 'EXCELENCIA' | 'SENIOR' | null
   cobranzaSemanal?:     number | null
+  // Match con User: si el empleado tiene cuenta de app, aqui viene el
+  // userId + el flag activo. Se usa para pintar el switch de acceso en
+  // la tabla y llamar a PATCH /api/users/[id]/access.
+  userId?:              string | null
+  credencialActiva?:    boolean | null
 }
 
 interface Props {

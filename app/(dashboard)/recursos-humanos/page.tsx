@@ -42,9 +42,12 @@ export default async function RecursosHumanosPage() {
       select: { nombre: true },
       orderBy: { nombre: 'asc' },
     }),
+    // Traemos activos e inactivos: el switch de acceso debe poder
+    // reactivar a un usuario que ya esta desactivado, y sin esta linea
+    // el match por nombre se perderia para los deshabilitados.
     prisma.user.findMany({
-      where: { companyId: companyId!, activo: true },
-      select: { id: true, nombre: true },
+      where: { companyId: companyId! },
+      select: { id: true, nombre: true, activo: true, rol: true },
     }),
     cobranzaSemanalPorUsuario(prisma, companyId!, sabado, viernes),
   ])
@@ -58,15 +61,19 @@ export default async function RecursosHumanosPage() {
   const sucursalesSugeridas = Array.from(sucursalesSet).sort((a, b) => a.localeCompare(b))
 
   // Index de usuarios por nombre normalizado para el match con RH.
-  const userPorNombre = new Map<string, string>()
+  // Guardamos el user completo (no solo id) porque el switch de acceso
+  // en la UI necesita el flag activo y el rol (SUPER_ADMIN no se toca).
+  const userPorNombre = new Map<string, { id: string; activo: boolean; rol: string }>()
   for (const u of usuarios) {
-    userPorNombre.set(normalizarNombre(u.nombre), u.id)
+    userPorNombre.set(normalizarNombre(u.nombre), { id: u.id, activo: u.activo, rol: u.rol })
   }
 
   // Serializamos para el cliente: Decimal -> string, Date -> ISO string.
   const empleados: EmpleadoData[] = empleadosRaw.map((e) => {
-    const userId   = userPorNombre.get(normalizarNombre(e.nombre)) ?? null
-    const cobranza = userId !== null ? (cobranzaMap.get(userId) ?? 0) : null
+    const user     = userPorNombre.get(normalizarNombre(e.nombre)) ?? null
+    // Cobranza solo aplica a usuarios activos — un desactivado no
+    // deberia figurar en la meta semanal.
+    const cobranza = user && user.activo ? (cobranzaMap.get(user.id) ?? 0) : null
     const perfil   = perfilPorCobranza(cobranza)
 
     return {
@@ -94,6 +101,10 @@ export default async function RecursosHumanosPage() {
       // Derivados — no se editan, son solo display.
       perfil,
       cobranzaSemanal:    cobranza,
+      // Match con User para el switch de acceso. Excluimos SUPER_ADMIN
+      // porque su credencial no se toca desde aqui (solo desde /sys-mnt).
+      userId:             user && user.rol !== 'SUPER_ADMIN' ? user.id     : null,
+      credencialActiva:   user && user.rol !== 'SUPER_ADMIN' ? user.activo : null,
     }
   })
 
@@ -102,6 +113,10 @@ export default async function RecursosHumanosPage() {
       <RecursosHumanosClient
         empleados={empleados}
         sucursalesSugeridas={sucursalesSugeridas}
+        // viewerUserId sirve para tapar el switch de "Acceso" en la propia
+        // fila del director que esta viendo la pagina — no puede kickearse
+        // a si mismo (mismo bloqueo tambien vive server-side en el PATCH).
+        viewerUserId={session.user.id}
       />
     </div>
   )

@@ -18,7 +18,6 @@ import {
   BarChart3,
   LogOut,
   Building2,
-  CheckSquare,
   ArrowLeftRight,
   Archive,
   Shield,
@@ -69,16 +68,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: <ClipboardList className="h-5 w-5" />,
     roles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
-  // 'Préstamos en limbo' y 'Coordinadores bloqueados' se sacaron del sidebar:
-  // ya tienen su widget en el Dashboard y desde ahí se entra a la lista, así
-  // que la entrada de menú era ruido. Las rutas /limbo y /coordinadores-bloqueados
-  // siguen existiendo y siendo clickeables desde el widget del dashboard.
-  {
-    href: '/prestamos/aprobaciones',
-    label: 'Aprobaciones',
-    icon: <CheckSquare className="h-5 w-5" />,
-    roles: ['DIRECTOR_GENERAL'],
-  },
+  // 'Préstamos en limbo', 'Coordinadores bloqueados' y 'Aprobaciones' se
+  // sacaron del sidebar: cada uno tiene su widget en el Dashboard con conteo
+  // y CTA a la lista completa (/limbo, /coordinadores-bloqueados, /prestamos/
+  // aprobaciones), y en la práctica el DG revisa todo desde /prestamos
+  // (Solicitudes), no desde el sidebar. La entrada solo duplicaba accesos.
+  // Las rutas siguen existiendo.
   {
     href: '/cobros/pactados',
     label: 'Pactados del día',

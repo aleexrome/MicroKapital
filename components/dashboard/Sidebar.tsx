@@ -48,7 +48,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/dashboard',
     label: 'Dashboard',
     icon: <LayoutDashboard className="h-5 w-5" />,
-    roles: ['GERENTE', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE_ZONAL', 'MESA_CONTROL'],
+    roles: ['GERENTE', 'COORDINADOR', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE_ZONAL', 'MESA_CONTROL'],
   },
   {
     href: '/clientes',

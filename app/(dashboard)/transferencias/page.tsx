@@ -49,6 +49,7 @@ export default async function TransferenciasPage() {
     rol,
     branchId: session.user.branchId ?? null,
     zonaBranchIds: session.user.zonaBranchIds as string[] | null | undefined,
+    permisoVerificarTransferBranchIds: session.user.permisoVerificarTransferBranchIds ?? null,
   }
 
   const rows: TransferRow[] = payments.map((p) => ({

@@ -245,6 +245,12 @@ model User {
   // null = sin acceso (default).
   bancaViewerBranchId String?
   bancaViewerBranch   Branch? @relation("BancaViewers", fields: [bancaViewerBranchId], references: [id])
+  // Override por usuario: sucursales donde puede verificar transferencias
+  // ADEMAS de las que le da su rol / zona. Es una lista JSON de branchIds.
+  // Ejemplo: Edgar (GZ Veracruz) valida Veracruz Central aunque este
+  // marcada como verificacionCentralizada (normalmente solo Mesa de
+  // Control la validaria). Suma; no le quita permiso a nadie mas.
+  permisoVerificarTransferBranchIds Json?
 
   clientsManaged              Client[]                    @relation("CobradoresClientes")
   clientsHeredadosDe          Client[]                    @relation("HeredadoDeCoordinador")

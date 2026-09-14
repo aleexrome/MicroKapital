@@ -12,6 +12,12 @@ export interface AccessUser {
   rol: UserRole
   branchId: string | null
   zonaBranchIds?: string[] | null
+  /** Override por usuario: sucursales adicionales donde puede verificar
+   *  transferencias, ademas de las que le dan su rol y su zona. Se usa
+   *  para casos como "Edgar valida Veracruz Central" (que es
+   *  centralizada y normalmente le tocaria a Mesa de Control). Suma;
+   *  no le quita permiso a nadie mas. */
+  permisoVerificarTransferBranchIds?: string[] | null
 }
 
 /**
@@ -218,6 +224,12 @@ export function canViewInterestData(rol: UserRole): boolean {
  * capturado en la sucursal dada?
  *
  * Reglas:
+ * - Override por usuario (permisoVerificarTransferBranchIds): si la
+ *   sucursal esta en la lista, se permite sin importar el rol o la
+ *   flag verificacionCentralizada. Suma sobre las reglas base — no le
+ *   quita permiso a Mesa de Control ni a nadie mas. Se usa para casos
+ *   como "Edgar valida transferencias de Veracruz Central" que es
+ *   centralizada y normalmente solo Mesa la validaria.
  * - DG / DC / SUPER_ADMIN: pueden verificar en cualquier sucursal
  *   (autoridad máxima; ven todo por escalación).
  * - MESA_CONTROL: verifica SOLO en sucursales con verificacionCentralizada
@@ -225,12 +237,16 @@ export function canViewInterestData(rol: UserRole): boolean {
  *   el GZ, para no cruzar responsabilidades.
  * - GERENTE_ZONAL / GERENTE: verifican SOLO si la sucursal NO es
  *   centralizada y su zona la incluye.
- * - Cualquier otro rol: no puede.
+ * - Cualquier otro rol: no puede (a menos que el override lo listee).
  */
 export function canVerifyTransfer(
   user: AccessUser,
   branch: { id: string; verificacionCentralizada: boolean },
 ): boolean {
+  // Override explicito por usuario — checa antes que las reglas de rol.
+  if (user.permisoVerificarTransferBranchIds?.includes(branch.id)) {
+    return true
+  }
   const rol = user.rol
   if (rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN') {
     return true

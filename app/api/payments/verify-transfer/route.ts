@@ -40,12 +40,16 @@ export async function POST(req: NextRequest) {
 
   // Scope de sucursal — GZ/GERENTE solo verifica en su zona; además
   // quedan bloqueados en sucursales con verificacionCentralizada=true.
+  // Override: si el usuario tiene permisoVerificarTransferBranchIds, esas
+  // sucursales se suman al scope (aunque su rol/zona no las incluyera).
   const branchScope: Record<string, unknown> = {}
+  const overrideBranchIds = session.user.permisoVerificarTransferBranchIds ?? []
   if (rol === 'GERENTE' || rol === 'GERENTE_ZONAL') {
-    const branchIds = session.user.zonaBranchIds?.length
+    const zonaIds = session.user.zonaBranchIds?.length
       ? session.user.zonaBranchIds
-      : session.user.branchId ? [session.user.branchId] : null
-    if (branchIds?.length) branchScope.branchId = { in: branchIds }
+      : session.user.branchId ? [session.user.branchId] : []
+    const branchIds = Array.from(new Set([...zonaIds, ...overrideBranchIds]))
+    if (branchIds.length) branchScope.branchId = { in: branchIds }
   }
 
   const payment = await prisma.payment.findFirst({
@@ -72,10 +76,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Bloqueo por sucursal:
-  // - GZ/GERENTE no verifica sucursales centralizadas.
+  // - GZ/GERENTE no verifica sucursales centralizadas (a menos que el
+  //   override permisoVerificarTransferBranchIds las liste).
   // - MC solo verifica sucursales centralizadas (para no cruzar con GZ).
+  const overrideCubre = overrideBranchIds.includes(payment.loan.branch.id)
   if ((rol === 'GERENTE' || rol === 'GERENTE_ZONAL')
-      && payment.loan.branch.verificacionCentralizada) {
+      && payment.loan.branch.verificacionCentralizada
+      && !overrideCubre) {
     return NextResponse.json({
       error: 'Las transferencias de esta sucursal deben ser verificadas por Dirección General o Mesa de Control.',
     }, { status: 403 })

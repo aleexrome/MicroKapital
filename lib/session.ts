@@ -18,6 +18,10 @@ export interface SessionUser {
   branchId: string | null
   zonaBranchIds?: string[] | null
   permisoAplicarPagos?: boolean
+  /** Override por usuario: sucursales adicionales donde puede verificar
+   *  transferencias (ademas de las que le da rol + zona). Se refresca
+   *  desde BD en cada request. */
+  permisoVerificarTransferBranchIds?: string[] | null
 }
 
 export interface AppSession {
@@ -53,6 +57,7 @@ export async function getSession(): Promise<AppSession | null> {
       branchId: string | null
       zonaBranchIds: unknown
       permisoAplicarPagos: boolean
+      permisoVerificarTransferBranchIds: unknown
       activo: boolean
     } | null = null
     try {
@@ -63,6 +68,7 @@ export async function getSession(): Promise<AppSession | null> {
           branchId: true,
           zonaBranchIds: true,
           permisoAplicarPagos: true,
+          permisoVerificarTransferBranchIds: true,
           activo: true,
         },
       })
@@ -88,6 +94,11 @@ export async function getSession(): Promise<AppSession | null> {
         permisoAplicarPagos: fresh
           ? fresh.permisoAplicarPagos
           : ((decoded.permisoAplicarPagos as boolean | null) ?? false),
+        permisoVerificarTransferBranchIds: fresh
+          ? (Array.isArray(fresh.permisoVerificarTransferBranchIds)
+              ? (fresh.permisoVerificarTransferBranchIds as string[])
+              : null)
+          : null,
       },
     }
   } catch {

@@ -1,12 +1,16 @@
 import { addDays, getDay, getMonth, getDate, isSameDay } from 'date-fns'
 
 // Festivos fijos de México (mes es 0-indexado)
+// Nota: 16 de septiembre (Independencia) se quitó de la lista — en la
+// práctica MicroKapital sí opera ese día, y dejarlo como festivo hacía
+// que los créditos Ágil recorrieran pagos al día siguiente hábil sin
+// razón. Si en algún ejercicio a futuro se decide descansar, se agrega
+// aquí o se controla por año.
 const FESTIVOS_FIJOS: Array<{ mes: number; dia: number }> = [
   { mes: 0, dia: 1 },   // 1 Enero — Año Nuevo
   { mes: 1, dia: 5 },   // 5 Febrero — Constitución
   { mes: 2, dia: 21 },  // 21 Marzo — Natalicio Benito Juárez
   { mes: 4, dia: 1 },   // 1 Mayo — Día del Trabajo
-  { mes: 8, dia: 16 },  // 16 Septiembre — Independencia
   { mes: 10, dia: 2 },  // 2 Noviembre — Día de Muertos (no es festivo oficial, pero se incluye por práctica)
   { mes: 10, dia: 20 }, // 20 Noviembre — Revolución Mexicana
   { mes: 11, dia: 25 }, // 25 Diciembre — Navidad

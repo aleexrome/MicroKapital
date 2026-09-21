@@ -80,14 +80,22 @@ export default async function MesaControlPage() {
     // fecha del video (los mas recientes arriba) y como fallback por
     // updatedAt (para los que solo tienen intentos rechazados sin
     // subida final).
+    //
+    // Nota: loanNotDeletedWhere tiene su propio OR interno; combinarlo
+    // con nuestro OR via spread hace que uno pise al otro. Usamos AND
+    // anidado para que ambos filtros convivan sin colisionar.
     prisma.loan.findMany({
       where: {
         companyId: companyId!,
-        OR: [
-          { desembolsoVideoUrl: { not: null } },
-          { desembolsoIntentos: { gt: 0 } },
+        AND: [
+          {
+            OR: [
+              { desembolsoVideoUrl: { not: null } },
+              { desembolsoIntentos: { gt: 0 } },
+            ],
+          },
+          loanNotDeletedWhere,
         ],
-        ...loanNotDeletedWhere,
       },
       orderBy: [
         { desembolsoVideoSubidoAt: 'desc' },

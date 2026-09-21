@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { ArrowLeft, Users, Banknote, DollarSign, TrendingUp, Wallet, PiggyBank } from 'lucide-react'
+import { ArrowLeft, Users, Banknote, DollarSign, TrendingUp, Wallet, PiggyBank, Printer, Percent, Receipt } from 'lucide-react'
 import { GrupoCalendar } from '@/components/loans/GrupoCalendar'
 import { EditGroupNameButton } from '@/components/loans/EditGroupNameButton'
 import { canViewInterestData } from '@/lib/access'
@@ -186,19 +186,24 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
   // ── Resumen financiero del grupo (solo DG/DC/SA) ────────────────────
   // Se calcula sobre los loans del ciclo vigente para reflejar el ciclo
   // activo y no arrastrar dinero de ciclos anteriores ya liquidados.
-  //   - totalPrestado = suma de capital que salió a los integrantes.
-  //   - totalARecuperar = suma de lo que el grupo debe pagar en total
-  //     (capital + interés + comisión), o sea Σ totalPago.
-  //   - gananciaMK = totalARecuperar - totalPrestado (interés + comisión).
-  //   - cobrado = todo lo que ya entró a caja por payments capturados,
-  //     leído desde schedule.montoPagado (respeta multipagos parciales).
-  //   - porCobrar = lo que falta para llegar a totalARecuperar.
+  //   - totalPrestado    = Σ capital que salió a los integrantes.
+  //   - totalMontoReal   = Σ montoReal (lo que efectivamente se entrego
+  //     al cliente despues de retener comisiones cuando aplica).
+  //   - totalComision    = Σ comisión de apertura.
+  //   - totalInteres     = Σ interés.
+  //   - totalARecuperar  = Σ totalPago (capital + interés + comisión).
+  //   - gananciaMK       = totalInteres + totalComision (= totalARecuperar - totalPrestado).
+  //   - cobrado          = Σ schedule.montoPagado (respeta multipagos parciales).
+  //   - porCobrar        = totalARecuperar - cobrado, con piso en 0.
   const mostrarResumenFinanciero = rol === 'DIRECTOR_GENERAL'
     || rol === 'DIRECTOR_COMERCIAL'
     || rol === 'SUPER_ADMIN'
-  const totalPrestado = loansVigentes.reduce((s, l) => s + Number(l.capital), 0)
-  const totalARecuperar = loansVigentes.reduce((s, l) => s + Number(l.totalPago), 0)
-  const gananciaMK = totalARecuperar - totalPrestado
+  const totalPrestado    = loansVigentes.reduce((s, l) => s + Number(l.capital),   0)
+  const totalMontoReal   = loansVigentes.reduce((s, l) => s + Number(l.montoReal), 0)
+  const totalComision    = loansVigentes.reduce((s, l) => s + Number(l.comision),  0)
+  const totalInteres     = loansVigentes.reduce((s, l) => s + Number(l.interes),   0)
+  const totalARecuperar  = loansVigentes.reduce((s, l) => s + Number(l.totalPago), 0)
+  const gananciaMK       = totalInteres + totalComision
   const totalCobrado = loansVigentes.reduce(
     (s, l) => s + l.schedule.reduce((acc, sc) => acc + Number(sc.montoPagado), 0),
     0,
@@ -256,11 +261,24 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
       {mostrarResumenFinanciero && (
         <Card>
           <CardContent className="p-4 sm:p-5 space-y-4">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <DollarSign className="h-4 w-4 text-primary-600" />
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Resumen financiero del grupo
               </h2>
+              {/* Boton de imprimir — abre la vista imprimible en nueva
+                  pestana. La ruta destino aplica print styles y un
+                  auto-print opcional. */}
+              <Button asChild size="sm" variant="outline" className="ml-auto">
+                <Link
+                  href={`/grupos/${grupo.id}/estado-financiero`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Printer className="h-3.5 w-3.5 mr-1.5" />
+                  Imprimir estado financiero
+                </Link>
+              </Button>
             </div>
 
             {/* Los 2 numeros clave que pidio DG: prestado y a recuperar */}
@@ -291,24 +309,59 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
               </div>
             </div>
 
-            {/* Segunda fila: ganancia, cobrado, por cobrar */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            {/* Segunda fila: desglose de la ganancia y comparativa
+                capital → dinero real entregado (comisiones retenidas). */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+              <div>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Percent className="h-3.5 w-3.5 text-indigo-500" />
+                  Interes total
+                </div>
+                <p className="text-base font-semibold money mt-0.5">
+                  {formatMoney(totalInteres)}
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Receipt className="h-3.5 w-3.5 text-fuchsia-500" />
+                  Comision total
+                </div>
+                <p className="text-base font-semibold money mt-0.5">
+                  {formatMoney(totalComision)}
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Wallet className="h-3.5 w-3.5 text-sky-500" />
+                  Monto entregado
+                </div>
+                <p className="text-base font-semibold money mt-0.5">
+                  {formatMoney(totalMontoReal)}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Neto al cliente
+                </p>
+              </div>
               <div>
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <PiggyBank className="h-3.5 w-3.5 text-primary-500" />
                   Ganancia estimada
                 </div>
-                <p className="text-lg font-semibold money mt-0.5">
+                <p className="text-base font-semibold text-primary-600 money mt-0.5">
                   {formatMoney(gananciaMK)}
                 </p>
               </div>
+            </div>
+
+            {/* Tercera fila: progreso de cobranza */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-border pt-4">
               <div>
                 <p className="text-xs text-muted-foreground">Cobrado a la fecha</p>
                 <p className="text-lg font-semibold text-emerald-600 money mt-0.5">
                   {formatMoney(totalCobrado)}
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {pctCobrado}% del total
+                  {pctCobrado}% del total a recuperar
                 </p>
               </div>
               <div>

@@ -30,8 +30,21 @@ cloudinary.config({
   api_key:    process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 })
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+// Lazy singletons — el SDK de OpenAI v7 valida la key en el constructor,
+// y Vercel corre "Collecting page data" en build donde las env vars de
+// runtime no siempre estan cargadas. Instanciar dentro del handler evita
+// que el build reviente por falta de credenciales.
+let _openai: OpenAI | null = null
+function getOpenAI(): OpenAI {
+  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  return _openai
+}
+let _anthropic: Anthropic | null = null
+function getAnthropic(): Anthropic {
+  if (!_anthropic) _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  return _anthropic
+}
 
 /**
  * POST /api/loans/[id]/desembolso/upload
@@ -142,7 +155,7 @@ export async function POST(
     const whisperFile = new File([buffer], file.name || 'video.webm', {
       type: file.type || 'video/webm',
     })
-    const resp = await openai.audio.transcriptions.create({
+    const resp = await getOpenAI().audio.transcriptions.create({
       file: whisperFile,
       model: 'whisper-1',
       language: 'es',
@@ -181,7 +194,7 @@ export async function POST(
         return Buffer.from(arr).toString('base64')
       }),
     )
-    const visionResp = await anthropic.messages.create({
+    const visionResp = await getAnthropic().messages.create({
       model: 'claude-3-5-sonnet-latest',
       max_tokens: 200,
       messages: [

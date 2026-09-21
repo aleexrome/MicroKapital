@@ -35,15 +35,18 @@ export function DashboardShell({
   const sidebarProps = { userRole, userName, companyName, branchName, treeData, puedeVerBanca }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Sidebar desktop */}
-      <div className="hidden md:flex md:flex-shrink-0">
+    // print:h-auto / print:overflow-visible → cuando el usuario imprime,
+    // el contenedor deja de ser un viewport de alto fijo y el main puede
+    // extender su contenido a varias hojas.
+    <div className="flex h-screen overflow-hidden bg-background print:h-auto print:overflow-visible">
+      {/* Sidebar desktop — oculto al imprimir */}
+      <div className="hidden md:flex md:flex-shrink-0 print:hidden">
         <Sidebar {...sidebarProps} />
       </div>
 
       {/* Sidebar móvil */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className="fixed inset-0 z-40 md:hidden print:hidden">
           <div className="fixed inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
           <div className="fixed inset-y-0 left-0 z-50">
             <Sidebar {...sidebarProps} onNavClick={() => setSidebarOpen(false)} />
@@ -52,8 +55,8 @@ export function DashboardShell({
       )}
 
       {/* Contenido principal */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-primary-700 text-white border-b border-primary-600/50">
+      <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible">
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-primary-700 text-white border-b border-primary-600/50 print:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-1 rounded-lg hover:bg-white/10 transition-colors"
@@ -63,9 +66,11 @@ export function DashboardShell({
           </button>
           <span className="font-semibold text-sm truncate">{companyName ?? 'MicroKapital'}</span>
         </div>
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto print:overflow-visible">{children}</main>
       </div>
-      <FloatingActionsCluster userId={userId} />
+      <div className="print:hidden">
+        <FloatingActionsCluster userId={userId} />
+      </div>
     </div>
   )
 }

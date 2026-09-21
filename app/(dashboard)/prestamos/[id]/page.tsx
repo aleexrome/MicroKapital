@@ -5,7 +5,7 @@ import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
 import { LoanApprovalActions } from '@/components/loans/LoanApprovalActions'
 import { MesaControlActions } from '@/components/loans/MesaControlActions'
 import { ResubmitLoanButton } from '@/components/loans/ResubmitLoanButton'
-import { DisbursementPhoto } from '@/components/loans/DisbursementPhoto'
+import { DisbursementVideo } from '@/components/loans/DisbursementVideo'
 import { LoanActivateButton } from '@/components/loans/LoanActivateButton'
 import { LoanClientRejectButton } from '@/components/loans/LoanClientRejectButton'
 import { LoanRenewButton } from '@/components/loans/LoanRenewButton'
@@ -889,20 +889,28 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         </Card>
       )}
 
-      {/* Evidencia de desembolso. Cuando el préstamo está ACTIVE el
-          componente decide qué renderizar:
-          - Con foto: tarjeta con GPS y botón "Ver foto" (todos los roles).
-          - Sin foto + rol puede subir: formulario de upload (legacy, para
-            créditos que se activaron antes del flujo de candados).
-          - Sin foto + Director (readOnly): no renderiza nada. */}
-      {loan.estado === 'ACTIVE' && (
-        <DisbursementPhoto
+      {/* Evidencia de desembolso — flujo nuevo por VIDEO con validación
+          automática (Whisper + Claude Vision). El componente decide qué
+          renderizar según lo que hay en BD:
+            - Con video: player + metadata (todos los roles).
+            - Con foto y sin video: tarjeta legacy con la foto.
+            - Sin evidencia + rol puede grabar (IN_ACTIVATION o ACTIVE
+              legacy): flow completo de grabación con MediaRecorder.
+            - Sin evidencia + Director/DC (readOnly): no renderiza nada.
+          Se muestra tanto en IN_ACTIVATION (para grabar el video que
+          activa el préstamo) como en ACTIVE (para ver la evidencia
+          ya guardada). */}
+      {(loan.estado === 'IN_ACTIVATION' || loan.estado === 'ACTIVE') && (
+        <DisbursementVideo
           loanId={loan.id}
+          videoUrl={loan.desembolsoVideoUrl}
           fotoUrl={loan.desembolsoFotoUrl}
           lat={loan.desembolsoLat}
           lng={loan.desembolsoLng}
+          videoAt={loan.desembolsoVideoSubidoAt?.toISOString() ?? null}
           fotoAt={loan.desembolsoFotoAt?.toISOString() ?? null}
           readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
+          estadoLoan={loan.estado}
         />
       )}
 

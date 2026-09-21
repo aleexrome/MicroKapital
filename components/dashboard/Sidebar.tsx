@@ -33,6 +33,7 @@ import {
   CalendarClock,
   BriefcaseBusiness,
   ClipboardList,
+  Video,
 } from 'lucide-react'
 import type { BranchTreeData } from '@/types/tree'
 
@@ -66,6 +67,12 @@ const NAV_ITEMS: NavItem[] = [
     href: '/mesa-control',
     label: 'Mesa de Control',
     icon: <ClipboardList className="h-5 w-5" />,
+    roles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
+  },
+  {
+    href: '/desembolsos-video',
+    label: 'Desembolsos con video',
+    icon: <Video className="h-5 w-5" />,
     roles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   // 'Préstamos en limbo', 'Coordinadores bloqueados' y 'Aprobaciones' se

@@ -56,10 +56,13 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
   const [q, setQ] = useState('')
   const [branchFilter, setBranchFilter] = useState<string>('__ALL__')
   const [cobradorFilter, setCobradorFilter] = useState<string>('__ALL__')
-  const [estadoFilter, setEstadoFilter] = useState<'__ALL__' | 'PENDIENTE' | 'VERIFICADO'>('__ALL__')
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
   const [orden, setOrden] = useState<'fecha-desc' | 'fecha-asc' | 'monto-desc' | 'monto-asc'>('fecha-desc')
+  // Tab activa: reemplaza el select de "Estado" que estaba en el panel
+  // de filtros — es mas obvio visualmente cambiar entre pendientes /
+  // verificadas / todas.
+  const [activeTab, setActiveTab] = useState<'PENDIENTE' | 'VERIFICADO' | 'TODAS'>('PENDIENTE')
 
   // Opciones para los dropdowns — solo lo que aparece en las filas del scope.
   const sucursales = useMemo(() => {
@@ -78,20 +81,19 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
   const filtroActivo = q.trim() !== ''
     || branchFilter !== '__ALL__'
     || cobradorFilter !== '__ALL__'
-    || estadoFilter !== '__ALL__'
     || fechaDesde !== ''
     || fechaHasta !== ''
   function resetFiltros() {
     setQ('')
     setBranchFilter('__ALL__')
     setCobradorFilter('__ALL__')
-    setEstadoFilter('__ALL__')
     setFechaDesde('')
     setFechaHasta('')
   }
 
-  // Un solo pipeline: filtrar + ordenar; luego se parte en pendientes /
-  // verificadas. Así los dos badges de conteo respetan el filtro.
+  // Un solo pipeline: filtrar + ordenar. Los conteos por tab
+  // (pendientes / verificadas / todas) se sacan del mismo resultado
+  // para que respeten los filtros activos.
   const filtradasOrdenadas = useMemo(() => {
     const needle = q.trim().toLowerCase()
     const desde = fechaDesde ? new Date(fechaDesde + 'T00:00:00') : null
@@ -100,7 +102,6 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
       if (!enScope(r)) return false
       if (branchFilter !== '__ALL__' && r.sucursalNombre !== branchFilter) return false
       if (cobradorFilter !== '__ALL__' && r.cobrador.nombre !== cobradorFilter) return false
-      if (estadoFilter !== '__ALL__' && r.statusTransferencia !== estadoFilter) return false
       if (desde || hasta) {
         const d = new Date(r.fechaHora)
         if (desde && d < desde) return false
@@ -124,10 +125,13 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
     })
     return filtered
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, q, branchFilter, cobradorFilter, estadoFilter, fechaDesde, fechaHasta, orden, esAdmin])
+  }, [rows, q, branchFilter, cobradorFilter, fechaDesde, fechaHasta, orden, esAdmin])
 
   const pendientes = filtradasOrdenadas.filter((r) => r.statusTransferencia === 'PENDIENTE')
   const verificadas = filtradasOrdenadas.filter((r) => r.statusTransferencia === 'VERIFICADO')
+  const visibles = activeTab === 'PENDIENTE' ? pendientes
+    : activeTab === 'VERIFICADO' ? verificadas
+    : filtradasOrdenadas
 
   async function handleVerify(paymentId: string) {
     setProcessing(paymentId)
@@ -230,19 +234,6 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
                   {cobradores.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              {/* Estado */}
-              <div className="space-y-1">
-                <Label className="text-xs">Estado</Label>
-                <select
-                  value={estadoFilter}
-                  onChange={(e) => setEstadoFilter(e.target.value as typeof estadoFilter)}
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="__ALL__">Todos</option>
-                  <option value="PENDIENTE">Pendientes</option>
-                  <option value="VERIFICADO">Verificadas</option>
-                </select>
-              </div>
               {/* Rango de fechas */}
               <div className="space-y-1">
                 <Label className="text-xs">Desde</Label>
@@ -279,32 +270,77 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
         </Card>
       )}
 
-      {/* ── PENDIENTES ─────────────────────────────────────────────────── */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-yellow-500" />
-          <h2 className="text-sm font-semibold">
-            Pendientes de verificación <span className="text-muted-foreground">({pendientes.length})</span>
-          </h2>
-        </div>
+      {/* ── TABS: Pendientes / Verificadas / Todas ─────────────────────── */}
+      <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
+        {([
+          { key: 'PENDIENTE',  label: 'Pendientes',  count: pendientes.length,          icon: <Clock className="h-4 w-4" />,       color: 'text-yellow-500'  },
+          { key: 'VERIFICADO', label: 'Verificadas', count: verificadas.length,         icon: <ShieldCheck className="h-4 w-4" />, color: 'text-emerald-500' },
+          { key: 'TODAS',      label: 'Todas',       count: filtradasOrdenadas.length,  icon: null,                                color: 'text-gray-600'   },
+        ] as const).map((tab) => {
+          const isActive = activeTab === tab.key
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                isActive
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+              }`}
+            >
+              {tab.icon && <span className={isActive ? tab.color : ''}>{tab.icon}</span>}
+              <span>{tab.label}</span>
+              <span className={`inline-flex items-center justify-center min-w-[1.5rem] h-5 px-1.5 rounded-full text-xs font-semibold ${
+                isActive ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          )
+        })}
+      </div>
 
-        {pendientes.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-8">
-              <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No hay transferencias pendientes de verificación</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {pendientes.map((p) => (
-              <Card key={p.id} className="border-yellow-500/20 bg-yellow-500/5">
+      {/* ── LISTADO — segun la tab activa ──────────────────────────────── */}
+      {visibles.length === 0 ? (
+        <Card>
+          <CardContent className="text-center py-10">
+            {activeTab === 'PENDIENTE' ? (
+              <>
+                <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">No hay transferencias pendientes de verificación</p>
+              </>
+            ) : activeTab === 'VERIFICADO' ? (
+              <p className="text-sm text-muted-foreground">Aún no hay transferencias verificadas</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">No hay transferencias con los filtros actuales</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {visibles.map((p) => {
+            const esPendiente = p.statusTransferencia === 'PENDIENTE'
+            return (
+              <Card
+                key={p.id}
+                className={esPendiente ? 'border-yellow-500/20 bg-yellow-500/5' : ''}
+              >
                 <CardContent className="p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <Clock className="h-4 w-4 text-yellow-500" />
-                        <Badge variant="secondary">Pendiente</Badge>
+                        {esPendiente ? (
+                          <>
+                            <Clock className="h-4 w-4 text-yellow-500" />
+                            <Badge variant="secondary">Pendiente</Badge>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                            <Badge variant="success">Verificada</Badge>
+                          </>
+                        )}
                         <span className="font-semibold text-sm">{p.client.nombreCompleto}</span>
                       </div>
                       <div className="text-sm text-gray-700 space-y-0.5">
@@ -321,90 +357,44 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
                           </p>
                         )}
                         <p><span className="text-muted-foreground">Sucursal:</span> {p.sucursalNombre}</p>
-                      </div>
-                    </div>
-                    {p.puedeVerificar ? (
-                      <Button
-                        size="sm"
-                        variant="success"
-                        disabled={!!processing}
-                        onClick={() => handleVerify(p.id)}
-                      >
-                        {processing === p.id
-                          ? <Loader2 className="h-4 w-4 animate-spin" />
-                          : <><CheckCircle className="h-4 w-4" /> Verificar</>}
-                      </Button>
-                    ) : puedeVerificar ? (
-                      // El usuario puede verificar en general, pero no ESTA
-                      // (sucursal centralizada fuera de su alcance).
-                      <span className="text-xs italic text-muted-foreground shrink-0">
-                        Verifica Dirección / Mesa de Control
-                      </span>
-                    ) : null}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* ── VERIFICADAS ────────────────────────────────────────────────── */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-emerald-500" />
-          <h2 className="text-sm font-semibold">
-            Verificadas <span className="text-muted-foreground">({verificadas.length})</span>
-          </h2>
-        </div>
-
-        {verificadas.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-8">
-              <p className="text-sm text-muted-foreground">Aún no hay transferencias verificadas</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {verificadas.map((p) => (
-              <Card key={p.id}>
-                <CardContent className="p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                        <Badge variant="success">Verificada</Badge>
-                        <span className="font-semibold text-sm">{p.client.nombreCompleto}</span>
-                      </div>
-                      <div className="text-sm text-gray-700 space-y-0.5">
-                        <p><span className="text-muted-foreground">Monto:</span> <span className="font-semibold money">{formatMoney(Number(p.monto))}</span></p>
-                        <p><span className="text-muted-foreground">Cobrador:</span> {p.cobrador.nombre}</p>
-                        <p><span className="text-muted-foreground">Capturado:</span> {formatDateTime(p.fechaHora)}</p>
-                        {p.idTransferencia && (
-                          <p><span className="text-muted-foreground">Referencia:</span> <span className="font-mono">{p.idTransferencia}</span></p>
-                        )}
-                        {p.cuentaDestino && (
-                          <p className="flex items-center gap-1">
-                            <Building2 className="h-3 w-3 text-muted-foreground" />
-                            {p.cuentaDestino.banco} — CLABE: {p.cuentaDestino.clabe}
+                        {!esPendiente && (
+                          <p className="pt-1 mt-1 border-t border-border text-emerald-600">
+                            <span className="text-muted-foreground">Validada por:</span>{' '}
+                            <span className="font-medium">{p.verificadoPor?.nombre ?? '—'}</span>
+                            {p.verificadoAt && (
+                              <> · {formatDateTime(p.verificadoAt)}</>
+                            )}
                           </p>
                         )}
-                        <p className="pt-1 mt-1 border-t border-border text-emerald-600">
-                          <span className="text-muted-foreground">Validada por:</span>{' '}
-                          <span className="font-medium">{p.verificadoPor?.nombre ?? '—'}</span>
-                          {p.verificadoAt && (
-                            <> · {formatDateTime(p.verificadoAt)}</>
-                          )}
-                        </p>
                       </div>
                     </div>
+                    {esPendiente && (
+                      p.puedeVerificar ? (
+                        <Button
+                          size="sm"
+                          variant="success"
+                          disabled={!!processing}
+                          onClick={() => handleVerify(p.id)}
+                        >
+                          {processing === p.id
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <><CheckCircle className="h-4 w-4" /> Verificar</>}
+                        </Button>
+                      ) : puedeVerificar ? (
+                        // El usuario puede verificar en general, pero no ESTA
+                        // (sucursal centralizada fuera de su alcance).
+                        <span className="text-xs italic text-muted-foreground shrink-0">
+                          Verifica Dirección / Mesa de Control
+                        </span>
+                      ) : null
+                    )}
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        )}
-      </section>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

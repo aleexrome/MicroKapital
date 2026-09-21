@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
@@ -461,17 +462,37 @@ export function GrupoCalendar({
 
             return (
               <div key={loan.id} className="border rounded-lg overflow-hidden">
-                <button
-                  type="button"
+                {/* Row del integrante: click en el chevron o area vacia
+                    expande/colapsa el calendario; click en el nombre
+                    navega a /prestamos/<id> (resumen financiero, docs,
+                    calendario individual, etc.). Se usa un div en lugar
+                    de button para poder anidar el Link sin romper HTML;
+                    el toggle se dispara con onClick + soporte de
+                    teclado. */}
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => toggleClient(loan.id)}
-                  className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      toggleClient(loan.id)
+                    }
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-muted/40 transition-colors cursor-pointer"
                 >
                   {isExpanded
                     ? <ChevronDown  className="h-4 w-4 shrink-0 text-muted-foreground" />
                     : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                   }
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{loan.clientNombre}</div>
+                    <Link
+                      href={`/prestamos/${loan.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-medium truncate block hover:underline hover:text-primary-600 transition-colors"
+                    >
+                      {loan.clientNombre}
+                    </Link>
                     <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
                       <span>Monto: <span className="font-medium">{formatMoney(loan.capital)}</span></span>
                       {loan.pagoSemanal !== null && (
@@ -485,7 +506,7 @@ export function GrupoCalendar({
                   <span className="text-xs text-muted-foreground shrink-0">
                     {pagadosCount}/{loan.schedule.length} pagados
                   </span>
-                </button>
+                </div>
 
                 {isExpanded && (
                   <div className="border-t px-4 py-3">

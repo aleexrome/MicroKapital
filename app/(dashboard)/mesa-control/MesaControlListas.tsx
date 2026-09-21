@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { AlertTriangle, ClipboardList, CheckCircle, Building2, User, RotateCcw } from 'lucide-react'
+import { AlertTriangle, ClipboardList, CheckCircle, Building2, User, RotateCcw, Video } from 'lucide-react'
+import { DesembolsosVideoList, type DesembolsoVideoRow } from './DesembolsosVideoList'
 
 export interface MesaControlLoan {
   id: string
@@ -47,30 +48,42 @@ function agrupar(loans: MesaControlLoan[]) {
 interface Props {
   pendientes: MesaControlLoan[]
   regresadas: MesaControlLoan[]
+  desembolsosVideo: DesembolsoVideoRow[]
 }
 
-/**
- * Bloque inferior de /mesa-control con las dos listas de préstamos
- * organizadas en tabs: "Por revisar" (PENDING_REVIEW) y "Regresadas"
- * (RETURNED_TO_COORDINATOR). Cada tab agrupa por sucursal →
- * coordinador. Antes eran dos <section> apiladas y había que scrollear
- * mucho para ver las regresadas; con tabs se cambia de una a otra sin
- * salir del viewport.
- */
-export function MesaControlListas({ pendientes, regresadas }: Props) {
-  const [activeTab, setActiveTab] = useState<'PENDIENTE' | 'REGRESADA'>('PENDIENTE')
+type ActiveTab = 'PENDIENTE' | 'REGRESADA' | 'DESEMBOLSOS_VIDEO'
 
-  const grupos = activeTab === 'PENDIENTE' ? agrupar(pendientes) : agrupar(regresadas)
+/**
+ * Bloque inferior de /mesa-control con las listas organizadas en tabs:
+ *   - "Por revisar" (PENDING_REVIEW)
+ *   - "Regresadas al coordinador" (RETURNED_TO_COORDINATOR)
+ *   - "Desembolsos con video" (auditoria: loans con video subido o con
+ *     intentos rechazados). MC ve el dia a dia; DG y DC entran a
+ *     supervisar cuando quieran.
+ */
+export function MesaControlListas({ pendientes, regresadas, desembolsosVideo }: Props) {
+  const [activeTab, setActiveTab] = useState<ActiveTab>('PENDIENTE')
+
+  const grupos = activeTab === 'PENDIENTE'
+    ? agrupar(pendientes)
+    : activeTab === 'REGRESADA'
+    ? agrupar(regresadas)
+    : []
   const variante = activeTab === 'PENDIENTE' ? 'pendiente' : 'regresada'
-  const cuenta = activeTab === 'PENDIENTE' ? pendientes.length : regresadas.length
+  const cuenta = activeTab === 'PENDIENTE'
+    ? pendientes.length
+    : activeTab === 'REGRESADA'
+    ? regresadas.length
+    : desembolsosVideo.length
 
   return (
     <div className="space-y-4">
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
         {([
-          { key: 'PENDIENTE',  label: 'Por revisar',              count: pendientes.length, icon: <AlertTriangle className="h-4 w-4" />, color: 'text-yellow-500' },
-          { key: 'REGRESADA',  label: 'Regresadas al coordinador', count: regresadas.length, icon: <ClipboardList className="h-4 w-4" />, color: 'text-blue-500' },
+          { key: 'PENDIENTE',         label: 'Por revisar',              count: pendientes.length,      icon: <AlertTriangle className="h-4 w-4" />, color: 'text-yellow-500' },
+          { key: 'REGRESADA',         label: 'Regresadas al coordinador', count: regresadas.length,      icon: <ClipboardList className="h-4 w-4" />, color: 'text-blue-500' },
+          { key: 'DESEMBOLSOS_VIDEO', label: 'Desembolsos con video',     count: desembolsosVideo.length, icon: <Video className="h-4 w-4" />,        color: 'text-emerald-500' },
         ] as const).map((tab) => {
           const isActive = activeTab === tab.key
           return (
@@ -96,8 +109,12 @@ export function MesaControlListas({ pendientes, regresadas }: Props) {
         })}
       </div>
 
-      {/* Contenido */}
-      {cuenta === 0 ? (
+      {/* Contenido — la tab "Desembolsos con video" se pinta por
+          separado porque su UI es distinta (auditoría con filtros y
+          card individual por intento, no agrupación por sucursal). */}
+      {activeTab === 'DESEMBOLSOS_VIDEO' ? (
+        <DesembolsosVideoList rows={desembolsosVideo} />
+      ) : cuenta === 0 ? (
         <Card>
           <CardContent className="text-center py-8 text-muted-foreground">
             {activeTab === 'PENDIENTE' ? (

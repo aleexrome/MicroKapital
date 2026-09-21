@@ -444,6 +444,21 @@ model Loan {
   desembolsoLat          Float? // Latitud GPS del desembolso
   desembolsoLng          Float? // Longitud GPS del desembolso
   desembolsoFotoAt       DateTime? // Cuándo se subió la evidencia
+  // ── Evidencia de desembolso por VIDEO (nuevo flujo anti-fraude) ─────
+  // El cliente graba un video diciendo su nombre, la fecha, el monto y
+  // una palabra del dia (nonce) que genero el server al iniciar la
+  // sesion. La app manda el audio a Whisper + frames del video a
+  // Claude Vision para validar todos los checks automaticamente.
+  // Los campos siguen a los ya existentes de la foto — cuando ambos
+  // esten llenos, el video reemplaza a la foto como evidencia oficial.
+  desembolsoVideoUrl              String?   // Cloudinary URL del video
+  desembolsoPalabraDelDia         String?   // Nonce que el cliente debe decir
+  desembolsoSesionIniciadaAt      DateTime? // Cuando se pidio la palabra del dia
+  desembolsoVideoSubidoAt         DateTime? // Cuando llego el video
+  desembolsoTranscripcion         String?   // Texto reconocido por Whisper (audit)
+  desembolsoValidacion            Json?     // Reporte de los 5 checks (nombre/fecha/monto/palabra/dinero-visible)
+  desembolsoAprobado              Boolean?  // null=pendiente, true=paso auto, false=rechazado
+  desembolsoIntentos              Int       @default(0) // Cuantas veces el coord ha reintentado
   // Aval — nombre en un solo string libre para retro-compat + los
   // subcampos estructurados que llenan los nuevos formularios. Direccion
   // el aval no comparte tabla con Client, asi que su descomposicion

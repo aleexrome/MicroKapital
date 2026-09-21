@@ -119,42 +119,61 @@ export async function POST(
     )
   }
 
-  // ── Recibir video + GPS ─────────────────────────────────────────────
-  const formData = await req.formData()
-  const file = formData.get('video') as File | null
-  const lat = formData.get('lat') as string | null
-  const lng = formData.get('lng') as string | null
-  if (!file) return NextResponse.json({ error: 'Video requerido' }, { status: 400 })
-
-  const bytes = await file.arrayBuffer()
-  const buffer = Buffer.from(bytes)
-
-  // 1. Subir a Cloudinary como video
-  const uploadResult = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'microkapital/desembolsos-video',
-        public_id: `${loan.id}-${Date.now()}`,
-        resource_type: 'video',
-        type: 'upload',
-        access_mode: 'public',
-      },
-      (error, result) => {
-        if (error || !result) return reject(error ?? new Error('Cloudinary video upload failed'))
-        resolve({ secure_url: result.secure_url, public_id: result.public_id })
-      },
+  // ── Recibir referencia al video ya subido a Cloudinary + GPS ──────
+  // El frontend ya subio el video directo a Cloudinary via signed
+  // upload (sorteando el limite de 4.5MB de Vercel). Aqui solo nos
+  // llega el URL y el public_id para procesar.
+  const body = await req.json().catch(() => null) as
+    | { videoUrl?: string; publicId?: string; lat?: string | number | null; lng?: string | number | null }
+    | null
+  if (!body?.videoUrl || !body?.publicId) {
+    return NextResponse.json(
+      { error: 'Faltan videoUrl y publicId. Sube primero el video a Cloudinary con la firma de /signature.' },
+      { status: 400 },
     )
-    stream.end(buffer)
-  })
-  const videoUrl = uploadResult.secure_url
+  }
+  const videoUrl = body.videoUrl
+  const publicId = body.publicId
+  const lat = body.lat != null ? String(body.lat) : null
+  const lng = body.lng != null ? String(body.lng) : null
 
-  // 2. Transcribir audio con Whisper. Convertimos el buffer a un File-like
-  //    que el SDK acepta. Whisper soporta webm/mp4/mp3/wav etc.
+  // 1. Extraer solo el audio como MP3 via Cloudinary URL transform y
+  //    pasarlo a Whisper. Es MUCHO mas chico que el video completo y
+  //    en formato canonico (MP3) que Whisper reconoce siempre — esto
+  //    evita el error "no se pudo transcribir" cuando el video venia
+  //    con codecs raros de movil.
+  const audioUrl = cloudinary.url(publicId, {
+    resource_type: 'video',
+    format: 'mp3',
+  })
   let transcripcion = ''
   try {
-    const whisperFile = new File([buffer], file.name || 'video.webm', {
-      type: file.type || 'video/webm',
-    })
+    // Damos hasta 3 intentos con backoff — a veces Cloudinary tarda
+    // unos segundos en tener el derivado MP3 disponible despues del
+    // upload directo.
+    let audioBuf: Buffer | null = null
+    for (let intento = 0; intento < 3; intento++) {
+      const r = await fetch(audioUrl)
+      if (r.ok) {
+        audioBuf = Buffer.from(await r.arrayBuffer())
+        break
+      }
+      if (r.status === 404 || r.status === 423) {
+        await new Promise((r) => setTimeout(r, 1500))
+        continue
+      }
+      throw new Error(`Cloudinary audio fetch failed: ${r.status}`)
+    }
+    if (!audioBuf) throw new Error('Timeout esperando el audio de Cloudinary')
+
+    // Uint8Array (no Buffer) para satisfacer el tipado de File en la
+    // configuracion actual — Buffer<SharedArrayBuffer> no es asignable
+    // a BlobPart en strict mode.
+    const whisperFile = new File(
+      [new Uint8Array(audioBuf)],
+      `audio-${loan.id}.mp3`,
+      { type: 'audio/mpeg' },
+    )
     const resp = await getOpenAI().audio.transcriptions.create({
       file: whisperFile,
       model: 'whisper-1',
@@ -164,25 +183,28 @@ export async function POST(
   } catch (err) {
     console.error('[desembolso-video] Whisper error:', err)
     return NextResponse.json(
-      { error: 'No se pudo transcribir el audio del video. Reintenta.' },
+      {
+        error: 'No se pudo transcribir el audio del video. Revisa que el audio se escuche claro y reintenta.',
+        debug: err instanceof Error ? err.message : String(err),
+      },
       { status: 500 },
     )
   }
 
-  // 3. Frames del video via URL de Cloudinary. Cloudinary genera un
+  // 2. Frames del video via URL de Cloudinary. Cloudinary genera un
   //    thumbnail JPG desde el video con transformacion so_<segundos>.
   //    Con 3 frames alcanzamos: al inicio (2s), a la mitad (~5-7s) y
   //    hacia el final (~12s). Si el video es corto la extraccion
   //    igual funciona porque Cloudinary hace clamp.
   const framesUrls = [2, 6, 12].map((s) =>
-    cloudinary.url(uploadResult.public_id, {
+    cloudinary.url(publicId, {
       resource_type: 'video',
       format: 'jpg',
       transformation: [{ start_offset: `${s}` }, { width: 640, crop: 'limit' }],
     }),
   )
 
-  // 4. Claude Vision decide si hay dinero visible.
+  // 3. Claude Vision decide si hay dinero visible.
   let dineroVisible = false
   let dineroDetalle = ''
   try {
@@ -234,7 +256,7 @@ export async function POST(
     dineroDetalle = 'Error al analizar el video con visión — reintenta o contacta soporte'
   }
 
-  // 5. Correr los 5 checks
+  // 4. Correr los 5 checks
   const hoy = todayMx()
   const rNombre  = checkNombre(transcripcion, loan.client.nombreCompleto)
   const rFecha   = checkFecha(transcripcion, hoy)

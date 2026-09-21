@@ -88,7 +88,12 @@ export default async function CarteraTipoPage({
           },
         },
       },
-      orderBy: { nombre: 'asc' },
+      // Ordenamos primero por coordinador y despues por nombre del grupo,
+      // porque la vista agrupa por coordinador (mismo patron que
+      // INDIVIDUAL/AGIL/FIDUCIARIO mas abajo). Antes venia solo por
+      // nombre y los grupos se mezclaban entre coordinadores en la
+      // sucursal — dificil de leer.
+      orderBy: [{ cobrador: { nombre: 'asc' } }, { nombre: 'asc' }],
     })
 
     const groupData: SolidarioGroup[] = groups.map((grupo) => {
@@ -116,6 +121,22 @@ export default async function CarteraTipoPage({
       }
     })
 
+    // Agrupamos por coordinador preservando el orden de la query (que ya
+    // viene por cobrador asc, luego nombre asc). El Map mantiene el orden
+    // de insercion, asi que iterar el Map da los coordinadores en el
+    // orden correcto y sus grupos ordenados alfabeticamente dentro.
+    const gruposPorCoordinador = new Map<string, SolidarioGroup[]>()
+    for (const g of groupData) {
+      const key = g.cobradorNombre ?? 'Sin asignar'
+      if (!gruposPorCoordinador.has(key)) gruposPorCoordinador.set(key, [])
+      gruposPorCoordinador.get(key)!.push(g)
+    }
+
+    const modeSolidario: 'aplicar' | 'capturar' =
+      rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN' || session.user.permisoAplicarPagos
+        ? 'aplicar'
+        : 'capturar'
+
     return (
       <div className="p-6 space-y-5 max-w-3xl mx-auto">
         <div className="flex items-center gap-3">
@@ -131,16 +152,29 @@ export default async function CarteraTipoPage({
           </div>
         </div>
 
-        <SolidarioGroupList
-          groups={groupData}
-          mode={
-            rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN' || session.user.permisoAplicarPagos
-              ? 'aplicar'
-              : 'capturar'
-          }
-          canDelete={rol === 'DIRECTOR_GENERAL'}
-          canEditName={rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'}
-        />
+        {groups.length === 0 && (
+          <Card><CardContent className="py-10 text-center text-muted-foreground">No hay grupos solidarios activos en esta sucursal</CardContent></Card>
+        )}
+
+        {Array.from(gruposPorCoordinador.entries()).map(([cobradorNombre, gruposCoord]) => (
+          <div key={cobradorNombre} className="space-y-2">
+            {/* Encabezado coordinador — mismo patron que
+                INDIVIDUAL/AGIL/FIDUCIARIO */}
+            <div className="flex items-center gap-2 px-1 pt-2">
+              <UserCheck className="h-4 w-4 text-primary-600" />
+              <p className="text-sm font-semibold text-gray-700">{cobradorNombre}</p>
+              <span className="text-xs text-muted-foreground">
+                · {gruposCoord.length} grupo(s)
+              </span>
+            </div>
+            <SolidarioGroupList
+              groups={gruposCoord}
+              mode={modeSolidario}
+              canDelete={rol === 'DIRECTOR_GENERAL'}
+              canEditName={rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'}
+            />
+          </div>
+        ))}
       </div>
     )
   }

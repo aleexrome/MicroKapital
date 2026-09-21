@@ -56,7 +56,15 @@ interface ValidacionResp {
   message?: string
 }
 
-const MAX_DURACION_SEG = 25  // max 25s de grabación para que Whisper sea rápido
+// Duracion maxima y bitrate elegidos para que el video quepa dentro
+// del limite de 4.5 MB de Vercel serverless functions. Con
+// videoBitsPerSecond=600_000 + audioBitsPerSecond=48_000, un video
+// de 20s pesa aprox 1.6 MB — margen amplio para variaciones de la
+// escena. Si Vercel algun dia levanta el limite o se migra a
+// signed upload directo a Cloudinary, se puede subir la calidad.
+const MAX_DURACION_SEG = 20
+const VIDEO_BITS_PER_SECOND = 600_000
+const AUDIO_BITS_PER_SECOND = 48_000
 
 export function DisbursementVideo({
   loanId,
@@ -199,8 +207,17 @@ export function DisbursementVideo({
     try {
       // 1. Pedir permisos (cámara + micrófono + GPS) primero. Si el
       //    usuario niega alguno, no gastamos una sesión en el server.
+      // Resolucion moderada — 640x480 alcanza para que Claude Vision
+      // detecte el dinero sin generar archivos gigantes. En movil
+      // muchas veces el navegador ignora estos hints y da mas
+      // resolucion; el bitrate del MediaRecorder es el que realmente
+      // caps el tamano final.
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }, // cámara trasera en móvil
+        video: {
+          facingMode: 'environment',
+          width:  { ideal: 640 },
+          height: { ideal: 480 },
+        },
         audio: true,
       })
       streamRef.current = stream
@@ -246,7 +263,15 @@ export function DisbursementVideo({
     // Elegir mime type compatible con el navegador; Safari iOS necesita mp4.
     const mimeTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
     const mime = mimeTypes.find((m) => MediaRecorder.isTypeSupported(m)) ?? ''
-    const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+    // Bitrates bajos para caber en el limite de 4.5 MB de Vercel.
+    // Si el navegador no respeta estos hints (raro), igual el video
+    // se comprime con los ajustes de codec del mime elegido.
+    const recorderOpts: MediaRecorderOptions = {
+      videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
+      audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
+    }
+    if (mime) recorderOpts.mimeType = mime
+    const recorder = new MediaRecorder(stream, recorderOpts)
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data)
     }
@@ -305,6 +330,29 @@ export function DisbursementVideo({
         fd.append('lng', String(gpsCoords.lng))
       }
       const r = await fetch(`/api/loans/${loanId}/desembolso/upload`, { method: 'POST', body: fd })
+
+      // Manejo robusto de la respuesta: algunos errores (413 Request
+      // Entity Too Large, 502, 504) llegan como texto plano en lugar
+      // de JSON. Si intento .json() sin verificar, revienta con
+      // "Unexpected token ..." y el usuario ve un mensaje inutil.
+      // Aqui verificamos content-type; si no es JSON, leemos como
+      // texto y armamos un mensaje humano segun el status.
+      const contentType = r.headers.get('content-type') ?? ''
+      const esJson = contentType.includes('application/json')
+
+      if (!esJson) {
+        const texto = await r.text().catch(() => '')
+        let mensaje = `Error ${r.status}`
+        if (r.status === 413) {
+          mensaje = 'El video quedó muy pesado y el servidor lo rechazó. Regraba manteniendo el video corto (máx 20s) y vuelve a intentar.'
+        } else if (r.status === 504 || r.status === 502) {
+          mensaje = 'El servidor tardó demasiado en procesar el video. Revisa tu conexión y vuelve a intentar.'
+        } else if (texto) {
+          mensaje = texto.slice(0, 200)
+        }
+        throw new Error(mensaje)
+      }
+
       const data: ValidacionResp & { error?: string } = await r.json()
       if (!r.ok && !data?.validacion) {
         throw new Error(data?.error ?? 'Error al subir el video')

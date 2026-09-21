@@ -158,11 +158,14 @@ export default async function CarteraTipoPage({
 
         {Array.from(gruposPorCoordinador.entries()).map(([cobradorNombre, gruposCoord]) => (
           <div key={cobradorNombre} className="space-y-2">
-            {/* Encabezado coordinador — mismo patron que
-                INDIVIDUAL/AGIL/FIDUCIARIO */}
-            <div className="flex items-center gap-2 px-1 pt-2">
-              <UserCheck className="h-4 w-4 text-primary-600" />
-              <p className="text-sm font-semibold text-gray-700">{cobradorNombre}</p>
+            {/* Encabezado coordinador — se ve como divisor visual entre
+                bloques: icono en naranja, nombre en tipografia grande y
+                el bloque desfasado a la izquierda para que no compita con
+                los nombres de los grupos y quede claro que es una
+                seccion, no un renglon mas de la lista. */}
+            <div className="flex items-center gap-2 -ml-3 pt-3 pb-1">
+              <UserCheck className="h-5 w-5 text-orange-500" />
+              <p className="text-lg font-bold text-gray-900">{cobradorNombre}</p>
               <span className="text-xs text-muted-foreground">
                 · {gruposCoord.length} grupo(s)
               </span>
@@ -237,10 +240,11 @@ export default async function CarteraTipoPage({
 
       {Array.from(porCoordinador.values()).map(({ nombre: cobradorNombre, loans: cobradorLoans }) => (
         <div key={cobradorNombre} className="space-y-2">
-          {/* Encabezado coordinador */}
-          <div className="flex items-center gap-2 px-1 pt-2">
-            <UserCheck className="h-4 w-4 text-primary-600" />
-            <p className="text-sm font-semibold text-gray-700">{cobradorNombre}</p>
+          {/* Encabezado coordinador — mismo divisor visual que se usa
+              en la vista de SOLIDARIO. */}
+          <div className="flex items-center gap-2 -ml-3 pt-3 pb-1">
+            <UserCheck className="h-5 w-5 text-orange-500" />
+            <p className="text-lg font-bold text-gray-900">{cobradorNombre}</p>
             <span className="text-xs text-muted-foreground">· {cobradorLoans.length} crédito(s)</span>
           </div>
 

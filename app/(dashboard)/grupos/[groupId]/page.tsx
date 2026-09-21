@@ -3,10 +3,12 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Users, Banknote } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { ArrowLeft, Users, Banknote, DollarSign, TrendingUp, Wallet, PiggyBank } from 'lucide-react'
 import { GrupoCalendar } from '@/components/loans/GrupoCalendar'
 import { EditGroupNameButton } from '@/components/loans/EditGroupNameButton'
 import { canViewInterestData } from '@/lib/access'
+import { formatMoney } from '@/lib/utils'
 import { type Prisma } from '@prisma/client'
 import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 
@@ -181,6 +183,31 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
     }
   }
 
+  // ── Resumen financiero del grupo (solo DG/DC/SA) ────────────────────
+  // Se calcula sobre los loans del ciclo vigente para reflejar el ciclo
+  // activo y no arrastrar dinero de ciclos anteriores ya liquidados.
+  //   - totalPrestado = suma de capital que salió a los integrantes.
+  //   - totalARecuperar = suma de lo que el grupo debe pagar en total
+  //     (capital + interés + comisión), o sea Σ totalPago.
+  //   - gananciaMK = totalARecuperar - totalPrestado (interés + comisión).
+  //   - cobrado = todo lo que ya entró a caja por payments capturados,
+  //     leído desde schedule.montoPagado (respeta multipagos parciales).
+  //   - porCobrar = lo que falta para llegar a totalARecuperar.
+  const mostrarResumenFinanciero = rol === 'DIRECTOR_GENERAL'
+    || rol === 'DIRECTOR_COMERCIAL'
+    || rol === 'SUPER_ADMIN'
+  const totalPrestado = loansVigentes.reduce((s, l) => s + Number(l.capital), 0)
+  const totalARecuperar = loansVigentes.reduce((s, l) => s + Number(l.totalPago), 0)
+  const gananciaMK = totalARecuperar - totalPrestado
+  const totalCobrado = loansVigentes.reduce(
+    (s, l) => s + l.schedule.reduce((acc, sc) => acc + Number(sc.montoPagado), 0),
+    0,
+  )
+  const porCobrar = Math.max(0, totalARecuperar - totalCobrado)
+  const pctCobrado = totalARecuperar > 0
+    ? Math.round((totalCobrado / totalARecuperar) * 100)
+    : 0
+
   // Calcular href de regreso según rol
   const loanBranchId = grupo.loans[0]?.branchId
   const backHref =
@@ -224,6 +251,86 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
           </Button>
         )}
       </div>
+
+      {/* ── Resumen financiero — solo Direccion ─────────────────────── */}
+      {mostrarResumenFinanciero && (
+        <Card>
+          <CardContent className="p-4 sm:p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-primary-600" />
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Resumen financiero del grupo
+              </h2>
+            </div>
+
+            {/* Los 2 numeros clave que pidio DG: prestado y a recuperar */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-xl bg-blue-500/5 border border-blue-500/20 p-3">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Wallet className="h-3.5 w-3.5 text-blue-500" />
+                  Total prestado al grupo
+                </div>
+                <p className="text-2xl font-bold text-blue-600 money mt-1">
+                  {formatMoney(totalPrestado)}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Capital que salio a los integrantes
+                </p>
+              </div>
+              <div className="rounded-xl bg-emerald-500/5 border border-emerald-500/20 p-3">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                  Total a recuperar por MicroKapital
+                </div>
+                <p className="text-2xl font-bold text-emerald-600 money mt-1">
+                  {formatMoney(totalARecuperar)}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Capital + interes + comision
+                </p>
+              </div>
+            </div>
+
+            {/* Segunda fila: ganancia, cobrado, por cobrar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <div>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <PiggyBank className="h-3.5 w-3.5 text-primary-500" />
+                  Ganancia estimada
+                </div>
+                <p className="text-lg font-semibold money mt-0.5">
+                  {formatMoney(gananciaMK)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Cobrado a la fecha</p>
+                <p className="text-lg font-semibold text-emerald-600 money mt-0.5">
+                  {formatMoney(totalCobrado)}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {pctCobrado}% del total
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Por cobrar</p>
+                <p className="text-lg font-semibold text-amber-600 money mt-0.5">
+                  {formatMoney(porCobrar)}
+                </p>
+              </div>
+            </div>
+
+            {/* Barra de progreso de la cobranza vs total a recuperar */}
+            <div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 transition-all"
+                  style={{ width: `${Math.min(100, pctCobrado)}%` }}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <GrupoCalendar
         groupId={grupo.id}

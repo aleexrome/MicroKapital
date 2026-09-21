@@ -347,7 +347,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
                   <PiggyBank className="h-3.5 w-3.5 text-primary-500" />
                   Ganancia estimada
                 </div>
-                <p className="text-base font-semibold text-primary-600 money mt-0.5">
+                <p className="text-base font-semibold text-fuchsia-500 money mt-0.5">
                   {formatMoney(gananciaMK)}
                 </p>
               </div>

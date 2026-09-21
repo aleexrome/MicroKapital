@@ -322,40 +322,61 @@ export function DisbursementVideo({
     if (!videoBlob) return
     setFase('subiendo')
     try {
-      const fd = new FormData()
-      const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm'
-      fd.append('video', new File([videoBlob], `desembolso-${loanId}.${ext}`, { type: videoBlob.type }))
-      if (gpsCoords) {
-        fd.append('lat', String(gpsCoords.lat))
-        fd.append('lng', String(gpsCoords.lng))
+      // 1. Pedir firma para subir directo a Cloudinary. Asi evitamos
+      //    el limite de 4.5MB de Vercel serverless functions — el
+      //    binario grande no pasa por nuestro backend.
+      const sigRes = await fetch(`/api/loans/${loanId}/desembolso/signature`, { method: 'POST' })
+      if (!sigRes.ok) {
+        const err = await sigRes.json().catch(() => ({}))
+        throw new Error(err.error ?? 'No se pudo firmar el upload')
       }
-      const r = await fetch(`/api/loans/${loanId}/desembolso/upload`, { method: 'POST', body: fd })
+      const sig = await sigRes.json() as {
+        cloudName: string; apiKey: string; timestamp: number;
+        folder: string; publicId: string; signature: string;
+      }
 
-      // Manejo robusto de la respuesta: algunos errores (413 Request
-      // Entity Too Large, 502, 504) llegan como texto plano en lugar
-      // de JSON. Si intento .json() sin verificar, revienta con
-      // "Unexpected token ..." y el usuario ve un mensaje inutil.
-      // Aqui verificamos content-type; si no es JSON, leemos como
-      // texto y armamos un mensaje humano segun el status.
+      // 2. Subir directo a Cloudinary. El binario ya no toca Vercel.
+      const cloudForm = new FormData()
+      const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm'
+      cloudForm.append('file', new File([videoBlob], `desembolso-${loanId}.${ext}`, { type: videoBlob.type }))
+      cloudForm.append('api_key',   sig.apiKey)
+      cloudForm.append('timestamp', String(sig.timestamp))
+      cloudForm.append('folder',    sig.folder)
+      cloudForm.append('public_id', sig.publicId)
+      cloudForm.append('signature', sig.signature)
+
+      const cloudRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${sig.cloudName}/video/upload`,
+        { method: 'POST', body: cloudForm },
+      )
+      if (!cloudRes.ok) {
+        const err = await cloudRes.json().catch(() => ({}))
+        throw new Error(err.error?.message ?? `Cloudinary rechazó el video (${cloudRes.status})`)
+      }
+      const cloudData = await cloudRes.json() as { secure_url: string; public_id: string }
+
+      // 3. Llamar al backend con la URL para que corra la validacion.
+      //    Solo va JSON pequeno — no hay riesgo de 413.
+      const r = await fetch(`/api/loans/${loanId}/desembolso/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoUrl: cloudData.secure_url,
+          publicId: cloudData.public_id,
+          lat: gpsCoords?.lat ?? null,
+          lng: gpsCoords?.lng ?? null,
+        }),
+      })
+
       const contentType = r.headers.get('content-type') ?? ''
-      const esJson = contentType.includes('application/json')
-
-      if (!esJson) {
+      if (!contentType.includes('application/json')) {
         const texto = await r.text().catch(() => '')
-        let mensaje = `Error ${r.status}`
-        if (r.status === 413) {
-          mensaje = 'El video quedó muy pesado y el servidor lo rechazó. Regraba manteniendo el video corto (máx 20s) y vuelve a intentar.'
-        } else if (r.status === 504 || r.status === 502) {
-          mensaje = 'El servidor tardó demasiado en procesar el video. Revisa tu conexión y vuelve a intentar.'
-        } else if (texto) {
-          mensaje = texto.slice(0, 200)
-        }
-        throw new Error(mensaje)
+        throw new Error(texto.slice(0, 200) || `Error ${r.status}`)
       }
 
       const data: ValidacionResp & { error?: string } = await r.json()
       if (!r.ok && !data?.validacion) {
-        throw new Error(data?.error ?? 'Error al subir el video')
+        throw new Error(data?.error ?? 'Error al validar el video')
       }
 
       if (data.aprobado) {

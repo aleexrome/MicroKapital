@@ -459,6 +459,13 @@ model Loan {
   desembolsoValidacion            Json?     // Reporte de los 5 checks (nombre/fecha/monto/palabra/dinero-visible)
   desembolsoAprobado              Boolean?  // null=pendiente, true=paso auto, false=rechazado
   desembolsoIntentos              Int       @default(0) // Cuantas veces el coord ha reintentado
+  // Escalamiento manual por Mesa de Control cuando algo se ve raro
+  // (mismo coord con muchos rechazos, GPS lejos de la sucursal, video
+  // que aprobo auto pero con evidencia debil, etc.). Al escalar se
+  // notifica a Direccion y queda marcado el desembolso para revision.
+  desembolsoEscaladoAt            DateTime?
+  desembolsoEscaladoPorId         String?
+  desembolsoEscaladoNota          String?
   // Aval — nombre en un solo string libre para retro-compat + los
   // subcampos estructurados que llenan los nuevos formularios. Direccion
   // el aval no comparte tabla con Client, asi que su descomposicion

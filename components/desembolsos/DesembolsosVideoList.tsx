@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useToast } from '@/components/ui/use-toast'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,8 +12,9 @@ import { Label } from '@/components/ui/label'
 import { formatMoney } from '@/lib/utils'
 import {
   Video, CheckCircle, XCircle, MapPin, Building2, User, Search, Filter, X,
-  RefreshCw, Clock, ChevronDown, ChevronUp, ExternalLink,
+  RefreshCw, Clock, ChevronDown, ChevronUp, ExternalLink, AlertTriangle, Loader2,
 } from 'lucide-react'
+import type { UserRole } from '@prisma/client'
 
 /**
  * Fila de desembolso por video para la vista de auditoria en
@@ -35,6 +38,11 @@ export interface DesembolsoVideoRow {
   lat:              number | null
   lng:              number | null
   transcripcion:    string | null
+  // Escalamiento manual — cuando MC/DG/DC marcan el desembolso para
+  // revision. La UI lo pinta con badge amarillo y muestra la nota.
+  escaladoAt:       string | null    // ISO
+  escaladoPorNombre: string | null
+  escaladoNota:     string | null
   // JSON del reporte de validacion — se lee con acceso lazy segun
   // hace falta. Simplifica el type solo a lo que la UI usa.
   checks:           {
@@ -46,18 +54,59 @@ export interface DesembolsoVideoRow {
   } | null
 }
 
-type EstadoFiltro = 'TODOS' | 'APROBADOS' | 'RECHAZADOS' | 'MULTI_INTENTOS'
+type EstadoFiltro = 'TODOS' | 'APROBADOS' | 'RECHAZADOS' | 'MULTI_INTENTOS' | 'ESCALADOS'
 
 interface Props {
   rows: DesembolsoVideoRow[]
+  /** Rol del usuario logueado — MC/DG/DC/SA ven el boton "Escalar". */
+  rol: UserRole
 }
 
-export function DesembolsosVideoList({ rows }: Props) {
+export function DesembolsosVideoList({ rows, rol }: Props) {
+  const router = useRouter()
+  const { toast } = useToast()
   const [q, setQ] = useState('')
   const [branchFilter, setBranchFilter] = useState<string>('__ALL__')
   const [cobradorFilter, setCobradorFilter] = useState<string>('__ALL__')
   const [estadoFilter, setEstadoFilter] = useState<EstadoFiltro>('TODOS')
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set())
+  const [escalando, setEscalando] = useState<string | null>(null)
+
+  const puedeEscalar = rol === 'MESA_CONTROL' || rol === 'DIRECTOR_GENERAL'
+    || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
+
+  async function escalar(loanId: string) {
+    const nota = window.prompt(
+      'Escribe una nota corta explicando por qué escalas este desembolso a Dirección (opcional):',
+      '',
+    )
+    if (nota === null) return // usuario canceló
+    setEscalando(loanId)
+    try {
+      const res = await fetch(`/api/loans/${loanId}/desembolso/escalar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nota: nota.trim() || undefined }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error ?? 'No se pudo escalar')
+      }
+      toast({
+        title: '⚠ Desembolso escalado',
+        description: 'Dirección fue notificada.',
+      })
+      router.refresh()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Error',
+        variant: 'destructive',
+      })
+    } finally {
+      setEscalando(null)
+    }
+  }
 
   const sucursales = useMemo(() => {
     const set = new Set<string>()
@@ -89,6 +138,7 @@ export function DesembolsosVideoList({ rows }: Props) {
       if (estadoFilter === 'APROBADOS'      && r.aprobado !== true)  return false
       if (estadoFilter === 'RECHAZADOS'     && r.aprobado !== false) return false
       if (estadoFilter === 'MULTI_INTENTOS' && r.intentos < 3)       return false
+      if (estadoFilter === 'ESCALADOS'      && !r.escaladoAt)        return false
       if (needle) {
         const hay = `${r.clienteNombre} ${r.cobradorNombre} ${r.branchNombre}`.toLowerCase()
         if (!hay.includes(needle)) return false
@@ -100,6 +150,7 @@ export function DesembolsosVideoList({ rows }: Props) {
   const conteoAprobados     = rows.filter((r) => r.aprobado === true).length
   const conteoRechazados    = rows.filter((r) => r.aprobado === false).length
   const conteoMultiIntentos = rows.filter((r) => r.intentos >= 3).length
+  const conteoEscalados     = rows.filter((r) => !!r.escaladoAt).length
 
   function toggle(id: string) {
     setExpandidos((prev) => {
@@ -113,7 +164,7 @@ export function DesembolsosVideoList({ rows }: Props) {
   return (
     <div className="space-y-4">
       {/* KPIs simples arriba */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Card>
           <CardContent className="p-3">
             <p className="text-xs text-muted-foreground">Total</p>
@@ -142,6 +193,14 @@ export function DesembolsosVideoList({ rows }: Props) {
               <RefreshCw className="h-3 w-3 text-amber-500" /> ≥3 intentos
             </p>
             <p className="text-xl font-bold text-amber-500">{conteoMultiIntentos}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3 text-orange-500" /> Escalados
+            </p>
+            <p className="text-xl font-bold text-orange-500">{conteoEscalados}</p>
           </CardContent>
         </Card>
       </div>
@@ -206,6 +265,7 @@ export function DesembolsosVideoList({ rows }: Props) {
                 <option value="APROBADOS">Solo aprobados</option>
                 <option value="RECHAZADOS">Solo rechazados</option>
                 <option value="MULTI_INTENTOS">≥3 intentos (potencial fraude)</option>
+                <option value="ESCALADOS">Escalados a Dirección</option>
               </select>
             </div>
           </div>
@@ -228,7 +288,9 @@ export function DesembolsosVideoList({ rows }: Props) {
             const isExpanded = expandidos.has(r.loanId)
             return (
               <Card key={r.loanId} className={
-                r.aprobado === false
+                r.escaladoAt
+                  ? 'border-orange-500/40 bg-orange-500/5'
+                  : r.aprobado === false
                   ? 'border-red-500/30 bg-red-500/5'
                   : r.intentos >= 3
                   ? 'border-amber-500/30 bg-amber-500/5'
@@ -262,6 +324,11 @@ export function DesembolsosVideoList({ rows }: Props) {
                             {r.intentos} intentos
                           </Badge>
                         )}
+                        {r.escaladoAt && (
+                          <Badge className="text-[10px] bg-orange-500 hover:bg-orange-500 text-white">
+                            <AlertTriangle className="h-3 w-3 mr-1" /> Escalado a Dirección
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1 flex items-center gap-3 flex-wrap">
                         <span className="flex items-center gap-1">
@@ -287,12 +354,26 @@ export function DesembolsosVideoList({ rows }: Props) {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
                       <Button asChild size="sm" variant="outline">
                         <Link href={`/prestamos/${r.loanId}`}>
                           <ExternalLink className="h-3 w-3 mr-1" /> Ver préstamo
                         </Link>
                       </Button>
+                      {puedeEscalar && !r.escaladoAt && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-orange-500/50 text-orange-600 hover:bg-orange-500/10"
+                          disabled={escalando === r.loanId}
+                          onClick={() => escalar(r.loanId)}
+                        >
+                          {escalando === r.loanId
+                            ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            : <AlertTriangle className="h-3 w-3 mr-1" />}
+                          Escalar a Dirección
+                        </Button>
+                      )}
                       {(r.videoUrl || r.transcripcion || r.checks) && (
                         <Button
                           size="sm"
@@ -309,6 +390,23 @@ export function DesembolsosVideoList({ rows }: Props) {
 
                   {isExpanded && (
                     <div className="space-y-3 pt-2 border-t">
+                      {r.escaladoAt && (
+                        <div className="rounded-lg border border-orange-300 bg-orange-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-widest text-orange-700 mb-1 flex items-center gap-1">
+                            <AlertTriangle className="h-3.5 w-3.5" /> Escalado a Dirección
+                          </p>
+                          <p className="text-xs text-orange-900">
+                            Por <span className="font-medium">{r.escaladoPorNombre ?? 'usuario desconocido'}</span>
+                            {' · '}
+                            {new Date(r.escaladoAt).toLocaleString('es-MX')}
+                          </p>
+                          {r.escaladoNota && (
+                            <p className="text-sm text-orange-900 mt-2 whitespace-pre-wrap">
+                              {r.escaladoNota}
+                            </p>
+                          )}
+                        </div>
+                      )}
                       {r.videoUrl && (
                         <video
                           src={r.videoUrl}

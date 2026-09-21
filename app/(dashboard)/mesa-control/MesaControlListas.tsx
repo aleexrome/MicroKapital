@@ -5,8 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney, formatDate } from '@/lib/utils'
-import { AlertTriangle, ClipboardList, CheckCircle, Building2, User, RotateCcw, Video } from 'lucide-react'
-import { DesembolsosVideoList, type DesembolsoVideoRow } from './DesembolsosVideoList'
+import { AlertTriangle, ClipboardList, CheckCircle, Building2, User, RotateCcw } from 'lucide-react'
 
 export interface MesaControlLoan {
   id: string
@@ -48,42 +47,33 @@ function agrupar(loans: MesaControlLoan[]) {
 interface Props {
   pendientes: MesaControlLoan[]
   regresadas: MesaControlLoan[]
-  desembolsosVideo: DesembolsoVideoRow[]
 }
 
-type ActiveTab = 'PENDIENTE' | 'REGRESADA' | 'DESEMBOLSOS_VIDEO'
+type ActiveTab = 'PENDIENTE' | 'REGRESADA'
 
 /**
  * Bloque inferior de /mesa-control con las listas organizadas en tabs:
  *   - "Por revisar" (PENDING_REVIEW)
  *   - "Regresadas al coordinador" (RETURNED_TO_COORDINATOR)
- *   - "Desembolsos con video" (auditoria: loans con video subido o con
- *     intentos rechazados). MC ve el dia a dia; DG y DC entran a
- *     supervisar cuando quieran.
+ *
+ * El flujo de desembolso por video vive aparte en /desembolsos-video
+ * porque Mesa de Control es papeleo (revision de solicitudes) y la
+ * activacion por video es un flujo distinto en campo.
  */
-export function MesaControlListas({ pendientes, regresadas, desembolsosVideo }: Props) {
+export function MesaControlListas({ pendientes, regresadas }: Props) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('PENDIENTE')
 
-  const grupos = activeTab === 'PENDIENTE'
-    ? agrupar(pendientes)
-    : activeTab === 'REGRESADA'
-    ? agrupar(regresadas)
-    : []
+  const grupos = activeTab === 'PENDIENTE' ? agrupar(pendientes) : agrupar(regresadas)
   const variante = activeTab === 'PENDIENTE' ? 'pendiente' : 'regresada'
-  const cuenta = activeTab === 'PENDIENTE'
-    ? pendientes.length
-    : activeTab === 'REGRESADA'
-    ? regresadas.length
-    : desembolsosVideo.length
+  const cuenta = activeTab === 'PENDIENTE' ? pendientes.length : regresadas.length
 
   return (
     <div className="space-y-4">
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
         {([
-          { key: 'PENDIENTE',         label: 'Por revisar',              count: pendientes.length,      icon: <AlertTriangle className="h-4 w-4" />, color: 'text-yellow-500' },
-          { key: 'REGRESADA',         label: 'Regresadas al coordinador', count: regresadas.length,      icon: <ClipboardList className="h-4 w-4" />, color: 'text-blue-500' },
-          { key: 'DESEMBOLSOS_VIDEO', label: 'Desembolsos con video',     count: desembolsosVideo.length, icon: <Video className="h-4 w-4" />,        color: 'text-emerald-500' },
+          { key: 'PENDIENTE', label: 'Por revisar',              count: pendientes.length, icon: <AlertTriangle className="h-4 w-4" />, color: 'text-yellow-500' },
+          { key: 'REGRESADA', label: 'Regresadas al coordinador', count: regresadas.length, icon: <ClipboardList className="h-4 w-4" />, color: 'text-blue-500' },
         ] as const).map((tab) => {
           const isActive = activeTab === tab.key
           return (
@@ -109,12 +99,8 @@ export function MesaControlListas({ pendientes, regresadas, desembolsosVideo }: 
         })}
       </div>
 
-      {/* Contenido — la tab "Desembolsos con video" se pinta por
-          separado porque su UI es distinta (auditoría con filtros y
-          card individual por intento, no agrupación por sucursal). */}
-      {activeTab === 'DESEMBOLSOS_VIDEO' ? (
-        <DesembolsosVideoList rows={desembolsosVideo} />
-      ) : cuenta === 0 ? (
+      {/* Contenido */}
+      {cuenta === 0 ? (
         <Card>
           <CardContent className="text-center py-8 text-muted-foreground">
             {activeTab === 'PENDIENTE' ? (

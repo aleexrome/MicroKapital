@@ -9,7 +9,6 @@ import { AlertTriangle, ClipboardList, CheckCircle, RotateCcw, BarChart3 } from 
 import { loanNotDeletedWhere } from '@/lib/access'
 import { getSaturday, getFriday } from '@/lib/week-utils'
 import { MesaControlListas, type MesaControlLoan } from './MesaControlListas'
-import type { DesembolsoVideoRow } from './DesembolsosVideoList'
 
 const ROLES_PERMITIDOS = ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN']
 
@@ -32,7 +31,7 @@ export default async function MesaControlPage() {
   const satActual = getSaturday(new Date())
   const friActual = getFriday(satActual)
 
-  const [pendientes, regresadas, semanaAudit, desembolsosVideo] = await Promise.all([
+  const [pendientes, regresadas, semanaAudit] = await Promise.all([
     prisma.loan.findMany({
       where: {
         companyId: companyId!,
@@ -75,39 +74,6 @@ export default async function MesaControlPage() {
       },
       select: { accion: true },
     }),
-    // Loans con actividad de video de desembolso: ya subieron y
-    // aprobaron, o ya intentaron y siguen sin aprobar. Se ordena por
-    // fecha del video (los mas recientes arriba) y como fallback por
-    // updatedAt (para los que solo tienen intentos rechazados sin
-    // subida final).
-    //
-    // Nota: loanNotDeletedWhere tiene su propio OR interno; combinarlo
-    // con nuestro OR via spread hace que uno pise al otro. Usamos AND
-    // anidado para que ambos filtros convivan sin colisionar.
-    prisma.loan.findMany({
-      where: {
-        companyId: companyId!,
-        AND: [
-          {
-            OR: [
-              { desembolsoVideoUrl: { not: null } },
-              { desembolsoIntentos: { gt: 0 } },
-            ],
-          },
-          loanNotDeletedWhere,
-        ],
-      },
-      orderBy: [
-        { desembolsoVideoSubidoAt: 'desc' },
-        { updatedAt: 'desc' },
-      ],
-      take: 200,
-      include: {
-        client:   { select: { id: true, nombreCompleto: true } },
-        cobrador: { select: { id: true, nombre: true } },
-        branch:   { select: { nombre: true } },
-      },
-    }),
   ])
 
   // Serializar para el client component — Decimal → string, Date → ISO.
@@ -125,49 +91,6 @@ export default async function MesaControlPage() {
   })
   const pendientesSer = pendientes.map(toClient)
   const regresadasSer = regresadas.map(toClient)
-
-  // Serializar desembolsos-video para el client.
-  // desembolsoValidacion viene como JSON — extraemos solo los checks
-  // que la UI necesita, con tipo tolerante.
-  interface CheckJson { ok?: unknown; detalle?: unknown }
-  const desembolsosVideoSer: DesembolsoVideoRow[] = desembolsosVideo.map((l) => {
-    const v = (l.desembolsoValidacion ?? null) as { checks?: Record<string, CheckJson> } | null
-    const readCheck = (k: string): { ok: boolean; detalle: string } | null => {
-      const c = v?.checks?.[k]
-      if (!c) return null
-      return {
-        ok: Boolean(c.ok),
-        detalle: typeof c.detalle === 'string' ? c.detalle : '',
-      }
-    }
-    return {
-      loanId:         l.id,
-      clienteNombre:  l.client.nombreCompleto,
-      clienteId:      l.client.id,
-      tipo:           l.tipo,
-      capital:        l.capital.toString(),
-      branchNombre:   l.branch?.nombre ?? 'Sin sucursal',
-      cobradorNombre: l.cobrador?.nombre ?? 'Sin coordinador',
-      cobradorId:     l.cobrador?.id ?? '',
-      estadoLoan:     l.estado,
-      aprobado:       l.desembolsoAprobado,
-      intentos:       l.desembolsoIntentos ?? 0,
-      videoUrl:       l.desembolsoVideoUrl,
-      videoAt:        l.desembolsoVideoSubidoAt ? l.desembolsoVideoSubidoAt.toISOString() : null,
-      lat:            l.desembolsoLat,
-      lng:            l.desembolsoLng,
-      transcripcion:  l.desembolsoTranscripcion,
-      checks: v?.checks
-        ? {
-            nombre:        readCheck('nombre'),
-            fecha:         readCheck('fecha'),
-            monto:         readCheck('monto'),
-            palabraDelDia: readCheck('palabraDelDia'),
-            dineroVisible: readCheck('dineroVisible'),
-          }
-        : null,
-    }
-  })
 
   const semAprobadas  = semanaAudit.filter((a) => a.accion === 'MESA_CONTROL_FORWARD').length
   const semRegresadas = semanaAudit.filter((a) => a.accion === 'MESA_CONTROL_RETURN').length
@@ -238,11 +161,10 @@ export default async function MesaControlPage() {
         </Link>
       </div>
 
-      {/* Listas Por revisar / Regresadas / Desembolsos-video — tabs client-side */}
+      {/* Listas Por revisar / Regresadas — tabs client-side */}
       <MesaControlListas
         pendientes={pendientesSer}
         regresadas={regresadasSer}
-        desembolsosVideo={desembolsosVideoSer}
       />
     </div>
   )

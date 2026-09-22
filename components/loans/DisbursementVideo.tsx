@@ -363,11 +363,25 @@ export function DisbursementVideo({
     if (fase !== 'listo') return
     if (volteandoCamara) return
     const streamPrev = streamRef.current
-    const facingNext: CameraFacing = cameraFacing === 'environment' ? 'user' : 'environment'
+    const facingActual = cameraFacing
+    const facingNext: CameraFacing = facingActual === 'environment' ? 'user' : 'environment'
     setVolteandoCamara(true)
     try {
-      const nuevo = await pedirStream(facingNext)
+      // CRITICO para mobile: el OS de Android/iOS solo permite UN
+      // stream de camara activo a la vez. Si pedimos la nueva camara
+      // ANTES de liberar la actual, getUserMedia falla con "Could not
+      // start video source". Por eso: detach + stop tracks + pequeño
+      // delay para que el OS termine de liberar el hardware, y
+      // recien despues pedimos la opuesta.
+      if (videoElRef.current) {
+        videoElRef.current.srcObject = null
+      }
       streamPrev?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+      // 300ms suele bastar; en algunos Samsung viejos se necesita mas.
+      await new Promise((res) => setTimeout(res, 300))
+
+      const nuevo = await pedirStream(facingNext)
       streamRef.current = nuevo
       if (videoElRef.current) {
         videoElRef.current.srcObject = nuevo
@@ -376,12 +390,25 @@ export function DisbursementVideo({
       }
       setCameraFacing(facingNext)
     } catch (err) {
-      // La camara opuesta no existe / esta ocupada. Dejamos el stream
-      // anterior corriendo — el usuario sigue en la fase 'listo' con
-      // la camara actual.
+      // La nueva camara fallo (probable: dispositivo con una sola
+      // camara, o el OS aun no libera el hardware). Intentamos
+      // reabrir la original para no dejar al usuario sin video.
+      let recuperado = false
+      try {
+        const restaurado = await pedirStream(facingActual)
+        streamRef.current = restaurado
+        if (videoElRef.current) {
+          videoElRef.current.srcObject = restaurado
+          videoElRef.current.muted = true
+          await videoElRef.current.play().catch(() => {})
+        }
+        recuperado = true
+      } catch { /* si tampoco se pudo, el usuario debe reiniciar */ }
       toast({
         title: 'No se pudo voltear la cámara',
-        description: err instanceof Error ? err.message : 'Es probable que este dispositivo solo tenga una cámara.',
+        description: recuperado
+          ? 'Este dispositivo parece tener solo una cámara. Se restauró la actual — sigue grabando.'
+          : `${err instanceof Error ? err.message : 'Error desconocido'}. Cancela y vuelve a iniciar la grabación.`,
         variant: 'destructive',
       })
     } finally {

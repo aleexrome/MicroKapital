@@ -167,9 +167,10 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       },
     })) > 0
 
-  // Chip 3 — foto del desembolso: subida al endpoint disbursement-photo
-  // (ocurre después de activar, por eso en APPROVED queda gris/LATER).
-  const fotoDesembolsoSubida = !!loan.desembolsoFotoUrl
+  // Chip 3 — evidencia del desembolso: video (flujo nuevo con IA) o
+  // foto (flujo legacy). Cualquiera cierra el candado 3 en la UI para
+  // no romper la visual de préstamos históricos activados con foto.
+  const desembolsoSubido = !!loan.desembolsoVideoUrl || !!loan.desembolsoFotoUrl
 
   // Check if the client applying for this loan is a guarantor (aval) for someone else
   const avalMatches = loan.estado === 'PENDING_APPROVAL'
@@ -459,9 +460,10 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   const puedeEditarFechas = esOpAdmin
   const puedeDeshacerPago = esOpAdmin || tienePermisoAplicar
 
-  // Coordinador/Cobrador/Gerente (y usuarios con permiso) pueden capturar pagos
-  const tieneEvidenciaDesembolso = !!loan.desembolsoFotoUrl
-  // Solo bloquear pagos si el crédito no tiene pagos aún (nuevo) y no tiene foto
+  // Coordinador/Cobrador/Gerente (y usuarios con permiso) pueden capturar pagos.
+  // Evidencia = video (flow nuevo con IA) o foto (legacy).
+  const tieneEvidenciaDesembolso = !!loan.desembolsoVideoUrl || !!loan.desembolsoFotoUrl
+  // Solo bloquear pagos si el crédito no tiene pagos aún (nuevo) y no tiene evidencia
   const requiereFotoDesembolso = !tieneEvidenciaDesembolso && pagados === 0
   const rolPuedeCapturar =
     rol === 'COBRADOR' ||
@@ -611,7 +613,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 contratoFirmadoSubido={contratoFirmadoSubido}
                 seguroPagado={seguroPagado}
                 seguroPendienteTransfer={loan.seguroPendiente}
-                fotoDesembolsoSubida={fotoDesembolsoSubida}
+                desembolsoSubido={desembolsoSubido}
                 contrato={contratoExistente}
                 feeConcepto={tarifaApertura.concepto}
                 feeMonto={tarifaApertura.monto}
@@ -901,6 +903,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           activa el préstamo) como en ACTIVE (para ver la evidencia
           ya guardada). */}
       {(loan.estado === 'IN_ACTIVATION' || loan.estado === 'ACTIVE') && (
+        <div id="desembolso-video-block" className="scroll-mt-4">
         <DisbursementVideo
           loanId={loan.id}
           videoUrl={loan.desembolsoVideoUrl}
@@ -912,6 +915,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
           estadoLoan={loan.estado}
         />
+        </div>
       )}
 
       {/* Calendario de pagos */}

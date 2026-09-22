@@ -1,11 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Clock, Circle, FileText, Banknote, Camera, Undo2, XOctagon } from 'lucide-react'
+import { CheckCircle2, Clock, Circle, FileText, Banknote, Video, Undo2, XOctagon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SubirContratoFirmadoDialog } from './SubirContratoFirmadoDialog'
 import { RegistrarPagoDialog } from './RegistrarPagoDialog'
-import { CapturarFotoDesembolsoDialog } from './CapturarFotoDesembolsoDialog'
 import { CancelarActivacionDialog } from './CancelarActivacionDialog'
 import { ConfirmarAtrasDialog } from './ConfirmarAtrasDialog'
 import { VolverAtrasDialog } from './VolverAtrasDialog'
@@ -40,7 +39,14 @@ interface EstadoFlujoActivacionProps {
   contratoFirmadoSubido: boolean
   seguroPagado: boolean                // Payment de comisión vigente (canceledAt null)
   seguroPendienteTransfer: boolean     // loan.seguroPendiente — TRANSFER en espera de verificación
-  fotoDesembolsoSubida: boolean
+  /**
+   * Verdadero si YA hay video de desembolso aprobado, o si por
+   * fallback legacy hay foto. El candado 3 cierra con cualquiera de
+   * los dos — el sistema moderno usa video con validación auto por
+   * IA, pero prestamos historicos se cerraron con foto y no queremos
+   * romper esa historia visual.
+   */
+  desembolsoSubido: boolean
   contrato: ContratoExistente | null
 
   // Datos para los modales
@@ -82,7 +88,7 @@ type ChipStatus = 'OK' | 'PENDING' | 'PENDING_TRANSFER' | 'LATER'
 export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
   const {
     loanId, loanEstado,
-    contratoFirmadoSubido, seguroPagado, seguroPendienteTransfer, fotoDesembolsoSubida,
+    contratoFirmadoSubido, seguroPagado, seguroPendienteTransfer, desembolsoSubido,
     contrato,
     feeConcepto, feeMonto, capital, descuentoRenovacion = 0,
     solidarioGroupInfo,
@@ -108,7 +114,6 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
   const [generating, setGenerating] = useState(false)
   const [openSubir, setOpenSubir] = useState(false)
   const [openPago, setOpenPago] = useState(false)
-  const [openFoto, setOpenFoto] = useState(false)
   const [openCancelar, setOpenCancelar] = useState(false)
   const [openVolverAtras, setOpenVolverAtras] = useState(false)
   const [openAtrasContrato, setOpenAtrasContrato] = useState(false)
@@ -144,7 +149,7 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
   })()
 
   const chip3Status: ChipStatus = (() => {
-    if (fotoDesembolsoSubida) return 'OK'
+    if (desembolsoSubido) return 'OK'
     if (isInActivation && contratoFirmadoSubido && seguroPagado && !seguroPendienteTransfer) return 'PENDING'
     return 'LATER'
   })()
@@ -306,20 +311,32 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
         }
       />
 
-      {/* ── Chip 3 — Foto del desembolso con GPS ────────────────────────── */}
+      {/* ── Chip 3 — Video del desembolso con validación IA ─────────────
+          El flujo viejo capturaba una foto; el nuevo (fase 8) usa video
+          con validación automática por Whisper + Claude Vision. El
+          botón "Ir a grabar" hace scroll al bloque `DisbursementVideo`
+          que vive mas abajo en la pagina y ahi arranca todo el flow
+          (palabra del dia, grabacion live, upload directo a Cloudinary,
+          checks). El diálogo antiguo de foto se retiro. */}
       <Chip
         status={chip3Status}
-        title="Foto del desembolso con GPS"
+        title="Video del desembolso con GPS"
         subtitle={chip3Subtitle(chip3Status)}
         accion={
           chip3Status === 'PENDING' && puedeActuar ? (
-            <Button size="sm" onClick={() => setOpenFoto(true)}>
-              <Camera className="h-3.5 w-3.5" />
-              Capturar foto
+            <Button
+              size="sm"
+              onClick={() => {
+                const el = document.getElementById('desembolso-video-block')
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}
+            >
+              <Video className="h-3.5 w-3.5" />
+              Ir a grabar video
             </Button>
           ) : null
         }
-        atras={null}  // Chip 3 es irrevocable: subir la foto activa el préstamo
+        atras={null}  // Chip 3 es irrevocable: aprobar el video activa el préstamo
       />
 
       {/* ── Footer: "Volver atrás" o "Cancelar activación" según avance ── */}
@@ -367,12 +384,6 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
         feeMonto={feeMontoEfectivo}
         capital={capital}
         descuentoRenovacion={descuentoRenovacion}
-      />
-
-      <CapturarFotoDesembolsoDialog
-        loanId={loanId}
-        open={openFoto}
-        onClose={() => setOpenFoto(false)}
       />
 
       <CancelarActivacionDialog
@@ -512,7 +523,7 @@ function chip2Subtitle(status: ChipStatus): string {
 }
 
 function chip3Subtitle(status: ChipStatus): string {
-  if (status === 'OK') return 'Capturada — préstamo activo'
-  if (status === 'PENDING') return 'Toma la foto al entregar el dinero. Activa el préstamo y genera el calendario de pagos.'
-  return 'Se captura al entregar el dinero (último paso del flujo)'
+  if (status === 'OK') return 'Aprobado — préstamo activo'
+  if (status === 'PENDING') return 'Graba el video con el cliente al entregar el dinero. La IA valida y activa el préstamo.'
+  return 'Se graba al entregar el dinero (último paso del flujo)'
 }

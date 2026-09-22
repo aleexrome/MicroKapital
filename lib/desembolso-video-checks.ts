@@ -105,6 +105,41 @@ export function checkNombre(transcripcion: string, nombreCompleto: string): { ok
 }
 
 
+// ─── Check: nombre del grupo (solo para SOLIDARIO grupal) ──────────
+/**
+ * Version grupal del check de nombre. En videos grupales todas las
+ * integrantes se graban juntas diciendo "somos el grupo XXX" — asi
+ * que en lugar de validar el nombre del cliente individual, verificamos
+ * que la transcripcion contenga el nombre del GRUPO.
+ *
+ * Tolerancia laxa (0.35) porque los nombres de grupo suelen ser cortos
+ * y unicos (ej. "las luchonas", "flores del alba") — un pequeño error
+ * de transcripcion no debe bloquear la activacion.
+ */
+export function checkGrupo(transcripcion: string, nombreGrupo: string): { ok: boolean; detalle: string } {
+  const nombreLimpio = nombreGrupo.trim()
+  if (nombreLimpio.length === 0) {
+    return { ok: false, detalle: 'No se pudo determinar el nombre del grupo' }
+  }
+  // Buscamos el nombre completo del grupo con tolerancia. Si no matchea
+  // completo, intentamos con cada palabra individual — al menos la mitad
+  // de las palabras tienen que aparecer.
+  const okCompleto = contieneFuzzy(transcripcion, nombreLimpio, 0.35)
+  const palabras = normalizar(nombreLimpio).split(' ').filter((p) => p.length >= 3)
+  const encontradas = palabras.filter((p) => contieneFuzzy(transcripcion, p, 0.25))
+  const okParcial = palabras.length > 0 && encontradas.length >= Math.ceil(palabras.length / 2)
+
+  const ok = okCompleto || okParcial
+  const previewTx = normalizar(transcripcion).slice(0, 200).trim()
+  return {
+    ok,
+    detalle: ok
+      ? `Nombre del grupo reconocido ("${nombreGrupo}"${okCompleto ? '' : ` — ${encontradas.length}/${palabras.length} palabras`})`
+      : `No se detectó el nombre del grupo "${nombreGrupo}" en el audio. Audio: "${previewTx}..."`,
+  }
+}
+
+
 // ─── Check: palabra del día (nonce) ─────────────────────────────────
 /**
  * La palabra del día es tipo "MESA-VERDE-42". El cliente la va a decir

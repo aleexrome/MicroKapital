@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import {
   Video, Loader2, MapPin, CheckCircle, AlertTriangle, RefreshCw, X,
-  Play, Square, PlayCircle, Info, SwitchCamera,
+  Play, Square, PlayCircle, Info, SwitchCamera, Users, ExternalLink,
 } from 'lucide-react'
 
 interface DisbursementVideoProps {
@@ -23,6 +24,21 @@ interface DisbursementVideoProps {
   readOnly?: boolean
   /** Estado del loan — solo IN_ACTIVATION o ACTIVE (legacy sin video) permiten grabar. */
   estadoLoan: string
+  /**
+   * Info del grupo si el prestamo es SOLIDARIO. Se usa para:
+   * - Coord: mostrar "video del grupo" en el header + guion grupal.
+   * - No coord: NO renderizar el flujo, mostrar en su lugar un mensaje
+   *   apuntando a la coord (unico lugar donde se graba y activa).
+   */
+  grupoInfo?: {
+    nombre: string
+    esCoord: boolean
+    coordLoanId: string | null
+    coordCliente: string | null
+    /** Video de la coord (si ya se grabó) para mostrarlo aqui tambien. */
+    coordVideoUrl?: string | null
+    coordVideoAt?: string | null
+  } | null
 }
 
 type Fase = 'idle' | 'preparando' | 'listo' | 'grabando' | 'preview' | 'subiendo' | 'rechazado'
@@ -77,7 +93,10 @@ export function DisbursementVideo({
   fotoAt,
   readOnly = false,
   estadoLoan,
+  grupoInfo = null,
 }: DisbursementVideoProps) {
+  const esGrupalNoCoord = grupoInfo && !grupoInfo.esCoord
+  const esGrupalCoord   = grupoInfo && grupoInfo.esCoord
   const router = useRouter()
   const { toast } = useToast()
 
@@ -194,6 +213,67 @@ export function DisbursementVideo({
               </a>
             )}
           </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // ── VIEW: integrante NO-coord de un grupo solidario ───────────────
+  // No renderiza el flujo de grabacion — la activacion se hace desde el
+  // perfil de la coordinadora. Si la coord ya subio el video, lo
+  // mostramos aqui como evidencia (misma video URL) para que la
+  // integrante y su cobrador puedan verlo.
+  if (esGrupalNoCoord) {
+    const cVideo = grupoInfo!.coordVideoUrl
+    const cVideoAt = grupoInfo!.coordVideoAt
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Users className="h-4 w-4 text-primary-600" />
+            {cVideo ? 'Evidencia de desembolso grupal (video)' : 'Activación grupal — coordinadora'}
+            {cVideo && (
+              <span className="ml-auto flex items-center gap-1 text-xs text-emerald-600 font-normal">
+                <CheckCircle className="h-3.5 w-3.5" />
+                Verificado
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {cVideo ? (
+            <>
+              <video src={cVideo} controls playsInline className="w-full rounded-lg bg-black max-h-96" />
+              <div className="text-xs text-muted-foreground flex items-center gap-4 flex-wrap">
+                {cVideoAt && <span>Grabado: {new Date(cVideoAt).toLocaleString('es-MX')}</span>}
+                <span>
+                  Grupo: <strong>{grupoInfo!.nombre}</strong>
+                  {grupoInfo!.coordCliente && ` — Coord: ${grupoInfo!.coordCliente}`}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-lg bg-primary-50 border border-primary-200 p-4 text-sm text-primary-900">
+              <p className="mb-2">
+                Este préstamo forma parte del grupo solidario <strong>{grupoInfo!.nombre}</strong> y
+                se activa junto con las demás integrantes.
+              </p>
+              <p className="mb-3">
+                La coordinadora graba <strong>un solo video</strong> con todas las integrantes juntas.
+                Cuando ese video se apruebe, este préstamo también quedará activo automáticamente.
+              </p>
+              {grupoInfo!.coordLoanId && (
+                <Link
+                  href={`/prestamos/${grupoInfo!.coordLoanId}`}
+                  className="inline-flex items-center gap-1 text-primary-600 hover:underline font-medium"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Ir al perfil de la coordinadora
+                  {grupoInfo!.coordCliente && ` (${grupoInfo!.coordCliente})`}
+                </Link>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     )
@@ -475,8 +555,10 @@ export function DisbursementVideo({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <Video className="h-4 w-4 text-primary-600" />
-          Video de desembolso
+          {esGrupalCoord
+            ? <Users className="h-4 w-4 text-primary-600" />
+            : <Video className="h-4 w-4 text-primary-600" />}
+          {esGrupalCoord ? 'Video de desembolso grupal' : 'Video de desembolso'}
           <span className="text-xs font-normal text-muted-foreground">
             (evidencia con validación automática)
           </span>
@@ -486,10 +568,22 @@ export function DisbursementVideo({
 
         {fase === 'idle' && (
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              El cliente va a grabar un video corto diciendo su nombre, la fecha, el monto y una palabra
-              del día que se genera al iniciar. El sistema valida todo automáticamente antes de activar el préstamo.
-            </p>
+            {esGrupalCoord ? (
+              <div className="rounded-lg bg-primary-50 border border-primary-200 p-3 text-sm text-primary-900">
+                <p className="font-semibold mb-1">Video del grupo <span className="font-bold">{grupoInfo!.nombre}</span></p>
+                <p>
+                  Junta a <strong>TODAS las integrantes</strong> frente a la cámara y graben un
+                  solo video diciendo el guion (nombre del grupo, fecha, total prestado y palabra
+                  del día). Al aprobar, <strong>todos los préstamos del grupo</strong> quedan activos
+                  automáticamente.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                El cliente va a grabar un video corto diciendo su nombre, la fecha, el monto y una palabra
+                del día que se genera al iniciar. El sistema valida todo automáticamente antes de activar el préstamo.
+              </p>
+            )}
             <Button onClick={iniciarSesion} size="lg">
               <Video className="h-4 w-4 mr-2" />
               Iniciar grabación

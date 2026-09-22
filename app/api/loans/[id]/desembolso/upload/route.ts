@@ -14,7 +14,7 @@ export const runtime = 'nodejs'
 import { todayMx } from '@/lib/timezone'
 import { SESION_DESEMBOLSO_TTL_MS } from '@/lib/desembolso-video'
 import {
-  checkNombre, checkPalabraDelDia, checkFecha, checkMonto,
+  checkNombre, checkPalabraDelDia, checkFecha, checkMonto, checkGrupo,
 } from '@/lib/desembolso-video-checks'
 import OpenAI, { toFile } from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
@@ -141,9 +141,33 @@ export async function POST(
 
   const loan = await prisma.loan.findFirst({
     where: { id: params.id, companyId: companyId! },
-    include: { client: { select: { nombreCompleto: true } } },
+    include: {
+      client: { select: { nombreCompleto: true } },
+      loanGroup: { select: { nombre: true } },
+    },
   })
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
+
+  // ── Reglas grupales (SOLIDARIO) ──────────────────────────────────
+  // Las no-coordinadoras no graban su propio video — se activan cuando
+  // el video de la coord aprueba. Bloqueamos aqui antes de aceptar la
+  // carga (mismo check que /iniciar-sesion).
+  const esGrupal = loan.tipo === 'SOLIDARIO' && loan.loanGroupId !== null
+  if (esGrupal && !loan.esCoordinadora) {
+    const esRenovacion = loan.loanOriginalId !== null
+    const cicloFilter = esRenovacion ? { loanOriginalId: { not: null } } : { loanOriginalId: null }
+    const coord = await prisma.loan.findFirst({
+      where: { loanGroupId: loan.loanGroupId!, esCoordinadora: true, ...cicloFilter, companyId: companyId! },
+      select: { id: true, client: { select: { nombreCompleto: true } } },
+    })
+    return NextResponse.json({
+      error: 'ACTIVAR_DESDE_COORDINADORA',
+      message: coord
+        ? `Este préstamo se activa con todo el grupo desde el perfil de la coordinadora: ${coord.client.nombreCompleto}.`
+        : 'Este préstamo forma parte de un grupo solidario y se activa desde el perfil de la coordinadora.',
+      coordinadoraLoanId: coord?.id ?? null,
+    }, { status: 400 })
+  }
 
   // Permisos por rol
   let allowed = false
@@ -408,11 +432,43 @@ export async function POST(
     dineroDetalle = `Vision falló: ${msg}`
   }
 
-  // 4. Correr los 5 checks
+  // 4. Correr los 5 checks. Si es coord de un grupo SOLIDARIO, dos
+  //    cambios respecto al flujo individual:
+  //      - "nombre" valida el NOMBRE DEL GRUPO (checkGrupo), no el
+  //        del cliente coord. El guion grupal dice "somos el grupo
+  //        [nombre]" en lugar de "soy [nombre del cliente]".
+  //      - "monto" valida la SUMA de capital de todas las integrantes
+  //        del ciclo (montoTotalGrupo), no solo el capital de la coord.
+  //    Para el resto de flujos (individual, agil, fiduciario) sigue
+  //    igual que antes.
+  const esCoordGrupal = esGrupal && loan.esCoordinadora
+  let montoTotalGrupo = Number(loan.capital)
+  if (esCoordGrupal) {
+    const esRenovacion = loan.loanOriginalId !== null
+    const cicloFilter = esRenovacion ? { loanOriginalId: { not: null } } : { loanOriginalId: null }
+    const integrantes = await prisma.loan.findMany({
+      where: {
+        loanGroupId: loan.loanGroupId!,
+        estado: 'IN_ACTIVATION',
+        ...cicloFilter,
+        companyId: companyId!,
+      },
+      select: { capital: true },
+    })
+    if (integrantes.length > 0) {
+      montoTotalGrupo = integrantes.reduce((acc, l) => acc + Number(l.capital), 0)
+    }
+  }
+
   const hoy = todayMx()
-  const rNombre  = checkNombre(transcripcion, loan.client.nombreCompleto)
+  const rNombre = esCoordGrupal && loan.loanGroup?.nombre
+    ? checkGrupo(transcripcion, loan.loanGroup.nombre)
+    : checkNombre(transcripcion, loan.client.nombreCompleto)
   const rFecha   = checkFecha(transcripcion, hoy)
-  const rMonto   = checkMonto(transcripcion, Number(loan.capital))
+  // Tolerancia relativa para montos grandes — un grupo puede prestar
+  // $50,000 y una diferencia de $50 se vuelve ridicula. Usamos max(50, 1%).
+  const tolMonto = Math.max(50, Math.floor(montoTotalGrupo * 0.01))
+  const rMonto   = checkMonto(transcripcion, montoTotalGrupo, tolMonto)
   const rPalabra = checkPalabraDelDia(transcripcion, loan.desembolsoPalabraDelDia)
   const rDinero  = { ok: dineroVisible, detalle: dineroDetalle || (dineroVisible ? 'Dinero visible en el video' : 'No se detectó dinero') }
 

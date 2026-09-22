@@ -120,6 +120,68 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     contratoFirmadoUrl = doc?.archivoUrl ?? null
   }
 
+  // ── Info del grupo solidario para el componente de video ─────────
+  // Solo se calcula si el prestamo es SOLIDARIO. Sirve para:
+  //   - Coord: el video se graba con TODAS las integrantes y se
+  //     valida contra el nombre del grupo + total prestado.
+  //   - No-coord: no graban su propio video. La UI muestra un mensaje
+  //     apuntando al perfil de la coordinadora + (si ya se grabo) el
+  //     mismo video de la coord como evidencia.
+  type GrupoInfo = {
+    nombre: string
+    esCoord: boolean
+    coordLoanId: string | null
+    coordCliente: string | null
+    coordVideoUrl: string | null
+    coordVideoAt: string | null
+  }
+  let grupoInfo: GrupoInfo | null = null
+  if (loan.tipo === 'SOLIDARIO' && loan.loanGroupId) {
+    const grupo = await prisma.loanGroup.findUnique({
+      where: { id: loan.loanGroupId },
+      select: { nombre: true },
+    })
+    if (grupo) {
+      if (loan.esCoordinadora) {
+        grupoInfo = {
+          nombre:         grupo.nombre,
+          esCoord:        true,
+          coordLoanId:    null,
+          coordCliente:   null,
+          coordVideoUrl:  null,
+          coordVideoAt:   null,
+        }
+      } else {
+        const esRenovacion = loan.loanOriginalId !== null
+        const cicloFilter: Prisma.LoanWhereInput = esRenovacion
+          ? { loanOriginalId: { not: null } }
+          : { loanOriginalId: null }
+        const coord = await prisma.loan.findFirst({
+          where: {
+            loanGroupId: loan.loanGroupId,
+            esCoordinadora: true,
+            companyId: companyId!,
+            ...cicloFilter,
+          },
+          select: {
+            id: true,
+            client: { select: { nombreCompleto: true } },
+            desembolsoVideoUrl: true,
+            desembolsoVideoSubidoAt: true,
+          },
+        })
+        grupoInfo = {
+          nombre:        grupo.nombre,
+          esCoord:       false,
+          coordLoanId:   coord?.id ?? null,
+          coordCliente:  coord?.client.nombreCompleto ?? null,
+          coordVideoUrl: coord?.desembolsoVideoUrl ?? null,
+          coordVideoAt:  coord?.desembolsoVideoSubidoAt?.toISOString() ?? null,
+        }
+      }
+    }
+  }
+
   const contratoExistente = contratoRow
     ? {
         id: contratoRow.id,
@@ -914,6 +976,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           fotoAt={loan.desembolsoFotoAt?.toISOString() ?? null}
           readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
           estadoLoan={loan.estado}
+          grupoInfo={grupoInfo}
         />
         </div>
       )}

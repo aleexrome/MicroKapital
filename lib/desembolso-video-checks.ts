@@ -204,12 +204,15 @@ export function checkMonto(transcripcion: string, capitalEsperado: number, toler
   // "cliente no dijo el monto" y "algoritmo se lo comio".
   const filtrados = todosRaw.filter((n) => !todos.includes(n))
   const filtradosMsg = filtrados.length > 0 ? ` [descartados como año: ${filtrados.join(', ')}]` : ''
-  const previewTx = t.slice(0, 60).trim()
+  // Preview de 300 chars — cubre completo un audio de 20s. Necesario
+  // para diagnosticar cuando el algoritmo no encuentra numero: hay que
+  // ver que dijo el cliente y como lo transcribio Whisper.
+  const previewTx = t.slice(0, 300).trim()
   return {
     ok,
     detalle: ok
       ? `Monto reconocido ($${match} vs esperado $${capitalEsperado})`
-      : `No se detectó el monto esperado $${capitalEsperado} en el audio (encontrados: ${todos.slice(0, 3).join(', ') || 'ninguno'})${filtradosMsg}. Audio: "${previewTx}..."`,
+      : `No se detectó el monto esperado $${capitalEsperado} en el audio (encontrados: ${todos.slice(0, 3).join(', ') || 'ninguno'})${filtradosMsg}. Audio: "${previewTx}${t.length > 300 ? '...' : ''}"`,
   }
 }
 
@@ -285,8 +288,18 @@ function extraerNumerosEnPalabras(txt: string): number[] {
   let ultimo = 0
   for (const p of palabras) {
     if (p === 'y') continue
+    // Fuente de valor: la palabra puede ser texto ("cinco") o digito
+    // suelto ("5"). Whisper mezcla los dos estilos — a veces escribe
+    // "cinco mil pesos", a veces "5 mil pesos". Sin el segundo camino,
+    // frases con digitos sueltos + multiplicador se pierden.
+    let v: number | null = null
     if (p in tabla) {
-      const v = tabla[p]
+      v = tabla[p]
+    } else if (/^\d+$/.test(p)) {
+      const parsed = parseInt(p, 10)
+      if (!isNaN(parsed) && parsed > 0 && parsed < 1_000_000) v = parsed
+    }
+    if (v !== null) {
       if (v === 1000 || v === 1_000_000) {
         // Multiplicador — multiplica lo acumulado hasta ahora.
         const base = acumulado === 0 && ultimo === 0 ? 1 : (ultimo || acumulado)
@@ -305,7 +318,9 @@ function extraerNumerosEnPalabras(txt: string): number[] {
     }
   }
   if (acumulado > 0) resultados.push(acumulado)
-  return resultados
+  // Filtrar valores < 100 (dias, palabras del dia, etc.) — mismo umbral
+  // que numsDigitos. Un prestamo < $100 no existe.
+  return resultados.filter((n) => n >= 100)
 }
 
 

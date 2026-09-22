@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import {
   Video, Loader2, MapPin, CheckCircle, AlertTriangle, RefreshCw, X,
-  Play, Square, PlayCircle, Info,
+  Play, Square, PlayCircle, Info, SwitchCamera,
 } from 'lucide-react'
 
 interface DisbursementVideoProps {
@@ -25,7 +25,8 @@ interface DisbursementVideoProps {
   estadoLoan: string
 }
 
-type Fase = 'idle' | 'preparando' | 'grabando' | 'preview' | 'subiendo' | 'rechazado'
+type Fase = 'idle' | 'preparando' | 'listo' | 'grabando' | 'preview' | 'subiendo' | 'rechazado'
+type CameraFacing = 'environment' | 'user'
 
 interface SesionDesembolso {
   palabraDelDia: string
@@ -88,6 +89,12 @@ export function DisbursementVideo({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [rechazo, setRechazo] = useState<ValidacionResp | null>(null)
+  // Por defecto camara trasera — es lo que sirve para enfocar el
+  // dinero y al cliente al mismo tiempo. El coordinador puede
+  // voltear a la frontal si le acomoda mejor (p.ej. selfie con
+  // cliente al lado).
+  const [cameraFacing, setCameraFacing] = useState<CameraFacing>('environment')
+  const [volteandoCamara, setVolteandoCamara] = useState(false)
 
   const streamRef       = useRef<MediaStream | null>(null)
   const recorderRef     = useRef<MediaRecorder | null>(null)
@@ -201,25 +208,33 @@ export function DisbursementVideo({
   if (!estadoApto) return null
 
   // ── Handlers ────────────────────────────────────────────────────────
+  // Helper que pide la camara con un facingMode dado. Se usa en
+  // iniciarSesion (arranque) y en voltearCamara (toggle). En mobile
+  // los navegadores respetan facingMode; en desktop puede ignorarlo
+  // si solo hay una camara — lo tratamos como un no-op amistoso.
+  async function pedirStream(facing: CameraFacing): Promise<MediaStream> {
+    // Resolucion moderada — 640x480 alcanza para que Claude Vision
+    // detecte el dinero sin generar archivos gigantes. En movil
+    // muchas veces el navegador ignora estos hints y da mas
+    // resolucion; el bitrate del MediaRecorder es el que realmente
+    // caps el tamano final.
+    return navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: facing,
+        width:  { ideal: 640 },
+        height: { ideal: 480 },
+      },
+      audio: true,
+    })
+  }
+
   async function iniciarSesion() {
     setRechazo(null)
     setFase('preparando')
     try {
       // 1. Pedir permisos (cámara + micrófono + GPS) primero. Si el
       //    usuario niega alguno, no gastamos una sesión en el server.
-      // Resolucion moderada — 640x480 alcanza para que Claude Vision
-      // detecte el dinero sin generar archivos gigantes. En movil
-      // muchas veces el navegador ignora estos hints y da mas
-      // resolucion; el bitrate del MediaRecorder es el que realmente
-      // caps el tamano final.
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width:  { ideal: 640 },
-          height: { ideal: 480 },
-        },
-        audio: true,
-      })
+      const stream = await pedirStream(cameraFacing)
       streamRef.current = stream
 
       const coords = await new Promise<GeolocationPosition | null>((res) => {
@@ -238,13 +253,16 @@ export function DisbursementVideo({
       if (!r.ok) throw new Error(data.error ?? 'No se pudo iniciar sesión')
       setSesion(data as SesionDesembolso)
 
-      // 3. Enganchar el stream al <video> preview y arrancar MediaRecorder.
+      // 3. Enganchar el stream al <video> preview. NO arrancamos la
+      //    grabacion todavia — pasamos a fase 'listo' para que el
+      //    usuario pueda voltear la camara si lo necesita antes de
+      //    presionar "Grabar ahora".
       if (videoElRef.current) {
         videoElRef.current.srcObject = stream
         videoElRef.current.muted = true
         await videoElRef.current.play().catch(() => {})
       }
-      arrancarGrabacion(stream)
+      setFase('listo')
     } catch (err) {
       cleanupStream()
       setFase('idle')
@@ -253,6 +271,41 @@ export function DisbursementVideo({
         description: err instanceof Error ? err.message : 'Concede permisos de cámara, micrófono y ubicación.',
         variant: 'destructive',
       })
+    }
+  }
+
+  // Voltea la camara entre trasera y frontal. Solo permitido antes de
+  // que el MediaRecorder haya empezado (fase 'listo'). Si el
+  // dispositivo no tiene la camara opuesta, `getUserMedia` va a
+  // fallar y avisamos con un toast — el stream anterior se
+  // reestablece.
+  async function voltearCamara() {
+    if (fase !== 'listo') return
+    if (volteandoCamara) return
+    const streamPrev = streamRef.current
+    const facingNext: CameraFacing = cameraFacing === 'environment' ? 'user' : 'environment'
+    setVolteandoCamara(true)
+    try {
+      const nuevo = await pedirStream(facingNext)
+      streamPrev?.getTracks().forEach((t) => t.stop())
+      streamRef.current = nuevo
+      if (videoElRef.current) {
+        videoElRef.current.srcObject = nuevo
+        videoElRef.current.muted = true
+        await videoElRef.current.play().catch(() => {})
+      }
+      setCameraFacing(facingNext)
+    } catch (err) {
+      // La camara opuesta no existe / esta ocupada. Dejamos el stream
+      // anterior corriendo — el usuario sigue en la fase 'listo' con
+      // la camara actual.
+      toast({
+        title: 'No se pudo voltear la cámara',
+        description: err instanceof Error ? err.message : 'Es probable que este dispositivo solo tenga una cámara.',
+        variant: 'destructive',
+      })
+    } finally {
+      setVolteandoCamara(false)
     }
   }
 
@@ -312,6 +365,12 @@ export function DisbursementVideo({
 
   function descartarPreview() {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
+    // Si venimos de 'listo' (todavia con stream vivo) o de 'preview'
+    // (el stream ya se corto en recorder.onstop) igual llamamos a
+    // cleanupStream — es idempotente y libera la camara si sigue
+    // abierta.
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
     setPreviewUrl(null)
     setVideoBlob(null)
     setSesion(null)
@@ -445,7 +504,7 @@ export function DisbursementVideo({
           </div>
         )}
 
-        {(fase === 'grabando' || (fase === 'preview' && sesion)) && sesion && (
+        {(fase === 'listo' || fase === 'grabando' || (fase === 'preview' && sesion)) && sesion && (
           <div className="space-y-3">
             {/* Guion + palabra del día */}
             <div className="rounded-xl bg-primary-50 border border-primary-200 p-3">
@@ -472,7 +531,7 @@ export function DisbursementVideo({
                 ref={videoElRef}
                 autoPlay
                 playsInline
-                muted={fase === 'grabando'}
+                muted={fase === 'listo' || fase === 'grabando'}
                 controls={fase === 'preview'}
                 src={fase === 'preview' && previewUrl ? previewUrl : undefined}
                 className="w-full rounded-lg bg-black max-h-96"
@@ -483,8 +542,38 @@ export function DisbursementVideo({
                   REC {duracionGrabacion}s / {MAX_DURACION_SEG}s
                 </div>
               )}
+              {fase === 'listo' && (
+                <button
+                  type="button"
+                  onClick={voltearCamara}
+                  disabled={volteandoCamara}
+                  className="absolute top-2 right-2 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 text-white text-xs font-medium px-2.5 py-1.5 rounded-full disabled:opacity-50"
+                  title={cameraFacing === 'environment' ? 'Cambiar a cámara frontal' : 'Cambiar a cámara trasera'}
+                >
+                  {volteandoCamara
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <SwitchCamera className="h-3.5 w-3.5" />}
+                  {cameraFacing === 'environment' ? 'Frontal' : 'Trasera'}
+                </button>
+              )}
             </div>
 
+            {fase === 'listo' && (
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  onClick={() => streamRef.current && arrancarGrabacion(streamRef.current)}
+                  size="lg"
+                  className="flex-1"
+                >
+                  <Video className="h-4 w-4 mr-2" />
+                  Grabar ahora
+                </Button>
+                <Button onClick={descartarPreview} variant="outline" size="lg">
+                  <X className="h-4 w-4 mr-2" />
+                  Cancelar
+                </Button>
+              </div>
+            )}
             {fase === 'grabando' && (
               <div className="flex gap-2">
                 <Button onClick={detenerGrabacion} variant="destructive" size="lg" className="flex-1">

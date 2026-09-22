@@ -50,6 +50,10 @@ export async function POST(
       cobradorId: true,
       client: { select: { nombreCompleto: true } },
       desembolsoVideoUrl: true,
+      // Necesarios para validar los candados previos (contrato +
+      // comision) — no arrancamos la grabacion si algo falta.
+      seguroMetodoPago: true,
+      seguroPendiente: true,
     },
   })
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
@@ -85,6 +89,46 @@ export async function POST(
       { error: 'Este préstamo ya tiene un video de desembolso aprobado' },
       { status: 400 },
     )
+  }
+
+  // ── Candados 1 y 2 — solo si el prestamo esta en IN_ACTIVATION ────
+  // (los ACTIVE legacy sin video no pasan por los candados formales
+  // porque nacieron pre-fase 6).
+  //
+  // Estos mismos checks se corren tambien en /upload como backstop,
+  // pero validarlos aqui evita que el coord grabe/procese un video
+  // que luego el server va a rechazar por candado. Ademas ahorra el
+  // costo de Whisper + Vision.
+  if (loan.estado === 'IN_ACTIVATION') {
+    const contract = await prisma.contract.findFirst({
+      where: {
+        companyId: companyId!,
+        loanDocumentFirmadoId: { not: null },
+        OR: [
+          { loanId: loan.id },
+          { groupMembers: { some: { loanId: loan.id } } },
+        ],
+      },
+      select: { id: true },
+    })
+    if (!contract) {
+      return NextResponse.json(
+        { error: 'Falta el contrato firmado (candado 1). Sube el PDF firmado antes de grabar el video.' },
+        { status: 400 },
+      )
+    }
+    if (loan.seguroMetodoPago === null) {
+      return NextResponse.json(
+        { error: 'Falta cobrar la comisión de apertura (candado 2). Regístralo antes de grabar el video.' },
+        { status: 400 },
+      )
+    }
+    if (loan.seguroPendiente) {
+      return NextResponse.json(
+        { error: 'La comisión de apertura se pagó por transferencia y aún no se verifica. Espera la verificación antes de grabar el video.' },
+        { status: 400 },
+      )
+    }
   }
 
   // Generar palabra del dia + guardar sesion.

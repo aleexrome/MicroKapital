@@ -119,6 +119,43 @@ export async function POST(
     )
   }
 
+  // ── Candados 1 y 2 (validacion temprana) ──────────────────────────
+  // Antes esta validacion vivia solo despues de que Whisper y Claude
+  // Vision aprobaban el video — desperdicio de recursos. Ahora se
+  // corre aqui, antes de descargar/transcribir/analizar. Si algun
+  // candado falta, ni siquiera se toca a Cloudinary ni a las APIs.
+  if (esFlujoNuevo) {
+    const contract = await prisma.contract.findFirst({
+      where: {
+        companyId: companyId!,
+        loanDocumentFirmadoId: { not: null },
+        OR: [
+          { loanId: loan.id },
+          { groupMembers: { some: { loanId: loan.id } } },
+        ],
+      },
+      select: { id: true },
+    })
+    if (!contract) {
+      return NextResponse.json(
+        { error: 'Falta el contrato firmado (candado 1). Sube el PDF firmado antes de grabar el video.' },
+        { status: 400 },
+      )
+    }
+    if (loan.seguroMetodoPago === null) {
+      return NextResponse.json(
+        { error: 'Falta cobrar la comisión de apertura (candado 2). Regístralo antes de grabar el video.' },
+        { status: 400 },
+      )
+    }
+    if (loan.seguroPendiente) {
+      return NextResponse.json(
+        { error: 'La comisión de apertura se pagó por transferencia y aún no se verifica. Espera la verificación antes de grabar el video.' },
+        { status: 400 },
+      )
+    }
+  }
+
   // ── Recibir referencia al video ya subido a Cloudinary + GPS ──────
   // El frontend ya subio el video directo a Cloudinary via signed
   // upload (sorteando el limite de 4.5MB de Vercel). Aqui solo nos
@@ -377,9 +414,15 @@ export async function POST(
     }
   }
 
-  // Candados 1 y 2 en flujo nuevo
-  if (esFlujoNuevo) {
+  // Candados 1 y 2 — ya validados arriba para el loan del coord al
+  // inicio del handler. Para SOLIDARIO grupal ademas hay que
+  // verificar candados en TODOS los integrantes que se van a activar
+  // (cada uno tiene su propio contrato firmado y su propio pago de
+  // comision). El loan del coord ya paso arriba; los otros los
+  // checamos aqui.
+  if (esFlujoNuevo && activacionGrupal) {
     for (const t of targetLoans) {
+      if (t.id === loan.id) continue // ya validado arriba
       const contract = await prisma.contract.findFirst({
         where: {
           companyId: companyId!,
@@ -389,10 +432,10 @@ export async function POST(
         select: { id: true },
       })
       if (!contract) {
-        return NextResponse.json({ error: `Falta el contrato firmado (candado 1)${activacionGrupal ? ` para ${t.id}` : ''}` }, { status: 400 })
+        return NextResponse.json({ error: `Falta el contrato firmado (candado 1) para ${t.id}` }, { status: 400 })
       }
       if (t.seguroMetodoPago === null || t.seguroPendiente) {
-        return NextResponse.json({ error: 'Falta el pago de comisión / seguro (candado 2)' }, { status: 400 })
+        return NextResponse.json({ error: `Falta el pago de comisión / seguro (candado 2) para integrante ${t.id}` }, { status: 400 })
       }
     }
   }

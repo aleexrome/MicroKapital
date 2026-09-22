@@ -137,42 +137,50 @@ export async function POST(
   const lat = body.lat != null ? String(body.lat) : null
   const lng = body.lng != null ? String(body.lng) : null
 
-  // 1. Extraer solo el audio como MP3 via Cloudinary URL transform y
-  //    pasarlo a Whisper. Es MUCHO mas chico que el video completo y
-  //    en formato canonico (MP3) que Whisper reconoce siempre — esto
-  //    evita el error "no se pudo transcribir" cuando el video venia
-  //    con codecs raros de movil.
-  const audioUrl = cloudinary.url(publicId, {
-    resource_type: 'video',
-    format: 'mp3',
-  })
+  // 1. Descargar el video ORIGINAL desde Cloudinary y pasarlo a
+  //    Whisper. Antes intentabamos extraer el audio como MP3 via
+  //    transform `f_mp3`, pero el derivado a veces tarda o no se
+  //    genera bien (depende del video processing addon de Cloudinary
+  //    para free plan), y Whisper terminaba sin recibir nada. Whisper
+  //    acepta nativo webm/mp4/mpga/wav/m4a — asi que lo mandamos
+  //    directo. Videos de 20s pesan 1-8 MB, muy por debajo del limite
+  //    de 25 MB de Whisper.
   let transcripcion = ''
   try {
-    // Damos hasta 3 intentos con backoff — a veces Cloudinary tarda
-    // unos segundos en tener el derivado MP3 disponible despues del
-    // upload directo.
-    let audioBuf: Buffer | null = null
+    // Cloudinary a veces tarda 1-2s en propagar el secure_url del
+    // upload directo. Con 3 reintentos y backoff cubrimos.
+    let videoBuf: Buffer | null = null
+    let ultimoStatus = 0
     for (let intento = 0; intento < 3; intento++) {
-      const r = await fetch(audioUrl)
+      const r = await fetch(videoUrl)
       if (r.ok) {
-        audioBuf = Buffer.from(await r.arrayBuffer())
+        videoBuf = Buffer.from(await r.arrayBuffer())
         break
       }
+      ultimoStatus = r.status
       if (r.status === 404 || r.status === 423) {
         await new Promise((r) => setTimeout(r, 1500))
         continue
       }
-      throw new Error(`Cloudinary audio fetch failed: ${r.status}`)
+      throw new Error(`Cloudinary video fetch failed: ${r.status}`)
     }
-    if (!audioBuf) throw new Error('Timeout esperando el audio de Cloudinary')
+    if (!videoBuf) {
+      throw new Error(`Timeout esperando el video en Cloudinary (ultimo status: ${ultimoStatus})`)
+    }
 
-    // Uint8Array (no Buffer) para satisfacer el tipado de File en la
-    // configuracion actual — Buffer<SharedArrayBuffer> no es asignable
-    // a BlobPart en strict mode.
+    // Whisper acepta el video con audio embebido y hace la extraccion
+    // internamente. La extension guia al parser — usamos la del blob
+    // original si es posible, fallback a webm.
+    const mimeGuess = videoUrl.toLowerCase().endsWith('.mp4')
+      ? { ext: 'mp4', type: 'video/mp4' }
+      : { ext: 'webm', type: 'video/webm' }
+    // Uint8Array-wrap del buffer para satisfacer el tipado File en
+    // strict mode (Buffer<SharedArrayBuffer> no es asignable a
+    // BlobPart directamente).
     const whisperFile = new File(
-      [new Uint8Array(audioBuf)],
-      `audio-${loan.id}.mp3`,
-      { type: 'audio/mpeg' },
+      [new Uint8Array(videoBuf)],
+      `desembolso-${loan.id}.${mimeGuess.ext}`,
+      { type: mimeGuess.type },
     )
     const resp = await getOpenAI().audio.transcriptions.create({
       file: whisperFile,
@@ -180,12 +188,28 @@ export async function POST(
       language: 'es',
     })
     transcripcion = resp.text ?? ''
+    console.log('[desembolso-video] transcripcion:', transcripcion.slice(0, 200))
   } catch (err) {
     console.error('[desembolso-video] Whisper error:', err)
     return NextResponse.json(
       {
         error: 'No se pudo transcribir el audio del video. Revisa que el audio se escuche claro y reintenta.',
         debug: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 },
+    )
+  }
+
+  // Guardia extra: si Whisper devolvio string vacio o casi vacio,
+  // significa que no detecto habla — probable audio en silencio, muy
+  // bajo o sin microfono. Mejor rechazar aqui con mensaje claro en
+  // lugar de dejar que los 5 checks fallen todos con detalle poco
+  // util.
+  if (transcripcion.trim().length < 5) {
+    return NextResponse.json(
+      {
+        error: 'No se detectó nada de audio. Habla mas fuerte, cerca del microfono, y vuelve a grabar.',
+        debug: `transcripcion vacia: "${transcripcion}"`,
       },
       { status: 500 },
     )

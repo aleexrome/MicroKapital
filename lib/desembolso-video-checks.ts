@@ -175,7 +175,19 @@ export function checkFecha(transcripcion: string, hoy: Date): { ok: boolean; det
  * Acepta números en dígitos (5000) o en texto ("cinco mil pesos").
  */
 export function checkMonto(transcripcion: string, capitalEsperado: number, tolerancia = 50): { ok: boolean; detalle: string } {
-  const t = normalizar(transcripcion)
+  // Normalizacion + un pase extra: unir grupos de digitos separados
+  // por espacio cuando el segundo grupo tiene exactamente 3 digitos
+  // (patron de separador de miles). Whisper transcribe "$5,000" a
+  // veces como "5 000" y "$1,500,000" como "1 500 000" — sin este
+  // join los digitos individuales quedan filtrados como <100 y el
+  // monto se pierde. Iteramos porque un solo pass no cubre
+  // "1 500 000" (se junta primero 1+500=1500, luego 1500+000=1500000).
+  let t = normalizar(transcripcion)
+  for (let i = 0; i < 5; i++) {
+    const next = t.replace(/(\d+)\s+(\d{3})(?=\s|$)/g, '$1$2')
+    if (next === t) break
+    t = next
+  }
   // Extrae todos los números en dígitos o en palabras.
   const numsDigitos = Array.from(t.matchAll(/(\d[\d,]{2,})/g))
     .map((m) => parseInt(m[1].replace(/,/g, ''), 10))

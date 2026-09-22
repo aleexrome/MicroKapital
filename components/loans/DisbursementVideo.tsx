@@ -569,13 +569,19 @@ export function DisbursementVideo({
         {fase === 'idle' && (
           <div className="space-y-3">
             {esGrupalCoord ? (
-              <div className="rounded-lg bg-primary-50 border border-primary-200 p-3 text-sm text-primary-900">
-                <p className="font-semibold mb-1">Video del grupo <span className="font-bold">{grupoInfo!.nombre}</span></p>
+              <div className="rounded-lg bg-primary-50 border border-primary-200 p-3 text-sm text-primary-900 space-y-2">
+                <p className="font-semibold">Video del grupo <span className="font-bold">{grupoInfo!.nombre}</span></p>
                 <p>
                   Junta a <strong>TODAS las integrantes</strong> frente a la cámara y graben un
-                  solo video diciendo el guion (nombre del grupo, fecha, total prestado y palabra
-                  del día). Al aprobar, <strong>todos los préstamos del grupo</strong> quedan activos
-                  automáticamente.
+                  solo video diciendo el guion (nombre del grupo, fecha, total prestado y palabra del día).
+                </p>
+                <p className="text-primary-800">
+                  📸 <strong>Cada integrante debe tener billetes en la mano visibles a la cámara</strong> —
+                  el sistema verifica que todas las mujeres del grupo aparezcan con dinero. Si alguna no
+                  se ve o no tiene billetes, se rechaza.
+                </p>
+                <p className="text-xs text-primary-700">
+                  Al aprobar, <strong>todos los préstamos del grupo</strong> quedan activos automáticamente.
                 </p>
               </div>
             ) : (

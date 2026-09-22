@@ -374,6 +374,13 @@ export async function POST(
   //    error si algo falla (antes se quedaba en un texto generico
   //    "Error al analizar el video con vision" que no dejaba
   //    diagnosticar).
+  // Detectamos si es coord grupal ANTES del bloque de Vision porque
+  // el prompt cambia: en grupal pedimos que Vision verifique que
+  // TODAS las integrantes visibles tienen billetes en la mano. En
+  // individual sigue siendo el check simple de "hay dinero visible".
+  const esCoordGrupalVision = loan.tipo === 'SOLIDARIO'
+    && loan.loanGroupId !== null
+    && loan.esCoordinadora === true
   let dineroVisible = false
   let dineroDetalle = ''
   try {
@@ -382,6 +389,16 @@ export async function POST(
       const buf = await fetchConReintentos(framesUrls[i], 5, 2000)
       framesContent.push(Buffer.from(new Uint8Array(buf)).toString('base64'))
     }
+
+    // Prompt distinto para grupal vs individual. En grupal exigimos:
+    //  1. Se ven MÁS DE UNA persona (grupo visible)
+    //  2. Cada persona visible tiene billetes en la mano (en al menos
+    //     uno de los 3 frames — asi toleramos que en un frame alguna
+    //     este ajustando algo o mirando a la camara sin billetes
+    //     mostrados justo ahi).
+    const promptTextGrupal = 'Estas 3 imagenes son frames de un video de desembolso GRUPAL — un grupo de mujeres recibiendo un prestamo solidario. En estos frames debe aparecer un GRUPO (mas de una persona) donde cada integrante muestra billetes de peso mexicano en la mano. Responde SOLO en JSON con esta forma exacta: {"grupo_visible": true|false, "todas_con_billetes": true|false, "personas_aprox": <numero>, "explicacion": "breve razon"}. "grupo_visible" es true si se ven al menos 2 personas. "todas_con_billetes" es true si TODAS las personas visibles tienen billetes en la mano en al menos uno de los 3 frames (una persona puede estar sin billetes en un frame si en otro se le ven — solo rechazar si alguien claramente NO tiene billetes en ninguno).'
+    const promptTextIndividual = 'Estas imagenes son frames de un video donde alguien recibe dinero en efectivo. ¿En alguna de las imagenes se ve claramente dinero (billetes de peso mexicano) siendo mostrado por la persona? Responde SOLO en JSON con esta forma exacta: {"dinero_visible": true|false, "explicacion": "breve razon"}.'
+
     const visionResp = await getAnthropic().messages.create({
       // claude-3-5-sonnet-latest devolvia 404 porque la alias `-latest`
       // ya no esta accesible en el workspace (Anthropic la deprecio).
@@ -389,7 +406,7 @@ export async function POST(
       // es la opcion recomendada por Anthropic para tareas de analisis
       // visual con calidad para produccion (anti-fraude).
       model: 'claude-opus-5',
-      max_tokens: 200,
+      max_tokens: 300,
       messages: [
         {
           role: 'user',
@@ -404,7 +421,7 @@ export async function POST(
             })),
             {
               type: 'text' as const,
-              text: 'Estas imagenes son frames de un video donde alguien recibe dinero en efectivo. ¿En alguna de las imagenes se ve claramente dinero (billetes de peso mexicano) siendo mostrado por la persona? Responde SOLO en JSON con esta forma exacta: {"dinero_visible": true|false, "explicacion": "breve razon"}.',
+              text: esCoordGrupalVision ? promptTextGrupal : promptTextIndividual,
             },
           ],
         },
@@ -414,9 +431,26 @@ export async function POST(
     if (textBlock && textBlock.type === 'text') {
       const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as { dinero_visible: boolean; explicacion: string }
-        dineroVisible = Boolean(parsed.dinero_visible)
-        dineroDetalle = parsed.explicacion ?? ''
+        if (esCoordGrupalVision) {
+          const parsed = JSON.parse(jsonMatch[0]) as {
+            grupo_visible?: boolean
+            todas_con_billetes?: boolean
+            personas_aprox?: number
+            explicacion?: string
+          }
+          const grupoOk = Boolean(parsed.grupo_visible)
+          const billetesOk = Boolean(parsed.todas_con_billetes)
+          dineroVisible = grupoOk && billetesOk
+          const nPersonas = typeof parsed.personas_aprox === 'number' ? parsed.personas_aprox : null
+          const razon = parsed.explicacion ?? ''
+          dineroDetalle = dineroVisible
+            ? `Grupo visible (${nPersonas ?? '?'} personas) y todas con billetes. ${razon}`.trim()
+            : `Falla grupal: ${!grupoOk ? 'no se ve grupo (mínimo 2 personas)' : ''}${!grupoOk && !billetesOk ? ' y ' : ''}${!billetesOk ? 'no todas tienen billetes en la mano' : ''}. ${razon}`.trim()
+        } else {
+          const parsed = JSON.parse(jsonMatch[0]) as { dinero_visible: boolean; explicacion: string }
+          dineroVisible = Boolean(parsed.dinero_visible)
+          dineroDetalle = parsed.explicacion ?? ''
+        }
       } else {
         dineroDetalle = `Vision respondió sin JSON parseable: "${textBlock.text.slice(0, 100)}"`
       }

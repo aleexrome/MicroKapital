@@ -359,7 +359,12 @@ export async function POST(
       framesContent.push(Buffer.from(new Uint8Array(buf)).toString('base64'))
     }
     const visionResp = await getAnthropic().messages.create({
-      model: 'claude-3-5-sonnet-latest',
+      // claude-3-5-sonnet-latest devolvia 404 porque la alias `-latest`
+      // ya no esta accesible en el workspace (Anthropic la deprecio).
+      // Usamos el modelo estable actual — claude-opus-5 tiene vision y
+      // es la opcion recomendada por Anthropic para tareas de analisis
+      // visual con calidad para produccion (anti-fraude).
+      model: 'claude-opus-5',
       max_tokens: 200,
       messages: [
         {

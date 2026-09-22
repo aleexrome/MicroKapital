@@ -35,14 +35,32 @@ cloudinary.config({
 // y Vercel corre "Collecting page data" en build donde las env vars de
 // runtime no siempre estan cargadas. Instanciar dentro del handler evita
 // que el build reviente por falta de credenciales.
+//
+// Ademas, si la env var falta en runtime tiramos un error explicito con
+// nombre de la variable — el error nativo del SDK es criptico
+// ("Missing credentials. Please pass an 'apikey'...") y hace pensar
+// que el bug esta en el codigo cuando en realidad lo que hay que
+// hacer es setearla en Vercel > Settings > Environment Variables.
 let _openai: OpenAI | null = null
 function getOpenAI(): OpenAI {
-  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  if (!_openai) {
+    const key = process.env.OPENAI_API_KEY
+    if (!key) {
+      throw new Error('Falta OPENAI_API_KEY en las variables de entorno del server (Vercel > Settings > Environment Variables). Contacta a soporte para configurarla.')
+    }
+    _openai = new OpenAI({ apiKey: key })
+  }
   return _openai
 }
 let _anthropic: Anthropic | null = null
 function getAnthropic(): Anthropic {
-  if (!_anthropic) _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  if (!_anthropic) {
+    const key = process.env.ANTHROPIC_API_KEY
+    if (!key) {
+      throw new Error('Falta ANTHROPIC_API_KEY en las variables de entorno del server (Vercel > Settings > Environment Variables). Contacta a soporte para configurarla.')
+    }
+    _anthropic = new Anthropic({ apiKey: key })
+  }
   return _anthropic
 }
 

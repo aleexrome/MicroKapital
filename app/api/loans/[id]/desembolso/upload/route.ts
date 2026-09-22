@@ -335,17 +335,21 @@ export async function POST(
   )
 
   // 3. Claude Vision decide si hay dinero visible.
+  //    Los frames JPG que Cloudinary genera on-the-fly desde el video
+  //    tardan 1-3s la primera vez que se piden. Los pedimos con
+  //    fetchConReintentos para tolerar el 423/404 mientras Cloudinary
+  //    genera cada derivado. Ademas propagamos el mensaje real del
+  //    error si algo falla (antes se quedaba en un texto generico
+  //    "Error al analizar el video con vision" que no dejaba
+  //    diagnosticar).
   let dineroVisible = false
   let dineroDetalle = ''
   try {
-    const framesContent = await Promise.all(
-      framesUrls.map(async (u) => {
-        const r = await fetch(u)
-        if (!r.ok) throw new Error(`Frame fetch failed: ${u}`)
-        const arr = new Uint8Array(await r.arrayBuffer())
-        return Buffer.from(arr).toString('base64')
-      }),
-    )
+    const framesContent: string[] = []
+    for (let i = 0; i < framesUrls.length; i++) {
+      const buf = await fetchConReintentos(framesUrls[i], 5, 2000)
+      framesContent.push(Buffer.from(new Uint8Array(buf)).toString('base64'))
+    }
     const visionResp = await getAnthropic().messages.create({
       model: 'claude-3-5-sonnet-latest',
       max_tokens: 200,
@@ -376,14 +380,19 @@ export async function POST(
         const parsed = JSON.parse(jsonMatch[0]) as { dinero_visible: boolean; explicacion: string }
         dineroVisible = Boolean(parsed.dinero_visible)
         dineroDetalle = parsed.explicacion ?? ''
+      } else {
+        dineroDetalle = `Vision respondió sin JSON parseable: "${textBlock.text.slice(0, 100)}"`
       }
+    } else {
+      dineroDetalle = 'Vision no devolvió bloque de texto — respuesta inesperada'
     }
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
     console.error('[desembolso-video] Claude Vision error:', err)
-    // Si Vision falla, marcamos el check como no verificado y forzamos
-    // regrabar — es mas seguro que auto-aprobar sin ver.
+    // Propagamos el mensaje real al detalle asi el coord ve si es la
+    // API key, la generacion de frames o Anthropic mismo lo que falla.
     dineroVisible = false
-    dineroDetalle = 'Error al analizar el video con visión — reintenta o contacta soporte'
+    dineroDetalle = `Vision falló: ${msg}`
   }
 
   // 4. Correr los 5 checks

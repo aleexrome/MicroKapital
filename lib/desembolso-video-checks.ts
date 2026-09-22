@@ -159,7 +159,19 @@ export function checkMonto(transcripcion: string, capitalEsperado: number, toler
     .map((m) => parseInt(m[1].replace(/,/g, ''), 10))
     .filter((n) => !isNaN(n) && n >= 100)
   const numsTexto = extraerNumerosEnPalabras(t)
-  const todos = [...numsDigitos, ...numsTexto]
+  const todosRaw = [...numsDigitos, ...numsTexto]
+
+  // Filtro anti-falso-positivo: los años (1900-2100) casi siempre son
+  // parte de la fecha que dijo el cliente ("dos mil veintiseis"), no
+  // del monto. Los excluimos como candidatos SALVO que el
+  // capitalEsperado sea exactamente un año — caso extremo pero
+  // posible ($2026 de prestamo). Sin este filtro, la fecha
+  // "22 de septiembre del dos mil veintiseis" mete 2026 en la lista
+  // y el check falla aunque el cliente si haya dicho "cinco mil".
+  const capitalEsAño = capitalEsperado >= 1900 && capitalEsperado <= 2100
+  const todos = capitalEsAño
+    ? todosRaw
+    : todosRaw.filter((n) => !(n >= 1900 && n <= 2100))
 
   const match = todos.find((n) => Math.abs(n - capitalEsperado) <= tolerancia)
   const ok = match !== undefined

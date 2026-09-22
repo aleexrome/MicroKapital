@@ -59,7 +59,15 @@ function getAnthropic(): Anthropic {
     if (!key) {
       throw new Error('Falta ANTHROPIC_API_KEY en las variables de entorno del server (Vercel > Settings > Environment Variables). Contacta a soporte para configurarla.')
     }
-    _anthropic = new Anthropic({ apiKey: key })
+    // Si la key es org-level ("All workspaces"), la API exige el
+    // header `anthropic-workspace-id`. Con este env var opcional se
+    // permite usar keys de ese scope sin regenerarlas — se ignora si
+    // la key ya viene scoped a un workspace.
+    const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID
+    _anthropic = new Anthropic({
+      apiKey: key,
+      ...(workspaceId ? { defaultHeaders: { 'anthropic-workspace-id': workspaceId } } : {}),
+    })
   }
   return _anthropic
 }

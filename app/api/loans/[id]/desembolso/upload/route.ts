@@ -16,7 +16,7 @@ import { SESION_DESEMBOLSO_TTL_MS } from '@/lib/desembolso-video'
 import {
   checkNombre, checkPalabraDelDia, checkFecha, checkMonto,
 } from '@/lib/desembolso-video-checks'
-import OpenAI from 'openai'
+import OpenAI, { toFile } from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 import {
   generarFechasSemanales, generarFechasHabiles, generarFechasFiduciario,
@@ -44,6 +44,40 @@ let _anthropic: Anthropic | null = null
 function getAnthropic(): Anthropic {
   if (!_anthropic) _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   return _anthropic
+}
+
+// Helper para descargar recursos de Cloudinary con reintentos.
+// Se usa tanto para el video original como para el derivado MP3.
+// Cloudinary responde 423 (Locked) o 404 mientras genera un derivado
+// on-demand — con reintentos + backoff cubrimos la ventana de 3-5s
+// que a veces toma la generacion. Devuelve un Buffer con los bytes.
+async function fetchConReintentos(
+  url: string,
+  intentos = 3,
+  delayMs = 1500,
+): Promise<Buffer> {
+  let ultimoStatus = 0
+  let ultimoMensaje = ''
+  for (let i = 0; i < intentos; i++) {
+    try {
+      const r = await fetch(url)
+      if (r.ok) {
+        return Buffer.from(await r.arrayBuffer())
+      }
+      ultimoStatus = r.status
+      // 423 = generando derivado; 404 = aun no propagado. Reintentar.
+      // Cualquier otro status es error terminal.
+      if (r.status !== 404 && r.status !== 423) {
+        throw new Error(`Cloudinary fetch failed: ${r.status}`)
+      }
+    } catch (e) {
+      ultimoMensaje = e instanceof Error ? e.message : String(e)
+    }
+    await new Promise((r) => setTimeout(r, delayMs))
+  }
+  throw new Error(
+    `Timeout descargando de Cloudinary (status=${ultimoStatus} msg=${ultimoMensaje} url=${url})`,
+  )
 }
 
 /**
@@ -174,64 +208,81 @@ export async function POST(
   const lat = body.lat != null ? String(body.lat) : null
   const lng = body.lng != null ? String(body.lng) : null
 
-  // 1. Descargar el video ORIGINAL desde Cloudinary y pasarlo a
-  //    Whisper. Antes intentabamos extraer el audio como MP3 via
-  //    transform `f_mp3`, pero el derivado a veces tarda o no se
-  //    genera bien (depende del video processing addon de Cloudinary
-  //    para free plan), y Whisper terminaba sin recibir nada. Whisper
-  //    acepta nativo webm/mp4/mpga/wav/m4a — asi que lo mandamos
-  //    directo. Videos de 20s pesan 1-8 MB, muy por debajo del limite
-  //    de 25 MB de Whisper.
+  // 1. Descargar el video desde Cloudinary y pasarlo a Whisper.
+  //    Estrategia con doble intento:
+  //     (a) primer intento con el video ORIGINAL — Whisper sabe extraer
+  //         audio de webm/mp4/m4a directamente, es el camino rapido.
+  //     (b) si (a) falla (algunos webm de MediaRecorder tienen headers
+  //         no estandar que revientan el decoder de Whisper), pedimos
+  //         a Cloudinary un derivado de solo audio (mp3) y reintentamos.
+  //    Antes intentabamos solo (a) y por eso a veces salia "no se pudo
+  //    transcribir". Ahora si (a) falla, el fallback (b) suele arreglar.
+  //
+  //    Nota critica: se usa `toFile` de OpenAI SDK — NO `new File(...)`.
+  //    El File nativo de Node no siempre es reconocido por el
+  //    Uploadable de OpenAI v7, lo que causa que el SDK falle con
+  //    "expected file-like value" o mande el body mal. `toFile` arma
+  //    el multipart correcto en todos los runtimes.
   let transcripcion = ''
+  const debugTrace: string[] = []
   try {
-    // Cloudinary a veces tarda 1-2s en propagar el secure_url del
-    // upload directo. Con 3 reintentos y backoff cubrimos.
-    let videoBuf: Buffer | null = null
-    let ultimoStatus = 0
-    for (let intento = 0; intento < 3; intento++) {
-      const r = await fetch(videoUrl)
-      if (r.ok) {
-        videoBuf = Buffer.from(await r.arrayBuffer())
-        break
-      }
-      ultimoStatus = r.status
-      if (r.status === 404 || r.status === 423) {
-        await new Promise((r) => setTimeout(r, 1500))
-        continue
-      }
-      throw new Error(`Cloudinary video fetch failed: ${r.status}`)
-    }
-    if (!videoBuf) {
-      throw new Error(`Timeout esperando el video en Cloudinary (ultimo status: ${ultimoStatus})`)
-    }
+    const videoBuf = await fetchConReintentos(videoUrl)
+    debugTrace.push(`original bytes=${videoBuf.byteLength}`)
 
-    // Whisper acepta el video con audio embebido y hace la extraccion
-    // internamente. La extension guia al parser — usamos la del blob
-    // original si es posible, fallback a webm.
-    const mimeGuess = videoUrl.toLowerCase().endsWith('.mp4')
-      ? { ext: 'mp4', type: 'video/mp4' }
-      : { ext: 'webm', type: 'video/webm' }
-    // Uint8Array-wrap del buffer para satisfacer el tipado File en
-    // strict mode (Buffer<SharedArrayBuffer> no es asignable a
-    // BlobPart directamente).
-    const whisperFile = new File(
-      [new Uint8Array(videoBuf)],
-      `desembolso-${loan.id}.${mimeGuess.ext}`,
-      { type: mimeGuess.type },
-    )
-    const resp = await getOpenAI().audio.transcriptions.create({
-      file: whisperFile,
-      model: 'whisper-1',
-      language: 'es',
-    })
-    transcripcion = resp.text ?? ''
+    // Elegimos extension segun el URL. Si Cloudinary reescribio o le
+    // dimos mal la pista, el fallback igual cubre.
+    const ext = videoUrl.toLowerCase().endsWith('.mp4') ? 'mp4' : 'webm'
+    const type = ext === 'mp4' ? 'video/mp4' : 'video/webm'
+
+    try {
+      const primaryFile = await toFile(
+        new Uint8Array(videoBuf),
+        `desembolso-${loan.id}.${ext}`,
+        { type },
+      )
+      const resp = await getOpenAI().audio.transcriptions.create({
+        file: primaryFile,
+        model: 'whisper-1',
+        language: 'es',
+      })
+      transcripcion = resp.text ?? ''
+      debugTrace.push(`whisper-primary ok len=${transcripcion.length}`)
+    } catch (primaryErr) {
+      debugTrace.push(
+        `whisper-primary FAIL: ${primaryErr instanceof Error ? primaryErr.message : String(primaryErr)}`,
+      )
+      // Fallback: pedir a Cloudinary un derivado de solo audio (mp3).
+      // La transformacion `f_mp3` genera el derivado en la primera
+      // peticion; puede tardar 1-3s. fetchConReintentos cubre el 423
+      // "processing" de Cloudinary.
+      const mp3Url = cloudinary.url(publicId, {
+        resource_type: 'video',
+        format: 'mp3',
+      })
+      const mp3Buf = await fetchConReintentos(mp3Url, 5, 2000)
+      debugTrace.push(`mp3 derivate bytes=${mp3Buf.byteLength}`)
+      const mp3File = await toFile(
+        new Uint8Array(mp3Buf),
+        `desembolso-${loan.id}.mp3`,
+        { type: 'audio/mpeg' },
+      )
+      const resp = await getOpenAI().audio.transcriptions.create({
+        file: mp3File,
+        model: 'whisper-1',
+        language: 'es',
+      })
+      transcripcion = resp.text ?? ''
+      debugTrace.push(`whisper-fallback ok len=${transcripcion.length}`)
+    }
+    console.log('[desembolso-video] trace:', debugTrace.join(' | '))
     console.log('[desembolso-video] transcripcion:', transcripcion.slice(0, 200))
   } catch (err) {
-    console.error('[desembolso-video] Whisper error:', err)
+    const errMsg = err instanceof Error ? err.message : String(err)
+    console.error('[desembolso-video] Whisper error:', err, 'trace:', debugTrace)
     return NextResponse.json(
       {
-        error: 'No se pudo transcribir el audio del video. Revisa que el audio se escuche claro y reintenta.',
-        debug: err instanceof Error ? err.message : String(err),
+        error: `No se pudo transcribir el audio (${errMsg}). Reintenta; si persiste, contacta soporte.`,
+        debug: `${errMsg} — trace: ${debugTrace.join(' | ')}`,
       },
       { status: 500 },
     )

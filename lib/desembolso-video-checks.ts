@@ -65,20 +65,42 @@ export function checkNombre(transcripcion: string, nombreCompleto: string): { ok
   const tokens = normalizar(nombreCompleto).split(' ').filter(Boolean)
   if (tokens.length === 0) return { ok: false, detalle: 'No se pudo determinar el nombre del cliente' }
   const primerNombre = tokens[0]
-  // El primer apellido suele ser el token del medio o penúltimo — en
-  // convención mexicana, después de N nombres. Tomamos el más largo
-  // de los tokens que no son el primero para maximizar señal.
+  // Tomamos los 2 apellidos mas largos como candidatos — asi cubrimos
+  // convencion mexicana (nombre + apellido paterno + apellido materno).
   const candidatosApellido = tokens.slice(1).sort((a, b) => b.length - a.length)
-  const primerApellido = candidatosApellido[0] ?? ''
+  const primerApellido  = candidatosApellido[0] ?? ''
+  const segundoApellido = candidatosApellido[1] ?? ''
 
-  const okNombre    = contieneFuzzy(transcripcion, primerNombre)
-  const okApellido  = primerApellido.length > 0 ? contieneFuzzy(transcripcion, primerApellido) : true
+  // Tolerancia mayor para el nombre propio (0.4). Whisper tiende a
+  // transcribir mal nombres regionales / no-estandar en español:
+  // "Deysi" -> "Deicy" / "Daisy", "Yamileth" -> "Yamilet", "Yenifer"
+  // -> "Jennifer", etc. El primer apellido queda en 0.25 porque son
+  // menos ambiguos y no queremos que "Perez" matchee con "Perea".
+  const okNombre = contieneFuzzy(transcripcion, primerNombre, 0.4)
+  const okPrimerApellido  = primerApellido.length  > 0 ? contieneFuzzy(transcripcion, primerApellido,  0.25) : false
+  const okSegundoApellido = segundoApellido.length > 0 ? contieneFuzzy(transcripcion, segundoApellido, 0.25) : false
+
+  // Aceptamos si cualquiera de:
+  // A) Nombre + primer apellido matchean (caso feliz)
+  // B) Los dos apellidos matchean (nombre pudo mal transcribirse pero
+  //    dos apellidos fuertes son suficiente evidencia — apellidos
+  //    compuestos son mucho menos ambiguos que nombres propios)
+  const casoA = okNombre && okPrimerApellido
+  const casoB = okPrimerApellido && okSegundoApellido
+  const ok = casoA || casoB
+
+  const previewTx = normalizar(transcripcion).slice(0, 80).trim()
+  const faltantes = [
+    !okNombre           && `nombre "${primerNombre}"`,
+    !okPrimerApellido   && primerApellido  && `apellido "${primerApellido}"`,
+    !okSegundoApellido  && segundoApellido && `apellido "${segundoApellido}"`,
+  ].filter(Boolean) as string[]
 
   return {
-    ok: okNombre && okApellido,
-    detalle: okNombre && okApellido
-      ? `Nombre reconocido (${primerNombre} + ${primerApellido})`
-      : `Falta ${!okNombre ? primerNombre : ''}${!okNombre && !okApellido ? ' + ' : ''}${!okApellido ? primerApellido : ''} en el audio`,
+    ok,
+    detalle: ok
+      ? `Nombre reconocido (${primerNombre} + ${primerApellido}${okSegundoApellido ? ` + ${segundoApellido}` : ''})`
+      : `Falta en el audio: ${faltantes.join(', ')}. Audio: "${previewTx}..."`,
   }
 }
 

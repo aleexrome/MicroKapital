@@ -4,6 +4,12 @@ import { prisma } from '@/lib/prisma'
 import { v2 as cloudinary } from 'cloudinary'
 import { SESION_DESEMBOLSO_TTL_MS } from '@/lib/desembolso-video'
 
+// Excepcion unica del 2026-09-22 — el flujo de IA fallo el dia
+// anterior y varios prestamos se grabaron offline. Se acepta upload
+// manual sin validacion IA hasta las 00:00 CST del 2026-09-23.
+// Despues del deadline los intentos con `manual: true` se rechazan.
+const BYPASS_MANUAL_EXPIRA_MS = new Date('2026-09-23T06:00:00Z').getTime()
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key:    process.env.CLOUDINARY_API_KEY,
@@ -59,19 +65,35 @@ export async function POST(
   }
   if (!allowed) return NextResponse.json({ error: 'Sin permisos sobre este préstamo' }, { status: 403 })
 
-  // Sesion debe existir y estar viva
-  if (!loan.desembolsoPalabraDelDia || !loan.desembolsoSesionIniciadaAt) {
-    return NextResponse.json(
-      { error: 'No hay sesión de desembolso iniciada. Llama /iniciar-sesion primero.' },
-      { status: 400 },
-    )
-  }
-  const edadSesionMs = Date.now() - loan.desembolsoSesionIniciadaAt.getTime()
-  if (edadSesionMs > SESION_DESEMBOLSO_TTL_MS) {
-    return NextResponse.json(
-      { error: 'La sesión expiró. Reinicia con /iniciar-sesion para obtener una palabra nueva.' },
-      { status: 400 },
-    )
+  // Bypass de excepcion (solo hoy 2026-09-22). Si el cliente manda
+  // `manual: true` en el body, saltamos la validacion de sesion — no
+  // hay palabra del dia porque el video se grabo ayer offline. Se
+  // usa junto con /upload en modo bypass. Despues del deadline
+  // rechazamos con 400 (el flag deja de funcionar solo).
+  const body = await req.json().catch(() => ({})) as { manual?: boolean }
+  const modoManual = body.manual === true
+  if (modoManual) {
+    if (Date.now() > BYPASS_MANUAL_EXPIRA_MS) {
+      return NextResponse.json(
+        { error: 'La excepción de video manual expiró. Usa el flujo normal con validación automática.' },
+        { status: 400 },
+      )
+    }
+  } else {
+    // Modo normal: sesion debe existir y estar viva
+    if (!loan.desembolsoPalabraDelDia || !loan.desembolsoSesionIniciadaAt) {
+      return NextResponse.json(
+        { error: 'No hay sesión de desembolso iniciada. Llama /iniciar-sesion primero.' },
+        { status: 400 },
+      )
+    }
+    const edadSesionMs = Date.now() - loan.desembolsoSesionIniciadaAt.getTime()
+    if (edadSesionMs > SESION_DESEMBOLSO_TTL_MS) {
+      return NextResponse.json(
+        { error: 'La sesión expiró. Reinicia con /iniciar-sesion para obtener una palabra nueva.' },
+        { status: 400 },
+      )
+    }
   }
 
   const timestamp = Math.floor(Date.now() / 1000)

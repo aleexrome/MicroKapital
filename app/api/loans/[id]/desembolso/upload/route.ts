@@ -179,19 +179,54 @@ export async function POST(
   }
   if (!allowed) return NextResponse.json({ error: 'Sin permisos sobre este préstamo' }, { status: 403 })
 
-  // Sesion debe existir y estar viva
-  if (!loan.desembolsoPalabraDelDia || !loan.desembolsoSesionIniciadaAt) {
+  // ── Recibir body primero (incluye flag opcional `manual` para bypass) ──
+  const body = await req.json().catch(() => null) as
+    | {
+        videoUrl?: string
+        publicId?: string
+        lat?: string | number | null
+        lng?: string | number | null
+        /** Bypass de IA (excepcion unica del 2026-09-22). */
+        manual?: boolean
+      }
+    | null
+  if (!body?.videoUrl || !body?.publicId) {
     return NextResponse.json(
-      { error: 'No hay sesión de desembolso iniciada. Llama /iniciar-sesion primero.' },
+      { error: 'Faltan videoUrl y publicId. Sube primero el video a Cloudinary con la firma de /signature.' },
       { status: 400 },
     )
   }
-  const edadSesionMs = Date.now() - loan.desembolsoSesionIniciadaAt.getTime()
-  if (edadSesionMs > SESION_DESEMBOLSO_TTL_MS) {
+
+  // Bypass de excepcion (2026-09-22). Deadline duro server-side: si
+  // hoy es despues del corte, `manual: true` se ignora y volvemos al
+  // flujo normal (que rechazara por falta de sesion). Auditamos aparte.
+  const BYPASS_MANUAL_EXPIRA_MS = new Date('2026-09-23T06:00:00Z').getTime()
+  const bypassSolicitado = body.manual === true
+  const bypassPermitido = bypassSolicitado && Date.now() <= BYPASS_MANUAL_EXPIRA_MS
+  if (bypassSolicitado && !bypassPermitido) {
     return NextResponse.json(
-      { error: 'La sesión expiró. Reinicia con /iniciar-sesion para obtener una palabra nueva.' },
+      { error: 'La excepción de video manual expiró. Vuelve al flujo normal con validación automática.' },
       { status: 400 },
     )
+  }
+
+  // Sesion debe existir y estar viva — SOLO en modo normal. En modo
+  // manual saltamos: no hay palabra del dia porque el video se grabo
+  // offline antes de este endpoint.
+  if (!bypassPermitido) {
+    if (!loan.desembolsoPalabraDelDia || !loan.desembolsoSesionIniciadaAt) {
+      return NextResponse.json(
+        { error: 'No hay sesión de desembolso iniciada. Llama /iniciar-sesion primero.' },
+        { status: 400 },
+      )
+    }
+    const edadSesionMs = Date.now() - loan.desembolsoSesionIniciadaAt.getTime()
+    if (edadSesionMs > SESION_DESEMBOLSO_TTL_MS) {
+      return NextResponse.json(
+        { error: 'La sesión expiró. Reinicia con /iniciar-sesion para obtener una palabra nueva.' },
+        { status: 400 },
+      )
+    }
   }
 
   const esFlujoNuevo = loan.estado === 'IN_ACTIVATION'
@@ -240,23 +275,46 @@ export async function POST(
     }
   }
 
-  // ── Recibir referencia al video ya subido a Cloudinary + GPS ──────
-  // El frontend ya subio el video directo a Cloudinary via signed
-  // upload (sorteando el limite de 4.5MB de Vercel). Aqui solo nos
-  // llega el URL y el public_id para procesar.
-  const body = await req.json().catch(() => null) as
-    | { videoUrl?: string; publicId?: string; lat?: string | number | null; lng?: string | number | null }
-    | null
-  if (!body?.videoUrl || !body?.publicId) {
-    return NextResponse.json(
-      { error: 'Faltan videoUrl y publicId. Sube primero el video a Cloudinary con la firma de /signature.' },
-      { status: 400 },
-    )
-  }
+  // El body ya lo parseamos arriba (para leer el flag `manual`).
+  // Aqui solo extraemos las referencias al video ya subido a
+  // Cloudinary + GPS opcional.
   const videoUrl = body.videoUrl
   const publicId = body.publicId
   const lat = body.lat != null ? String(body.lat) : null
   const lng = body.lng != null ? String(body.lng) : null
+
+  // ── Bypass: si `manual` esta activo y valido, saltamos toda la
+  // pipeline de IA (Whisper + Vision + checks) y vamos directo a
+  // activar. Esto es la excepcion del 2026-09-22 para desembolsos
+  // grabados offline. Un audit log despues marca claramente que fue
+  // manual con el user + timestamp.
+  let transcripcion = ''
+  let validacion: {
+    checkedAt: string
+    checks: Record<string, { ok: boolean; detalle: string }>
+    transcripcionLength?: number
+    bypass?: boolean
+  }
+  let todosOk = false
+
+  if (bypassPermitido) {
+    // Validacion "sintetica" para poblar los mismos campos que el
+    // flujo normal — asi la UI de auditoria muestra este video como
+    // aprobado con la nota "bypass manual".
+    transcripcion = '[bypass manual — video no transcrito, excepcion del 2026-09-22]'
+    validacion = {
+      checkedAt: new Date().toISOString(),
+      checks: {
+        nombre:        { ok: true, detalle: 'Bypass manual (excepción del 2026-09-22)' },
+        fecha:         { ok: true, detalle: 'Bypass manual (excepción del 2026-09-22)' },
+        monto:         { ok: true, detalle: 'Bypass manual (excepción del 2026-09-22)' },
+        palabraDelDia: { ok: true, detalle: 'Bypass manual (excepción del 2026-09-22)' },
+        dineroVisible: { ok: true, detalle: 'Bypass manual (excepción del 2026-09-22)' },
+      },
+      bypass: true,
+    }
+    todosOk = true
+  } else {
 
   // 1. Descargar el video desde Cloudinary y pasarlo a Whisper.
   //    Estrategia con doble intento:
@@ -273,7 +331,6 @@ export async function POST(
   //    Uploadable de OpenAI v7, lo que causa que el SDK falle con
   //    "expected file-like value" o mande el body mal. `toFile` arma
   //    el multipart correcto en todos los runtimes.
-  let transcripcion = ''
   const debugTrace: string[] = []
   try {
     const videoBuf = await fetchConReintentos(videoUrl)
@@ -469,10 +526,12 @@ export async function POST(
   // $50,000 y una diferencia de $50 se vuelve ridicula. Usamos max(50, 1%).
   const tolMonto = Math.max(50, Math.floor(montoTotalGrupo * 0.01))
   const rMonto   = checkMonto(transcripcion, montoTotalGrupo, tolMonto)
-  const rPalabra = checkPalabraDelDia(transcripcion, loan.desembolsoPalabraDelDia)
+  // desembolsoPalabraDelDia se valida arriba (fuera del bypass) — aca
+  // es non-null. Usamos non-null assertion para satisfacer TS.
+  const rPalabra = checkPalabraDelDia(transcripcion, loan.desembolsoPalabraDelDia!)
   const rDinero  = { ok: dineroVisible, detalle: dineroDetalle || (dineroVisible ? 'Dinero visible en el video' : 'No se detectó dinero') }
 
-  const validacion = {
+  validacion = {
     checkedAt: new Date().toISOString(),
     checks: {
       nombre:        rNombre,
@@ -483,7 +542,8 @@ export async function POST(
     },
     transcripcionLength: transcripcion.length,
   }
-  const todosOk = rNombre.ok && rFecha.ok && rMonto.ok && rPalabra.ok && rDinero.ok
+  todosOk = rNombre.ok && rFecha.ok && rMonto.ok && rPalabra.ok && rDinero.ok
+  } // ── FIN del else (flujo con IA)
 
   // ── Si algún check falla: guardar y regresar razones ─────────────
   if (!todosOk) {
@@ -507,13 +567,11 @@ export async function POST(
       registroId: loan.id,
       valoresNuevos: { validacion, videoUrl },
     })
-    const razones = [
-      !rNombre.ok  && rNombre.detalle,
-      !rFecha.ok   && rFecha.detalle,
-      !rMonto.ok   && rMonto.detalle,
-      !rPalabra.ok && rPalabra.detalle,
-      !rDinero.ok  && rDinero.detalle,
-    ].filter(Boolean) as string[]
+    // Derivamos razones desde validacion.checks (no dependen de las
+    // vars rNombre/etc que solo existen dentro del else con IA).
+    const razones = Object.values(validacion.checks)
+      .filter((c) => !c.ok)
+      .map((c) => c.detalle)
     return NextResponse.json({
       aprobado: false,
       videoUrl,
@@ -686,11 +744,17 @@ export async function POST(
 
   createAuditLog({
     userId,
-    accion: activacionGrupal ? 'ACTIVATE_GROUP_VIA_DISBURSEMENT_VIDEO' : 'ACTIVATE_LOAN_VIA_DISBURSEMENT_VIDEO',
+    // Marcamos claramente cuando fue bypass manual — asi cuando alguien
+    // audite la actividad, distingue estos activados-sin-IA de los
+    // normales. Utl para futura investigacion / cumplimiento.
+    accion: bypassPermitido
+      ? (activacionGrupal ? 'ACTIVATE_GROUP_VIA_DISBURSEMENT_VIDEO_MANUAL' : 'ACTIVATE_LOAN_VIA_DISBURSEMENT_VIDEO_MANUAL')
+      : (activacionGrupal ? 'ACTIVATE_GROUP_VIA_DISBURSEMENT_VIDEO' : 'ACTIVATE_LOAN_VIA_DISBURSEMENT_VIDEO'),
     tabla: 'Loan',
     registroId: loan.id,
     valoresNuevos: {
       videoUrl, validacion, lat: parsedLat, lng: parsedLng, estado: 'ACTIVE',
+      bypassManual: bypassPermitido,
       ...(activacionGrupal ? { integrantesActivados: targetLoans.map((t) => t.id) } : {}),
     },
   })

@@ -592,6 +592,11 @@ export function DisbursementVideo({
               <Info className="h-3 w-3 mt-0.5 shrink-0" />
               Se van a pedir permisos de cámara, micrófono y ubicación. Concédelos todos.
             </p>
+
+            {/* Excepción del 2026-09-22 — sube video pre-grabado ayer
+                offline (sin pasar por IA). El botón se auto-esconde
+                pasando la fecha, el server tambien lo rechaza. */}
+            <BypassManualBloque loanId={loanId} onDone={() => router.refresh()} />
           </div>
         )}
 
@@ -752,5 +757,129 @@ export function DisbursementVideo({
         )}
       </CardContent>
     </Card>
+  )
+}
+
+
+// ─────────────────────────────────────────────────────────────────────
+// Bloque de excepcion del 2026-09-22 — permite subir un video
+// pre-grabado offline y activar el prestamo sin pasar por Whisper /
+// Vision. Se auto-esconde despues del deadline. El server tambien
+// valida el deadline como backstop, asi que si alguien deja abierta
+// la pagina, no puede abusar del bypass despues del corte.
+// ─────────────────────────────────────────────────────────────────────
+const BYPASS_MANUAL_EXPIRA_MS = new Date('2026-09-23T06:00:00Z').getTime()
+
+function BypassManualBloque({ loanId, onDone }: { loanId: string; onDone: () => void }) {
+  const { toast } = useToast()
+  const [subiendo, setSubiendo] = useState(false)
+  const [archivo, setArchivo] = useState<File | null>(null)
+
+  // Guarda el timestamp de "vigente hasta" — el componente se re-monta
+  // en cada navegacion. No hace falta hook exotico, un check simple
+  // al render alcanza.
+  if (Date.now() > BYPASS_MANUAL_EXPIRA_MS) return null
+
+  async function subir() {
+    if (!archivo) return
+    setSubiendo(true)
+    try {
+      // 1. Pedir firma con flag manual — el server valida el deadline
+      //    y devuelve una firma valida solo si estamos dentro del corte.
+      const sigRes = await fetch(`/api/loans/${loanId}/desembolso/signature`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manual: true }),
+      })
+      if (!sigRes.ok) {
+        const err = await sigRes.json().catch(() => ({}))
+        throw new Error(err.error ?? 'No se pudo firmar el upload')
+      }
+      const sig = await sigRes.json() as {
+        cloudName: string; apiKey: string; timestamp: number;
+        folder: string; publicId: string; signature: string;
+      }
+
+      // 2. Subida directa a Cloudinary — como el flujo normal.
+      const cloudForm = new FormData()
+      cloudForm.append('file', archivo)
+      cloudForm.append('api_key',   sig.apiKey)
+      cloudForm.append('timestamp', String(sig.timestamp))
+      cloudForm.append('folder',    sig.folder)
+      cloudForm.append('public_id', sig.publicId)
+      cloudForm.append('signature', sig.signature)
+      const cloudRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${sig.cloudName}/video/upload`,
+        { method: 'POST', body: cloudForm },
+      )
+      if (!cloudRes.ok) {
+        const err = await cloudRes.json().catch(() => ({}))
+        throw new Error(err.error?.message ?? `Cloudinary rechazó el video (${cloudRes.status})`)
+      }
+      const cloudData = await cloudRes.json() as { secure_url: string; public_id: string }
+
+      // 3. Llamar al upload en modo manual — activa sin IA.
+      const r = await fetch(`/api/loans/${loanId}/desembolso/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoUrl: cloudData.secure_url,
+          publicId: cloudData.public_id,
+          manual: true,
+        }),
+      })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(data?.error ?? `Error al activar (${r.status})`)
+
+      toast({
+        title: '✅ Préstamo activado (excepción del día)',
+        description: 'El video se guardó sin validación automática. Auditoría queda registrada.',
+      })
+      onDone()
+    } catch (err) {
+      toast({
+        title: 'Error subiendo video pre-grabado',
+        description: err instanceof Error ? err.message : 'Error desconocido',
+        variant: 'destructive',
+      })
+    } finally {
+      setSubiendo(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="h-4 w-4 text-amber-700 mt-0.5 shrink-0" />
+        <div className="text-xs text-amber-900">
+          <p className="font-semibold mb-1">Excepción del día — subir video pre-grabado</p>
+          <p>
+            Ayer el sistema de IA falló y algunos desembolsos se grabaron offline. Solo por hoy
+            (hasta media noche) puedes subir esos videos aquí sin validación automática. El
+            préstamo se activa directo y queda auditado con tu nombre.
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <input
+          type="file"
+          accept="video/*"
+          onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+          disabled={subiendo}
+          className="text-xs flex-1 min-w-0"
+        />
+        <Button
+          onClick={subir}
+          disabled={!archivo || subiendo}
+          size="sm"
+          variant="outline"
+          className="border-amber-400 text-amber-900 hover:bg-amber-100"
+        >
+          {subiendo
+            ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Subiendo</>
+            : <>Subir y activar</>}
+        </Button>
+      </div>
+    </div>
   )
 }

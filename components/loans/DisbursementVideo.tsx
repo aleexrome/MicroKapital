@@ -433,9 +433,13 @@ export function DisbursementVideo({
         throw new Error(texto.slice(0, 200) || `Error ${r.status}`)
       }
 
-      const data: ValidacionResp & { error?: string } = await r.json()
+      const data: ValidacionResp & { error?: string; debug?: string } = await r.json()
       if (!r.ok && !data?.validacion) {
-        throw new Error(data?.error ?? 'Error al validar el video')
+        // Si el server incluyo 'debug', lo pegamos al mensaje asi el
+        // coord ve el motivo tecnico y puede reportarlo a soporte en
+        // lugar de que quede oculto en logs de Vercel.
+        const detalle = data?.debug ? ` [${data.debug}]` : ''
+        throw new Error((data?.error ?? 'Error al validar el video') + detalle)
       }
 
       if (data.aprobado) {

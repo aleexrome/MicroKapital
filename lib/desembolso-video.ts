@@ -58,3 +58,26 @@ export function armarGuion(params: {
   }).format(monto)
   return `Hola, soy ${nombreCliente}. Hoy ${fechaTxt} recibí ${montoTxt} pesos gracias a MicroKapital. Código: ${palabraDelDia}.`
 }
+
+/**
+ * Version grupal del guion. Se usa cuando el prestamo es SOLIDARIO y el
+ * loan pertenece a la coordinadora del grupo — en ese caso todas las
+ * integrantes se graban JUNTAS diciendo el guion con nombre del grupo y
+ * el total prestado (suma del capital de todas las integrantes del ciclo
+ * actual). Asi evitamos que cada integrante grabe su propio video.
+ */
+export function armarGuionGrupal(params: {
+  nombreGrupo: string
+  fechaHoy: Date
+  montoTotal: number
+  palabraDelDia: string
+}): string {
+  const { nombreGrupo, fechaHoy, montoTotal, palabraDelDia } = params
+  const fechaTxt = fechaHoy.toLocaleDateString('es-MX', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  })
+  const montoTxt = new Intl.NumberFormat('es-MX', {
+    style: 'currency', currency: 'MXN', maximumFractionDigits: 0,
+  }).format(montoTotal)
+  return `Hola, somos el grupo ${nombreGrupo} y hoy ${fechaTxt} estamos recibiendo la cantidad de ${montoTxt} pesos gracias a MicroKapital. Código: ${palabraDelDia}.`
+}

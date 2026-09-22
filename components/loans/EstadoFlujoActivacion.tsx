@@ -324,16 +324,31 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
         subtitle={chip3Subtitle(chip3Status)}
         accion={
           chip3Status === 'PENDING' && puedeActuar ? (
-            <Button
-              size="sm"
-              onClick={() => {
-                const el = document.getElementById('desembolso-video-block')
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }}
-            >
-              <Video className="h-3.5 w-3.5" />
-              Ir a grabar video
-            </Button>
+            // Si es integrante NO-coord de un grupo solidario, el
+            // video no se graba aqui — se graba en el perfil de la
+            // coordinadora con TODAS las integrantes juntas. Le
+            // mandamos al perfil de la coord en lugar de hacer scroll
+            // a un componente que no existe en su pagina.
+            solidarioGroupInfo && !solidarioGroupInfo.esCoordinadora && solidarioGroupInfo.coordinadora?.loanId ? (
+              <Button
+                size="sm"
+                onClick={() => { router.push(`/prestamos/${solidarioGroupInfo.coordinadora!.loanId}#desembolso-video-block`) }}
+              >
+                <Video className="h-3.5 w-3.5" />
+                Ir con la coordinadora
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => {
+                  const el = document.getElementById('desembolso-video-block')
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}
+              >
+                <Video className="h-3.5 w-3.5" />
+                Ir a grabar video
+              </Button>
+            )
           ) : null
         }
         atras={null}  // Chip 3 es irrevocable: aprobar el video activa el préstamo

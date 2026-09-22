@@ -5,6 +5,7 @@ import { createAuditLog } from '@/lib/audit'
 import {
   generarPalabraDelDia,
   armarGuion,
+  armarGuionGrupal,
   SESION_DESEMBOLSO_TTL_MS,
 } from '@/lib/desembolso-video'
 
@@ -44,11 +45,16 @@ export async function POST(
     where: { id: params.id, companyId: companyId! },
     select: {
       id: true,
+      tipo: true,
       estado: true,
       capital: true,
       branchId: true,
       cobradorId: true,
+      loanGroupId: true,
+      esCoordinadora: true,
+      loanOriginalId: true,
       client: { select: { nombreCompleto: true } },
+      loanGroup: { select: { nombre: true } },
       desembolsoVideoUrl: true,
       // Necesarios para validar los candados previos (contrato +
       // comision) — no arrancamos la grabacion si algo falta.
@@ -57,6 +63,33 @@ export async function POST(
     },
   })
   if (!loan) return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
+
+  // ── Reglas grupales (SOLIDARIO) ──────────────────────────────────
+  // El video de desembolso de un grupo lo graba UNA sola vez la
+  // coordinadora con todas las integrantes juntas frente a la camara.
+  // Los prestamos de las no-coordinadoras se activan cuando el video
+  // del coord aprueba — no deben grabar su propio video.
+  const esGrupal = loan.tipo === 'SOLIDARIO' && loan.loanGroupId !== null
+  if (esGrupal && !loan.esCoordinadora) {
+    const esRenovacion = loan.loanOriginalId !== null
+    const cicloFilter = esRenovacion ? { loanOriginalId: { not: null } } : { loanOriginalId: null }
+    const coord = await prisma.loan.findFirst({
+      where: {
+        loanGroupId: loan.loanGroupId!,
+        esCoordinadora: true,
+        ...cicloFilter,
+        companyId: companyId!,
+      },
+      select: { id: true, client: { select: { nombreCompleto: true } } },
+    })
+    return NextResponse.json({
+      error: 'ACTIVAR_DESDE_COORDINADORA',
+      message: coord
+        ? `Este préstamo se activa con todo el grupo desde el perfil de la coordinadora: ${coord.client.nombreCompleto}.`
+        : 'Este préstamo forma parte de un grupo solidario y se activa desde el perfil de la coordinadora.',
+      coordinadoraLoanId: coord?.id ?? null,
+    }, { status: 400 })
+  }
 
   // Permisos por rol: solo dueños del prestamo pueden grabar (SA
   // pasa siempre). Es simetrico a disbursement-photo.
@@ -131,6 +164,34 @@ export async function POST(
     }
   }
 
+  // Si es coord del grupo, computamos el total del ciclo — se usa
+  // tanto en el guion como despues en checkMonto. Es la suma del
+  // capital de TODAS las integrantes activas del ciclo (incluyendo a
+  // la coord). Un ciclo nuevo es loanOriginalId=null; renovacion es
+  // not null.
+  let montoTotalGrupo: number | null = null
+  let nombreGrupo: string | null = null
+  if (esGrupal && loan.esCoordinadora) {
+    const esRenovacion = loan.loanOriginalId !== null
+    const cicloFilter = esRenovacion ? { loanOriginalId: { not: null } } : { loanOriginalId: null }
+    const integrantes = await prisma.loan.findMany({
+      where: {
+        loanGroupId: loan.loanGroupId!,
+        estado: 'IN_ACTIVATION',
+        ...cicloFilter,
+        companyId: companyId!,
+      },
+      select: { capital: true },
+    })
+    // Si solo la coord esta en IN_ACTIVATION (todas las demas ya
+    // pasaron o el grupo ya no funciona como grupo), usamos su propio
+    // capital como fallback.
+    montoTotalGrupo = integrantes.length > 0
+      ? integrantes.reduce((acc, l) => acc + Number(l.capital), 0)
+      : Number(loan.capital)
+    nombreGrupo = loan.loanGroup?.nombre ?? null
+  }
+
   // Generar palabra del dia + guardar sesion.
   const palabraDelDia = generarPalabraDelDia()
   const iniciadaAt = new Date()
@@ -142,19 +203,27 @@ export async function POST(
     },
   })
 
-  const guion = armarGuion({
-    nombreCliente: loan.client.nombreCompleto,
-    fechaHoy:      iniciadaAt,
-    monto:         Number(loan.capital),
-    palabraDelDia,
-  })
+  const esCoordGrupal = esGrupal && loan.esCoordinadora && nombreGrupo && montoTotalGrupo !== null
+  const guion = esCoordGrupal
+    ? armarGuionGrupal({
+        nombreGrupo:   nombreGrupo!,
+        fechaHoy:      iniciadaAt,
+        montoTotal:    montoTotalGrupo!,
+        palabraDelDia,
+      })
+    : armarGuion({
+        nombreCliente: loan.client.nombreCompleto,
+        fechaHoy:      iniciadaAt,
+        monto:         Number(loan.capital),
+        palabraDelDia,
+      })
 
   createAuditLog({
     userId,
     accion: 'DESEMBOLSO_VIDEO_SESION_INICIADA',
     tabla: 'Loan',
     registroId: loan.id,
-    valoresNuevos: { palabraDelDia, iniciadaAt: iniciadaAt.toISOString() },
+    valoresNuevos: { palabraDelDia, iniciadaAt: iniciadaAt.toISOString(), esCoordGrupal },
     ipAddress: req.headers.get('x-forwarded-for') ?? undefined,
   })
 
@@ -170,6 +239,11 @@ export async function POST(
     prestamo: {
       clienteNombre: loan.client.nombreCompleto,
       capital:       Number(loan.capital),
+      // Solo poblado si es coord de un grupo solidario — el frontend
+      // usa esto para saber si mostrar el guion grupal.
+      esCoordGrupal: !!esCoordGrupal,
+      nombreGrupo,
+      montoTotalGrupo,
     },
   })
 }

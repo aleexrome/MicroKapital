@@ -175,11 +175,19 @@ export function checkMonto(transcripcion: string, capitalEsperado: number, toler
 
   const match = todos.find((n) => Math.abs(n - capitalEsperado) <= tolerancia)
   const ok = match !== undefined
+  // Info diagnostica extra en el detalle: si filtramos años los
+  // mostramos aparte, y siempre incluimos los primeros 60 chars de la
+  // transcripcion normalizada para saber si el cliente si dijo el
+  // monto o no. Sin esto, "encontrados: ninguno" no diferencia entre
+  // "cliente no dijo el monto" y "algoritmo se lo comio".
+  const filtrados = todosRaw.filter((n) => !todos.includes(n))
+  const filtradosMsg = filtrados.length > 0 ? ` [descartados como año: ${filtrados.join(', ')}]` : ''
+  const previewTx = t.slice(0, 60).trim()
   return {
     ok,
     detalle: ok
       ? `Monto reconocido ($${match} vs esperado $${capitalEsperado})`
-      : `No se detectó el monto esperado $${capitalEsperado} en el audio (encontrados: ${todos.slice(0, 3).join(', ') || 'ninguno'})`,
+      : `No se detectó el monto esperado $${capitalEsperado} en el audio (encontrados: ${todos.slice(0, 3).join(', ') || 'ninguno'})${filtradosMsg}. Audio: "${previewTx}..."`,
   }
 }
 

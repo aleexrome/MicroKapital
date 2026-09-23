@@ -604,8 +604,11 @@ export function DisbursementVideo({
                 </p>
                 <p className="text-primary-800">
                   📸 <strong>Cada integrante debe tener billetes en la mano visibles a la cámara</strong> —
-                  el sistema verifica que todas las mujeres del grupo aparezcan con dinero. Si alguna no
-                  se ve o no tiene billetes, se rechaza.
+                  el sistema verifica que todas las mujeres del grupo aparezcan con dinero.
+                </p>
+                <p className="text-xs text-primary-700">
+                  🔊 En calle con ruido el audio se distorsiona — no pasa nada, solo procura que se escuche
+                  claramente la <strong>palabra del día</strong> al final. Con eso basta si el resto se pierde.
                 </p>
                 <p className="text-xs text-primary-700">
                   Al aprobar, <strong>todos los préstamos del grupo</strong> quedan activos automáticamente.

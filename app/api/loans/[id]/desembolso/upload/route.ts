@@ -153,6 +153,10 @@ export async function POST(
   // el video de la coord aprueba. Bloqueamos aqui antes de aceptar la
   // carga (mismo check que /iniciar-sesion).
   const esGrupal = loan.tipo === 'SOLIDARIO' && loan.loanGroupId !== null
+  // `esCoordGrupal` se usa despues en varios puntos (Vision prompt,
+  // regla de aprobacion flexible, mensajes de rechazo). Lo computamos
+  // aqui una sola vez para que este visible en todo el handler.
+  const esCoordGrupal = esGrupal && loan.esCoordinadora === true
   if (esGrupal && !loan.esCoordinadora) {
     const esRenovacion = loan.loanOriginalId !== null
     const cicloFilter = esRenovacion ? { loanOriginalId: { not: null } } : { loanOriginalId: null }
@@ -431,13 +435,11 @@ export async function POST(
   //    error si algo falla (antes se quedaba en un texto generico
   //    "Error al analizar el video con vision" que no dejaba
   //    diagnosticar).
-  // Detectamos si es coord grupal ANTES del bloque de Vision porque
-  // el prompt cambia: en grupal pedimos que Vision verifique que
+  // El prompt de Vision cambia en grupal: pedimos que verifique que
   // TODAS las integrantes visibles tienen billetes en la mano. En
   // individual sigue siendo el check simple de "hay dinero visible".
-  const esCoordGrupalVision = loan.tipo === 'SOLIDARIO'
-    && loan.loanGroupId !== null
-    && loan.esCoordinadora === true
+  // Alias para claridad — esCoordGrupal ya se computo arriba.
+  const esCoordGrupalVision = esCoordGrupal
   let dineroVisible = false
   let dineroDetalle = ''
   try {
@@ -532,7 +534,6 @@ export async function POST(
   //        del ciclo (montoTotalGrupo), no solo el capital de la coord.
   //    Para el resto de flujos (individual, agil, fiduciario) sigue
   //    igual que antes.
-  const esCoordGrupal = esGrupal && loan.esCoordinadora
   let montoTotalGrupo = Number(loan.capital)
   if (esCoordGrupal) {
     const esRenovacion = loan.loanOriginalId !== null
@@ -576,7 +577,29 @@ export async function POST(
     },
     transcripcionLength: transcripcion.length,
   }
-  todosOk = rNombre.ok && rFecha.ok && rMonto.ok && rPalabra.ok && rDinero.ok
+  if (esCoordGrupal) {
+    // ── Regla flexible para GRUPAL ────────────────────────────────
+    // Los videos grupales se graban en la calle con ruido exterior
+    // (motos, gente, viento) y Whisper puede perder algunas palabras.
+    // Para no rechazar por audio malo cuando la evidencia es real,
+    // relajamos la regla:
+    //   OBLIGATORIOS (anti-fraude core):
+    //     - palabraDelDia: nonce del dia, imposible de pre-grabar
+    //     - dineroVisible: Vision confirma grupo + billetes en mano
+    //   CORROBORATIVOS (soft — al menos 1 de 3 debe pasar):
+    //     - nombreGrupo, fecha, monto
+    // Asi si Whisper solo alcanzo a captar el nombre del grupo (o la
+    // fecha, o el monto) mas la palabra del dia, y Vision confirma
+    // billetes, el video pasa. Los checks fallidos siguen quedando
+    // en el audit log — la evidencia forense se conserva.
+    const corroborativosOk = [rNombre.ok, rFecha.ok, rMonto.ok].filter(Boolean).length
+    todosOk = rPalabra.ok && rDinero.ok && corroborativosOk >= 1
+  } else {
+    // Individual: seguimos exigiendo los 5. Un cliente grabando en
+    // casa/oficina de la cobradora no tiene el problema de ruido
+    // exterior — no hay razon para relajar.
+    todosOk = rNombre.ok && rFecha.ok && rMonto.ok && rPalabra.ok && rDinero.ok
+  }
   } // ── FIN del else (flujo con IA)
 
   // ── Si algún check falla: guardar y regresar razones ─────────────
@@ -601,11 +624,32 @@ export async function POST(
       registroId: loan.id,
       valoresNuevos: { validacion, videoUrl },
     })
-    // Derivamos razones desde validacion.checks (no dependen de las
-    // vars rNombre/etc que solo existen dentro del else con IA).
-    const razones = Object.values(validacion.checks)
-      .filter((c) => !c.ok)
-      .map((c) => c.detalle)
+    // Derivamos razones desde validacion.checks. En el flujo grupal
+    // la regla es distinta (solo palabra + dinero + 1-de-3 corrobora),
+    // asi que solo mencionamos los checks que realmente causaron el
+    // rechazo — no llenamos el mensaje con checks blandos que
+    // fallaron pero no eran obligatorios.
+    let razones: string[]
+    if (esCoordGrupal) {
+      const checks = validacion.checks
+      const razonesTemp: string[] = []
+      if (!checks.palabraDelDia.ok) razonesTemp.push(`❗ ${checks.palabraDelDia.detalle}`)
+      if (!checks.dineroVisible.ok) razonesTemp.push(`❗ ${checks.dineroVisible.detalle}`)
+      const corroborativos = [checks.nombre, checks.fecha, checks.monto]
+      const corroborativosOk = corroborativos.filter((c) => c.ok).length
+      if (corroborativosOk === 0) {
+        razonesTemp.push(
+          '❗ El audio no captó ni el nombre del grupo, ni la fecha, ni el monto. Al menos UNO de estos debe escucharse. Vuelvan a grabar en un lugar con menos ruido.',
+        )
+        // Detalle diagnostico para cada uno
+        corroborativos.forEach((c) => razonesTemp.push(`  · ${c.detalle}`))
+      }
+      razones = razonesTemp
+    } else {
+      razones = Object.values(validacion.checks)
+        .filter((c) => !c.ok)
+        .map((c) => c.detalle)
+    }
     return NextResponse.json({
       aprobado: false,
       videoUrl,

@@ -6,6 +6,7 @@ import { LoanApprovalActions } from '@/components/loans/LoanApprovalActions'
 import { MesaControlActions } from '@/components/loans/MesaControlActions'
 import { ResubmitLoanButton } from '@/components/loans/ResubmitLoanButton'
 import { DisbursementVideo } from '@/components/loans/DisbursementVideo'
+import { TransferenciaFotoUpload } from '@/components/loans/TransferenciaFotoUpload'
 import { LoanActivateButton } from '@/components/loans/LoanActivateButton'
 import { LoanClientRejectButton } from '@/components/loans/LoanClientRejectButton'
 import { LoanRenewButton } from '@/components/loans/LoanRenewButton'
@@ -230,9 +231,12 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
     })) > 0
 
   // Chip 3 — evidencia del desembolso: video (flujo nuevo con IA) o
-  // foto (flujo legacy). Cualquiera cierra el candado 3 en la UI para
-  // no romper la visual de préstamos históricos activados con foto.
-  const desembolsoSubido = !!loan.desembolsoVideoUrl || !!loan.desembolsoFotoUrl
+  // foto (flujo legacy) o transferencia (Activación Virtual). Cualquiera
+  // cierra el candado 3 en la UI para no romper la visual de préstamos
+  // historicos activados con foto.
+  const desembolsoSubido = !!loan.desembolsoVideoUrl
+    || !!loan.desembolsoFotoUrl
+    || !!loan.transferenciaFotoUrl
 
   // Check if the client applying for this loan is a guarantor (aval) for someone else
   const avalMatches = loan.estado === 'PENDING_APPROVAL'
@@ -546,6 +550,14 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold">Préstamo {loan.tipo}</h1>
             <ApprovalBadge status={loan.estado as LoanStatus} />
+            {loan.activacionVirtual && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-violet-100 border border-violet-300 text-violet-800 px-2 py-0.5 text-xs font-medium"
+                title="Este préstamo se aprobó con Activación Virtual — se activa con foto del comprobante de transferencia (sin video de desembolso)."
+              >
+                📱 Activación Virtual
+              </span>
+            )}
           </div>
 
           {/* Alerta de aval — si el cliente es garantía de otro préstamo con riesgo */}
@@ -682,6 +694,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 capital={Number(loan.capital)}
                 descuentoRenovacion={loan.descuentoRenovacion ? Number(loan.descuentoRenovacion) : 0}
                 solidarioGroupInfo={solidarioGroupInfo}
+                activacionVirtual={loan.activacionVirtual}
                 userRole={rol}
                 userId={userId}
                 loanCobradorId={loan.cobradorId}
@@ -953,31 +966,37 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
         </Card>
       )}
 
-      {/* Evidencia de desembolso — flujo nuevo por VIDEO con validación
-          automática (Whisper + Claude Vision). El componente decide qué
-          renderizar según lo que hay en BD:
-            - Con video: player + metadata (todos los roles).
-            - Con foto y sin video: tarjeta legacy con la foto.
-            - Sin evidencia + rol puede grabar (IN_ACTIVATION o ACTIVE
-              legacy): flow completo de grabación con MediaRecorder.
-            - Sin evidencia + Director/DC (readOnly): no renderiza nada.
-          Se muestra tanto en IN_ACTIVATION (para grabar el video que
-          activa el préstamo) como en ACTIVE (para ver la evidencia
-          ya guardada). */}
+      {/* Evidencia de desembolso.
+          Dos flujos según el flag `activacionVirtual` del préstamo:
+            - true: TransferenciaFotoUpload — foto del comprobante,
+              sin video, sin IA. Solo para los 3 clientes 100% online
+              que DG marca como excepción al aprobar.
+            - false (default): DisbursementVideo — flujo estándar con
+              video validado por Whisper + Claude Vision. */}
       {(loan.estado === 'IN_ACTIVATION' || loan.estado === 'ACTIVE') && (
         <div id="desembolso-video-block" className="scroll-mt-4">
-        <DisbursementVideo
-          loanId={loan.id}
-          videoUrl={loan.desembolsoVideoUrl}
-          fotoUrl={loan.desembolsoFotoUrl}
-          lat={loan.desembolsoLat}
-          lng={loan.desembolsoLng}
-          videoAt={loan.desembolsoVideoSubidoAt?.toISOString() ?? null}
-          fotoAt={loan.desembolsoFotoAt?.toISOString() ?? null}
-          readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
-          estadoLoan={loan.estado}
-          grupoInfo={grupoInfo}
-        />
+          {loan.activacionVirtual ? (
+            <TransferenciaFotoUpload
+              loanId={loan.id}
+              transferenciaFotoUrl={loan.transferenciaFotoUrl}
+              transferenciaFotoAt={loan.transferenciaFotoAt?.toISOString() ?? null}
+              readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
+              estadoLoan={loan.estado}
+            />
+          ) : (
+            <DisbursementVideo
+              loanId={loan.id}
+              videoUrl={loan.desembolsoVideoUrl}
+              fotoUrl={loan.desembolsoFotoUrl}
+              lat={loan.desembolsoLat}
+              lng={loan.desembolsoLng}
+              videoAt={loan.desembolsoVideoSubidoAt?.toISOString() ?? null}
+              fotoAt={loan.desembolsoFotoAt?.toISOString() ?? null}
+              readOnly={rol === 'DIRECTOR_COMERCIAL' || rol === 'DIRECTOR_GENERAL'}
+              estadoLoan={loan.estado}
+              grupoInfo={grupoInfo}
+            />
+          )}
         </div>
       )}
 

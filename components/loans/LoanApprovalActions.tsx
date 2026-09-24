@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
-import { CheckCircle, XCircle, Loader2, Edit2, ChevronDown, ChevronUp } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, Edit2, ChevronDown, ChevronUp, Smartphone } from 'lucide-react'
 
 interface GrupoMiembro {
   loanId: string
@@ -72,7 +72,19 @@ export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0,
   const [diaCobro, setDiaCobro] = useState<string>(defaultDiaCobro ?? '')
   const [horaLimite, setHoraLimite] = useState<string>(defaultHoraLimite ?? '')
 
-  async function handleApprove(conContrapropuesta = false) {
+  async function handleApprove(conContrapropuesta = false, activacionVirtual = false) {
+    // Confirmacion antes de virtual — es una excepcion importante que
+    // solo aplica a 3 clientes especiales. Evita clicks accidentales.
+    if (activacionVirtual) {
+      const ok = confirm(
+        '¿Aprobar con ACTIVACIÓN VIRTUAL?\n\n' +
+        'El coordinador subirá SOLO una foto del comprobante de transferencia. ' +
+        'No se grabará video de desembolso. ' +
+        'Este modo es para clientes 100% online que no pueden grabar video.\n\n' +
+        '¿Estás seguro?'
+      )
+      if (!ok) return
+    }
     setProcessing(true)
     try {
       const esGrupo = tipo === 'SOLIDARIO' && grupoMiembros && grupoMiembros.length > 0
@@ -99,6 +111,7 @@ export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0,
               // Día y hora aplican a todos los integrantes del grupo por igual.
               ...(diaCobro ? { diaCobro } : {}),
               ...(horaLimite ? { horaLimiteCobro: horaLimite } : {}),
+              ...(activacionVirtual ? { activacionVirtual: true } : {}),
             }
             if (conContrapropuesta) {
               body.contrapropuesta = {
@@ -123,15 +136,20 @@ export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0,
         )
 
         toast({
-          title: conContrapropuesta ? '✅ Contrapropuesta enviada' : '✅ Grupo aprobado',
+          title: conContrapropuesta
+            ? '✅ Contrapropuesta enviada'
+            : activacionVirtual ? '✅ Grupo aprobado (Activación Virtual)' : '✅ Grupo aprobado',
           description: conContrapropuesta
             ? 'El coordinador presentará las nuevas condiciones a cada integrante'
+            : activacionVirtual
+            ? `${grupoMiembros!.length} integrantes — se activa con foto de transferencia (sin video)`
             : `${grupoMiembros!.length} integrantes aprobados · Pendiente de activación`,
         })
       } else {
         const body: Record<string, unknown> = {
           ...(diaCobro ? { diaCobro } : {}),
           ...(horaLimite ? { horaLimiteCobro: horaLimite } : {}),
+          ...(activacionVirtual ? { activacionVirtual: true } : {}),
         }
         if (conContrapropuesta) {
           const cap = parseFloat(nuevoCapital)
@@ -169,7 +187,9 @@ export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0,
         }
         const data = await res.json()
         toast({
-          title: conContrapropuesta ? '✅ Contrapropuesta enviada' : '✅ Préstamo aprobado',
+          title: conContrapropuesta
+            ? '✅ Contrapropuesta enviada'
+            : activacionVirtual ? '✅ Aprobado con Activación Virtual' : '✅ Préstamo aprobado',
           description: data.message,
         })
       }
@@ -290,13 +310,25 @@ export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0,
         </p>
       </div>
 
-      {/* Botones principales */}
+      {/* Botones principales
+          Orden: Aprobar → Aprobar con Activación Virtual → Contrapropuesta → Rechazar */}
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="success" disabled={processing} onClick={() => handleApprove(false)}>
+        <Button size="sm" variant="success" disabled={processing} onClick={() => handleApprove(false, false)}>
           {processing
             ? <Loader2 className="h-4 w-4 animate-spin" />
             : <><CheckCircle className="h-4 w-4 mr-1" />{grupoMiembros ? `Aprobar grupo (${grupoMiembros.length})` : 'Aprobar'}</>
           }
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-violet-400 text-violet-700 hover:bg-violet-50"
+          disabled={processing}
+          onClick={() => handleApprove(false, true)}
+          title="Aprobar sin video de desembolso — solo se pide foto del comprobante de transferencia. Para clientes 100% online."
+        >
+          <Smartphone className="h-4 w-4 mr-1" />
+          {grupoMiembros ? 'Activación Virtual (grupo)' : 'Aprobar con Activación Virtual'}
         </Button>
         <Button
           size="sm"
@@ -430,7 +462,7 @@ export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0,
               size="sm"
               className="bg-amber-600 hover:bg-amber-700 text-white"
               disabled={processing}
-              onClick={() => handleApprove(true)}
+              onClick={() => handleApprove(true, false)}
             >
               {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Enviar contrapropuesta'}
             </Button>

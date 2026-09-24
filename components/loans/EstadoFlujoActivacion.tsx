@@ -59,6 +59,10 @@ interface EstadoFlujoActivacionProps {
   // del grupo y muestra el monto total agregado al firmar/pagar/activar.
   solidarioGroupInfo?: SolidarioGroupInfo
 
+  // Activación Virtual — cambia el label + botón del chip 3 para pedir
+  // FOTO DE TRANSFERENCIA en lugar de video de desembolso.
+  activacionVirtual?: boolean
+
   // Permisos
   userRole: string
   userId: string
@@ -92,6 +96,7 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
     contrato,
     feeConcepto, feeMonto, capital, descuentoRenovacion = 0,
     solidarioGroupInfo,
+    activacionVirtual = false,
     userRole, userId, loanCobradorId, loanGerenteZonalIds, loanBranchId,
   } = props
 
@@ -311,24 +316,21 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
         }
       />
 
-      {/* ── Chip 3 — Video del desembolso con validación IA ─────────────
-          El flujo viejo capturaba una foto; el nuevo (fase 8) usa video
-          con validación automática por Whisper + Claude Vision. El
-          botón "Ir a grabar" hace scroll al bloque `DisbursementVideo`
-          que vive mas abajo en la pagina y ahi arranca todo el flow
-          (palabra del dia, grabacion live, upload directo a Cloudinary,
-          checks). El diálogo antiguo de foto se retiro. */}
+      {/* ── Chip 3 — Evidencia del desembolso ─────────────────────────
+          Flujo estándar: video con validación IA (Whisper + Vision).
+          Activación Virtual: foto del comprobante de transferencia
+          (para clientes 100% online que DG marca como excepción). En
+          ambos casos el botón hace scroll al bloque más abajo. */}
       <Chip
         status={chip3Status}
-        title="Video del desembolso con GPS"
+        title={activacionVirtual ? 'Foto de transferencia (Activación Virtual)' : 'Video del desembolso con GPS'}
         subtitle={chip3Subtitle(chip3Status)}
         accion={
           chip3Status === 'PENDING' && puedeActuar ? (
-            // Si es integrante NO-coord de un grupo solidario, el
-            // video no se graba aqui — se graba en el perfil de la
-            // coordinadora con TODAS las integrantes juntas. Le
-            // mandamos al perfil de la coord en lugar de hacer scroll
-            // a un componente que no existe en su pagina.
+            // Si es integrante NO-coord de un grupo solidario, la
+            // evidencia se sube en el perfil de la coordinadora (con
+            // TODAS las integrantes o UN solo comprobante grupal según
+            // el flujo). Le mandamos allá.
             solidarioGroupInfo && !solidarioGroupInfo.esCoordinadora && solidarioGroupInfo.coordinadora?.loanId ? (
               <Button
                 size="sm"
@@ -346,12 +348,12 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
                 }}
               >
                 <Video className="h-3.5 w-3.5" />
-                Ir a grabar video
+                {activacionVirtual ? 'Subir foto de transferencia' : 'Ir a grabar video'}
               </Button>
             )
           ) : null
         }
-        atras={null}  // Chip 3 es irrevocable: aprobar el video activa el préstamo
+        atras={null}  // Chip 3 es irrevocable: la evidencia activa el préstamo
       />
 
       {/* ── Footer: "Volver atrás" o "Cancelar activación" según avance ── */}

@@ -236,7 +236,7 @@ export default function NuevaSolicitudPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            nombre: nombreGrupo || `Grupo ${new Date().toLocaleDateString('es-MX')}`,
+            nombre: nombreGrupo.trim(),
             clientIds: miembrosValidos.map((m) => m.id),
             capitales: miembrosValidos.map((m) => Number(m.capital)),
             tipoGrupo,
@@ -333,10 +333,18 @@ export default function NuevaSolicitudPage() {
     }
   }
 
+  // Nombre del grupo: normalizamos igual que el backend (quita `*` iniciales
+  // y espacios) para validar en el mismo terreno que zod. Exigimos >= 3 chars
+  // reales para bloquear cosas triviales como "AA" o "1", ademas del min(2)
+  // del schema — 3 chars es el minimo razonable para un nombre.
+  const nombreGrupoNormalizado = nombreGrupo.trimStart().replace(/^\*+/, '').trim()
+  const nombreGrupoValido = nombreGrupoNormalizado.length >= 3
+
   const canSubmit = !loading && (
     tipo === 'SOLIDARIO'
       ? miembrosValidos.length >= minIntegrantes
         && miembrosValidos.every((m) => Number(m.capital) >= 100)
+        && nombreGrupoValido
         && nombreCheck.status !== 'taken'
       : !!capital && !!clienteId
   )
@@ -397,7 +405,9 @@ export default function NuevaSolicitudPage() {
             {tipo === 'SOLIDARIO' && (
               <div className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label>Nombre del grupo (opcional)</Label>
+                  <Label>
+                    Nombre del grupo <span className="text-red-500">*</span>
+                  </Label>
                   <div className="relative">
                     <Input
                       value={nombreGrupo}
@@ -444,6 +454,18 @@ export default function NuevaSolicitudPage() {
                   )}
                   {nombreCheck.status === 'available' && (
                     <p className="text-xs text-green-600">Nombre disponible.</p>
+                  )}
+                  {/* Guia si el nombre esta vacio o muy corto — para
+                      que la coord entienda por que el boton "Enviar"
+                      queda deshabilitado y no tenga que adivinar. */}
+                  {!nombreGrupoValido && (
+                    <p className="text-xs text-amber-700 flex items-start gap-1">
+                      <span>ⓘ</span>
+                      <span>
+                        Escribe un nombre real para el grupo (ej. "LAS FLORES", "GRUPO ESPERANZA").
+                        No uses el día ni la hora de cobro — para eso ya hay campos abajo.
+                      </span>
+                    </p>
                   )}
                 </div>
 

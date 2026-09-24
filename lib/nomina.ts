@@ -17,24 +17,39 @@ import {
  *  tiene ficha, marcamos sinFichaRH=true y la UI muestra "Aún no estás
  *  dado de alta en RH" sin calcular nada.
  *
- *  ── Comisión por crédito ───────────────────────────────────────────────
- *  Depende del perfil del empleado y de si el crédito es nuevo o renovado.
+ *  ── Esquemas disponibles ───────────────────────────────────────────────
+ *  El DG/DC decide en /nomina/[semana] con qué esquema pagar a cada
+ *  usuario esa semana (tabla NominaEsquemaOverride). Sin override →
+ *  default COLOCACION.
  *
- *  ── Perfil ─────────────────────────────────────────────────────────────
- *  Se deriva de la cobranza pactada de la semana (ver lib/cobranza-semanal).
+ *  ── Esquema COLOCACION (histórico) ─────────────────────────────────────
+ *  Perfil derivado del pactado semanal:
+ *      Junior     ≤ $74,999   base + comisión NUEVO/RENOVACION
+ *      Excelencia $75k-199k   base + comisión NUEVO (todos) + 1% cobranza
+ *      Senior     ≥ $200k     base + 1% colocación zona + 0.5% cobranza zona
  *
- *      Junior     ≤ $74,999  cobra: base + comisión NUEVO/RENOVACION
- *      Excelencia $75k-199k  cobra: base + comisión NUEVO (todos) + 1% cobranza
- *      Senior     ≥ $200k    cobra: base + 1% colocación zona + 0.5% cobranza zona
- *
- *  ── Gates ──────────────────────────────────────────────────────────────
- *  Para que el variable se pague, deben cumplir:
+ *  Gates:
  *      Todos:      cobranza efectiva ≥ 98% de pactada
- *      Junior:     + colocación real ≥ meta colocación
- *      Excelencia: + colocación real ≥ meta colocación
- *      Senior:     (solo el gate de cobranza, no requiere meta colocación)
- *
+ *      Junior/Exc: + colocación real ≥ meta colocación
+ *      Senior:     (solo el gate de cobranza)
  *  Si NO cumplen, sale solo el sueldo base.
+ *
+ *  ── Esquema COBRANZA (nuevo) ───────────────────────────────────────────
+ *  Categoría derivada del pactado semanal (rango [inf, sup)):
+ *      Entrenamiento  [$0, $20,000)     incentivo base 2.0% del pactado
+ *      Plata          [$20,000, $75,000) incentivo base 2.5% del pactado
+ *      Oro            [$75,000, $100k)  incentivo base 3.0% del pactado
+ *      Diamante       ≥ $100,000        incentivo base 3.5% del pactado
+ *
+ *  Multiplicador escalado por % de cobranza efectiva:
+ *      ≥ 98%           → 100% del incentivo
+ *      ≥ 94% y < 98%   →  80% del incentivo
+ *      ≥ 90% y < 94%   →  40% del incentivo
+ *      < 90%           →   0% (sin incentivo)
+ *
+ *  Total = sueldoBase + (pactado × %categoria × multiplicador).
+ *  Sin gate de colocación — el multiplicador de cobranza YA controla
+ *  cuánto se paga.
  *
  *  ── Ventana ────────────────────────────────────────────────────────────
  *  Sábado 00:00 UTC al viernes 14:00 CDMX (= viernes 20:00 UTC). Los
@@ -54,6 +69,41 @@ const COMISIONES = {
 const FIDUCIARIO_PCT = 0.05
 
 type LoanTipo = 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO'
+
+// ─── Esquema COBRANZA ────────────────────────────────────────────────
+export type Esquema = 'COLOCACION' | 'COBRANZA'
+export type CategoriaCobranza = 'ENTRENAMIENTO' | 'PLATA' | 'ORO' | 'DIAMANTE'
+
+/** Categoría según pactado semanal. Intervalos [inf, sup). */
+export function categoriaPorPactado(pactado: number): CategoriaCobranza {
+  if (pactado >= 100_000) return 'DIAMANTE'
+  if (pactado >=  75_000) return 'ORO'
+  if (pactado >=  20_000) return 'PLATA'
+  return 'ENTRENAMIENTO'
+}
+
+/** % del pactado que corresponde de incentivo base para cada categoría. */
+export const PCT_INCENTIVO_BASE: Record<CategoriaCobranza, number> = {
+  DIAMANTE:      0.035,
+  ORO:           0.030,
+  PLATA:         0.025,
+  ENTRENAMIENTO: 0.020,
+}
+
+/**
+ * Multiplicador que se aplica sobre el incentivo base según el % de
+ * cobranza efectiva de la semana. Rangos continuos con inclusivo abajo:
+ *  ≥ 98%           → 1.00 (100% del incentivo)
+ *  ≥ 94% y < 98%   → 0.80
+ *  ≥ 90% y < 94%   → 0.40
+ *  < 90%           → 0.00
+ */
+export function multiplicadorPorCobranza(pct: number): number {
+  if (pct >= 0.98) return 1.00
+  if (pct >= 0.94) return 0.80
+  if (pct >= 0.90) return 0.40
+  return 0
+}
 
 function comisionPorCredito(
   tipo: LoanTipo,
@@ -87,26 +137,45 @@ export interface NominaEmpleado {
   /** Si no se encontró ficha de RH para el User. La UI muestra mensaje. */
   sinFichaRH: boolean
 
+  /** Esquema con el que se está calculando este renglón. */
+  esquema: Esquema
+
+  // Para COLOCACION (historico): perfil derivado del pactado.
+  // Para COBRANZA (nuevo): siempre null (usa `categoria`).
   perfil: Perfil | null
+  // Para COBRANZA: categoria derivada del pactado. Null en COLOCACION.
+  categoria: CategoriaCobranza | null
+
   sueldoBase: number
 
-  // Performance
+  // Performance (compartido entre esquemas)
   cobranzaPactada: number
   cobranzaEfectiva: number
   cobranzaPct: number
   cumpleCobranza: boolean
 
+  // Solo relevante en COLOCACION
   metaColocacion: number
   colocacionReal: number
   colocacionPct: number
   /** Junior/Excelencia: colocacionReal >= meta. Senior: siempre true. */
   cumpleColocacion: boolean
 
-  // Componentes
+  // Componentes de COLOCACION
   creditos: NominaCredito[]
   comisionPorCreditos: number
   bonoCobranzaEfectiva: number
   bonoColocacion: number
+
+  // Componentes de COBRANZA
+  /** % base del pactado que aplica según categoría (0.035, 0.030, 0.025, 0.020). */
+  pctIncentivoBase: number
+  /** Multiplicador según % de cobranza (1, 0.8, 0.4, 0). */
+  multiplicadorCobranza: number
+  /** Incentivo maximo posible antes del multiplicador (pactado × pctBase). */
+  incentivoBase: number
+  /** Incentivo final = incentivoBase × multiplicadorCobranza. */
+  incentivo: number
 
   // Resultado
   totalAPagar: number
@@ -139,7 +208,7 @@ export async function calcularNominaSemana(
   friday: Date,
   cutoff: Date,
 ): Promise<NominaEmpleado[]> {
-  const [users, employees, schedules, loans] = await Promise.all([
+  const [users, employees, schedules, loans, esquemaOverrides] = await Promise.all([
     prisma.user.findMany({
       where: { companyId, activo: true },
       select: {
@@ -186,7 +255,15 @@ export async function calcularNominaSemana(
         loanGroup: { select: { nombre: true } },
       },
     }),
+    // Overrides de esquema para esta semana. Sin fila → default COLOCACION.
+    prisma.nominaEsquemaOverride.findMany({
+      where: { companyId, semanaSabado: saturday },
+      select: { userId: true, esquema: true },
+    }),
   ])
+
+  const esquemaPorUser = new Map<string, Esquema>()
+  for (const o of esquemaOverrides) esquemaPorUser.set(o.userId, o.esquema)
 
   // Ficha de RH por nombre normalizado.
   const rhPorNombre = new Map<string, { sueldo: number; sucursal: string | null }>()
@@ -304,43 +381,67 @@ export async function calcularNominaSemana(
 
     const creditos = esAggregador ? [] : (creditosPorCobrador.get(u.id) ?? [])
 
-    const perfil = perfilPorCobranza(cobranzaPactada)
-
-    // Comisión por crédito (no aplica a Senior, que cobra por % colocación).
-    if (perfil !== 'SENIOR') {
-      for (const c of creditos) {
-        c.comision = comisionPorCredito(c.tipo, c.esRenovacion, c.capital, perfil)
-      }
-    }
-
-    const cobranzaPct  = cobranzaPactada > 0 ? cobranzaEfectiva / cobranzaPactada : 0
+    const cobranzaPct    = cobranzaPactada > 0 ? cobranzaEfectiva / cobranzaPactada : 0
     const cumpleCobranza = cobranzaPct >= PCT_COBRANZA_MINIMA
 
+    // Esquema a aplicar para este usuario esta semana.
+    const esquema: Esquema = esquemaPorUser.get(u.id) ?? 'COLOCACION'
+
+    // ── Componentes compartidos entre esquemas ────────────────────
+    const perfil = perfilPorCobranza(cobranzaPactada)  // solo relevante en COLOCACION
+    const categoria = categoriaPorPactado(cobranzaPactada)  // solo relevante en COBRANZA
     const meta = metaColocacion(cobranzaPactada)
     const colocacionPct = meta > 0 ? colocacionReal / meta : 0
-    // Senior no requiere gate de colocación; Junior y Excelencia sí.
     const cumpleColocacion = perfil === 'SENIOR' ? true : colocacionReal >= meta
 
-    const cumpleGates = cumpleCobranza && cumpleColocacion
-
+    // ── Rama por esquema ─────────────────────────────────────────
     let comisionPorCreditos = 0
     let bonoCobranzaEfectiva = 0
     let bonoColocacion = 0
+    let pctIncentivoBase = 0
+    let multiplicadorCobranza = 0
+    let incentivoBase = 0
+    let incentivo = 0
+    let totalAPagar = sueldoBase
+    let cumpleGates = false
 
-    if (perfil === 'JUNIOR') {
-      comisionPorCreditos = creditos.reduce((s, c) => s + c.comision, 0)
-    } else if (perfil === 'EXCELENCIA') {
-      comisionPorCreditos  = creditos.reduce((s, c) => s + c.comision, 0)
-      bonoCobranzaEfectiva = cobranzaEfectiva * BONO_COBRANZA_EXCELENCIA
-    } else if (perfil === 'SENIOR') {
-      bonoColocacion       = colocacionReal   * BONO_COLOCACION_SENIOR
-      bonoCobranzaEfectiva = cobranzaEfectiva * BONO_COBRANZA_SENIOR
+    if (esquema === 'COLOCACION') {
+      // Comisión por crédito (no aplica a Senior, que cobra por % colocación).
+      if (perfil !== 'SENIOR') {
+        for (const c of creditos) {
+          c.comision = comisionPorCredito(c.tipo, c.esRenovacion, c.capital, perfil)
+        }
+      }
+
+      cumpleGates = cumpleCobranza && cumpleColocacion
+
+      if (perfil === 'JUNIOR') {
+        comisionPorCreditos = creditos.reduce((s, c) => s + c.comision, 0)
+      } else if (perfil === 'EXCELENCIA') {
+        comisionPorCreditos  = creditos.reduce((s, c) => s + c.comision, 0)
+        bonoCobranzaEfectiva = cobranzaEfectiva * BONO_COBRANZA_EXCELENCIA
+      } else if (perfil === 'SENIOR') {
+        bonoColocacion       = colocacionReal   * BONO_COLOCACION_SENIOR
+        bonoCobranzaEfectiva = cobranzaEfectiva * BONO_COBRANZA_SENIOR
+      }
+
+      const variableTotal = cumpleGates
+        ? comisionPorCreditos + bonoCobranzaEfectiva + bonoColocacion
+        : 0
+      totalAPagar = sueldoBase + variableTotal
+    } else {
+      // Esquema COBRANZA (nuevo)
+      pctIncentivoBase = PCT_INCENTIVO_BASE[categoria]
+      multiplicadorCobranza = multiplicadorPorCobranza(cobranzaPct)
+      incentivoBase = cobranzaPactada * pctIncentivoBase
+      incentivo = incentivoBase * multiplicadorCobranza
+      // Un usuario "cumple" cuando cobra suficiente para tener al menos
+      // el multiplicador mínimo (40% del incentivo — es decir cobranza ≥ 90%).
+      // Con < 90% se queda solo con sueldo base — equivalente a "no cumple
+      // gates" para efectos de la UI de estado.
+      cumpleGates = multiplicadorCobranza > 0
+      totalAPagar = sueldoBase + incentivo
     }
-
-    const variableTotal = cumpleGates
-      ? comisionPorCreditos + bonoCobranzaEfectiva + bonoColocacion
-      : 0
-    const totalAPagar = sueldoBase + variableTotal
 
     result.push({
       userId: u.id,
@@ -348,7 +449,9 @@ export async function calcularNominaSemana(
       rol: u.rol,
       sucursal,
       sinFichaRH: !ficha,
-      perfil,
+      esquema,
+      perfil: esquema === 'COLOCACION' ? perfil : null,
+      categoria: esquema === 'COBRANZA' ? categoria : null,
       sueldoBase,
       cobranzaPactada,
       cobranzaEfectiva,
@@ -362,6 +465,10 @@ export async function calcularNominaSemana(
       comisionPorCreditos,
       bonoCobranzaEfectiva,
       bonoColocacion,
+      pctIncentivoBase,
+      multiplicadorCobranza,
+      incentivoBase,
+      incentivo,
       totalAPagar,
       cumpleGates,
     })

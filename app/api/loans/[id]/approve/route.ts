@@ -29,6 +29,11 @@ const approveSchema = z.object({
   // actuales del Loan (que pueden venir del backfill desde BranchConfig).
   diaCobro: z.enum(['LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO','DOMINGO']).optional(),
   horaLimiteCobro: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Formato HH:MM (24h)').optional(),
+  // Activación Virtual — para clientes 100% online (3 casos especiales).
+  // Si true, al aprobar se setea Loan.activacionVirtual = true y el
+  // flujo de activación pide FOTO de transferencia en lugar del video
+  // con IA. DG lo decide en el momento de aprobar.
+  activacionVirtual: z.boolean().optional(),
 })
 
 export async function POST(
@@ -74,6 +79,7 @@ export async function POST(
   const esCoordinadora = parsed.success && loan.tipo === 'SOLIDARIO' ? (parsed.data.esCoordinadora ?? false) : false
   const diaCobro = parsed.success ? parsed.data.diaCobro : undefined
   const horaLimiteCobro = parsed.success ? parsed.data.horaLimiteCobro : undefined
+  const activacionVirtual = parsed.success ? (parsed.data.activacionVirtual ?? false) : false
 
   // Build updated financial fields if Director makes a counteroffer
   let loanFieldUpdates: Record<string, unknown> = {}
@@ -148,6 +154,9 @@ export async function POST(
         ...(loan.tipo === 'SOLIDARIO' ? { esCoordinadora } : {}),
         ...(diaCobro ? { diaCobro } : {}),
         ...(horaLimiteCobro ? { horaLimiteCobro } : {}),
+        // Activacion virtual — solo se persiste el flag si esta true.
+        // Asi si DG aprueba normal despues no accidentalmente lo desmarca.
+        ...(activacionVirtual ? { activacionVirtual: true } : {}),
         ...loanFieldUpdates,
       },
     })
@@ -187,7 +196,9 @@ export async function POST(
 
   createAuditLog({
     userId,
-    accion: esContrapropuesta ? 'COUNTEROFFER_LOAN' : 'APPROVE_LOAN',
+    accion: esContrapropuesta
+      ? 'COUNTEROFFER_LOAN'
+      : activacionVirtual ? 'APPROVE_LOAN_VIRTUAL' : 'APPROVE_LOAN',
     tabla: 'Loan',
     registroId: loan.id,
     valoresNuevos: {
@@ -195,6 +206,7 @@ export async function POST(
       aprobadoPorId: userId,
       ...(esContrapropuesta ? { contrapropuesta } : {}),
       ...(esRenovacion ? { loanOriginalLiquidado: loan.loanOriginalId } : {}),
+      ...(activacionVirtual ? { activacionVirtual: true } : {}),
     },
   })
 
@@ -251,6 +263,8 @@ export async function POST(
 
   const message = esContrapropuesta
     ? 'Contrapropuesta registrada — el coordinador visitará al cliente para presentar las nuevas condiciones'
+    : activacionVirtual
+    ? 'Crédito aprobado con Activación Virtual — el coordinador subirá foto del comprobante de transferencia (sin video)'
     : esRenovacion
     ? 'Renovación aprobada — pendiente de activación (el crédito anterior se liquidará al activar)'
     : 'Crédito aprobado — pendiente de activación por el coordinador'

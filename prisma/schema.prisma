@@ -481,6 +481,15 @@ model Loan {
   desembolsoEscaladoAt            DateTime?
   desembolsoEscaladoPorId         String?
   desembolsoEscaladoNota          String?
+  // ── Activacion Virtual (clientes 100% online) ─────────────────────
+  // Para 3 clientes especiales que trabajan solo por celular / transfer
+  // y no pueden grabar video, el DG marca `activacionVirtual = true` al
+  // aprobar. En vez del flujo de video, el coord sube una FOTO del
+  // comprobante de transferencia (sin IA, solo evidencia auditada).
+  activacionVirtual               Boolean   @default(false)
+  transferenciaFotoUrl            String?   // Cloudinary URL del comprobante
+  transferenciaFotoAt             DateTime? // Cuando se subio
+  transferenciaSubidaPorId        String?   // userId del coord que subio
   // Aval — nombre en un solo string libre para retro-compat + los
   // subcampos estructurados que llenan los nuevos formularios. Direccion
   // el aval no comparte tabla con Client, asi que su descomposicion

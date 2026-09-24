@@ -8,7 +8,15 @@ import { normalizeNameForSearch } from '@/lib/text-normalize'
 
 const buildSchema = (minIntegrantes: number) =>
   z.object({
-    nombre: z.string().min(2, 'Nombre del grupo requerido').transform((s) => s.trim().toUpperCase()),
+    // Normalizamos primero (trim + upper) y validamos DESPUES. Antes
+    // el chequeo era `min(2)` antes del trim, asi que "  A " (4 chars
+    // con whitespace) pasaba pero terminaba como "A" de un solo
+    // caracter. Ademas exigimos min 3 chars — con menos casi nunca es
+    // un nombre real de grupo.
+    nombre: z.preprocess(
+      (v) => typeof v === 'string' ? v.trim().toUpperCase() : v,
+      z.string().min(3, 'El nombre del grupo debe tener al menos 3 caracteres'),
+    ),
     clientIds: z.array(z.string().uuid()).min(minIntegrantes, 'Mínimo 4 integrantes').max(5, 'Máximo 5 integrantes'),
     capitales: z.array(z.number().positive()).min(minIntegrantes, 'Mínimo 4 capitales').max(5, 'Máximo 5 capitales'),
     tipoGrupo: z.enum(['REGULAR', 'RESCATE']).default('REGULAR'),

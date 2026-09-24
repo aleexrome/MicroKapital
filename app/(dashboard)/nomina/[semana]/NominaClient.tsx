@@ -1,14 +1,16 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { useToast } from '@/components/ui/use-toast'
 import {
   ArrowLeft, ArrowRight, CheckCircle2, XCircle, Search, Wallet,
-  TrendingUp, Target, Coins,
+  TrendingUp, Target, Coins, Loader2, Sparkles,
 } from 'lucide-react'
 
 interface NominaCredito {
@@ -20,13 +22,18 @@ interface NominaCredito {
   clienteNombre: string | null
 }
 
+type Esquema = 'COLOCACION' | 'COBRANZA'
+type Categoria = 'DIAMANTE' | 'ORO' | 'PLATA' | 'ENTRENAMIENTO'
+
 interface NominaEmpleado {
   userId: string
   nombre: string
   rol: string
   sucursal: string | null
   sinFichaRH: boolean
+  esquema: Esquema
   perfil: 'JUNIOR' | 'EXCELENCIA' | 'SENIOR' | null
+  categoria: Categoria | null
   sueldoBase: number
   cobranzaPactada: number
   cobranzaEfectiva: number
@@ -40,6 +47,10 @@ interface NominaEmpleado {
   comisionPorCreditos: number
   bonoCobranzaEfectiva: number
   bonoColocacion: number
+  pctIncentivoBase: number
+  multiplicadorCobranza: number
+  incentivoBase: number
+  incentivo: number
   totalAPagar: number
   cumpleGates: boolean
 }
@@ -52,6 +63,8 @@ interface Props {
   semanaAnteriorId: string
   semanaSiguienteId: string
   isCurrent: boolean
+  /** Solo DG/DC/SUPER_ADMIN pueden cambiar esquema por usuario. */
+  puedeToggleEsquema: boolean
 }
 
 function formatMoney(value: number): string {
@@ -75,11 +88,53 @@ function PerfilBadge({ perfil }: { perfil: 'JUNIOR' | 'EXCELENCIA' | 'SENIOR' | 
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${s.bg} ${s.text}`}>{s.label}</span>
 }
 
+const CATEGORIA_STYLES: Record<Categoria, { bg: string; text: string; label: string }> = {
+  DIAMANTE:      { bg: 'bg-cyan-100',    text: 'text-cyan-800',    label: '💎 Diamante' },
+  ORO:           { bg: 'bg-yellow-100',  text: 'text-yellow-800',  label: '🥇 Oro' },
+  PLATA:         { bg: 'bg-slate-200',   text: 'text-slate-700',   label: '🥈 Plata' },
+  ENTRENAMIENTO: { bg: 'bg-orange-100',  text: 'text-orange-800',  label: '🎓 Entren.' },
+}
+function CategoriaBadge({ categoria }: { categoria: Categoria | null }) {
+  if (!categoria) return <span className="text-muted-foreground italic text-xs">—</span>
+  const s = CATEGORIA_STYLES[categoria]
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${s.bg} ${s.text}`}>{s.label}</span>
+}
+
 export function NominaClient(props: Props) {
-  const { nomina, vistaCompleta, semanaLabel, semanaAnteriorId, semanaSiguienteId, isCurrent } = props
+  const { nomina, vistaCompleta, semanaLabel, semanaId, semanaAnteriorId, semanaSiguienteId, isCurrent, puedeToggleEsquema } = props
+  const router = useRouter()
+  const { toast } = useToast()
 
   const [q, setQ] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null)
+  const [, startTransition] = useTransition()
+
+  async function toggleEsquema(userId: string, nuevoEsquema: Esquema) {
+    setPendingUserId(userId)
+    try {
+      const r = await fetch(`/api/nomina/${semanaId}/esquema`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, esquema: nuevoEsquema }),
+      })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(data?.error ?? 'Error al cambiar esquema')
+      toast({
+        title: 'Esquema actualizado',
+        description: `${nuevoEsquema === 'COBRANZA' ? 'Por Cobranza' : 'Por Colocación'} — aplicando cambio…`,
+      })
+      startTransition(() => router.refresh())
+    } catch (err) {
+      toast({
+        title: 'No se pudo cambiar',
+        description: err instanceof Error ? err.message : 'Error',
+        variant: 'destructive',
+      })
+    } finally {
+      setPendingUserId(null)
+    }
+  }
 
   const filtrados = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -181,12 +236,13 @@ export function NominaClient(props: Props) {
                   <tr>
                     <th className="text-left py-2 px-2 font-medium">Empleado</th>
                     {vistaCompleta && <th className="text-left py-2 px-2 font-medium">Sucursal</th>}
-                    <th className="text-left py-2 px-2 font-medium">Perfil</th>
+                    <th className="text-left py-2 px-2 font-medium">Categoría / Perfil</th>
+                    {puedeToggleEsquema && <th className="text-center py-2 px-2 font-medium">Esquema</th>}
                     <th className="text-right py-2 px-2 font-medium">Cobranza %</th>
                     <th className="text-right py-2 px-2 font-medium">Colocación %</th>
                     <th className="text-center py-2 px-2 font-medium">Cumple</th>
                     <th className="text-right py-2 px-2 font-medium">Sueldo base</th>
-                    <th className="text-right py-2 px-2 font-medium">Comisiones</th>
+                    <th className="text-right py-2 px-2 font-medium">Variable</th>
                     <th className="text-right py-2 px-2 font-medium">Total</th>
                   </tr>
                 </thead>
@@ -202,6 +258,9 @@ export function NominaClient(props: Props) {
                         vistaCompleta={vistaCompleta}
                         isOpen={isOpen}
                         onToggle={() => setOpenId(isOpen ? null : n.userId)}
+                        puedeToggleEsquema={puedeToggleEsquema}
+                        pendingEsquema={pendingUserId === n.userId}
+                        onCambiarEsquema={(nuevo) => toggleEsquema(n.userId, nuevo)}
                       />
                     )
                   })}
@@ -216,20 +275,43 @@ export function NominaClient(props: Props) {
 }
 
 function RenglonNomina({
-  n, variable, vistaCompleta, isOpen, onToggle,
+  n, variable, vistaCompleta, isOpen, onToggle, puedeToggleEsquema, pendingEsquema, onCambiarEsquema,
 }: {
   n: NominaEmpleado
   variable: number
   vistaCompleta: boolean
   isOpen: boolean
   onToggle: () => void
+  puedeToggleEsquema: boolean
+  pendingEsquema: boolean
+  onCambiarEsquema: (nuevo: Esquema) => void
 }) {
+  // Total columnas para el colspan del detalle expandido:
+  //   base fija: Empleado + Categ/Perfil + Cobranza% + Coloc% + Cumple
+  //              + Base + Variable + Total = 8
+  //   + Sucursal si vistaCompleta
+  //   + Esquema si puedeToggleEsquema
+  const colspanDetalle = 8 + (vistaCompleta ? 1 : 0) + (puedeToggleEsquema ? 1 : 0)
   return (
     <>
       <tr className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={onToggle}>
         <td className="py-2 px-2 font-medium">{n.nombre}</td>
         {vistaCompleta && <td className="py-2 px-2 text-muted-foreground text-xs">{n.sucursal ?? '—'}</td>}
-        <td className="py-2 px-2"><PerfilBadge perfil={n.perfil} /></td>
+        <td className="py-2 px-2">
+          {n.esquema === 'COBRANZA'
+            ? <CategoriaBadge categoria={n.categoria} />
+            : <PerfilBadge perfil={n.perfil} />
+          }
+        </td>
+        {puedeToggleEsquema && (
+          <td className="py-2 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+            <EsquemaToggle
+              esquema={n.esquema}
+              disabled={pendingEsquema}
+              onChange={onCambiarEsquema}
+            />
+          </td>
+        )}
         <td className="py-2 px-2 text-right">
           {n.cobranzaPactada > 0 ? (
             <span className={n.cumpleCobranza ? 'text-emerald-700' : 'text-red-600'}>
@@ -238,7 +320,7 @@ function RenglonNomina({
           ) : <span className="text-muted-foreground text-xs">—</span>}
         </td>
         <td className="py-2 px-2 text-right">
-          {n.metaColocacion > 0 ? (
+          {n.metaColocacion > 0 && n.esquema === 'COLOCACION' ? (
             <span className={n.cumpleColocacion ? 'text-emerald-700' : 'text-red-600'}>
               {formatPct(n.colocacionPct)}
             </span>
@@ -259,12 +341,49 @@ function RenglonNomina({
       </tr>
       {isOpen && (
         <tr className="bg-muted/20">
-          <td colSpan={vistaCompleta ? 9 : 8} className="px-2 py-3">
+          <td colSpan={colspanDetalle} className="px-2 py-3">
             <DetalleEmpleado n={n} />
           </td>
         </tr>
       )}
     </>
+  )
+}
+
+/**
+ * Switch deslizable Colocación ⇄ Cobranza. Estilo iOS-toggle.
+ * Se muestra solo para DG/DC/SUPER_ADMIN.
+ */
+function EsquemaToggle({
+  esquema, disabled, onChange,
+}: {
+  esquema: Esquema
+  disabled: boolean
+  onChange: (nuevo: Esquema) => void
+}) {
+  const esCobranza = esquema === 'COBRANZA'
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={esCobranza}
+      disabled={disabled}
+      onClick={() => onChange(esCobranza ? 'COLOCACION' : 'COBRANZA')}
+      className={`
+        inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium
+        border transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+        ${esCobranza
+          ? 'bg-violet-100 border-violet-300 text-violet-800 hover:bg-violet-200'
+          : 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
+        }
+      `}
+      title={`Cambiar a ${esCobranza ? 'Por Colocación' : 'Por Cobranza'}`}
+    >
+      {disabled
+        ? <Loader2 className="h-3 w-3 animate-spin" />
+        : <Sparkles className="h-3 w-3" />}
+      {esCobranza ? 'Por Cobranza' : 'Por Colocación'}
+    </button>
   )
 }
 
@@ -278,6 +397,12 @@ function DetalleEmpleado({ n }: { n: NominaEmpleado }) {
     )
   }
 
+  // Esquema COBRANZA: desglose distinto (categoria + incentivo escalado).
+  if (n.esquema === 'COBRANZA') return <DetalleEmpleadoCobranza n={n} />
+  return <DetalleEmpleadoColocacion n={n} />
+}
+
+function DetalleEmpleadoColocacion({ n }: { n: NominaEmpleado }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
       <div className="space-y-2">
@@ -297,7 +422,7 @@ function DetalleEmpleado({ n }: { n: NominaEmpleado }) {
 
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
-          <Coins className="h-3.5 w-3.5" /> Desglose de pago
+          <Coins className="h-3.5 w-3.5" /> Desglose de pago — Por Colocación
         </div>
         <Linea label="Sueldo base" value={formatMoney2(n.sueldoBase)} />
         {n.comisionPorCreditos > 0 && (
@@ -359,6 +484,74 @@ function DetalleEmpleado({ n }: { n: NominaEmpleado }) {
           </table>
         </div>
       )}
+    </div>
+  )
+}
+
+function DetalleEmpleadoCobranza({ n }: { n: NominaEmpleado }) {
+  const multPct = Math.round(n.multiplicadorCobranza * 100)
+  const pctIncentivo = (n.pctIncentivoBase * 100).toFixed(1) // 3.5 / 3.0 / 2.5 / 2.0
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+          <Target className="h-3.5 w-3.5" /> Indicadores
+        </div>
+        <Linea
+          label="Categoría"
+          value={n.categoria ?? '—'}
+          sub={
+            n.categoria === 'DIAMANTE'      ? '≥ $100,000 pactado → 3.5% base'
+            : n.categoria === 'ORO'         ? '$75,000 – $99,999 pactado → 3.0% base'
+            : n.categoria === 'PLATA'       ? '$20,000 – $74,999 pactado → 2.5% base'
+            : n.categoria === 'ENTRENAMIENTO' ? '$0 – $19,999 pactado → 2.0% base'
+            : undefined
+          }
+        />
+        <Linea label="Cobranza pactada"  value={formatMoney(n.cobranzaPactada)} />
+        <Linea
+          label="Cobranza efectiva"
+          value={formatMoney(n.cobranzaEfectiva)}
+          sub={n.cobranzaPactada > 0 ? `${formatPct(n.cobranzaPct)} de la pactada` : undefined}
+          ok={n.multiplicadorCobranza === 1}
+        />
+        <Linea
+          label="Multiplicador cobranza"
+          value={`${multPct}%`}
+          sub={
+            n.multiplicadorCobranza === 1   ? 'Cobranza ≥ 98% → 100% del incentivo'
+            : n.multiplicadorCobranza === 0.8 ? 'Cobranza 94-97% → 80% del incentivo'
+            : n.multiplicadorCobranza === 0.4 ? 'Cobranza 90-93% → 40% del incentivo'
+            : 'Cobranza < 90% → sin incentivo'
+          }
+          ok={n.multiplicadorCobranza > 0 ? n.multiplicadorCobranza === 1 ? true : undefined : false}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+          <Coins className="h-3.5 w-3.5" /> Desglose de pago — Por Cobranza
+        </div>
+        <Linea label="Sueldo base" value={formatMoney2(n.sueldoBase)} />
+        <Linea
+          label={`Incentivo base (${pctIncentivo}% de pactado)`}
+          value={formatMoney2(n.incentivoBase)}
+        />
+        <Linea
+          label={`Incentivo aplicado (×${multPct}%)`}
+          value={formatMoney2(n.incentivo)}
+          dim={n.incentivo === 0 && n.incentivoBase > 0}
+        />
+        {n.incentivo === 0 && n.incentivoBase > 0 && (
+          <div className="rounded-md bg-red-50 border border-red-200 text-red-800 text-xs p-2">
+            Cobranza {formatPct(n.cobranzaPct)} está por debajo del 90% mínimo — solo se paga sueldo base.
+          </div>
+        )}
+        <div className="border-t pt-2 mt-2 flex justify-between items-center font-bold text-base">
+          <span>Total a pagar</span>
+          <span className="tabular-nums">{formatMoney2(n.totalAPagar)}</span>
+        </div>
+      </div>
     </div>
   )
 }

@@ -10,6 +10,10 @@ import { calcularNominaSemana, cutoffViernes14 } from '@/lib/nomina'
 import { NominaClient } from './NominaClient'
 
 const ROLES_VEN_TODO = new Set(['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'])
+// Solo DG/DC/SUPER_ADMIN pueden cambiar el esquema de nomina por
+// usuario. Mismos que ROLES_VEN_TODO por diseño — no queremos que el
+// coord se auto-cambie el esquema.
+const ROLES_PUEDEN_CAMBIAR_ESQUEMA = new Set(['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'])
 
 export default async function NominaSemanaPage({
   params,
@@ -46,6 +50,8 @@ export default async function NominaSemanaPage({
   const prevSat = new Date(saturday); prevSat.setUTCDate(prevSat.getUTCDate() - 7)
   const nextSat = new Date(saturday); nextSat.setUTCDate(nextSat.getUTCDate() + 7)
 
+  const puedeToggleEsquema = ROLES_PUEDEN_CAMBIAR_ESQUEMA.has(rol)
+
   return (
     <NominaClient
       nomina={visibles}
@@ -55,6 +61,7 @@ export default async function NominaSemanaPage({
       semanaAnteriorId={saturdayToId(prevSat)}
       semanaSiguienteId={saturdayToId(nextSat)}
       isCurrent={isCurrent}
+      puedeToggleEsquema={puedeToggleEsquema}
     />
   )
 }

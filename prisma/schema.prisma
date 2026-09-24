@@ -98,6 +98,19 @@ enum DocumentType {
   OTHER
 }
 
+// Esquema con el que se calcula la nomina de un usuario en una
+// semana. Ver lib/nomina.ts.
+//   - COLOCACION: esquema historico (perfil JUNIOR/EXCELENCIA/SENIOR
+//     derivado del pactado, comisiones por credito, gates de cobranza
+//     98% + colocacion).
+//   - COBRANZA: esquema nuevo (categoria DIAMANTE/ORO/PLATA/
+//     ENTRENAMIENTO derivada del pactado, sueldo base + incentivo
+//     porcentual sobre el pactado, escalado por % de cobranza).
+enum EsquemaNomina {
+  COLOCACION
+  COBRANZA
+}
+
 // ─────────────────────────────────────────
 // MODELS
 // ─────────────────────────────────────────
@@ -127,6 +140,7 @@ model Company {
   extraFunds    BranchExtraFund[]
   withdrawals   BranchWithdrawal[]
   moraCobros    MoraCobro[]
+  nominaEsquemaOverrides NominaEsquemaOverride[]
 }
 
 model License {
@@ -276,6 +290,7 @@ model User {
   extraFundsCreated           BranchExtraFund[]           @relation("BranchExtraFundsCreated")
   withdrawalsCreated          BranchWithdrawal[]          @relation("BranchWithdrawalsCreated")
   morasGeneradas              MoraCobro[]                 @relation("MorasGeneradas")
+  nominaEsquemaOverrides      NominaEsquemaOverride[]     @relation("NominaEsquemaOverrides")
 
   @@unique([companyId, email])
 }
@@ -1041,4 +1056,31 @@ model EmployeeRecord {
   updatedAt           DateTime        @updatedAt
 
   @@index([companyId])
+}
+
+// ─── NÓMINA — override de esquema por usuario/semana ─────────────────────────
+//
+// La nómina se calcula on-the-fly cada semana (no se persiste el snapshot),
+// pero SÍ persistimos qué esquema aplica a cada usuario en cada semana.
+// Sin fila para (userId, semanaSabado) → default COLOCACION.
+//
+// El toggle vive en la pantalla de nómina de esa semana — el DG puede
+// decidir persona a persona, y puede cambiar de una semana a otra.
+model NominaEsquemaOverride {
+  id           String        @id @default(uuid())
+  companyId    String
+  company      Company       @relation(fields: [companyId], references: [id])
+  userId       String
+  user         User          @relation("NominaEsquemaOverrides", fields: [userId], references: [id])
+  // Sábado en UTC — mismo identificador de semana que usa la UI
+  // (getSaturday del `lib/week-utils`). Sirve como llave junto con
+  // userId para asegurar un override único por semana.
+  semanaSabado DateTime      @db.Date
+  esquema      EsquemaNomina
+  createdBy    String?       // userId del DG/DC que hizo el cambio
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([userId, semanaSabado])
+  @@index([companyId, semanaSabado])
 }

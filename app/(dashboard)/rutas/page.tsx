@@ -71,7 +71,8 @@ export default async function RutasPage() {
     prisma.paymentSchedule.findMany({
       where: {
         fechaVencimiento: { gte: periodoStart, lte: periodoEnd },
-        estado: { not: 'FINANCIADO' },
+        // FINANCIADO se filtra abajo en el cálculo — no cuenta en meta
+        // ni cobrado (ese dinero no entró, se financió con renovación).
         loan: {
           cobradorId: { in: cobradorIds },
           companyId: companyId!,
@@ -126,7 +127,9 @@ export default async function RutasPage() {
 
     const wSchedules = allSchedules.filter((s) => {
       const d = new Date(s.fechaVencimiento)
-      return d >= saturday && d <= friday
+      // FINANCIADO no cuenta en meta ni cobrado — se financió con
+      // renovación, no entró dinero.
+      return d >= saturday && d <= friday && s.estado !== 'FINANCIADO'
     })
 
     // Filtrar payments DEL schedule a los que se hicieron DENTRO de esta

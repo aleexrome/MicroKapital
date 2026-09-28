@@ -72,6 +72,11 @@ function textColor(p: number, type: 'cobranza' | 'meta') {
 //     (fadeado) pero SÍ cuentan en la meta y en la cobranza. Motivo:
 //     el DG quiere ver el ciclo pactado completo, no solo el "trabajo
 //     de la semana" — para nómina y KPIs de cumplimiento.
+//   - Los FINANCIADO (pagos cubiertos por una renovación anticipada)
+//     SÍ llegan a la UI para que la cobradora los vea, pero NO cuentan
+//     en meta ni en cobrado — ese dinero no entró a la empresa, se
+//     financió con el nuevo crédito. Se pintan en morado y se listan
+//     bajo su propio chip "Financiados".
 function calcCobranza(
   schedules: Array<{
     estado: string
@@ -82,16 +87,17 @@ function calcCobranza(
   _weekStart: Date,
   _weekEnd: Date,
 ) {
-  const totalAPagar = schedules.reduce((s, r) => s + r.montoEsperado.toNumber(), 0)
-  const totalCobrado = schedules.reduce((s, r) => {
+  const activos = schedules.filter((r) => r.estado !== 'FINANCIADO')
+  const totalAPagar = activos.reduce((s, r) => s + r.montoEsperado.toNumber(), 0)
+  const totalCobrado = activos.reduce((s, r) => {
     const paidTotal = r.payments.reduce((acc, p) => acc + p.monto.toNumber(), 0)
     return s + Math.min(paidTotal, r.montoEsperado.toNumber())
   }, 0)
-  const cobradosCount = schedules.filter((r) => {
+  const cobradosCount = activos.filter((r) => {
     if (r.estado === 'PAID' || r.estado === 'ADVANCE') return true
     return r.payments.reduce((acc, p) => acc + p.monto.toNumber(), 0) > 0
   }).length
-  const scheduleCount = schedules.length
+  const scheduleCount = activos.length
   return { totalAPagar, totalCobrado, cobradosCount, scheduleCount }
 }
 
@@ -475,7 +481,9 @@ export default async function RutaDetallePage({
       prisma.paymentSchedule.findMany({
         where: {
           fechaVencimiento: { gte: saturday, lte: friday },
-          estado: { not: 'FINANCIADO' },
+          // FINANCIADO se incluye a propósito: se pinta en la lista (chip
+          // "Financiados") pero NO cuenta en meta ni cobrado — ver
+          // calcCobranza para la lógica.
           loan: {
             ...loanFilterBase,
             companyId: companyId!,
@@ -562,6 +570,7 @@ export default async function RutaDetallePage({
     const printCobros: RutaCobroRow[] = filteredSchedules.map((s) => {
       const vencTime = new Date(s.fechaVencimiento).getTime()
       const paidTotal = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
+      const financiado = s.estado === 'FINANCIADO'
       // prePagado (verdaderamente anticipado): schedule PAID/ADVANCE +
       // al menos un payment + TODOS los payments antes de fechaVencimiento.
       // Marcamos el flag solo para el badge visual "Pre-pagado" — pero
@@ -569,8 +578,10 @@ export default async function RutaDetallePage({
       // y en cobranza semanal, ver calcCobranza arriba).
       const todosAnticipados = s.payments.length > 0
         && s.payments.every((p) => new Date(p.fechaHora).getTime() < vencTime)
-      const prePagado = (s.estado === 'PAID' || s.estado === 'ADVANCE') && todosAnticipados
-      const montoCobrado = Math.min(paidTotal, Number(s.montoEsperado))
+      const prePagado = !financiado
+        && (s.estado === 'PAID' || s.estado === 'ADVANCE')
+        && todosAnticipados
+      const montoCobrado = financiado ? 0 : Math.min(paidTotal, Number(s.montoEsperado))
       return {
         clientNombre:  s.loan.client.nombreCompleto,
         tipo:          s.loan.tipo,
@@ -582,6 +593,7 @@ export default async function RutaDetallePage({
         montoCobrado,
         estado:        s.estado,
         prePagado,
+        financiado,
         nombreGrupo:   s.loan.loanGroup?.nombre ?? null,
       }
     })
@@ -748,7 +760,8 @@ export default async function RutaDetallePage({
       prisma.paymentSchedule.findMany({
         where: {
           fechaVencimiento: { gte: saturday, lte: friday },
-          estado: { not: 'FINANCIADO' },
+          // FINANCIADO se incluye: llega a la lista pero no cuenta en
+          // meta ni cobrado (ver calcCobranza).
           loan: {
             cobradorId: { in: allIds },
             companyId: companyId!,
@@ -946,7 +959,8 @@ export default async function RutaDetallePage({
       prisma.paymentSchedule.findMany({
         where: {
           fechaVencimiento: { gte: saturday, lte: friday },
-          estado: { not: 'FINANCIADO' },
+          // FINANCIADO se incluye: llega a la lista pero no cuenta en
+          // meta ni cobrado (ver calcCobranza).
           loan: {
             cobradorId: { in: allIds },
             companyId: companyId!,

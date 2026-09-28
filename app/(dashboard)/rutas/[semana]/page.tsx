@@ -59,36 +59,69 @@ function textColor(p: number, type: 'cobranza' | 'meta') {
 }
 
 // La cobranza efectiva se calcula sumando los Payment reales asociados a
-// cada schedule de la semana. Antes se sumaba `montoEsperado` cuando el
-// schedule estaba marcado PAID/ADVANCE — eso permitía que un schedule sin
-// movimiento real (renovaciones liquidadas como FINANCIADO antes del fix,
-// pagos aplicados sin Payment, etc.) inflara el indicador. Ahora un
-// schedule solo aporta lo que esté respaldado por Payment.monto, capeado
-// al monto esperado para no dejar que sobre-pagos eleven el porcentaje
-// (los excedentes pertenecen al schedule siguiente como ADVANCE).
+// cada schedule de la semana. Un schedule solo aporta lo que esté
+// respaldado por Payment.monto, capeado al monto esperado.
+//
+// PrePagado vs Pago Tardío:
+//   - Pre-pagado (anticipado): TODOS los payments del schedule fueron
+//     hechos ANTES de la fechaVencimiento. La cobradora no necesita
+//     visitar — el cliente pagó por adelantado. Se excluye de la ruta
+//     activa (activos.filter fuera).
+//   - Pago tardío: al menos un payment fue hecho EN O DESPUÉS de la
+//     fechaVencimiento, aunque haya caído fuera de la ventana semanal
+//     (típico: la cobradora cobra el sábado pero captura el domingo).
+//     Debe aparecer como "Pagado" en la ruta del vencimiento — la
+//     cobradora sí trabajó al cliente esa semana.
 function calcCobranza(
   schedules: Array<{
     estado: string
+    fechaVencimiento: Date | string
     montoEsperado: Prisma.Decimal
-    payments: Array<{ monto: Prisma.Decimal }>
-  }>
+    payments: Array<{ monto: Prisma.Decimal; fechaHora: Date | string }>
+  }>,
+  weekStart: Date,
+  weekEnd: Date,
 ) {
-  // Schedules pre-pagados (PAID/ADVANCE pero con `payments` vacío después
-  // del filtro por fechaHora de esta semana) son cobros que ya entraron en
-  // semanas anteriores — típicamente cuando el cliente pagó por adelantado
-  // o cuando una renovación absorbió pagos del crédito viejo. No cuentan
-  // ni en totalAPagar (no hay nada que cobrar esta semana) ni en cobrado.
+  const wsTime = weekStart.getTime()
+  const weTime = weekEnd.getTime()
   const activos = schedules.filter((r) => {
-    const sinPaymentEstaSemana = r.payments.length === 0
     const yaCobradoAntes = r.estado === 'PAID' || r.estado === 'ADVANCE'
-    return !(sinPaymentEstaSemana && yaCobradoAntes)
+    if (!yaCobradoAntes) return true
+    // Un schedule PAID solo es "prepagado" (y por lo tanto se excluye)
+    // cuando TODOS sus payments fueron hechos antes de la fechaVencimiento.
+    // Si al menos uno fue en o después → hubo cobro real (aunque tardío)
+    // → sí cuenta para la ruta.
+    if (r.payments.length === 0) return false  // legacy: sin Payment y PAID = data corrupta, no contar
+    const vencTime = new Date(r.fechaVencimiento).getTime()
+    const todosAnticipados = r.payments.every((p) => new Date(p.fechaHora).getTime() < vencTime)
+    return !todosAnticipados
   })
   const totalAPagar = activos.reduce((s, r) => s + r.montoEsperado.toNumber(), 0)
   const totalCobrado = activos.reduce((s, r) => {
-    const paid = r.payments.reduce((acc, p) => acc + p.monto.toNumber(), 0)
+    // Cobrado esta semana = payments dentro de la ventana semanal.
+    const paidThisWeek = r.payments
+      .filter((p) => {
+        const t = new Date(p.fechaHora).getTime()
+        return t >= wsTime && t <= weTime
+      })
+      .reduce((acc, p) => acc + p.monto.toNumber(), 0)
+    // Fallback: si no hubo Payment ESTA semana pero el schedule está
+    // PAID (pago tardío capturado en otra semana), usamos el total
+    // pagado del schedule para reflejar que ya está cobrado.
+    const paidTotal = r.payments.reduce((acc, p) => acc + p.monto.toNumber(), 0)
+    const isLate = (r.estado === 'PAID' || r.estado === 'ADVANCE') && paidThisWeek === 0 && paidTotal > 0
+    const paid = isLate ? paidTotal : paidThisWeek
     return s + Math.min(paid, r.montoEsperado.toNumber())
   }, 0)
-  const cobradosCount = activos.filter((r) => r.payments.length > 0).length
+  const cobradosCount = activos.filter((r) => {
+    const paidThisWeek = r.payments.some((p) => {
+      const t = new Date(p.fechaHora).getTime()
+      return t >= wsTime && t <= weTime
+    })
+    // Un schedule cuenta como "cobrado" si tuvo Payment esta semana
+    // O si está PAID (incluye pagos tardíos capturados en otra semana).
+    return paidThisWeek || r.estado === 'PAID' || r.estado === 'ADVANCE'
+  }).length
   const scheduleCount = activos.length
   return { totalAPagar, totalCobrado, cobradosCount, scheduleCount }
 }
@@ -102,8 +135,10 @@ function calcCobranza(
 function buildPairStats(
   schedules: Parameters<typeof calcCobranza>[0],
   loans: Array<{ capital: Prisma.Decimal | number }>,
+  weekStart: Date,
+  weekEnd: Date,
 ) {
-  const { totalAPagar, totalCobrado, cobradosCount, scheduleCount } = calcCobranza(schedules)
+  const { totalAPagar, totalCobrado, cobradosCount, scheduleCount } = calcCobranza(schedules, weekStart, weekEnd)
   const colocacion = loans.reduce((s, l) => s + Number(l.capital), 0)
   const metaTarget = metaColocacion(totalAPagar)
   return {
@@ -486,13 +521,14 @@ export default async function RutaDetallePage({
           montoPagado:   true,
           estado:        true,
           fechaVencimiento: true,
-          // Filtro por fechaHora: solo Payments hechos DENTRO de la semana
-          // del reporte. Antes traíamos todos los Payments del schedule y
-          // un cobro hecho en semana anterior (típico de renovación que
-          // absorbió el pago) inflaba la cobranza efectiva de esta semana.
+          // Traemos TODOS los Payments del schedule con su fechaHora —
+          // el filtrado por semana vs. antes-de-vencimiento lo hacemos
+          // en código. Necesario para distinguir un pago anticipado
+          // (prePagado) de un pago tardío (Pagado normal). Antes
+          // filtrábamos por fechaHora en la ventana semanal, lo que
+          // ocultaba los cobros tardíos.
           payments: {
-            where: { fechaHora: { gte: saturday, lte: friday } },
-            select: { monto: true },
+            select: { monto: true, fechaHora: true },
           },
           loan: {
             select: {
@@ -545,7 +581,7 @@ export default async function RutaDetallePage({
       ? loans.filter((l) => l.fechaDesembolso && toDayKey(new Date(l.fechaDesembolso)) === dayFilter)
       : loans
 
-    const { totalAPagar, totalCobrado, cobradosCount, scheduleCount: pactadosCount } = calcCobranza(filteredSchedules)
+    const { totalAPagar, totalCobrado, cobradosCount, scheduleCount: pactadosCount } = calcCobranza(filteredSchedules, saturday, friday)
     const colocacion = filteredLoans.reduce((s, l) => s + Number(l.capital), 0)
     const metaTarget = metaColocacion(totalAPagar)
     const cobranzaPct = calcPct(totalCobrado, totalAPagar)
@@ -554,16 +590,30 @@ export default async function RutaDetallePage({
     // ── Build print data ────────────────────────────────────────────────
     // El monto cobrado por fila viene de los Payment reales — ver
     // calcCobranza arriba para la justificación.
+    const wsTime = saturday.getTime()
+    const weTime = friday.getTime()
     const printCobros: RutaCobroRow[] = filteredSchedules.map((s) => {
-      const paid = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
-      const montoCobrado = Math.min(paid, Number(s.montoEsperado))
-      // prePagado: schedule está PAID/ADVANCE (cobro registrado en algún
-      // momento) pero no hay Payments dentro de esta semana — significa
-      // que el cobro fue en una semana anterior (renovación absorbida o
-      // cobro anticipado). El badge "Pre-pagado" avisa a la cobradora que
-      // no debe visitar al cliente, sin contarlo como cobranza efectiva
-      // de esta semana.
-      const prePagado = (s.estado === 'PAID' || s.estado === 'ADVANCE') && s.payments.length === 0
+      const vencTime = new Date(s.fechaVencimiento).getTime()
+      const paymentsThisWeek = s.payments.filter((p) => {
+        const t = new Date(p.fechaHora).getTime()
+        return t >= wsTime && t <= weTime
+      })
+      const paidThisWeek = paymentsThisWeek.reduce((acc, p) => acc + Number(p.monto), 0)
+      const paidTotal    = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
+      // prePagado (verdaderamente anticipado): schedule PAID/ADVANCE + al
+      // menos un payment + TODOS los payments antes de fechaVencimiento.
+      // Si hubo pago en o después del vencimiento (aunque cayera fuera de
+      // la semana), es un pago tardío — se muestra como Pagado normal.
+      const todosAnticipados = s.payments.length > 0
+        && s.payments.every((p) => new Date(p.fechaHora).getTime() < vencTime)
+      const prePagado = (s.estado === 'PAID' || s.estado === 'ADVANCE') && todosAnticipados
+      // montoCobrado: prefiere Payment de esta semana; si no hay pero el
+      // schedule ya está PAID (pago tardío capturado fuera), muestra
+      // el total pagado para que la fila refleje "sí se cobró".
+      const paidBase = paidThisWeek > 0
+        ? paidThisWeek
+        : ((s.estado === 'PAID' || s.estado === 'ADVANCE') && !prePagado ? paidTotal : 0)
+      const montoCobrado = Math.min(paidBase, Number(s.montoEsperado))
       return {
         clientNombre:  s.loan.client.nombreCompleto,
         tipo:          s.loan.tipo,
@@ -752,9 +802,13 @@ export default async function RutaDetallePage({
           montoEsperado: true,
           montoPagado: true,
           estado: true,
+          fechaVencimiento: true,
+          // Todos los Payments del schedule (con fechaHora) — el filtro
+          // por semana / por antes-de-vencimiento vive en calcCobranza.
+          // Ver el fix del bug de pagos tardíos en la definición de
+          // prePagado (arriba, calcCobranza).
           payments: {
-            where: { fechaHora: { gte: saturday, lte: friday } },
-            select: { monto: true },
+            select: { monto: true, fechaHora: true },
           },
           loan: {
             select: {
@@ -808,8 +862,8 @@ export default async function RutaDetallePage({
       const heredSched  = aggregator ? [] : uSched.filter((s) => isHeredado(s))
       const heredLoans  = aggregator ? [] : uLoans.filter((l) => isHeredado(l))
 
-      const propia = buildPairStats(propiaSched, propiaLoans)
-      const hered  = buildPairStats(heredSched,  heredLoans)
+      const propia = buildPairStats(propiaSched, propiaLoans, saturday, friday)
+      const hered  = buildPairStats(heredSched,  heredLoans,  saturday, friday)
       const hayHered = !aggregator && (heredSched.length > 0 || heredLoans.length > 0)
 
       return {
@@ -837,7 +891,7 @@ export default async function RutaDetallePage({
       totalAPagar: aggAPagar,
       totalCobrado: aggCobrado,
       cobradosCount: aggCobradosCount,
-    } = calcCobranza(wSchedules)
+    } = calcCobranza(wSchedules, saturday, friday)
     const aggColocacion = wLoans.reduce((s, l) => s + Number(l.capital), 0)
     const aggMeta      = metaColocacion(aggAPagar)
     const aggCobranzaPct = calcPct(aggCobrado, aggAPagar)
@@ -946,9 +1000,10 @@ export default async function RutaDetallePage({
           montoEsperado: true,
           montoPagado: true,
           estado: true,
+          fechaVencimiento: true,
+          // Todos los Payments (con fechaHora) — el filtro va en el codigo.
           payments: {
-            where: { fechaHora: { gte: saturday, lte: friday } },
-            select: { monto: true },
+            select: { monto: true, fechaHora: true },
           },
           // branchId hace falta para que las tarjetas de gerentes sin
           // cartera propia agreguen únicamente su sucursal.
@@ -1011,8 +1066,8 @@ export default async function RutaDetallePage({
       const propiaLoans = aggregator ? uLoans : uLoans.filter((l) => !isHeredado(l))
       const heredSched  = aggregator ? [] : uSched.filter((s) => isHeredado(s))
       const heredLoans  = aggregator ? [] : uLoans.filter((l) => isHeredado(l))
-      const propia = buildPairStats(propiaSched, propiaLoans)
-      const hered  = buildPairStats(heredSched,  heredLoans)
+      const propia = buildPairStats(propiaSched, propiaLoans, saturday, friday)
+      const hered  = buildPairStats(heredSched,  heredLoans,  saturday, friday)
       const hayHered = !aggregator && (heredSched.length > 0 || heredLoans.length > 0)
 
       return {
@@ -1040,7 +1095,7 @@ export default async function RutaDetallePage({
       totalAPagar: aggAPagar,
       totalCobrado: aggCobrado,
       cobradosCount: aggCobradosCount,
-    } = calcCobranza(wSchedules)
+    } = calcCobranza(wSchedules, saturday, friday)
     const aggColocacion = wLoans.reduce((s, l) => s + Number(l.capital), 0)
     const aggMeta       = metaColocacion(aggAPagar)
     const aggCobranzaPct = calcPct(aggCobrado, aggAPagar)

@@ -527,8 +527,13 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   const puedeDeshacerPago = esOpAdmin || tienePermisoAplicar
 
   // Coordinador/Cobrador/Gerente (y usuarios con permiso) pueden capturar pagos.
-  // Evidencia = video (flow nuevo con IA) o foto (legacy).
-  const tieneEvidenciaDesembolso = !!loan.desembolsoVideoUrl || !!loan.desembolsoFotoUrl
+  // Evidencia = video (flow nuevo con IA), foto (legacy) o foto de
+  // transferencia (Activación Virtual — clientes 100% online, marcados
+  // por DG). Sin este último los créditos virtuales quedaban con el
+  // calendario bloqueado (opacity-40 pointer-events-none) sin poder
+  // aplicar pagos ni editar fechas.
+  const tieneEvidenciaDesembolso =
+    !!loan.desembolsoVideoUrl || !!loan.desembolsoFotoUrl || !!loan.transferenciaFotoUrl
   // Solo bloquear pagos si el crédito no tiene pagos aún (nuevo) y no tiene evidencia
   const requiereFotoDesembolso = !tieneEvidenciaDesembolso && pagados === 0
   const rolPuedeCapturar =

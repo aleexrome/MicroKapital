@@ -56,7 +56,7 @@ export default async function DashboardPage({
   const session = await getSession()
   if (!session?.user || session.user.rol === 'COBRADOR') redirect('/cobros/agenda')
 
-  const { rol, companyId, branchId: userBranchId, id: userId } = session.user
+  const { rol, companyId, branchId: userBranchId, id: userId, name: userNombre, email: userEmail } = session.user
 
   // MESA_CONTROL tiene dashboard propio (métricas de su trabajo de
   // revisión, no de cobranza). Se resuelve inline con un early return
@@ -369,15 +369,19 @@ export default async function DashboardPage({
       {/* Banner anti-fraude — préstamos en limbo > 72h */}
       {limboStatus.bloqueado && <BannerLimbo prestamosEnLimbo={limboStatus.prestamosEnLimbo} />}
 
-      {/* Header — saludo personalizado para Director General (Stephanie).
-          Los demás roles siguen viendo el título "Dashboard" tal cual. */}
+      {/* Header — saludo personalizado para Director General.
+          Stephanie pidió literal "Hola, Jefa" — se conserva por email.
+          Los demás DG ven "Hola, <primer nombre>".
+          Los otros roles siguen viendo el título "Dashboard" tal cual. */}
       <div className="flex items-start justify-between gap-4">
         <div>
           {rol === 'DIRECTOR_GENERAL' ? (
             <>
               <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
                 <Sparkles className="h-6 w-6 text-primary-400" />
-                Hola, Jefa
+                {userEmail === 'stephanie.garcia@microkapital.com'
+                  ? 'Hola, Jefa'
+                  : `Hola, ${userNombre.split(' ')[0]}`}
               </h1>
               <p className="text-sm text-muted-foreground">{formatDate(new Date(), "EEEE d 'de' MMMM, yyyy")}</p>
             </>

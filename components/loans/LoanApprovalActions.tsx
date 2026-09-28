@@ -457,7 +457,7 @@ export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0,
               </span>
             </label>
           </div>
-          <div className="flex gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1">
             <Button
               size="sm"
               className="bg-amber-600 hover:bg-amber-700 text-white"
@@ -465,6 +465,17 @@ export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0,
               onClick={() => handleApprove(true, false)}
             >
               {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Enviar contrapropuesta'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-violet-400 text-violet-700 hover:bg-violet-50"
+              disabled={processing}
+              onClick={() => handleApprove(true, true)}
+              title="Enviar contrapropuesta y activar con foto de transferencia (sin video). Para clientes 100% online."
+            >
+              <Smartphone className="h-4 w-4 mr-1" />
+              + Activación Virtual
             </Button>
             <Button size="sm" variant="outline" onClick={() => setShowContrapropuesta(false)}>
               Cancelar

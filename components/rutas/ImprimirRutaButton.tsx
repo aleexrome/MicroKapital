@@ -157,19 +157,19 @@ export function ImprimirRutaButton({
 
     // ── COORDINADOR view ─────────────────────────────────────────────────
     if (cobros !== undefined) {
-      // Todos los renglones se imprimen — incluidos prepagados y
-      // financiados — para que la ruta refleje el ciclo pactado
-      // completo. Prepagados se marcan "Pre-pagado" (gris). Financiados
-      // se marcan "Financiado" (morado, no cuentan en cobrado).
+      // El print refleja la ruta REAL a trabajar: solo lo que hay que
+      // cobrar esta semana. Prepagados y financiados NO se imprimen
+      // (los prepagados ya se cobraron en semana MK anterior, los
+      // financiados no entrarán nunca). Sí se mencionan en el header
+      // como referencia informativa.
       const isFin = (r: RutaCobroRow) => !!r.financiado || r.estado === 'FINANCIADO'
-      const cobradosCount    = cobros.filter((r) => !r.prePagado && !isFin(r) && (r.estado === 'PAID' || r.estado === 'ADVANCE')).length
-      const parcialesCount   = cobros.filter((r) => !r.prePagado && !isFin(r) && r.estado === 'PARTIAL').length
-      const pendientesCount  = cobros.filter((r) => !isFin(r) && (r.estado === 'PENDING' || r.estado === 'OVERDUE')).length
-      const prePagadosCount  = cobros.filter((r) => r.prePagado && !isFin(r)).length
+      const isPre = (r: RutaCobroRow) => !!r.prePagado && !isFin(r)
+      const cobrosVisibles = cobros.filter((r) => !isFin(r) && !isPre(r))
+      const cobradosCount    = cobrosVisibles.filter((r) => r.estado === 'PAID' || r.estado === 'ADVANCE').length
+      const parcialesCount   = cobrosVisibles.filter((r) => r.estado === 'PARTIAL').length
+      const pendientesCount  = cobrosVisibles.filter((r) => r.estado === 'PENDING' || r.estado === 'OVERDUE').length
+      const prePagadosCount  = cobros.filter((r) => isPre(r)).length
       const financiadosCount = cobros.filter((r) => isFin(r)).length
-
-      // TODOS los cobros se imprimen — no filtramos ninguno.
-      const cobrosVisibles = cobros
 
       // Renderiza una fila de cobro. El i es solo para alternancia visual,
       // se mantiene un contador global para que el zebra-striping se vea
@@ -261,7 +261,7 @@ export function ImprimirRutaButton({
         <div class="meta">
           <span><strong>Semana:</strong> ${weekLabel}</span>
           <span><strong>Ruta:</strong> ${scopeLabel}</span>
-          <span><strong>Pactados:</strong> ${cobros.length}</span>
+          <span><strong>Pactados:</strong> ${cobrosVisibles.length}</span>
           <span class="cobrado"><strong>Cobrados:</strong> ${cobradosCount}</span>
           ${parcialesCount > 0 ? `<span class="parcial"><strong>Parciales:</strong> ${parcialesCount}</span>` : ''}
           ${prePagadosCount > 0 ? `<span class="prepagado"><strong>Pre-pagados:</strong> ${prePagadosCount}</span>` : ''}
@@ -282,7 +282,7 @@ export function ImprimirRutaButton({
           </div>
         </div>
 
-        <h3>Cobros de la semana (${cobrosVisibles.length}${prePagadosCount > 0 ? ` · incluye ${prePagadosCount} pre-pagado(s)` : ''}${financiadosCount > 0 ? ` · incluye ${financiadosCount} financiado(s)` : ''})</h3>
+        <h3>Cobros de la semana (${cobrosVisibles.length}${prePagadosCount > 0 ? ` · ${prePagadosCount} pre-pagado(s) omitido(s)` : ''}${financiadosCount > 0 ? ` · ${financiadosCount} financiado(s) omitido(s)` : ''})</h3>
         ${cobrosVisibles.length === 0
           ? '<p class="empty">Sin cobros pactados esta semana</p>'
           : `<table>

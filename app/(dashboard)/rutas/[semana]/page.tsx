@@ -58,25 +58,26 @@ function textColor(p: number, type: 'cobranza' | 'meta') {
   return 'text-gray-500'
 }
 
-// La cobranza efectiva se calcula sumando los Payment reales asociados a
-// cada schedule de la semana. La META es el TOTAL del calendario pactado
-// esa semana (todos los schedules, incluidos prepagados y tardíos). El
-// COBRADO es la suma de todos los payments hechos para esos schedules,
-// sin importar cuándo se capturaron ni si fueron anticipados o tardíos.
+// Regla de cobranza semanal (definida por el DG):
 //
-// Regla de negocio (decision del DG):
-//   - Meta = TODO lo que estaba programado cobrar esa semana (calendario)
-//   - Cobrado = TODO lo pagado de esos schedules (incluye anticipados
-//     de semanas previas Y tardíos capturados después)
-//   - Los prepagados aparecen en la lista con badge "Pre-pagado"
-//     (fadeado) pero SÍ cuentan en la meta y en la cobranza. Motivo:
-//     el DG quiere ver el ciclo pactado completo, no solo el "trabajo
-//     de la semana" — para nómina y KPIs de cumplimiento.
-//   - Los FINANCIADO (pagos cubiertos por una renovación anticipada)
-//     SÍ llegan a la UI para que la cobradora los vea, pero NO cuentan
-//     en meta ni en cobrado — ese dinero no entró a la empresa, se
-//     financió con el nuevo crédito. Se pintan en morado y se listan
-//     bajo su propio chip "Financiados".
+//   - META = lo que hay que cobrar REAL en esta semana W. Son los
+//     schedules cuyo vencimiento cae en la ventana sáb→vie de W,
+//     EXCLUYENDO los FINANCIADO (ya cubiertos por renovación) y los
+//     PRE-PAGADOS (el cliente ya pagó en semana MK anterior).
+//
+//   - COBRADO = suma de los Payments cuya fechaHora cae en la ventana
+//     sáb→vie de W, capado por el montoEsperado del schedule. O sea:
+//     el dinero que efectivamente entró a la empresa esta semana.
+//     Un prepago hecho el viernes anterior de un schedule que vence
+//     el sábado siguiente NO cuenta aquí — cuenta en la semana MK
+//     anterior donde entró.
+//
+//   - Los FINANCIADO no tienen Payment (el flujo de renovación no
+//     crea uno), así que no aportan al cobrado por definición.
+//
+//   - Los PRE-PAGADOS de esta semana sí aparecen en la UI web (con
+//     badge propio, para que la cobradora sepa que no los visite) pero
+//     no cuentan aquí. En el print se omiten.
 function calcCobranza(
   schedules: Array<{
     estado: string
@@ -84,20 +85,45 @@ function calcCobranza(
     montoEsperado: Prisma.Decimal
     payments: Array<{ monto: Prisma.Decimal; fechaHora: Date | string }>
   }>,
-  _weekStart: Date,
-  _weekEnd: Date,
+  weekStart: Date,
+  weekEnd: Date,
 ) {
-  const activos = schedules.filter((r) => r.estado !== 'FINANCIADO')
-  const totalAPagar = activos.reduce((s, r) => s + r.montoEsperado.toNumber(), 0)
-  const totalCobrado = activos.reduce((s, r) => {
-    const paidTotal = r.payments.reduce((acc, p) => acc + p.monto.toNumber(), 0)
-    return s + Math.min(paidTotal, r.montoEsperado.toNumber())
+  const weekStartMs = weekStart.getTime()
+  const weekEndMs   = weekEnd.getTime()
+
+  const isPrePagado = (r: { estado: string; payments: Array<{ fechaHora: Date | string }> }) =>
+    (r.estado === 'PAID' || r.estado === 'ADVANCE')
+    && r.payments.length > 0
+    && r.payments.every((p) => new Date(p.fechaHora).getTime() < weekStartMs)
+
+  // Meta: solo lo que hay que cobrar de verdad esta semana.
+  const paraMeta = schedules.filter((r) => r.estado !== 'FINANCIADO' && !isPrePagado(r))
+  const totalAPagar = paraMeta.reduce((s, r) => s + r.montoEsperado.toNumber(), 0)
+
+  // Cobrado: payments dentro de la ventana semanal, capado por schedule.
+  // Recorremos TODOS los schedules porque un payment intra-semana puede
+  // pertenecer a un schedule que vence en otra semana (el schedule llegó
+  // aquí porque también vence en la ventana; los payments fuera-de-semana
+  // no entran a este acumulador).
+  const totalCobrado = schedules.reduce((s, r) => {
+    if (r.estado === 'FINANCIADO') return s
+    const paidEnSemana = r.payments.reduce((acc, p) => {
+      const t = new Date(p.fechaHora).getTime()
+      if (t >= weekStartMs && t <= weekEndMs) return acc + p.monto.toNumber()
+      return acc
+    }, 0)
+    return s + Math.min(paidEnSemana, r.montoEsperado.toNumber())
   }, 0)
-  const cobradosCount = activos.filter((r) => {
-    if (r.estado === 'PAID' || r.estado === 'ADVANCE') return true
-    return r.payments.reduce((acc, p) => acc + p.monto.toNumber(), 0) > 0
+
+  const cobradosCount = paraMeta.filter((r) => {
+    const paidEnSemana = r.payments.reduce((acc, p) => {
+      const t = new Date(p.fechaHora).getTime()
+      if (t >= weekStartMs && t <= weekEndMs) return acc + p.monto.toNumber()
+      return acc
+    }, 0)
+    return paidEnSemana > 0
   }).length
-  const scheduleCount = activos.length
+  const scheduleCount = paraMeta.length
   return { totalAPagar, totalCobrado, cobradosCount, scheduleCount }
 }
 

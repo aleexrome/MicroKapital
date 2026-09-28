@@ -125,6 +125,8 @@ const BASE_STYLE = `
   .vencido    { color: #b91c1c; font-weight: 600; }
   .pendiente  { color: #6b7280; }
   .prepagado  { color: #6b7280; font-style: italic; }
+  tr.row-prepagado td { background: #fafafa; }
+  tr.row-prepagado.alt td { background: #f0f0f0; }
   tr.group-header td { background: #e8eef5; color: #1a3a5c; font-weight: 700; padding: 7px 8px; text-align: left; font-size: 12px; letter-spacing: .02em; }
   .nuevo      { color: #1d4ed8; }
   .renovacion { color: #7c3aed; }
@@ -150,30 +152,35 @@ export function ImprimirRutaButton({
 
     // ── COORDINADOR view ─────────────────────────────────────────────────
     if (cobros !== undefined) {
-      // Los pre-pagados (schedule PAID/ADVANCE pero Payment de semana
-      // anterior — típico de renovaciones que absorben pagos del crédito
-      // viejo) no cuentan en cobrados/pendientes de esta semana.
-      const cobradosCount  = cobros.filter((r) => !r.prePagado && (r.estado === 'PAID' || r.estado === 'ADVANCE')).length
-      const parcialesCount = cobros.filter((r) => !r.prePagado && r.estado === 'PARTIAL').length
+      // Todos los renglones se imprimen — incluidos prepagados — para
+      // que la ruta refleje el ciclo pactado completo. Prepagados se
+      // marcan con estado "Pre-pagado" pero sí cuentan en el count y
+      // en la lista impresa (así la cobradora ve a TODOS los clientes
+      // que tocaban esta semana, incluso si ya pagaron por adelantado).
+      const cobradosCount   = cobros.filter((r) => !r.prePagado && (r.estado === 'PAID' || r.estado === 'ADVANCE')).length
+      const parcialesCount  = cobros.filter((r) => !r.prePagado && r.estado === 'PARTIAL').length
       const pendientesCount = cobros.filter((r) => r.estado === 'PENDING' || r.estado === 'OVERDUE').length
       const prePagadosCount = cobros.filter((r) => r.prePagado).length
 
-      // Los pre-pagados se omiten de la tabla impresa para no saturarla
-      // con clientes que ya no hay que visitar — el conteo sigue arriba
-      // en el chip "Pre-pagados: N".
-      const cobrosVisibles = cobros.filter((r) => !r.prePagado)
+      // TODOS los cobros se imprimen — no filtramos prepagados.
+      const cobrosVisibles = cobros
 
       // Renderiza una fila de cobro. El i es solo para alternancia visual,
       // se mantiene un contador global para que el zebra-striping se vea
       // continuo entre grupos.
       const renderCobroRow = (r: RutaCobroRow, i: number) => {
-        const isCobrado = r.estado === 'PAID' || r.estado === 'ADVANCE'
-        const isPartial = r.estado === 'PARTIAL'
-        const isVencido = r.estado === 'OVERDUE'
-        const cls = isCobrado ? 'cobrado' : isPartial ? 'parcial' : isVencido ? 'vencido' : 'pendiente'
-        const estadoLabel = ESTADO_LABEL[r.estado] ?? r.estado
+        const isPrePagado = !!r.prePagado
+        const isCobrado = !isPrePagado && (r.estado === 'PAID' || r.estado === 'ADVANCE')
+        const isPartial = !isPrePagado && r.estado === 'PARTIAL'
+        const isVencido = !isPrePagado && r.estado === 'OVERDUE'
+        const cls = isPrePagado ? 'prepagado'
+                  : isCobrado   ? 'cobrado'
+                  : isPartial   ? 'parcial'
+                  : isVencido   ? 'vencido'
+                  :               'pendiente'
+        const estadoLabel = isPrePagado ? 'Pre-pagado' : (ESTADO_LABEL[r.estado] ?? r.estado)
         return `
-          <tr class="${i % 2 === 1 ? 'alt' : ''}">
+          <tr class="${i % 2 === 1 ? 'alt' : ''}${isPrePagado ? ' row-prepagado' : ''}">
             <td>${r.clientNombre}</td>
             <td class="center">${TIPO_LABEL[r.tipo] ?? r.tipo}</td>
             <td class="center">Pago ${r.numeroPago}</td>
@@ -258,7 +265,7 @@ export function ImprimirRutaButton({
           </div>
         </div>
 
-        <h3>Cobros de la semana (${cobrosVisibles.length}${prePagadosCount > 0 ? ` · ${prePagadosCount} pre-pagado(s) omitido(s)` : ''})</h3>
+        <h3>Cobros de la semana (${cobrosVisibles.length}${prePagadosCount > 0 ? ` · incluye ${prePagadosCount} pre-pagado(s)` : ''})</h3>
         ${cobrosVisibles.length === 0
           ? '<p class="empty">Sin cobros pactados esta semana</p>'
           : `<table>

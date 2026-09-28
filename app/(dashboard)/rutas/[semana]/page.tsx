@@ -567,20 +567,20 @@ export default async function RutaDetallePage({
     // ── Build print data ────────────────────────────────────────────────
     // El monto cobrado por fila viene de los Payment reales — ver
     // calcCobranza arriba para la justificación.
+    const saturdayTime = saturday.getTime()
     const printCobros: RutaCobroRow[] = filteredSchedules.map((s) => {
-      const vencTime = new Date(s.fechaVencimiento).getTime()
       const paidTotal = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
       const financiado = s.estado === 'FINANCIADO'
-      // prePagado (verdaderamente anticipado): schedule PAID/ADVANCE +
-      // al menos un payment + TODOS los payments antes de fechaVencimiento.
-      // Marcamos el flag solo para el badge visual "Pre-pagado" — pero
-      // el montoCobrado sí refleja el total pagado real (cuenta en meta
-      // y en cobranza semanal, ver calcCobranza arriba).
-      const todosAnticipados = s.payments.length > 0
-        && s.payments.every((p) => new Date(p.fechaHora).getTime() < vencTime)
+      // prePagado: pago hecho en una SEMANA MK PREVIA (antes del sábado
+      // de la semana del schedule). Un pago hecho el mismo sábado o
+      // dentro de la semana sáb→vie NO es prepago aunque sea un día
+      // antes del vencimiento — es cobro normal de la semana que le
+      // tocaba. El flag solo pinta el badge; el montoCobrado sí suma.
+      const todosSemanaPrevia = s.payments.length > 0
+        && s.payments.every((p) => new Date(p.fechaHora).getTime() < saturdayTime)
       const prePagado = !financiado
         && (s.estado === 'PAID' || s.estado === 'ADVANCE')
-        && todosAnticipados
+        && todosSemanaPrevia
       const montoCobrado = financiado ? 0 : Math.min(paidTotal, Number(s.montoEsperado))
       return {
         clientNombre:  s.loan.client.nombreCompleto,

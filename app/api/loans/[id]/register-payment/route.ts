@@ -103,7 +103,35 @@ export async function POST(
         include: { branch: { select: { nombre: true } } },
       }) as LoanRow[]
       if (integrantes.length > 0) {
-        targetLoans = integrantes
+        // Filtrar integrantes que ya tengan Payment de comisión registrado
+        // — por reintento previo, ciclo parcialmente cerrado, etc. Antes
+        // bloqueábamos TODA la operación si algún integrante ya lo tenía
+        // (el DG no podía terminar de registrar la comisión para los que
+        // faltaban). Ahora los saltamos y procesamos solo los pendientes.
+        const paymentCounts = await prisma.payment.groupBy({
+          by: ['loanId'],
+          where: {
+            loanId: { in: integrantes.map((i) => i.id) },
+            scheduleId: null,
+            canceledAt: null,
+            OR: [
+              { notas: { contains: 'apertura', mode: 'insensitive' } },
+              { notas: { contains: 'seguro',   mode: 'insensitive' } },
+              { notas: { contains: 'comisi',   mode: 'insensitive' } },
+            ],
+          },
+          _count: { _all: true },
+        })
+        const yaConPayment = new Set(paymentCounts.map((p) => p.loanId))
+        const pendientes = integrantes.filter((t) => !yaConPayment.has(t.id))
+        if (pendientes.length === 0) {
+          return NextResponse.json({
+            ok: true,
+            alreadyRegistered: true,
+            message: 'La comisión / seguro ya está registrada para todos los integrantes del grupo.',
+          })
+        }
+        targetLoans = pendientes
         pagoGrupal = integrantes.length > 1
       }
     } else {

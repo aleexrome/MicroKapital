@@ -21,7 +21,7 @@ function parseFecha(dateStr?: string): Date {
 export default async function CajaPage({
   searchParams,
 }: {
-  searchParams: { fecha?: string }
+  searchParams: { fecha?: string; fechaFin?: string }
 }) {
   const session = await getSession()
   if (!session?.user) redirect('/login')
@@ -53,17 +53,29 @@ export default async function CajaPage({
   const selectedDate = parseFecha(searchParams.fecha)
   const fechaStr = toMxYMD(selectedDate)
   const today = todayMx()
-  const isToday = selectedDate.getTime() === today.getTime()
   const todayStr = toMxYMD(today)
 
-  const nextDay = new Date(selectedDate)
+  // Rango opcional: si ?fechaFin= viene y es válida y >= fecha, sumamos
+  // todos los días del intervalo [fecha, fechaFin]. Si no, solo el día
+  // seleccionado (comportamiento anterior).
+  const selectedEnd = searchParams.fechaFin
+    ? parseFecha(searchParams.fechaFin)
+    : selectedDate
+  const rangeEnd = selectedEnd.getTime() >= selectedDate.getTime() ? selectedEnd : selectedDate
+  const fechaFinStr = toMxYMD(rangeEnd)
+  const isRange = fechaFinStr !== fechaStr
+  const isToday = !isRange && selectedDate.getTime() === today.getTime()
+
+  // Extremo superior EXCLUSIVO — al día siguiente del último día del rango.
+  const nextDay = new Date(rangeEnd)
   nextDay.setDate(nextDay.getDate() + 1)
 
-  // Caja del día: solo aplica a trabajadores con corte personal.
-  // Vista agregada (director/gerente) no muestra "Estado de caja" porque
-  // representa muchas cajas a la vez.
+  // Caja del día: solo aplica a trabajadores con corte personal, y solo
+  // cuando NO estamos viendo un rango (la caja es por día). Con rango se
+  // suprime la tarjeta "Estado de caja" — no tiene sentido para varios
+  // días a la vez.
   let caja: { estado: string; cobradoEfectivo: unknown; cobradoTarjeta: unknown; cambioEntregado: unknown } | null = null
-  if (!isAggregateView) {
+  if (!isAggregateView && !isRange) {
     caja = await prisma.cashRegister.findFirst({
       where: { cobradorId: cobrador.id, fecha: selectedDate },
     })
@@ -188,14 +200,18 @@ export default async function CajaPage({
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Corte del Día</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isRange ? 'Corte por rango' : 'Corte del Día'}
+          </h1>
           <p className="text-muted-foreground">
-            {formatDate(selectedDate, "EEEE d 'de' MMMM, yyyy")}
+            {isRange
+              ? `${formatDate(selectedDate, "d 'de' MMMM")} — ${formatDate(rangeEnd, "d 'de' MMMM, yyyy")}`
+              : formatDate(selectedDate, "EEEE d 'de' MMMM, yyyy")}
             {isDirectorView && ' · Empresa completa'}
             {isGerenteView && ' · Mi sucursal'}
           </p>
         </div>
-        <AgendaDatePicker fecha={fechaStr} baseHref="/caja" maxDate={todayStr} />
+        <AgendaDatePicker fecha={fechaStr} fechaFin={fechaFinStr} baseHref="/caja" maxDate={todayStr} />
       </div>
 
       {/* Botón imprimir corte — solo trabajadores con corte personal. La vista
@@ -203,7 +219,7 @@ export default async function CajaPage({
       {!isAggregateView && (
         <div className="flex justify-end">
           <Button asChild>
-            <Link href={`/caja/imprimir?fecha=${fechaStr}`}>
+            <Link href={`/caja/imprimir?fecha=${fechaStr}${isRange ? `&fechaFin=${fechaFinStr}` : ''}`}>
               <Printer className="h-4 w-4" /> Imprimir corte
             </Link>
           </Button>
@@ -272,7 +288,9 @@ export default async function CajaPage({
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="h-4 w-4 text-primary-700" />
-              <span className="text-xs text-primary-600 font-medium">Total cobrado del día</span>
+              <span className="text-xs text-primary-600 font-medium">
+                {isRange ? 'Total cobrado del rango' : 'Total cobrado del día'}
+              </span>
             </div>
             <p className="text-2xl font-bold text-primary-800 money">{formatMoney(totalGeneral)}</p>
           </CardContent>
@@ -321,7 +339,7 @@ export default async function CajaPage({
                       .map(([cId, cob]) => (
                         <Link
                           key={cId}
-                          href={`/caja/cobrador/${cId}?fecha=${fechaStr}`}
+                          href={`/caja/cobrador/${cId}?fecha=${fechaStr}${isRange ? `&fechaFin=${fechaFinStr}` : ''}`}
                           className="block py-3 first:pt-2 hover:bg-primary-500/5 -mx-4 px-4 transition-colors"
                         >
                           <div className="flex items-center justify-between mb-1">

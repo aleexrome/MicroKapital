@@ -703,6 +703,9 @@ export default async function RutaDetallePage({
           metaTarget={metaTarget}
           metaPct={metaPct}
           headerLabel={dayFilter ? 'Cobros del día' : 'Cobros de la semana'}
+          totalAPagarReal={totalAPagar}
+          totalCobradoReal={totalCobrado}
+          cobranzaPctReal={cobranzaPct}
         />
 
         {/* Colocación list */}

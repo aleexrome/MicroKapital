@@ -44,11 +44,19 @@ interface Props {
   metaTarget: number
   metaPct: number
   headerLabel: string
+  // Meta / cobrado calculados en el server con la regla de negocio
+  // (excluye prepagados y financiados; cobrado = payments intra-semana).
+  // Se usan para el KPI del print cuando el filtro es "todos" — así el
+  // reporte impreso muestra los mismos números que la UI web.
+  totalAPagarReal: number
+  totalCobradoReal: number
+  cobranzaPctReal: number
 }
 
 export function CobrosFilterableSection({
   weekLabel, scopeLabel, cobros, colocaciones,
   colocacionTotal, metaTarget, metaPct, headerLabel,
+  totalAPagarReal, totalCobradoReal, cobranzaPctReal,
 }: Props) {
   const [filtro, setFiltro] = useState<FiltroCobro>('todos')
 
@@ -174,18 +182,22 @@ export function CobrosFilterableSection({
         )}
       </div>
 
-      {/* Print del subset actual */}
+      {/* Print del subset actual. Cuando filtro="todos" pasamos los
+          valores REALES del server (meta y cobrado sin prepagados ni
+          financiados) para que el KPI del archivo impreso cuadre con
+          el KPI de la UI web. En filtros específicos (pagados / etc)
+          seguimos con la suma del subset filtrado. */}
       <div className="flex justify-center pt-2">
         <ImprimirRutaButton
           weekLabel={weekLabel}
           scopeLabel={scopeConFiltro}
           cobros={cobrosFiltrados}
           colocaciones={filtro === 'todos' ? colocaciones : []}
-          totalAPagar={totalAPagar}
-          totalCobrado={totalCobrado}
+          totalAPagar={filtro === 'todos' ? totalAPagarReal : totalAPagar}
+          totalCobrado={filtro === 'todos' ? totalCobradoReal : totalCobrado}
           colocacionTotal={filtro === 'todos' ? colocacionTotal : 0}
           metaTarget={filtro === 'todos' ? metaTarget : 0}
-          cobranzaPct={cobranzaPct}
+          cobranzaPct={filtro === 'todos' ? cobranzaPctReal : cobranzaPct}
           metaPct={filtro === 'todos' ? metaPct : 0}
         />
       </div>

@@ -16,7 +16,18 @@ export interface RutaCobroRow {
   // español sin depender de la zona horaria del navegador.
   fechaVencimiento: string
   montoEsperado: number
-  montoCobrado: number   // 0 si no cobrado
+  // Cobrado INTRA-semana MK (sáb→vie de la semana del schedule),
+  // capado por montoEsperado. Cero si no hubo pago dentro de la ventana.
+  // Su suma renglón-por-renglón cuadra con el KPI de cobranza.
+  montoCobrado: number
+  // Monto pagado ANTES del sábado (semana MK previa) — se muestra al
+  // lado como "+ $X anticipado" cuando aplica. Ese dinero cuenta en la
+  // cobranza de la semana anterior, no en esta.
+  montoAnticipado?: number
+  // Monto pagado DESPUES del viernes (semana MK siguiente) — se muestra
+  // al lado como "+ $X tardío". Ese dinero cuenta en la cobranza de
+  // la semana en que entró, no en esta.
+  montoTardio?: number
   estado: string
   // true si el schedule ya está PAID/ADVANCE pero el Payment se hizo
   // ANTES de fechaVencimiento (cobro anticipado real que sí entró a

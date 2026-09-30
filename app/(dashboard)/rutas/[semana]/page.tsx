@@ -592,23 +592,37 @@ export default async function RutaDetallePage({
     const metaPct     = calcPct(colocacion, metaTarget)
 
     // ── Build print data ────────────────────────────────────────────────
-    // El monto cobrado por fila viene de los Payment reales — ver
-    // calcCobranza arriba para la justificación.
+    // El montoCobrado que ve cada renglón SOLO cuenta payments hechos
+    // dentro de la ventana sáb→vie de esta semana MK. Así la suma
+    // renglón por renglón cuadra con el KPI (el usuario podía sumar y
+    // ver un total distinto porque los renglones antes mostraban el
+    // total del schedule incluyendo pagos tardíos que caen en otra
+    // semana MK). Los pagos tardíos y anticipados se guardan como
+    // montoTardio y montoAnticipado para mostrarlos como "+ $X" al
+    // lado — información no se pierde, solo se separa por semana.
     const saturdayTime = saturday.getTime()
+    const fridayTime   = friday.getTime()
     const printCobros: RutaCobroRow[] = filteredSchedules.map((s) => {
-      const paidTotal = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
       const financiado = s.estado === 'FINANCIADO'
-      // prePagado: pago hecho en una SEMANA MK PREVIA (antes del sábado
-      // de la semana del schedule). Un pago hecho el mismo sábado o
-      // dentro de la semana sáb→vie NO es prepago aunque sea un día
-      // antes del vencimiento — es cobro normal de la semana que le
-      // tocaba. El flag solo pinta el badge; el montoCobrado sí suma.
-      const todosSemanaPrevia = s.payments.length > 0
-        && s.payments.every((p) => new Date(p.fechaHora).getTime() < saturdayTime)
+      let pagosAntes = 0, pagosSemana = 0, pagosDespues = 0
+      for (const p of s.payments) {
+        const t = new Date(p.fechaHora).getTime()
+        const m = Number(p.monto)
+        if      (t <  saturdayTime) pagosAntes   += m
+        else if (t <= fridayTime)   pagosSemana  += m
+        else                        pagosDespues += m
+      }
+      const esperado = Number(s.montoEsperado)
+      // prePagado: schedule cerrado (PAID/ADVANCE) donde TODOS los
+      // payments fueron previos al sábado de esta semana MK.
       const prePagado = !financiado
         && (s.estado === 'PAID' || s.estado === 'ADVANCE')
-        && todosSemanaPrevia
-      const montoCobrado = financiado ? 0 : Math.min(paidTotal, Number(s.montoEsperado))
+        && pagosSemana === 0 && pagosDespues === 0 && pagosAntes > 0
+      const montoCobrado    = financiado ? 0 : Math.min(pagosSemana,  esperado)
+      const montoAnticipado = financiado ? 0 : Math.min(pagosAntes,   esperado)
+      // Cap del tardío al espacio que queda tras el cobrado intra-semana.
+      const restanteTardio  = Math.max(0, esperado - montoCobrado - montoAnticipado)
+      const montoTardio     = financiado ? 0 : Math.min(pagosDespues, restanteTardio)
       return {
         clientNombre:  s.loan.client.nombreCompleto,
         tipo:          s.loan.tipo,
@@ -616,8 +630,10 @@ export default async function RutaDetallePage({
         // ISO string para que el componente formatee fecha+día sin caer
         // en sorpresas de zona horaria del navegador.
         fechaVencimiento: new Date(s.fechaVencimiento).toISOString(),
-        montoEsperado: Number(s.montoEsperado),
+        montoEsperado: esperado,
         montoCobrado,
+        montoAnticipado,
+        montoTardio,
         estado:        s.estado,
         prePagado,
         financiado,

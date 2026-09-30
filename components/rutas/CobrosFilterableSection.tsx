@@ -148,7 +148,7 @@ export function CobrosFilterableSection({
                     <span className="flex-1 min-w-0 truncate font-medium">{r.clientNombre}</span>
                     <Badge variant="outline" className="text-xs shrink-0">{TIPO_LABEL[r.tipo] ?? r.tipo}</Badge>
                     <span className="font-semibold w-20 text-right shrink-0">{formatMoney(r.montoEsperado)}</span>
-                    <span className={`text-xs w-20 text-right shrink-0 ${
+                    <span className={`text-xs w-28 text-right shrink-0 ${
                       isFinanciado ? 'italic text-violet-700 font-medium'
                       : isCobrado ? 'text-green-600 font-medium'
                       : isPartial ? 'text-amber-600 font-medium'
@@ -156,7 +156,21 @@ export function CobrosFilterableSection({
                       : 'text-muted-foreground'
                     }`}>
                       {isFinanciado ? 'Financiado'
-                       : isCobrado || isPartial ? formatMoney(r.montoCobrado)
+                       : isCobrado || isPartial ? (
+                         <>
+                           {formatMoney(r.montoCobrado)}
+                           {(r.montoTardio ?? 0) > 0 && (
+                             <span className="block text-[10px] text-amber-600 font-normal" title="Pagado en semana MK siguiente — cuenta en esa semana">
+                               + {formatMoney(r.montoTardio!)} tardío
+                             </span>
+                           )}
+                           {(r.montoAnticipado ?? 0) > 0 && (
+                             <span className="block text-[10px] text-gray-500 font-normal italic" title="Pagado en semana MK previa — cuenta en esa semana">
+                               + {formatMoney(r.montoAnticipado!)} anticipado
+                             </span>
+                           )}
+                         </>
+                       )
                        : isPrePagado ? 'Pre-pagado'
                        : ESTADO_LABEL[r.estado] ?? r.estado}
                     </span>

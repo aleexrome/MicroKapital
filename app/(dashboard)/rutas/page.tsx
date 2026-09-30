@@ -127,46 +127,31 @@ export default async function RutasPage() {
     const usaCalculoEstricto = idx <= 1
 
     // Regla de negocio (DG): idéntica a calcCobranza en [semana]/page.tsx.
-    //   - Meta = solo lo que hay que cobrar REAL esta semana. Excluye
-    //     FINANCIADO y PRE-PAGADOS (schedules cuyo payment entró antes
-    //     del sábado 00:00 de esta semana).
-    //   - Cobrado = payments dentro de la ventana sáb→vie de la semana,
-    //     capado por schedule (dinero que efectivamente entró).
-    const sat = saturday.getTime()
-    const fri = friday.getTime()
-
+    //   - Meta = TODOS los schedules cuyo vencimiento cae en la semana,
+    //     EXCLUYENDO FINANCIADO. Los pagos anticipados o tardíos también
+    //     pertenecen a esta semana (donde vencía el schedule).
+    //   - Cobrado = sum(payments) capado por schedule.montoEsperado.
+    //     Sin importar cuándo entró el dinero — rutas mide cumplimiento
+    //     del ciclo semanal, no ingresos del día.
     const wSchedules = allSchedules.filter((s) => {
-      const d = new Date(s.fechaVencimiento).getTime()
-      return d >= sat && d <= fri && s.estado !== 'FINANCIADO'
+      const d = new Date(s.fechaVencimiento)
+      return d >= saturday && d <= friday && s.estado !== 'FINANCIADO'
     })
 
-    const isPrePagado = (s: (typeof wSchedules)[number]) =>
-      (s.estado === 'PAID' || s.estado === 'ADVANCE')
-      && s.payments.length > 0
-      && s.payments.every((p) => new Date(p.fechaHora).getTime() < sat)
-
-    const paraMeta = wSchedules.filter((s) => !isPrePagado(s))
-
-    const totalAPagar = paraMeta.reduce(
+    const totalAPagar = wSchedules.reduce(
       (sum, s) => sum + Number(s.montoEsperado), 0,
     )
 
-    // Estricto: solo los Payments cuya fechaHora cae dentro de la ventana
-    // semanal, capado por montoEsperado del schedule. Aplica a la semana
-    // en curso y la inmediatamente anterior (usaCalculoEstricto).
+    // Estricto: suma TODOS los Payments del schedule, capado. Anticipados
+    // y tardíos suman en la semana del schedule.
     const totalCobradoEstricto = wSchedules.reduce((sum, s) => {
-      const paidEnSemana = s.payments.reduce((acc, p) => {
-        const t = new Date(p.fechaHora).getTime()
-        if (t >= sat && t <= fri) return acc + Number(p.monto)
-        return acc
-      }, 0)
-      return sum + Math.min(paidEnSemana, Number(s.montoEsperado))
+      const paidTotal = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
+      return sum + Math.min(paidTotal, Number(s.montoEsperado))
     }, 0)
 
     // Preliminar (semanas viejas sin Payments respaldados): usa estado del
-    // schedule + montoPagado. Excluye prepagados para que la meta y
-    // cobrado del preliminar cuadren con el estricto (mismo denominador).
-    const totalCobradoPreliminar = paraMeta.reduce((sum, s) => {
+    // schedule + montoPagado. Consistente con el estricto.
+    const totalCobradoPreliminar = wSchedules.reduce((sum, s) => {
       if (s.estado === 'PAID' || s.estado === 'ADVANCE') return sum + Number(s.montoEsperado)
       if (s.estado === 'PARTIAL')                        return sum + Number(s.montoPagado)
       return sum
@@ -194,7 +179,7 @@ export default async function RutasPage() {
       colocacion,
       metaTarget,
       metaPct,
-      count: paraMeta.length,
+      count: wSchedules.length,
     }
   })
 

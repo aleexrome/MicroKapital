@@ -16,23 +16,11 @@ export interface RutaCobroRow {
   // español sin depender de la zona horaria del navegador.
   fechaVencimiento: string
   montoEsperado: number
-  // Cobrado INTRA-semana MK (sáb→vie de la semana del schedule),
-  // capado por montoEsperado. Cero si no hubo pago dentro de la ventana.
-  // Su suma renglón-por-renglón cuadra con el KPI de cobranza.
+  // Suma de TODOS los Payments del schedule, capado por montoEsperado.
+  // Sin importar cuándo entró el dinero — rutas mide cumplimiento del
+  // ciclo semanal. El día en que entró se ve en el Corte del Día.
   montoCobrado: number
-  // Monto pagado ANTES del sábado (semana MK previa) — se muestra al
-  // lado como "+ $X anticipado" cuando aplica. Ese dinero cuenta en la
-  // cobranza de la semana anterior, no en esta.
-  montoAnticipado?: number
-  // Monto pagado DESPUES del viernes (semana MK siguiente) — se muestra
-  // al lado como "+ $X tardío". Ese dinero cuenta en la cobranza de
-  // la semana en que entró, no en esta.
-  montoTardio?: number
   estado: string
-  // true si el schedule ya está PAID/ADVANCE pero el Payment se hizo
-  // ANTES de fechaVencimiento (cobro anticipado real que sí entró a
-  // caja). Se muestra como "Pre-pagado" y SÍ cuenta en cobranza.
-  prePagado?: boolean
   // true si el schedule está FINANCIADO (cubierto por una renovación
   // anticipada — el pago se absorbió con el capital del nuevo crédito).
   // Se muestra como "Financiado" en morado; NO cuenta en meta ni en
@@ -168,46 +156,31 @@ export function ImprimirRutaButton({
 
     // ── COORDINADOR view ─────────────────────────────────────────────────
     if (cobros !== undefined) {
-      // El print refleja la ruta REAL a trabajar: solo lo que hay que
-      // cobrar esta semana. Prepagados y financiados NO se imprimen
-      // (los prepagados ya se cobraron en semana MK anterior, los
-      // financiados no entrarán nunca). Sí se mencionan en el header
-      // como referencia informativa.
+      // El print refleja la ruta real a trabajar. Los financiados no
+      // se imprimen (no entrará ese dinero — fue absorbido por
+      // renovación); se mencionan en el header como referencia.
       const isFin = (r: RutaCobroRow) => !!r.financiado || r.estado === 'FINANCIADO'
-      const isPre = (r: RutaCobroRow) => !!r.prePagado && !isFin(r)
-      const cobrosVisibles = cobros.filter((r) => !isFin(r) && !isPre(r))
+      const cobrosVisibles   = cobros.filter((r) => !isFin(r))
       const cobradosCount    = cobrosVisibles.filter((r) => r.estado === 'PAID' || r.estado === 'ADVANCE').length
       const parcialesCount   = cobrosVisibles.filter((r) => r.estado === 'PARTIAL').length
       const pendientesCount  = cobrosVisibles.filter((r) => r.estado === 'PENDING' || r.estado === 'OVERDUE').length
-      const prePagadosCount  = cobros.filter((r) => isPre(r)).length
       const financiadosCount = cobros.filter((r) => isFin(r)).length
 
       // Renderiza una fila de cobro. El i es solo para alternancia visual,
       // se mantiene un contador global para que el zebra-striping se vea
       // continuo entre grupos.
       const renderCobroRow = (r: RutaCobroRow, i: number) => {
-        const isFinanciado = isFin(r)
-        const isPrePagado  = !isFinanciado && !!r.prePagado
-        const isCobrado    = !isFinanciado && !isPrePagado && (r.estado === 'PAID' || r.estado === 'ADVANCE')
-        const isPartial    = !isFinanciado && !isPrePagado && r.estado === 'PARTIAL'
-        const isVencido    = !isFinanciado && !isPrePagado && r.estado === 'OVERDUE'
-        const cls = isFinanciado ? 'financiado'
-                  : isPrePagado  ? 'prepagado'
-                  : isCobrado    ? 'cobrado'
-                  : isPartial    ? 'parcial'
-                  : isVencido    ? 'vencido'
-                  :                'pendiente'
-        const estadoLabel = isFinanciado ? 'Financiado'
-                          : isPrePagado ? 'Pre-pagado'
-                          : (ESTADO_LABEL[r.estado] ?? r.estado)
-        const rowExtra = isFinanciado ? ' row-financiado'
-                       : isPrePagado  ? ' row-prepagado'
-                       : ''
-        const montoCobradoCell = isFinanciado
-          ? '—'
-          : (r.montoCobrado > 0 ? fmt(r.montoCobrado) : '—')
+        const isCobrado = r.estado === 'PAID' || r.estado === 'ADVANCE'
+        const isPartial = r.estado === 'PARTIAL'
+        const isVencido = r.estado === 'OVERDUE'
+        const cls = isCobrado ? 'cobrado'
+                  : isPartial ? 'parcial'
+                  : isVencido ? 'vencido'
+                  :             'pendiente'
+        const estadoLabel = ESTADO_LABEL[r.estado] ?? r.estado
+        const montoCobradoCell = r.montoCobrado > 0 ? fmt(r.montoCobrado) : '—'
         return `
-          <tr class="${i % 2 === 1 ? 'alt' : ''}${rowExtra}">
+          <tr class="${i % 2 === 1 ? 'alt' : ''}">
             <td>${r.clientNombre}</td>
             <td class="center">${TIPO_LABEL[r.tipo] ?? r.tipo}</td>
             <td class="center">Pago ${r.numeroPago}</td>
@@ -275,7 +248,6 @@ export function ImprimirRutaButton({
           <span><strong>Pactados:</strong> ${cobrosVisibles.length}</span>
           <span class="cobrado"><strong>Cobrados:</strong> ${cobradosCount}</span>
           ${parcialesCount > 0 ? `<span class="parcial"><strong>Parciales:</strong> ${parcialesCount}</span>` : ''}
-          ${prePagadosCount > 0 ? `<span class="prepagado"><strong>Pre-pagados:</strong> ${prePagadosCount}</span>` : ''}
           ${financiadosCount > 0 ? `<span class="financiado"><strong>Financiados:</strong> ${financiadosCount}</span>` : ''}
           ${pendientesCount > 0 ? `<span class="pendiente"><strong>Pendientes/Vencidos:</strong> ${pendientesCount}</span>` : ''}
         </div>
@@ -293,7 +265,7 @@ export function ImprimirRutaButton({
           </div>
         </div>
 
-        <h3>Cobros de la semana (${cobrosVisibles.length}${prePagadosCount > 0 ? ` · ${prePagadosCount} pre-pagado(s) omitido(s)` : ''}${financiadosCount > 0 ? ` · ${financiadosCount} financiado(s) omitido(s)` : ''})</h3>
+        <h3>Cobros de la semana (${cobrosVisibles.length}${financiadosCount > 0 ? ` · ${financiadosCount} financiado(s) omitido(s)` : ''})</h3>
         ${cobrosVisibles.length === 0
           ? '<p class="empty">Sin cobros pactados esta semana</p>'
           : `<table>

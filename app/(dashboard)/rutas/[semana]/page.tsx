@@ -531,6 +531,7 @@ export default async function RutaDetallePage({
           // filtrábamos por fechaHora en la ventana semanal, lo que
           // ocultaba los cobros tardíos.
           payments: {
+            where:  { canceledAt: null },
             select: { monto: true, fechaHora: true },
           },
           loan: {
@@ -807,6 +808,7 @@ export default async function RutaDetallePage({
           // Ver el fix del bug de pagos tardíos en la definición de
           // prePagado (arriba, calcCobranza).
           payments: {
+            where:  { canceledAt: null },
             select: { monto: true, fechaHora: true },
           },
           loan: {
@@ -1003,6 +1005,7 @@ export default async function RutaDetallePage({
           fechaVencimiento: true,
           // Todos los Payments (con fechaHora) — el filtro va en el codigo.
           payments: {
+            where:  { canceledAt: null },
             select: { monto: true, fechaHora: true },
           },
           // branchId hace falta para que las tarjetas de gerentes sin

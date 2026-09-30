@@ -91,6 +91,7 @@ export default async function RutasPage() {
         // anticipado de uno tardío capturado fuera de la ventana semanal.
         // El filtro por semana se aplica en código.
         payments: {
+          where:  { canceledAt: null },
           select: { monto: true, fechaHora: true },
         },
       },

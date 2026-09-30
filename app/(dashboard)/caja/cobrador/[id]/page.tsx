@@ -21,7 +21,7 @@ export default async function CajaCobradorDetallePage({
   searchParams,
 }: {
   params: { id: string }
-  searchParams: { fecha?: string }
+  searchParams: { fecha?: string; fechaFin?: string }
 }) {
   const session = await getSession()
   if (!session?.user) redirect('/login')
@@ -53,7 +53,14 @@ export default async function CajaCobradorDetallePage({
   const today = todayMx()
   const todayStr = toMxYMD(today)
 
-  const nextDay = new Date(selectedDate)
+  const selectedEnd = searchParams.fechaFin ? parseFecha(searchParams.fechaFin) : selectedDate
+  const rangeEnd = selectedEnd.getTime() >= selectedDate.getTime() ? selectedEnd : selectedDate
+  const fechaFinStr = toMxYMD(rangeEnd)
+  const isRange = fechaFinStr !== fechaStr
+  const rangeSuffix = isRange ? `&fechaFin=${fechaFinStr}` : ''
+
+  // Extremo superior EXCLUSIVO: día siguiente del último día del rango.
+  const nextDay = new Date(rangeEnd)
   nextDay.setDate(nextDay.getDate() + 1)
 
   const pagosDia = await prisma.payment.findMany({
@@ -93,24 +100,26 @@ export default async function CajaCobradorDetallePage({
     <div className="p-6 space-y-6">
       <div className="flex items-start gap-3 flex-wrap">
         <Button asChild variant="ghost" size="icon">
-          <Link href={`/caja?fecha=${fechaStr}`}>
+          <Link href={`/caja?fecha=${fechaStr}${rangeSuffix}`}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-gray-900">{cobradorTarget.nombre}</h1>
           <p className="text-muted-foreground">
-            Corte del día · {cobradorTarget.branch?.nombre ?? 'Sin sucursal'} ·{' '}
-            {formatDate(selectedDate, "EEEE d 'de' MMMM, yyyy")}
+            {isRange ? 'Corte por rango' : 'Corte del día'} · {cobradorTarget.branch?.nombre ?? 'Sin sucursal'} ·{' '}
+            {isRange
+              ? `${formatDate(selectedDate, "d 'de' MMMM")} — ${formatDate(rangeEnd, "d 'de' MMMM, yyyy")}`
+              : formatDate(selectedDate, "EEEE d 'de' MMMM, yyyy")}
           </p>
         </div>
-        <AgendaDatePicker fecha={fechaStr} baseHref={`/caja/cobrador/${cobradorTarget.id}`} maxDate={todayStr} />
+        <AgendaDatePicker fecha={fechaStr} fechaFin={fechaFinStr} baseHref={`/caja/cobrador/${cobradorTarget.id}`} maxDate={todayStr} />
       </div>
 
       {/* Botón imprimir corte de este cobrador */}
       <div className="flex justify-end">
         <Button asChild>
-          <Link href={`/caja/imprimir?fecha=${fechaStr}&cobradorId=${cobradorTarget.id}`}>
+          <Link href={`/caja/imprimir?fecha=${fechaStr}${rangeSuffix}&cobradorId=${cobradorTarget.id}`}>
             <Printer className="h-4 w-4" /> Imprimir corte
           </Link>
         </Button>

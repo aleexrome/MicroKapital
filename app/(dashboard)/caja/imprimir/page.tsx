@@ -14,7 +14,7 @@ function parseFecha(dateStr?: string): Date {
 export default async function ImprimirCortePage({
   searchParams,
 }: {
-  searchParams: { fecha?: string; cobradorId?: string }
+  searchParams: { fecha?: string; fechaFin?: string; cobradorId?: string }
 }) {
   const session = await getSession()
   if (!session?.user) redirect('/login')
@@ -51,7 +51,10 @@ export default async function ImprimirCortePage({
   }
 
   const selectedDate = parseFecha(searchParams.fecha)
-  const nextDay = new Date(selectedDate)
+  const selectedEnd  = searchParams.fechaFin ? parseFecha(searchParams.fechaFin) : selectedDate
+  const rangeEnd     = selectedEnd.getTime() >= selectedDate.getTime() ? selectedEnd : selectedDate
+  // Extremo superior EXCLUSIVO — al día siguiente del último día del rango.
+  const nextDay = new Date(rangeEnd)
   nextDay.setDate(nextDay.getDate() + 1)
 
   const pagos = await prisma.payment.findMany({
@@ -97,6 +100,7 @@ export default async function ImprimirCortePage({
       sucursal={sucursalNombre}
       cobrador={cobrador.nombre}
       fecha={selectedDate.toISOString()}
+      fechaFin={rangeEnd.getTime() !== selectedDate.getTime() ? rangeEnd.toISOString() : undefined}
       pagos={pagos.map((p) => ({
         cliente: p.client.nombreCompleto,
         monto: Number(p.monto),

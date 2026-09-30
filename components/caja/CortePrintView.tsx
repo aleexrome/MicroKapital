@@ -35,17 +35,24 @@ interface Props {
   sucursal: string
   cobrador: string
   fecha: string
+  // Fin del rango (ISO). Si viene, el corte cubre [fecha..fechaFin]
+  // y las etiquetas cambian a "PERIODO: dd/mm/aaaa — dd/mm/aaaa".
+  fechaFin?: string
   pagos: PagoItem[]
   totales: Totales
 }
 
-export function CortePrintView({ empresa, sucursal, cobrador, fecha, pagos, totales }: Props) {
+export function CortePrintView({ empresa, sucursal, cobrador, fecha, fechaFin, pagos, totales }: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [printing, setPrinting] = useState(false)
 
   const fechaDate = new Date(fecha)
-  const fechaLabel = format(fechaDate, 'dd/MM/yyyy')
+  const fechaEndDate = fechaFin ? new Date(fechaFin) : null
+  const isRange = !!fechaEndDate && fechaEndDate.getTime() !== fechaDate.getTime()
+  const fechaLabel = isRange
+    ? `${format(fechaDate, 'dd/MM/yyyy')} — ${format(fechaEndDate!, 'dd/MM/yyyy')}`
+    : format(fechaDate, 'dd/MM/yyyy')
 
   async function handleBluetoothPrint() {
     setPrinting(true)
@@ -182,10 +189,10 @@ function renderPreview({
   const lines: string[] = []
   lines.push(center(empresa.slice(0, W)))
   lines.push(center(sucursal.slice(0, W)))
-  lines.push(center('CORTE DEL DIA'))
+  lines.push(center(fechaLabel.includes('—') ? 'CORTE POR PERIODO' : 'CORTE DEL DIA'))
   lines.push(eq)
   lines.push(`COBRADOR: ${cobrador.slice(0, W - 10)}`)
-  lines.push(`FECHA:    ${fechaLabel}`)
+  lines.push(`${fechaLabel.includes('—') ? 'PERIODO:' : 'FECHA:  '}  ${fechaLabel}`)
   lines.push(dash)
   lines.push('POR METODO DE PAGO')
   lines.push(padRight('Efectivo:',      formatMoney(totales.efectivo)))

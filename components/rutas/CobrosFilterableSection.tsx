@@ -164,18 +164,25 @@ export function CobrosFilterableSection({
                 )
               })}
             </div>
-            {/* Totales del subset filtrado. Los financiados no muestran
-                "cobrada" porque ese dinero no entró — se financió con
-                el nuevo crédito. */}
+            {/* Totales del subset filtrado. Con filtro="todos" usamos
+                los valores REALES del server (meta y cobrado sin
+                prepagados ni financiados) para cuadrar con el KPI
+                superior. Los financiados no muestran "cobrada" porque
+                ese dinero no entró — se financió con el nuevo crédito. */}
             <div className="flex justify-end gap-6 mt-2 text-xs text-muted-foreground">
               <span>
                 {filtro === 'financiados' ? 'Suma financiada' : 'Suma pactada'}:{' '}
                 <strong className={filtro === 'financiados' ? 'text-violet-700' : 'text-gray-800'}>
-                  {formatMoney(totalAPagar)}
+                  {formatMoney(filtro === 'todos' ? totalAPagarReal : totalAPagar)}
                 </strong>
               </span>
               {filtro !== 'prepagados' && filtro !== 'financiados' && (
-                <span>Suma cobrada: <strong className="text-green-700">{formatMoney(totalCobrado)}</strong></span>
+                <span>
+                  Suma cobrada:{' '}
+                  <strong className="text-green-700">
+                    {formatMoney(filtro === 'todos' ? totalCobradoReal : totalCobrado)}
+                  </strong>
+                </span>
               )}
             </div>
           </>

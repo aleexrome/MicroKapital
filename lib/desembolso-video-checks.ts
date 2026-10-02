@@ -56,32 +56,47 @@ function contieneFuzzy(haystack: string, needle: string, tolerancia = 0.2): bool
 
 // ─── Check: nombre del cliente ──────────────────────────────────────
 /**
- * Basta con que la transcripción contenga el primer nombre + primer
- * apellido con tolerancia. "Marta Perez Lopez" pasa si el cliente es
- * "María Marta Pérez López García" — es aceptable porque el nombre
+ * Basta con que la transcripción contenga alguno de los nombres propios
+ * + un apellido con tolerancia. "Marta Perez Lopez" pasa si el cliente
+ * es "María Marta Pérez López García" — es aceptable porque el nombre
  * completo con 4 tokens es raro que se diga completo.
+ *
+ * Convención mexicana por POSICION: los últimos 2 tokens son apellidos
+ * (paterno + materno) y los primeros son nombres propios (incluidos
+ * compuestos). Antes se tomaban los 2 tokens más largos como apellidos,
+ * pero eso rompía con nombres compuestos largos como "Aníbal Rockeller
+ * Ventura Muñoz" — tomaba "Rockeller" como apellido y pedía que la
+ * transcripción lo dijera, aunque Whisper suele perder el segundo
+ * nombre.
  */
 export function checkNombre(transcripcion: string, nombreCompleto: string): { ok: boolean; detalle: string } {
   const tokens = normalizar(nombreCompleto).split(' ').filter(Boolean)
   if (tokens.length === 0) return { ok: false, detalle: 'No se pudo determinar el nombre del cliente' }
-  const primerNombre = tokens[0]
-  // Tomamos los 2 apellidos mas largos como candidatos — asi cubrimos
-  // convencion mexicana (nombre + apellido paterno + apellido materno).
-  const candidatosApellido = tokens.slice(1).sort((a, b) => b.length - a.length)
-  const primerApellido  = candidatosApellido[0] ?? ''
-  const segundoApellido = candidatosApellido[1] ?? ''
 
-  // Tolerancia mayor para el nombre propio (0.4). Whisper tiende a
+  // Partición por posición: últimos 2 son apellidos, resto son nombres.
+  // Si el nombre tiene solo 1 ó 2 tokens, degradamos: en 2 tokens, el
+  // segundo es el único apellido; en 1 token, no hay apellido.
+  const resto = tokens.slice(1)
+  const primerApellido  = resto.length >= 2 ? resto[resto.length - 2]! : resto[0] ?? ''
+  const segundoApellido = resto.length >= 2 ? resto[resto.length - 1]! : ''
+  // Nombres propios = todo lo que NO sea apellido. En 4 tokens
+  // ("Anibal Rockeller Ventura Muñoz") = ["Anibal", "Rockeller"].
+  const nombresPropios = resto.length >= 2 ? [tokens[0]!, ...resto.slice(0, -2)] : [tokens[0]!]
+
+  // Tolerancia mayor para los nombres propios (0.4). Whisper tiende a
   // transcribir mal nombres regionales / no-estandar en español:
   // "Deysi" -> "Deicy" / "Daisy", "Yamileth" -> "Yamilet", "Yenifer"
-  // -> "Jennifer", etc. El primer apellido queda en 0.25 porque son
+  // -> "Jennifer", etc. Los apellidos quedan en 0.25 porque son
   // menos ambiguos y no queremos que "Perez" matchee con "Perea".
-  const okNombre = contieneFuzzy(transcripcion, primerNombre, 0.4)
+  // El nombre pasa si CUALQUIERA de los nombres propios matchea —
+  // así cubrimos nombres compuestos donde Whisper solo captó uno
+  // (ej. dijo "Anibal Ventura" sin el "Rockeller" intermedio).
+  const okNombre          = nombresPropios.some((n) => contieneFuzzy(transcripcion, n, 0.4))
   const okPrimerApellido  = primerApellido.length  > 0 ? contieneFuzzy(transcripcion, primerApellido,  0.25) : false
   const okSegundoApellido = segundoApellido.length > 0 ? contieneFuzzy(transcripcion, segundoApellido, 0.25) : false
 
   // Aceptamos si cualquiera de:
-  // A) Nombre + primer apellido matchean (caso feliz)
+  // A) Alguno de los nombres propios + primer apellido matchean (caso feliz)
   // B) Los dos apellidos matchean (nombre pudo mal transcribirse pero
   //    dos apellidos fuertes son suficiente evidencia — apellidos
   //    compuestos son mucho menos ambiguos que nombres propios)
@@ -90,8 +105,9 @@ export function checkNombre(transcripcion: string, nombreCompleto: string): { ok
   const ok = casoA || casoB
 
   const previewTx = normalizar(transcripcion).slice(0, 80).trim()
+  const nombresLabel = nombresPropios.join('/')
   const faltantes = [
-    !okNombre           && `nombre "${primerNombre}"`,
+    !okNombre           && `nombre "${nombresLabel}"`,
     !okPrimerApellido   && primerApellido  && `apellido "${primerApellido}"`,
     !okSegundoApellido  && segundoApellido && `apellido "${segundoApellido}"`,
   ].filter(Boolean) as string[]
@@ -99,7 +115,7 @@ export function checkNombre(transcripcion: string, nombreCompleto: string): { ok
   return {
     ok,
     detalle: ok
-      ? `Nombre reconocido (${primerNombre} + ${primerApellido}${okSegundoApellido ? ` + ${segundoApellido}` : ''})`
+      ? `Nombre reconocido (${nombresLabel} + ${primerApellido}${okSegundoApellido ? ` + ${segundoApellido}` : ''})`
       : `Falta en el audio: ${faltantes.join(', ')}. Audio: "${previewTx}..."`,
   }
 }

@@ -87,7 +87,7 @@ export function SolicitudesCancelacionWidget({ solicitudes: initialSolicitudes }
 
   if (solicitudes.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-card p-5">
+      <div className="glass-hover-card rounded-xl border border-border p-5">
         <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
           <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
           Solicitudes de cancelación
@@ -98,7 +98,7 @@ export function SolicitudesCancelacionWidget({ solicitudes: initialSolicitudes }
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+    <div className="glass-hover-card rounded-xl border border-border p-5 space-y-3">
       <h3 className="text-sm font-semibold flex items-center gap-2">
         <ClipboardCheck className="h-4 w-4 text-amber-500" />
         Solicitudes de cancelación pendientes

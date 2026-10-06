@@ -38,7 +38,12 @@ export function DashboardShell({
     // print:h-auto / print:overflow-visible → cuando el usuario imprime,
     // el contenedor deja de ser un viewport de alto fijo y el main puede
     // extender su contenido a varias hojas.
-    <div className="flex h-screen overflow-hidden bg-background print:h-auto print:overflow-visible">
+    //
+    // bg-background/70 (semi-transparente) deja asomar los blobs de color
+    // del layout detrás → le da al backdrop-blur de las clases .glass-*
+    // algo real que difuminar. Sin esto el fondo sólido tapaba los blobs
+    // y el glassmorphism no se percibía.
+    <div className="flex h-screen overflow-hidden bg-background/70 print:h-auto print:overflow-visible print:bg-background">
       {/* Sidebar desktop — oculto al imprimir */}
       <div className="hidden md:flex md:flex-shrink-0 print:hidden">
         <Sidebar {...sidebarProps} />

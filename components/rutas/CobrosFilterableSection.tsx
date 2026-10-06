@@ -125,7 +125,7 @@ export function CobrosFilterableSection({
           </p>
         ) : (
           <>
-            <div className="border rounded-xl overflow-hidden divide-y bg-white">
+            <div className="glass-hover-card border rounded-xl overflow-hidden divide-y">
               {cobrosFiltrados.map((r, i) => {
                 const cat = categoria(r)
                 const isFinanciado = cat === 'financiado'

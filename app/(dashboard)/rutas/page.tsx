@@ -208,7 +208,7 @@ export default async function RutasPage() {
             <Link
               key={w.weekId}
               href={`/rutas/${w.weekId}`}
-              className="block bg-white border rounded-xl p-4 hover:shadow-md hover:border-primary-300 transition-all group"
+              className="glass-hover-card block border rounded-xl p-4 hover:shadow-md hover:border-primary-300 transition-all group"
             >
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div>

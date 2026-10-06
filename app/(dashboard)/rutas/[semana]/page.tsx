@@ -236,7 +236,7 @@ function KpiCard({
   const tc = textColor(pctValue, type)
   const targetLabel = type === 'meta' ? 'meta' : 'total'
   return (
-    <div className="bg-white rounded-xl border shadow-sm p-5 flex-1">
+    <div className="glass-hover-card rounded-xl border shadow-sm p-5 flex-1">
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
       {sublabel && <p className="text-[11px] text-muted-foreground">{sublabel}</p>}
       <p className={`text-5xl font-black mt-2 mb-4 ${tc}`}>{pctValue}%</p>
@@ -339,7 +339,7 @@ function CobradorCard({
   scheduleCount: number
 }) {
   return (
-    <div className="bg-white border rounded-xl p-4 space-y-3">
+    <div className="glass-hover-card border rounded-xl p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <User className="h-4 w-4 text-muted-foreground" />
@@ -686,7 +686,7 @@ export default async function RutaDetallePage({
               {dayFilter ? 'Sin créditos colocados este día' : 'Sin créditos colocados esta semana'}
             </p>
           ) : (
-            <div className="border rounded-xl overflow-hidden divide-y bg-white">
+            <div className="glass-hover-card border rounded-xl overflow-hidden divide-y">
               {filteredLoans.map((l) => (
                 <div key={l.id} className="flex items-center gap-3 px-4 py-3 text-sm">
                   <CheckCircle2 className="h-4 w-4 text-indigo-500 shrink-0" />

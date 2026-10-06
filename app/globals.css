@@ -108,42 +108,85 @@
 }
 
 /* ────────────────────────────────────────────────────────────────────
- * Glass-hover — borde glow sutil + glassmorphism para elementos
- * seleccionables (Sidebar items, dashboard cards, botones de navegación).
- * Gradiente rosa→azul elegido porque NO colisiona con los colores
- * semánticos ya en uso (verde=pagado, rojo=vencido, ámbar=parcial,
- * violeta=financiado, naranja=Kapi/activación). Solo visual.
+ * Glass-hover — borde glow + glassmorphism al pasar el mouse.
+ * Dos sabores:
+ *   - .glass-hover-menu (y -active): ROSA, para items del Sidebar.
+ *   - .glass-hover-card (y -active): AZUL/MORADO, para cards del Dashboard
+ *     y elementos clickables de contenido.
  *
- * Reglas:
- *   .glass-hover         → efecto suave al pasar el mouse.
- *   .glass-hover-active  → mismo efecto siempre encendido (ítem activo).
+ * Elegidos porque NO colisionan con los colores semánticos ya en uso
+ * (verde=pagado, rojo=vencido, ámbar=parcial, violeta=financiado,
+ * naranja=Kapi/activación).
  *
- * No sobre-escribe el background original hasta que el usuario interactúa,
- * así los estados "activo" / "destructive" / etc. no se pierden.
+ * El glassmorphism requiere background semi-transparente para que el
+ * backdrop-filter difumine lo que haya detrás; por eso al hover
+ * override-amos cualquier bg sólido con una capa translúcida oscura
+ * (!important para ganarle a bg-card / bg-white del CardTheme).
  * ──────────────────────────────────────────────────────────────────── */
 @layer utilities {
-  .glass-hover {
+
+  /* ── MENÚ (ROSA) ─────────────────────────────────────────────── */
+  .glass-hover-menu {
+    position: relative;
+    transition: box-shadow 180ms ease,
+                background-color 180ms ease,
+                backdrop-filter 180ms ease;
+  }
+  .glass-hover-menu:hover {
+    backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+    background-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 0 0 2.5px rgba(236, 72, 153, 0.75),
+      0 0 24px rgba(236, 72, 153, 0.35),
+      0 0 42px rgba(236, 72, 153, 0.18),
+      inset 0 0 20px rgba(255, 255, 255, 0.04);
+  }
+  .glass-hover-menu-active {
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
+    background-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 0 0 2.5px rgba(236, 72, 153, 0.9),
+      0 0 30px rgba(236, 72, 153, 0.5),
+      0 0 48px rgba(236, 72, 153, 0.25),
+      inset 0 0 24px rgba(255, 255, 255, 0.06);
+  }
+
+  /* ── DASHBOARD / CARDS (AZUL + MORADO) ───────────────────────── */
+  .glass-hover-card {
+    position: relative;
     transition: box-shadow 180ms ease,
                 background-color 180ms ease,
                 backdrop-filter 180ms ease,
-                border-color 180ms ease;
+                transform 180ms ease;
   }
-  .glass-hover:hover {
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    background-color: rgba(255, 255, 255, 0.06);
+  .glass-hover-card:hover {
+    /* Override del bg sólido de <Card> para que el blur tenga qué
+       difuminar — sin esto el bg-card opaco mataba el efecto. */
+    background-color: rgba(30, 27, 58, 0.45) !important;
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
     box-shadow:
-      0 0 0 1px rgba(236, 72, 153, 0.45),
-      0 0 18px rgba(236, 72, 153, 0.22),
-      0 0 28px rgba(56, 189, 248, 0.14);
+      0 0 0 2.5px rgba(99, 102, 241, 0.7),
+      0 0 26px rgba(99, 102, 241, 0.35),
+      0 0 48px rgba(56, 189, 248, 0.22),
+      inset 0 0 24px rgba(255, 255, 255, 0.05);
+    transform: translateY(-1px);
   }
-  .glass-hover-active {
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    background-color: rgba(255, 255, 255, 0.10);
+  .glass-hover-card-active {
+    background-color: rgba(30, 27, 58, 0.55) !important;
+    backdrop-filter: blur(16px) saturate(170%);
+    -webkit-backdrop-filter: blur(16px) saturate(170%);
     box-shadow:
-      0 0 0 1.5px rgba(236, 72, 153, 0.6),
-      0 0 24px rgba(236, 72, 153, 0.32),
-      0 0 36px rgba(56, 189, 248, 0.22);
+      0 0 0 2.5px rgba(139, 92, 246, 0.8),
+      0 0 32px rgba(99, 102, 241, 0.5),
+      0 0 56px rgba(56, 189, 248, 0.3),
+      inset 0 0 28px rgba(255, 255, 255, 0.06);
   }
+
+  /* Alias para no romper el PR anterior (clases viejas siguen vivas,
+     redirigen al sabor "menú" por default). */
+  .glass-hover        { @apply glass-hover-menu; }
+  .glass-hover-active { @apply glass-hover-menu-active; }
 }

@@ -236,7 +236,7 @@ export function Sidebar({
   // (ej. Alejandro es DIRECTOR_GENERAL para que tenga acceso completo
   // pero su título real es Director de Sistemas).
   const rolLabelOverride: Record<string, string> = {
-    'aleboomrome@gmail.com': 'Director de Sistemas',
+    'alejandro.romero@microkapital.com': 'Director de Sistemas',
   }
   const rolLabel = (userEmail && rolLabelOverride[userEmail]) ?? ROL_ETIQUETAS[userRole] ?? userRole
 

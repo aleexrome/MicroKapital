@@ -245,7 +245,7 @@ export function Sidebar({
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
   return (
-    <aside className="flex h-full flex-col bg-primary-700/80 backdrop-blur-xl text-white w-64 min-w-[256px] border-r border-white/10">
+    <aside className="flex h-full flex-col bg-primary-700/80 backdrop-blur-xl text-white w-64 min-w-[256px] border-r border-white/10 overflow-y-auto overflow-x-hidden">
       {/* Logo / Empresa */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-primary-600/60">
         <div className="bg-primary-500/20 rounded-xl p-2.5 ring-1 ring-primary-500/30">
@@ -257,8 +257,10 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+      {/* Navigation — el scroll vive en el <aside> padre; aquí
+          overflow:visible deja que el glow del hover se extienda
+          naturalmente por encima del header sin recortes. */}
+      <nav className="flex-1 overflow-visible px-4 py-5 space-y-0.5">
         {/* Nav items normales */}
         {visibleItems.map((item) => (
           <Link
@@ -307,9 +309,9 @@ export function Sidebar({
                           href={branch.ownOnly ? '/cartera/mios' : `/cartera/${branch.id}`}
                           onClick={onNavClick}
                           className={cn(
-                            'flex-1 flex items-center gap-2 pl-6 pr-2 py-2 rounded-l-xl text-xs font-medium transition-all duration-150',
+                            'glass-hover-menu flex-1 flex items-center gap-2 pl-6 pr-2 py-2 rounded-l-xl text-xs font-medium transition-all duration-150',
                             isActive(branch.ownOnly ? '/cartera/mios' : `/cartera/${branch.id}`)
-                              ? 'bg-primary-500 text-white'
+                              ? 'glass-hover-menu-active bg-primary-500 text-white'
                               : 'text-primary-100 hover:bg-white/8 hover:text-white'
                           )}
                         >
@@ -350,9 +352,9 @@ export function Sidebar({
                                 href={href}
                                 onClick={onNavClick}
                                 className={cn(
-                                  'flex items-center gap-2 pl-10 pr-3 py-2 rounded-xl text-[11px] transition-all duration-150',
+                                  'glass-hover-menu flex items-center gap-2 pl-10 pr-3 py-2 rounded-xl text-[11px] transition-all duration-150',
                                   active
-                                    ? 'bg-primary-500 text-white font-semibold'
+                                    ? 'glass-hover-menu-active bg-primary-500 text-white font-semibold'
                                     : 'text-primary-200 hover:bg-white/8 hover:text-white'
                                 )}
                               >

@@ -248,8 +248,21 @@ export function Sidebar({
     <aside className="flex h-full flex-col bg-primary-700/80 backdrop-blur-xl text-white w-64 min-w-[256px] border-r border-white/10 overflow-y-auto overflow-x-hidden">
       {/* Logo / Empresa */}
       <div className="flex items-start gap-3 px-5 py-5 border-b border-primary-600/60">
-        <div className="bg-primary-500/20 rounded-xl p-2.5 ring-1 ring-primary-500/30 shrink-0">
-          <Building2 className="h-5 w-5 text-primary-300" />
+        <div className="bg-primary-500/20 rounded-xl ring-1 ring-primary-500/30 shrink-0 w-11 h-11 flex items-center justify-center">
+          {/* Logo "Mk" en fucsia — fuente manuscrita del sistema */}
+          <span
+            aria-hidden
+            className="text-fuchsia-500 font-black leading-none select-none"
+            style={{
+              fontFamily: '"Permanent Marker", "Marker Felt", "Comic Sans MS", cursive',
+              fontSize: '22px',
+              fontStyle: 'italic',
+              letterSpacing: '-0.04em',
+              transform: 'translateY(-1px)',
+            }}
+          >
+            Mk
+          </span>
         </div>
         <div className="flex-1 min-w-0">
           {/* Antes: truncate cortaba "MicroKapital Financiera" en

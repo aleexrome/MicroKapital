@@ -132,7 +132,7 @@ export default async function DashboardDetallePage({
                     {schedules.map((sc) => {
                       const diasVencido = Math.floor((Date.now() - new Date(sc.fechaVencimiento).getTime()) / 86400000)
                       return (
-                        <tr key={sc.id} className="hover:bg-muted/30 transition-colors">
+                        <tr key={sc.id} className="hover:glass-hover-card transition-colors">
                           <td className="px-4 py-2.5">
                             <Link href={`/clientes/${sc.loan.client.id}`} className="font-medium hover:underline text-primary">
                               {sc.loan.client.nombreCompleto}
@@ -341,7 +341,7 @@ export default async function DashboardDetallePage({
                 </thead>
                 <tbody className="divide-y">
                   {rows.map((loan) => (
-                    <tr key={loan.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={loan.id} className="hover:glass-hover-card transition-colors">
                       <td className="px-4 py-2.5">
                         <Link href={`/clientes/${loan.client.id}`} className="font-medium hover:underline text-primary">
                           {loan.client.nombreCompleto}

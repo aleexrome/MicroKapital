@@ -303,7 +303,7 @@ export default async function HistorialCobrosPage() {
                     </thead>
                     <tbody className="divide-y">
                       {byCobraodor.map((g) => (
-                        <tr key={g.id} className="hover:bg-muted/30 transition-colors">
+                        <tr key={g.id} className="hover:glass-hover-card transition-colors">
                           <td className="px-4 py-2.5 font-medium">{g.nombre}</td>
                           {isDirector && (
                             <td className="px-4 py-2.5 text-muted-foreground">{g.branchNombre}</td>

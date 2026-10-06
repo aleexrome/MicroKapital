@@ -170,7 +170,7 @@ export default async function PactadosDiaPage({
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-lg p-4 border border-border bg-muted/30">
+        <div className="rounded-lg p-4 border border-border glass-hover-card">
           <p className="text-xs text-muted-foreground">Pactados</p>
           <p className="text-2xl font-bold">{totalPactados}</p>
         </div>
@@ -184,7 +184,7 @@ export default async function PactadosDiaPage({
             </p>
           )}
         </div>
-        <div className={`rounded-lg p-4 border ${pendientesRows.length > 0 ? 'border-amber-500/20 bg-amber-500/10' : 'border-border bg-muted/30'}`}>
+        <div className={`rounded-lg p-4 border ${pendientesRows.length > 0 ? 'border-amber-500/20 bg-amber-500/10' : 'border-border glass-hover-card'}`}>
           <p className={`text-xs ${pendientesRows.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>
             {isToday ? 'Pendientes' : 'Sin cobrar'}
           </p>
@@ -195,7 +195,7 @@ export default async function PactadosDiaPage({
             <p className="text-xs text-amber-400/80 font-medium">{formatMoney(montoPendiente)}</p>
           )}
         </div>
-        <div className="rounded-lg p-4 border border-border bg-muted/30">
+        <div className="rounded-lg p-4 border border-border glass-hover-card">
           <p className="text-xs text-muted-foreground">Avance</p>
           <p className={`text-2xl font-bold ${avance === 100 ? 'text-emerald-300' : avance >= 80 ? 'text-blue-300' : ''}`}>
             {avance}%

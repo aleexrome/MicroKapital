@@ -332,7 +332,7 @@ export default async function ClienteExpedientePage({
                   <div key={loan.id} className="border rounded-lg overflow-hidden">
                     <Link
                       href={`/prestamos/${loan.id}`}
-                      className="block p-4 hover:bg-muted/30 transition-colors"
+                      className="block p-4 hover:glass-hover-card transition-colors"
                     >
                       <div className="flex items-center justify-between">
                         <div>

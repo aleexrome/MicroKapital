@@ -247,7 +247,7 @@ export function Sidebar({
   return (
     <aside className="flex h-full flex-col bg-primary-700/80 backdrop-blur-xl text-white w-64 min-w-[256px] border-r border-white/10 overflow-y-auto overflow-x-hidden">
       {/* Logo / Empresa */}
-      <div className="flex items-start gap-3 px-5 py-5 border-b border-primary-600/60">
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-primary-600/60">
         <div className="bg-primary-500/20 rounded-xl ring-1 ring-primary-500/30 shrink-0 w-11 h-11 flex items-center justify-center">
           {/* Logo "Mk" en fucsia — fuente manuscrita del sistema */}
           <span
@@ -265,11 +265,11 @@ export function Sidebar({
           </span>
         </div>
         <div className="flex-1 min-w-0">
-          {/* Antes: truncate cortaba "MicroKapital Financiera" en
-              "MicroKapital Financi..." y se veía mal.
-              Ahora wrap a 2 líneas con leading-tight. */}
-          <p className="text-sm font-bold text-white leading-tight break-words">{companyName ?? 'MicroKapital'}</p>
-          {branchName && <p className="text-xs text-primary-300 truncate mt-0.5">{branchName}</p>}
+          {/* Tamaño proporcional al logo (44px). 2 líneas con
+              leading-[1.15] suman ~42px — alineadas verticalmente
+              con el cuadro del logo. */}
+          <p className="text-[17px] font-bold text-white leading-[1.15] break-words">{companyName ?? 'MicroKapital'}</p>
+          {branchName && <p className="text-xs text-primary-300 truncate mt-1">{branchName}</p>}
         </div>
       </div>
 

@@ -245,7 +245,7 @@ export function Sidebar({
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
   return (
-    <aside className="flex h-full flex-col bg-primary-700 text-white w-64 min-w-[256px]">
+    <aside className="flex h-full flex-col bg-primary-700/80 backdrop-blur-xl text-white w-64 min-w-[256px] border-r border-white/10">
       {/* Logo / Empresa */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-primary-600/60">
         <div className="bg-primary-500/20 rounded-xl p-2.5 ring-1 ring-primary-500/30">

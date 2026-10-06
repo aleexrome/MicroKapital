@@ -303,16 +303,28 @@ export function Sidebar({
 
                   return (
                     <div key={branch.id}>
-                      {/* Branch node: nombre = link, flecha = expand */}
-                      <div className="flex items-center">
+                      {/* Branch node: nombre = link, flecha = expand.
+                          glass-hover-menu va en el div envolvente para
+                          que el ring/glow envuelva TODO el renglón
+                          (nombre + badge + flecha). Si estuviera solo
+                          en el Link, el borde quedaba cortado a mitad
+                          del toggle. */}
+                      <div
+                        className={cn(
+                          'glass-hover-menu flex items-center rounded-xl',
+                          isActive(branch.ownOnly ? '/cartera/mios' : `/cartera/${branch.id}`)
+                            ? 'glass-hover-menu-active'
+                            : ''
+                        )}
+                      >
                         <Link
                           href={branch.ownOnly ? '/cartera/mios' : `/cartera/${branch.id}`}
                           onClick={onNavClick}
                           className={cn(
-                            'glass-hover-menu flex-1 flex items-center gap-2 pl-6 pr-2 py-2 rounded-l-xl text-xs font-medium transition-all duration-150',
+                            'flex-1 flex items-center gap-2 pl-6 pr-2 py-2 text-xs font-medium transition-colors duration-150',
                             isActive(branch.ownOnly ? '/cartera/mios' : `/cartera/${branch.id}`)
-                              ? 'glass-hover-menu-active bg-primary-500 text-white'
-                              : 'text-primary-100 hover:bg-white/8 hover:text-white'
+                              ? 'bg-primary-500/70 text-white'
+                              : 'text-primary-100 hover:text-white'
                           )}
                         >
                           <Building2 className="h-3.5 w-3.5 shrink-0 text-primary-300" />

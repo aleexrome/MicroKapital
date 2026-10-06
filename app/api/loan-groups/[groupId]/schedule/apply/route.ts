@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
-import { createAuditLog } from '@/lib/audit'
+import { createAuditLog, createAuditLogAsync } from '@/lib/audit'
 import { todayMx } from '@/lib/timezone'
 import { z } from 'zod'
 
@@ -140,9 +140,33 @@ export async function POST(
     }
   })
 
+  // Un AuditLog POR schedule — con registroId=schedule.id para que la
+  // UI del detalle del préstamo pueda levantar la info de "quién/cuándo
+  // aplicó" vía el mismo lookup que /apply individual (busca por
+  // scheduleId en AuditLog, no por groupId). Awaited para que no se
+  // pierda en Vercel serverless.
+  await Promise.all(
+    schedules.map((s) =>
+      createAuditLogAsync({
+        userId,
+        accion: 'DG_APPLY_PAYMENT_GRUPO',
+        tabla:  'PaymentSchedule',
+        registroId: s.id,
+        valoresNuevos: {
+          groupId: params.groupId,
+          numeroPago,
+          metodoPago,
+          monto: Number(s.montoEsperado),
+          ...(esTransferencia ? { statusTransferencia: 'VERIFICADO' } : {}),
+        },
+      })
+    )
+  )
+
+  // Y un AuditLog resumen a nivel de grupo (reportería / historial)
   createAuditLog({
     userId,
-    accion: 'DG_APPLY_PAYMENT_GRUPO',
+    accion: 'DG_APPLY_PAYMENT_GRUPO_SUMMARY',
     tabla: 'LoanGroup',
     registroId: params.groupId,
     valoresNuevos: {

@@ -176,7 +176,7 @@ export default async function CarteraReportePage({
       </div>
 
       {snapshot.numCreditos === 0 ? (
-        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">"
+        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">
           Sin cartera activa con los filtros actuales.
         </CardContent></Card>
       ) : (

@@ -665,7 +665,7 @@ export default async function DashboardPage({
       )}
 
       {/* Recent loans */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader>
           <CardTitle className="text-base">Créditos recientes</CardTitle>
         </CardHeader>

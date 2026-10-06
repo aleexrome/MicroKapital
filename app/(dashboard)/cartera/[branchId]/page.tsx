@@ -63,7 +63,7 @@ export default async function CarteraBranchPage({ params }: { params: { branchId
           const capital = capitalMap[t.key] ?? 0
           return (
             <Link key={t.key} href={`/cartera/${branch.id}/${t.key}`}>
-              <Card className={`border hover:shadow-md transition-shadow cursor-pointer ${count === 0 ? 'opacity-50' : ''}`}>
+              <Card className={`glass-hover-card border hover:shadow-md transition-shadow cursor-pointer ${count === 0 ? 'opacity-50' : ''}`}>
                 <CardContent className="p-5">
                   <div className="flex items-center gap-3 mb-3">
                     <div className={`rounded-lg p-2 border ${t.color}`}>{t.icon}</div>

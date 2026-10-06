@@ -164,9 +164,16 @@
     position: relative;
     background-color: rgba(30, 27, 58, 0.22) !important;
     /* contrast + brightness + saturate dan la sensación de "aumento"
-       del contenido detrás (el blur solo lo difumina). Trade visible. */
+       del contenido detrás (el blur solo lo difumina). */
     backdrop-filter: blur(20px) saturate(200%) contrast(115%) brightness(115%);
     -webkit-backdrop-filter: blur(20px) saturate(200%) contrast(115%) brightness(115%);
+    /* translateZ(0) sube el elemento a su propia capa compositor
+       — el backdrop-filter se cachea en GPU en vez de recalcularse
+       en cada scroll o navegación. Sin esto, páginas con muchas
+       cards se sienten lentas al cambiar de pantalla.
+       NOTA: will-change va solo en :hover, no base, porque muchas
+       capas simultáneas con will-change consumen demasiada VRAM. */
+    transform: translateZ(0);
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.22),
@@ -178,10 +185,8 @@
                 transform 180ms ease;
   }
   .glass-hover-card:hover {
+    will-change: backdrop-filter, transform;
     background-color: rgba(30, 27, 58, 0.18) !important;
-    /* Efecto "lupa" más intenso al hover — más contrast + brightness,
-       menos blur así los detalles detrás se perciben más grandes y
-       vivos. */
     backdrop-filter: blur(16px) saturate(240%) contrast(130%) brightness(125%);
     -webkit-backdrop-filter: blur(16px) saturate(240%) contrast(130%) brightness(125%);
     border-color: transparent !important;
@@ -191,7 +196,7 @@
       0 0 64px rgba(56, 189, 248, 0.35),
       inset 0 1px 0 rgba(255, 255, 255, 0.4),
       inset 0 0 32px rgba(255, 255, 255, 0.08) !important;
-    transform: translateY(-2px) scale(1.015);
+    transform: translateZ(0) translateY(-2px) scale(1.015);
   }
   .glass-hover-card-active {
     background-color: rgba(30, 27, 58, 0.28) !important;

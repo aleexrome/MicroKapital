@@ -519,7 +519,7 @@ function GrupoCard({
 
   return (
     <Link href={`/cobros/grupo/${groupId}`}>
-      <Card className={`border-l-4 ${borderColor}`}>
+      <Card className={`glass-hover-card border-l-4 ${borderColor}`}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -585,7 +585,7 @@ function AgendaItem({
 
   return (
     <Link href={href}>
-      <Card className={`border-l-4 ${borderColor} ${variant === 'collected' ? 'bg-emerald-500/5' : variant === 'validation' ? 'bg-yellow-500/5' : ''}`}>
+      <Card className={`glass-hover-card border-l-4 ${borderColor} ${variant === 'collected' ? 'bg-emerald-500/5' : variant === 'validation' ? 'bg-yellow-500/5' : ''}`}>
         <CardContent className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             {StatusIcon && <StatusIcon className={`h-4 w-4 ${iconColor} shrink-0`} />}

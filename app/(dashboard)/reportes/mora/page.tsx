@@ -240,7 +240,7 @@ export default async function MoraReportePage({
       </div>
 
       {snapshot.numSchedules === 0 ? (
-        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">"
+        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">
           Sin mora registrada con los filtros actuales.
         </CardContent></Card>
       ) : (

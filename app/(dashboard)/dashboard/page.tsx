@@ -506,7 +506,7 @@ export default async function DashboardPage({
       {/* Secondary KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link href="/prestamos?estado=ACTIVE" className="block">
-          <Card className="transition-all hover:shadow-md hover:border-border cursor-pointer">
+          <Card className="glass-hover-card transition-all hover:shadow-md hover:border-border cursor-pointer">
             <CardContent className="p-4 flex items-center gap-4">
               <div className="bg-emerald-500/15 rounded-xl p-2.5">
                 <TrendingUp className="h-5 w-5 text-emerald-400" />
@@ -519,7 +519,7 @@ export default async function DashboardPage({
           </Card>
         </Link>
         <Link href="/creditos-concluidos" className="block">
-          <Card className="transition-all hover:shadow-md hover:border-border cursor-pointer">
+          <Card className="glass-hover-card transition-all hover:shadow-md hover:border-border cursor-pointer">
             <CardContent className="p-4 flex items-center gap-4">
               <div className="bg-blue-500/15 rounded-xl p-2.5">
                 <Archive className="h-5 w-5 text-blue-400" />
@@ -532,7 +532,7 @@ export default async function DashboardPage({
           </Card>
         </Link>
         {isDirector && (
-          <Card>
+          <Card className="glass-hover-card">
             <CardContent className="p-4 flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="bg-amber-500/15 rounded-xl p-2.5">
@@ -552,7 +552,7 @@ export default async function DashboardPage({
           </Card>
         )}
         {!isDirector && (
-          <Card>
+          <Card className="glass-hover-card">
             <CardContent className="p-4 flex items-center gap-4">
               <div className="bg-slate-500/15 rounded-xl p-2.5">
                 <CheckSquare className="h-5 w-5 text-slate-400" />
@@ -570,22 +570,22 @@ export default async function DashboardPage({
 
       {/* Charts 2×2 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-5">
             <LoanStatusChart data={loanStatusData} />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-5">
             <MonthPaymentsChart data={monthPaymentsData} />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-5">
             <LoanTypeChart data={loanTypeData} />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-5">
             <BranchCapitalChart data={branchCapitalData} />
           </CardContent>
@@ -594,7 +594,7 @@ export default async function DashboardPage({
 
       {/* Per-branch breakdown (directors + super admin) */}
       {showBranchBreakdown && branchBreakdown.length > 0 && (
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader>
             <CardTitle className="text-base">Cartera por sucursal</CardTitle>
           </CardHeader>
@@ -632,7 +632,7 @@ export default async function DashboardPage({
 
       {/* Per-coordinator breakdown (gerentes) */}
       {isGerente && coordinadorBreakdown.length > 0 && (
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader>
             <CardTitle className="text-base">Cartera por coordinador</CardTitle>
           </CardHeader>

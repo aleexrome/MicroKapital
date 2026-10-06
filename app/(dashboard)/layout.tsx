@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
+import { PlexusBackground } from '@/components/ui/PlexusBackground'
 import { Toaster } from '@/components/ui/toaster'
 import { checkLicense } from '@/lib/license-check'
 import type { BranchTreeData } from '@/types/tree'
@@ -147,18 +148,24 @@ export default async function DashboardLayout({
 
   return (
     <>
-      {/* Background decorativo con blobs de colores vivos borrosos.
-          Fija a toda la pantalla, DETRÁS de todo (z-index -10, sin
-          capturar eventos). Es el "paisaje" que el backdrop-filter de
-          las clases .glass-hover-* difumina — sin esto el blur no tiene
-          nada que difuminar y el glassmorphism no se percibe.
-          Opacidad baja (12-18%) para no competir con el contenido. */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-20 -left-24 w-[520px] h-[520px] rounded-full bg-pink-500/25 blur-[120px]" />
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[640px] h-[640px] rounded-full bg-sky-500/22 blur-[140px]" />
-        <div className="absolute -bottom-32 -right-20 w-[560px] h-[560px] rounded-full bg-violet-500/25 blur-[130px]" />
-        <div className="absolute top-10 right-1/4 w-[420px] h-[420px] rounded-full bg-fuchsia-500/18 blur-[110px]" />
-        <div className="absolute bottom-10 left-1/4 w-[460px] h-[460px] rounded-full bg-indigo-500/18 blur-[110px]" />
+      {/* Fondo animado con constelaciones (plexus azul-cyan) — el mismo
+          del login. Es el "paisaje" DETRÁS del vidrio que el backdrop-
+          filter de .glass-* difumina y hace visible el efecto cristal.
+          Fixed, inset-0, -z-10, sin captura de eventos. En print se
+          oculta para no gastar tinta. */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden print:hidden">
+        <PlexusBackground />
+      </div>
+
+      {/* Blobs de color encima del plexus — agregan rosa/violeta/azul
+          vivos para que el backdrop-blur tenga COLORES fuertes que
+          difuminar (el plexus solo es azul-cyan). */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden print:hidden">
+        <div className="absolute -top-20 -left-24 w-[560px] h-[560px] rounded-full bg-pink-500/30 blur-[130px]" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[680px] h-[680px] rounded-full bg-sky-500/25 blur-[150px]" />
+        <div className="absolute -bottom-32 -right-20 w-[600px] h-[600px] rounded-full bg-violet-500/30 blur-[140px]" />
+        <div className="absolute top-10 right-1/4 w-[460px] h-[460px] rounded-full bg-fuchsia-500/22 blur-[120px]" />
+        <div className="absolute bottom-10 left-1/4 w-[500px] h-[500px] rounded-full bg-indigo-500/22 blur-[120px]" />
       </div>
 
       <DashboardShell

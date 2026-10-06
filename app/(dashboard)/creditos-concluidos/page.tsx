@@ -125,7 +125,7 @@ export default async function CreditosConcluidos({
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-lg p-4 border border-border bg-muted/30">
+        <div className="rounded-lg p-4 border border-border glass-hover-card">
           <p className="text-xs text-muted-foreground mb-1">Total créditos</p>
           <p className="text-2xl font-bold">{total}</p>
         </div>

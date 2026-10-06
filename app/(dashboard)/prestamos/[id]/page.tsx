@@ -946,7 +946,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               </thead>
               <tbody className="divide-y">
                 {loan.moraCobros.map((m) => (
-                  <tr key={m.id} className="hover:bg-muted/30">
+                  <tr key={m.id} className="hover:glass-hover-card">
                     <td className="px-4 py-2">{m.schedule.numeroPago}</td>
                     <td className="px-4 py-2">
                       <span className={m.tipo === 'MORA' ? 'text-rose-500 font-medium' : 'text-amber-500 font-medium'}>

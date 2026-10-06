@@ -270,7 +270,7 @@ export default async function ReporteMorasPage({
               </thead>
               <tbody className="divide-y">
                 {moras.map((m) => (
-                  <tr key={m.id} className="hover:bg-muted/30">
+                  <tr key={m.id} className="hover:glass-hover-card">
                     <td className="px-4 py-2 text-muted-foreground">{formatDate(m.createdAt)}</td>
                     <td className="px-4 py-2">{m.branch.nombre}</td>
                     <td className="px-4 py-2">{m.cobrador.nombre}</td>

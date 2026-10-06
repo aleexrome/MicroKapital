@@ -105,19 +105,19 @@ export default async function CumplimientoPage({
       <div className="flex items-center gap-2 text-sm">
         <Link
           href={`/reportes/cumplimiento?semanaInicio=${lunesIso(semanaAnterior)}`}
-          className="rounded-lg border border-border/60 bg-card px-3 py-1.5 hover:bg-secondary transition-colors"
+          className="rounded-lg border border-border/60 glass-hover-card px-3 py-1.5 hover:bg-secondary transition-colors"
         >
           ← Semana anterior
         </Link>
         <Link
           href="/reportes/cumplimiento"
-          className="rounded-lg border border-border/60 bg-card px-3 py-1.5 hover:bg-secondary transition-colors"
+          className="rounded-lg border border-border/60 glass-hover-card px-3 py-1.5 hover:bg-secondary transition-colors"
         >
           Esta semana
         </Link>
         <Link
           href={`/reportes/cumplimiento?semanaInicio=${lunesIso(semanaSiguiente)}`}
-          className="rounded-lg border border-border/60 bg-card px-3 py-1.5 hover:bg-secondary transition-colors"
+          className="rounded-lg border border-border/60 glass-hover-card px-3 py-1.5 hover:bg-secondary transition-colors"
         >
           Semana siguiente →
         </Link>

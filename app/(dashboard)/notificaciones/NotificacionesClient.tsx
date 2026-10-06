@@ -166,7 +166,7 @@ export function NotificacionesClient() {
           <select
             value={tipoFiltro}
             onChange={(e) => setTipoFiltro(e.target.value as TipoFiltro)}
-            className="text-xs px-2 py-1 rounded-md bg-card border border-border"
+            className="text-xs px-2 py-1 rounded-md glass-hover-card border border-border"
           >
             {TIPOS.map((t) => (
               <option key={t.value} value={t.value}>
@@ -196,7 +196,7 @@ export function NotificacionesClient() {
           Sin notificaciones
         </div>
       ) : (
-        <div className="border rounded-xl overflow-hidden divide-y divide-border bg-card">
+        <div className="border rounded-xl overflow-hidden divide-y divide-border glass-hover-card">
           {items.map((n) => {
             const isUnread = n.leidaAt === null
             const esCritica = n.nivel === 'CRITICA'

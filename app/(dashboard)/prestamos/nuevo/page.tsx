@@ -651,7 +651,7 @@ export default function NuevaSolicitudPage() {
 
             {/* Aval */}
             {(tipo === 'INDIVIDUAL' || tipo === 'AGIL' || tipo === 'FIDUCIARIO') && (
-              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-4">
+              <div className="rounded-xl border border-border/60 glass-hover-card p-4 space-y-4">
                 <p className="text-sm font-semibold flex items-center gap-2">
                   <UserCheck className="h-4 w-4 text-primary" />
                   Datos del aval
@@ -877,7 +877,7 @@ export default function NuevaSolicitudPage() {
             {queuedDocs.length > 0 ? (
               <div className="space-y-1.5">
                 {queuedDocs.map((doc) => (
-                  <div key={doc.id} className="flex items-center justify-between rounded-lg px-3 py-2 text-sm border border-border bg-muted/30">
+                  <div key={doc.id} className="flex items-center justify-between rounded-lg px-3 py-2 text-sm border border-border glass-hover-card">
                     <div className="flex items-center gap-2 min-w-0">
                       <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
                       <span className="font-medium shrink-0">{DOC_LABELS[doc.tipo] ?? doc.tipo}</span>

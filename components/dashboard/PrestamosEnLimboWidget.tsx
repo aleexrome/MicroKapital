@@ -28,7 +28,7 @@ export function PrestamosEnLimboWidget({ buckets, detalle }: Props) {
   const order: BucketKey[] = ['recientes', 'demorados', 'atrasados', 'criticos']
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+    <div className="glass-hover-card rounded-xl border border-border p-5 space-y-3">
       <h3 className="text-sm font-semibold flex items-center gap-2">
         <Clock className="h-4 w-4 text-muted-foreground" />
         Préstamos en limbo

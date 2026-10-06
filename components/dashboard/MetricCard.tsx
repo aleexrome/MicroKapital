@@ -69,7 +69,7 @@ export function MetricCard({
   if (href) {
     return (
       <Link href={href} className="block">
-        <Card className={cn('overflow-hidden border-border/50 shadow-card transition-all hover:shadow-md hover:border-border', className)}>
+        <Card className={cn('glass-hover-card overflow-hidden border-border/50 shadow-card transition-all hover:shadow-md hover:border-border', className)}>
           {inner}
         </Card>
       </Link>
@@ -77,7 +77,7 @@ export function MetricCard({
   }
 
   return (
-    <Card className={cn('overflow-hidden border-border/50 shadow-card', className)}>
+    <Card className={cn('glass-hover-card overflow-hidden border-border/50 shadow-card', className)}>
       {inner}
     </Card>
   )

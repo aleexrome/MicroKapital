@@ -15,7 +15,7 @@ interface Props {
 export function CobradorasBloqueadasWidget({ cobradoras }: Props) {
   if (cobradoras.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-card p-5">
+      <div className="glass-hover-card rounded-xl border border-border p-5">
         <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
           <Lock className="h-4 w-4 text-muted-foreground" />
           Coordinadores bloqueados

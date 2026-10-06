@@ -99,13 +99,13 @@ export function PlexusBackground({ transparentBg = false, nodeScale = 1 }: Plexu
           const dist = Math.sqrt(dx * dx + dy * dy)
           if (dist > MAX_DIST) continue
 
-          const alpha = (1 - dist / MAX_DIST) * 0.75
+          const alpha = (1 - dist / MAX_DIST) * 0.6
           const [r, g, b] = COLORS.line
           ctx!.beginPath()
           ctx!.moveTo(nodes[i].x, nodes[i].y)
           ctx!.lineTo(nodes[j].x, nodes[j].y)
           ctx!.strokeStyle = `rgba(${r},${g},${b},${alpha})`
-          ctx!.lineWidth = 1.4 * nodeScale
+          ctx!.lineWidth = 0.9 * nodeScale
           ctx!.stroke()
         }
       }
@@ -114,18 +114,19 @@ export function PlexusBackground({ transparentBg = false, nodeScale = 1 }: Plexu
       for (const node of nodes) {
         const [r, g, b] = node.radius > 3 * nodeScale ? COLORS.nodeAlt : COLORS.node
 
-        // Outer glow — grande y brillante para que se note difuminado
-        // tras el blur de las cards.
-        const glow = ctx!.createRadialGradient(node.x, node.y, 0, node.x, node.y, node.radius * 10)
-        glow.addColorStop(0,   `rgba(${r},${g},${b},${node.opacity * 0.8})`)
-        glow.addColorStop(0.3, `rgba(${r},${g},${b},${node.opacity * 0.35})`)
+        // Outer glow — compacto para que el nodo se vea como un punto
+        // brillante y no como una telaraña gruesa. El halo es sutil
+        // pero visible tras el blur.
+        const glow = ctx!.createRadialGradient(node.x, node.y, 0, node.x, node.y, node.radius * 5)
+        glow.addColorStop(0,   `rgba(${r},${g},${b},${node.opacity * 0.6})`)
+        glow.addColorStop(0.35, `rgba(${r},${g},${b},${node.opacity * 0.18})`)
         glow.addColorStop(1,   `rgba(${r},${g},${b},0)`)
         ctx!.beginPath()
-        ctx!.arc(node.x, node.y, node.radius * 10, 0, Math.PI * 2)
+        ctx!.arc(node.x, node.y, node.radius * 5, 0, Math.PI * 2)
         ctx!.fillStyle = glow
         ctx!.fill()
 
-        // Core dot — un poco más grande + glow interior blanco
+        // Core dot
         ctx!.beginPath()
         ctx!.arc(node.x, node.y, node.radius, 0, Math.PI * 2)
         ctx!.fillStyle = `rgba(${r},${g},${b},${node.opacity})`

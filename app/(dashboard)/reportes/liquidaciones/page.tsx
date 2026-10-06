@@ -155,7 +155,7 @@ export default async function LiquidacionesReportePage({
       </div>
 
       {snapshot.numLiquidados === 0 ? (
-        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">"
+        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">
           Sin liquidaciones en el periodo seleccionado.
         </CardContent></Card>
       ) : (

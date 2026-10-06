@@ -167,7 +167,7 @@ export default async function CajaCobradorDetallePage({
           </CardContent>
         </Card>
 
-        <Card className="glass-hover-card bg-primary-50 col-span-2">
+        <Card className="glass-hover-card col-span-2">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="h-4 w-4 text-primary-700" />

@@ -156,7 +156,7 @@ export default async function ColocacionReportePage({
       </div>
 
       {snapshot.numCreditos === 0 ? (
-        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">"
+        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">
           Sin colocación en el periodo seleccionado.
         </CardContent></Card>
       ) : (

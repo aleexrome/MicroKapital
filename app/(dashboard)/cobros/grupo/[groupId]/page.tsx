@@ -99,7 +99,7 @@ export default async function GrupoCobroPage({ params }: { params: { groupId: st
 
       {/* Resumen del grupo */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-primary-50 rounded-lg p-3 text-center">
+        <div className="glass-hover-card rounded-lg p-3 text-center">
           <p className="text-xs text-primary-600 font-medium">Por cobrar</p>
           <p className="text-base font-bold text-primary-800">{formatMoney(totalEsperado)}</p>
         </div>

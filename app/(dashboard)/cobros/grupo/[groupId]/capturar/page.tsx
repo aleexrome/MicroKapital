@@ -345,7 +345,7 @@ export default function CapturarGrupoPage() {
     return (
       <div className="p-4 space-y-4 max-w-md mx-auto">
         {header}
-        <Card className="glass-hover-card bg-primary-500/5 border-primary-500/20">
+        <Card className="glass-hover-card0/5 border-primary-500/20">
           <CardContent className="p-4 text-center">
             <p className="text-xs text-primary-300">Total del grupo</p>
             <p className="text-3xl font-bold text-primary-200">{formatMoney(totalEsperado)}</p>
@@ -403,7 +403,7 @@ export default function CapturarGrupoPage() {
     return (
       <div className="p-4 space-y-4 max-w-md mx-auto">
         {header}
-        <Card className="glass-hover-card bg-primary-500/5 border-primary-500/20">
+        <Card className="glass-hover-card0/5 border-primary-500/20">
           <CardContent className="p-4 text-center">
             <CreditCard className="h-8 w-8 text-primary-400 mx-auto mb-2" />
             <p className="font-medium">Pago con tarjeta — grupo completo</p>
@@ -426,7 +426,7 @@ export default function CapturarGrupoPage() {
   return (
     <div className="p-4 space-y-4 max-w-md mx-auto">
       {header}
-      <Card className="glass-hover-card bg-primary-500/5 border-primary-500/20">
+      <Card className="glass-hover-card0/5 border-primary-500/20">
         <CardContent className="p-4 text-center">
           <Building2 className="h-8 w-8 text-primary-400 mx-auto mb-2" />
           <p className="font-medium">Transferencia — grupo completo</p>

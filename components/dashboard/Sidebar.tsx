@@ -323,7 +323,7 @@ export function Sidebar({
                           className={cn(
                             'flex-1 flex items-center gap-2 pl-6 pr-2 py-2 text-xs font-medium transition-colors duration-150',
                             isActive(branch.ownOnly ? '/cartera/mios' : `/cartera/${branch.id}`)
-                              ? 'bg-primary-500/70 text-white'
+                              ? 'text-white font-semibold'
                               : 'text-primary-100 hover:text-white'
                           )}
                         >

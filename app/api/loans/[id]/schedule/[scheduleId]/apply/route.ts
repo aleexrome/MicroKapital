@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
-import { createAuditLog } from '@/lib/audit'
+import { createAuditLogAsync } from '@/lib/audit'
 import { todayMx } from '@/lib/timezone'
 import { detectarMora } from '@/lib/moras'
 import { z } from 'zod'
@@ -205,7 +205,12 @@ export async function POST(
     }
   })
 
-  createAuditLog({
+  // Awaited: en Vercel serverless un createAuditLog fire-and-forget
+  // puede perderse si el request termina antes de que la promesa resuelva.
+  // La UI del detalle del préstamo lee este AuditLog para pintar el
+  // ícono "i" con quién/cuándo aplicó el pago — si se pierde, la burbuja
+  // de info muestra al cobrador titular como si él hubiera cobrado.
+  await createAuditLogAsync({
     userId,
     accion: 'DG_APPLY_PAYMENT',
     tabla:  'PaymentSchedule',

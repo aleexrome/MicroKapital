@@ -201,7 +201,7 @@ export async function MesaControlDashboard({
 
       {/* KPI cards con gradientes/borders de color */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="border-yellow-500/30 bg-gradient-to-br from-yellow-500/5 to-transparent">
+        <Card className="glass-hover-card border-yellow-500/30 bg-gradient-to-br from-yellow-500/5 to-transparent">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-2">
               <div className="rounded-xl p-2 bg-yellow-500/15">
@@ -213,7 +213,7 @@ export async function MesaControlDashboard({
             <p className="text-xs text-muted-foreground mt-1">Por revisar</p>
           </CardContent>
         </Card>
-        <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-transparent">
+        <Card className="glass-hover-card border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-transparent">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-2">
               <div className="rounded-xl p-2 bg-emerald-500/15">
@@ -225,7 +225,7 @@ export async function MesaControlDashboard({
             <p className="text-xs text-muted-foreground mt-1">Aprobadas</p>
           </CardContent>
         </Card>
-        <Card className="border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent">
+        <Card className="glass-hover-card border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-2">
               <div className="rounded-xl p-2 bg-amber-500/15">
@@ -237,7 +237,7 @@ export async function MesaControlDashboard({
             <p className="text-xs text-muted-foreground mt-1">Regresadas</p>
           </CardContent>
         </Card>
-        <Card className="border-primary-500/30 bg-gradient-to-br from-primary-500/5 to-transparent">
+        <Card className="glass-hover-card border-primary-500/30 bg-gradient-to-br from-primary-500/5 to-transparent">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-2">
               <div className="rounded-xl p-2 bg-primary-500/15">
@@ -253,7 +253,7 @@ export async function MesaControlDashboard({
 
       {/* Gráficas */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
+        <Card className="glass-hover-card lg:col-span-2">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -265,7 +265,7 @@ export async function MesaControlDashboard({
             <MesaControlBarChart data={chartData} />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-3">
               <Percent className="h-4 w-4 text-primary-400" />
@@ -277,7 +277,7 @@ export async function MesaControlDashboard({
       </div>
 
       {/* Últimas revisiones */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardContent className="p-0">
           <div className="p-4 border-b border-border/60 flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" />

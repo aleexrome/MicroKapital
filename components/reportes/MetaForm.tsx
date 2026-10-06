@@ -142,7 +142,7 @@ export function MetaForm({ initial, branches, cobradores }: Props) {
         </h1>
       </div>
 
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader><CardTitle>Periodo y alcance</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div>
@@ -207,7 +207,7 @@ export function MetaForm({ initial, branches, cobradores }: Props) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader><CardTitle>KPIs (define al menos uno)</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -112,7 +112,7 @@ export default async function MesaControlPage() {
       {/* KPIs de la semana (Sáb-Vie CDMX). Para MC: su propia actividad.
           Para DG/DC: agregado de toda la mesa de control. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-xl p-2.5 bg-yellow-500/15">
               <AlertTriangle className="h-4 w-4 text-yellow-500" />
@@ -123,7 +123,7 @@ export default async function MesaControlPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-xl p-2.5 bg-emerald-500/15">
               <CheckCircle className="h-4 w-4 text-emerald-400" />
@@ -134,7 +134,7 @@ export default async function MesaControlPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-xl p-2.5 bg-amber-500/15">
               <RotateCcw className="h-4 w-4 text-amber-400" />
@@ -146,7 +146,7 @@ export default async function MesaControlPage() {
           </CardContent>
         </Card>
         <Link href="/reportes/mesa-control" className="block">
-          <Card className="hover:shadow-md hover:border-primary-500/40 transition-all">
+          <Card className="glass-hover-card hover:shadow-md hover:border-primary-500/40 transition-all">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="rounded-xl p-2.5 bg-primary-500/15">
                 <BarChart3 className="h-4 w-4 text-primary-400" />

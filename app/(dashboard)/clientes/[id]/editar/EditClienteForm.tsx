@@ -112,7 +112,7 @@ export function EditClienteForm({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Datos personales</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 space-y-2">
@@ -151,7 +151,7 @@ export function EditClienteForm({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Identificación</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -182,7 +182,7 @@ export function EditClienteForm({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Referencia</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -204,7 +204,7 @@ export function EditClienteForm({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Asignación</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-2">

@@ -125,7 +125,7 @@ export default async function GrupoCobroPage({ params }: { params: { groupId: st
       )}
 
       {/* Lista de integrantes */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader>
           <CardTitle className="text-base">Integrantes del grupo</CardTitle>
         </CardHeader>

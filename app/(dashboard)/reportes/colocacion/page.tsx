@@ -156,19 +156,19 @@ export default async function ColocacionReportePage({
       </div>
 
       {snapshot.numCreditos === 0 ? (
-        <Card><CardContent className="p-8 text-center text-muted-foreground">
+        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">"
           Sin colocación en el periodo seleccionado.
         </CardContent></Card>
       ) : (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
+            <Card className="glass-hover-card">
               <CardHeader><CardTitle className="text-base">Por producto</CardTitle></CardHeader>
               <CardContent>
                 <ReportPieChart data={dataPorTipo} formatter="money" />
               </CardContent>
             </Card>
-            <Card>
+            <Card className="glass-hover-card">
               <CardHeader><CardTitle className="text-base">Top 10 sucursales</CardTitle></CardHeader>
               <CardContent>
                 <ReportBarChart
@@ -181,7 +181,7 @@ export default async function ColocacionReportePage({
             </Card>
           </div>
 
-          <Card>
+          <Card className="glass-hover-card">
             <CardHeader><CardTitle className="text-base">Detalle por cobrador</CardTitle></CardHeader>
             <CardContent className="p-0 overflow-x-auto max-h-96 overflow-y-auto">
               <table className="w-full text-sm">

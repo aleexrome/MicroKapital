@@ -97,7 +97,7 @@ export function DocumentChecklist({ loanId, tipo, savedChecklist, readOnly = fal
   }
 
   return (
-    <Card>
+    <Card className="glass-hover-card">
       <CardHeader>
         <CardTitle className="text-base flex items-center justify-between">
           <span className="flex items-center gap-2">

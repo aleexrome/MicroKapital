@@ -182,7 +182,7 @@ export default function CapturarMoraPage({ params }: { params: { scheduleId: str
           <Clock className="h-6 w-6" />
           <h2 className="text-lg font-bold">Transferencia registrada</h2>
         </div>
-        <Card className="bg-yellow-50 border-yellow-200">
+        <Card className="glass-hover-card bg-yellow-50 border-yellow-200">
           <CardContent className="p-4 space-y-2 text-sm">
             <p className="font-medium text-yellow-800">En proceso de validación</p>
             <p className="text-yellow-700">
@@ -235,7 +235,7 @@ export default function CapturarMoraPage({ params }: { params: { scheduleId: str
         </div>
       </div>
 
-      <Card>
+      <Card className="glass-hover-card">
         <CardContent className="p-4">
           <p className="font-semibold text-gray-900">{schedule.loan.client.nombreCompleto}</p>
           {schedule.loan.client.telefono && (
@@ -298,7 +298,7 @@ export default function CapturarMoraPage({ params }: { params: { scheduleId: str
 
       {step === 'confirm_card' && (
         <div className="space-y-4">
-          <Card className="bg-blue-50 border-blue-200">
+          <Card className="glass-hover-card bg-blue-50 border-blue-200">
             <CardContent className="p-4 text-center">
               <CreditCard className="h-8 w-8 text-blue-600 mx-auto mb-2" />
               <p className="font-medium">Pago con tarjeta</p>
@@ -316,7 +316,7 @@ export default function CapturarMoraPage({ params }: { params: { scheduleId: str
 
       {step === 'confirm_transfer' && (
         <div className="space-y-4">
-          <Card className="bg-blue-50 border-blue-200">
+          <Card className="glass-hover-card bg-blue-50 border-blue-200">
             <CardContent className="p-4 text-center">
               <Building2 className="h-8 w-8 text-blue-600 mx-auto mb-2" />
               <p className="font-medium">Transferencia bancaria</p>

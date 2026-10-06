@@ -141,7 +141,7 @@ export default async function CreditosConcluidos({
 
       {/* Filters */}
       {(isDirector || isGerente || isCampo) && (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <form method="GET" action="/creditos-concluidos" className="flex flex-wrap gap-3 items-end">
               {/* Branch filter — directors */}
@@ -207,7 +207,7 @@ export default async function CreditosConcluidos({
 
       {/* List */}
       {loans.length === 0 ? (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="text-center py-12">
             <CheckCircle className="h-10 w-10 text-emerald-400 mx-auto mb-3 opacity-50" />
             <p className="text-muted-foreground">No hay créditos concluidos con los filtros aplicados</p>

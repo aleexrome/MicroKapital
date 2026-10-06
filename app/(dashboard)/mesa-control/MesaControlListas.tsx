@@ -101,7 +101,7 @@ export function MesaControlListas({ pendientes, regresadas }: Props) {
 
       {/* Contenido */}
       {cuenta === 0 ? (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="text-center py-8 text-muted-foreground">
             {activeTab === 'PENDIENTE' ? (
               <>
@@ -135,7 +135,7 @@ export function MesaControlListas({ pendientes, regresadas }: Props) {
                   <div className="space-y-2 ml-1">
                     {loans.map((loan) => (
                       <Link key={loan.id} href={`/prestamos/${loan.id}`}>
-                        <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
+                        <Card className="glass-hover-card hover:bg-gray-50 transition-colors cursor-pointer">
                           <CardContent className="p-4">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-semibold">{loan.client.nombreCompleto}</span>

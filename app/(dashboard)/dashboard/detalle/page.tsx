@@ -112,7 +112,7 @@ export default async function DashboardDetallePage({
           </div>
         </div>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-0">
             {schedules.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-10">No hay pagos vencidos</p>
@@ -320,7 +320,7 @@ export default async function DashboardDetallePage({
         })}
       </div>
 
-      <Card>
+      <Card className="glass-hover-card">
         <CardContent className="p-0">
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-10">{emptyMsg}</p>

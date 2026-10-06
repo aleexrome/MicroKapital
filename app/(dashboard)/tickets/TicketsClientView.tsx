@@ -92,7 +92,7 @@ export function TicketsClientView() {
           <Loader2 className="h-8 w-8 animate-spin text-primary-700" />
         </div>
       ) : tickets.length === 0 ? (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="text-center py-12">
             <Ticket className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="text-muted-foreground">No hay tickets registrados</p>

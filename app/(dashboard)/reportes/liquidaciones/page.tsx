@@ -155,19 +155,19 @@ export default async function LiquidacionesReportePage({
       </div>
 
       {snapshot.numLiquidados === 0 ? (
-        <Card><CardContent className="p-8 text-center text-muted-foreground">
+        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">"
           Sin liquidaciones en el periodo seleccionado.
         </CardContent></Card>
       ) : (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
+            <Card className="glass-hover-card">
               <CardHeader><CardTitle className="text-base">Liquidaciones por producto</CardTitle></CardHeader>
               <CardContent>
                 <ReportPieChart data={dataPorTipo} formatter="count" />
               </CardContent>
             </Card>
-            <Card>
+            <Card className="glass-hover-card">
               <CardHeader><CardTitle className="text-base">Últimas liquidaciones</CardTitle></CardHeader>
               <CardContent className="p-0 max-h-80 overflow-y-auto">
                 <table className="w-full text-sm">

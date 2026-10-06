@@ -162,7 +162,7 @@ export default async function CarteraMiosTipoPage({ params }: { params: { tipo: 
       </div>
 
       {loans.length === 0 && (
-        <Card><CardContent className="py-10 text-center text-muted-foreground">No tienes créditos {TIPO_LABEL[tipo]} activos</CardContent></Card>
+        <Card className="glass-hover-card"><CardContent className="py-10 text-center text-muted-foreground">No tienes créditos {TIPO_LABEL[tipo]} activos</CardContent></Card>
       )}
 
       <div className="space-y-2">

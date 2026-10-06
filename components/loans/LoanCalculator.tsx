@@ -71,7 +71,7 @@ export function LoanCalculator({
   ]
 
   return (
-    <Card className="border-primary-500/30 bg-primary-500/10">
+    <Card className="glass-hover-card border-primary-500/30 bg-primary-500/10">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm text-primary-400">Resumen del préstamo</CardTitle>
       </CardHeader>

@@ -210,7 +210,7 @@ export default async function ClientesPage({
       </form>
 
       {/* Lista */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardContent className="p-0">
           {clientes.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">

@@ -455,7 +455,7 @@ export default async function BancaPage({
       </div>
 
       {weeksSorted.length === 0 ? (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="py-12 text-center text-muted-foreground">
             Sin movimientos en el periodo seleccionado.
           </CardContent>

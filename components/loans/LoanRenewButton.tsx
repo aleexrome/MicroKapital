@@ -107,7 +107,7 @@ export function LoanRenewButton({
   }
 
   return (
-    <Card className="border-2 border-orange-500 bg-green-50">
+    <Card className="glass-hover-card border-2 border-orange-500 bg-green-50">
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center justify-between">
           <span className="flex items-center gap-2 text-green-800">

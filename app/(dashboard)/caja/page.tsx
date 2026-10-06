@@ -229,7 +229,7 @@ export default async function CajaPage({
       {/* Estado de la caja */}
       <div className="grid grid-cols-2 gap-4">
         {caja && (
-          <Card className="col-span-2">
+          <Card className="glass-hover-card col-span-2">
             <CardContent className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Wallet className="h-5 w-5 text-primary-700" />
@@ -242,7 +242,7 @@ export default async function CajaPage({
           </Card>
         )}
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Banknote className="h-4 w-4 text-green-600" />
@@ -252,7 +252,7 @@ export default async function CajaPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <CreditCard className="h-4 w-4 text-blue-600" />
@@ -262,7 +262,7 @@ export default async function CajaPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs text-muted-foreground">Transferencia (verificada)</span>
@@ -276,7 +276,7 @@ export default async function CajaPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <span className="text-xs text-muted-foreground">Cambio entregado</span>
             <p className="text-xl font-bold text-gray-700 money">{formatMoney(totalCambio)}</p>
@@ -284,7 +284,7 @@ export default async function CajaPage({
           </CardContent>
         </Card>
 
-        <Card className="bg-primary-50 col-span-2">
+        <Card className="glass-hover-card bg-primary-50 col-span-2">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="h-4 w-4 text-primary-700" />
@@ -302,7 +302,7 @@ export default async function CajaPage({
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-gray-900">Desglose por sucursal y empleado</h2>
           {Object.keys(branchMap).length === 0 ? (
-            <Card>
+            <Card className="glass-hover-card">
               <CardContent className="text-sm text-muted-foreground text-center py-6">
                 Sin cobros registrados {isDirectorView ? 'en la empresa' : 'en tu sucursal'} este día
               </CardContent>
@@ -364,7 +364,7 @@ export default async function CajaPage({
         </div>
       ) : (
         /* Vista trabajador: lista plana de sus cobros */
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader>
             <CardTitle className="text-base">Cobros del día ({pagosDia.length})</CardTitle>
           </CardHeader>

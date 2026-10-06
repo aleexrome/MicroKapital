@@ -173,7 +173,7 @@ export default async function CobranzaReportePage({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
+        <Card className="glass-hover-card lg:col-span-2">
           <CardHeader><CardTitle className="text-base">Cobranza por día</CardTitle></CardHeader>
           <CardContent>
             <ReportLineChart
@@ -188,7 +188,7 @@ export default async function CobranzaReportePage({
             />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Distribución por método</CardTitle></CardHeader>
           <CardContent>
             {dataMetodo.length === 0
@@ -199,7 +199,7 @@ export default async function CobranzaReportePage({
       </div>
 
       {esperada.total > 0 && (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-start gap-3">
@@ -227,7 +227,7 @@ export default async function CobranzaReportePage({
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Cobranza por cobrador</CardTitle></CardHeader>
           <CardContent className="p-0 overflow-x-auto max-h-96 overflow-y-auto">
             <table className="w-full text-sm">
@@ -251,7 +251,7 @@ export default async function CobranzaReportePage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Cobranza por sucursal</CardTitle></CardHeader>
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-sm">

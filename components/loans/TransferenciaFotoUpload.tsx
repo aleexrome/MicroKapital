@@ -44,7 +44,7 @@ export function TransferenciaFotoUpload({
   // ── VIEW: ya se subió la foto → mostrar evidencia ─────────────────
   if (transferenciaFotoUrl) {
     return (
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Smartphone className="h-4 w-4 text-violet-600" />
@@ -127,7 +127,7 @@ export function TransferenciaFotoUpload({
 
   // ── Flujo de subida ──────────────────────────────────────────────
   return (
-    <Card>
+    <Card className="glass-hover-card">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <Smartphone className="h-4 w-4 text-violet-600" />

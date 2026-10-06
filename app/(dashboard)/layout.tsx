@@ -169,6 +169,7 @@ export default async function DashboardLayout({
         userId={session.user.id}
         userRole={rol}
         userName={session.user.name ?? ''}
+        userEmail={session.user.email ?? ''}
         companyName={company?.nombre ?? ''}
         branchName={branch?.nombre ?? ''}
         treeData={treeData}

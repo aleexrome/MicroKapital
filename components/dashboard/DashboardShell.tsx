@@ -11,6 +11,7 @@ interface DashboardShellProps {
   userId: string
   userRole: UserRole
   userName: string
+  userEmail?: string
   companyName?: string
   branchName?: string
   treeData?: BranchTreeData[]
@@ -24,6 +25,7 @@ export function DashboardShell({
   userId,
   userRole,
   userName,
+  userEmail,
   companyName,
   branchName,
   treeData = [],
@@ -32,7 +34,7 @@ export function DashboardShell({
 }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const sidebarProps = { userRole, userName, companyName, branchName, treeData, puedeVerBanca }
+  const sidebarProps = { userRole, userName, userEmail, companyName, branchName, treeData, puedeVerBanca }
 
   return (
     // print:h-auto / print:overflow-visible → cuando el usuario imprime,

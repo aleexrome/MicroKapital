@@ -204,6 +204,10 @@ const TIPO_ORDER = ['SOLIDARIO', 'INDIVIDUAL', 'AGIL', 'FIDUCIARIO']
 interface SidebarProps {
   userRole: UserRole
   userName: string
+  /** Email del usuario — usado solo para overrides visuales puntuales
+   *  (ej. mostrar "Director de Sistemas" para Alejandro aunque su rol
+   *  técnico sea DIRECTOR_GENERAL por permisos). */
+  userEmail?: string
   companyName?: string
   branchName?: string
   treeData?: BranchTreeData[]
@@ -216,6 +220,7 @@ interface SidebarProps {
 export function Sidebar({
   userRole,
   userName,
+  userEmail,
   companyName,
   branchName,
   treeData = [],
@@ -225,6 +230,15 @@ export function Sidebar({
   const pathname = usePathname()
   const [expandedBranches, setExpandedBranches] = useState<Set<string>>(new Set())
   const [treeOpen, setTreeOpen] = useState(false)
+
+  // Overrides visuales de etiqueta de rol por email. Permite mostrar
+  // un título funcional distinto al enum técnico sin tocar permisos
+  // (ej. Alejandro es DIRECTOR_GENERAL para que tenga acceso completo
+  // pero su título real es Director de Sistemas).
+  const rolLabelOverride: Record<string, string> = {
+    'aleboomrome@gmail.com': 'Director de Sistemas',
+  }
+  const rolLabel = (userEmail && rolLabelOverride[userEmail]) ?? ROL_ETIQUETAS[userRole] ?? userRole
 
   function toggleBranch(id: string) {
     setExpandedBranches((prev) => {
@@ -418,7 +432,7 @@ export function Sidebar({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-white truncate">{userName}</p>
-            <p className="text-xs text-primary-300 truncate">{ROL_ETIQUETAS[userRole] ?? userRole}</p>
+            <p className="text-xs text-primary-300 truncate">{rolLabel}</p>
           </div>
         </div>
         <form action={logoutAction}>

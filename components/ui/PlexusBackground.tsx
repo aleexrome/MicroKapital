@@ -151,13 +151,28 @@ export function PlexusBackground({ transparentBg = false, nodeScale = 1 }: Plexu
       animId = requestAnimationFrame(loop)
     }
 
+    // Pausa el canvas cuando la pestaña está oculta — evita quemar GPU
+    // mientras el usuario está en otra tab o minimizado. Al volver,
+    // reanuda. No hay cambio visual: solo deja de calcular frames que
+    // nadie ve. Las nuevas pantallas se sienten más fluidas porque el
+    // raf no compite con el render de Next en la navegación.
+    function onVisibility() {
+      if (document.visibilityState === 'hidden') {
+        if (animId) cancelAnimationFrame(animId)
+      } else {
+        animId = requestAnimationFrame(loop)
+      }
+    }
+
     resize()
     loop()
+    document.addEventListener('visibilitychange', onVisibility)
 
     window.addEventListener('resize', resize)
     return () => {
       cancelAnimationFrame(animId)
       window.removeEventListener('resize', resize)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [transparentBg, nodeScale])
 

@@ -171,7 +171,7 @@ export default async function ClienteExpedientePage({
 
       {/* Score + info básica */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><User className="h-4 w-4" />Datos personales</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex items-center justify-between gap-2">
@@ -210,7 +210,7 @@ export default async function ClienteExpedientePage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Historial de score</CardTitle></CardHeader>
           <CardContent>
             {client.scoreEvents.length === 0 ? (
@@ -290,7 +290,7 @@ export default async function ClienteExpedientePage({
       )}
 
       {/* Préstamos */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <CreditCard className="h-4 w-4" />
@@ -449,7 +449,7 @@ export default async function ClienteExpedientePage({
       )}
 
       {/* Historial de pagos */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <History className="h-4 w-4" />

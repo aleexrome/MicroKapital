@@ -88,7 +88,7 @@ export function RecursosHumanosClient({ empleados, sucursalesSugeridas, viewerUs
         />
       </div>
 
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <CardTitle className="text-base">Empleados</CardTitle>

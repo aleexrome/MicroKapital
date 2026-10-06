@@ -240,19 +240,19 @@ export default async function MoraReportePage({
       </div>
 
       {snapshot.numSchedules === 0 ? (
-        <Card><CardContent className="p-8 text-center text-muted-foreground">
+        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">"
           Sin mora registrada con los filtros actuales.
         </CardContent></Card>
       ) : (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
+            <Card className="glass-hover-card">
               <CardHeader><CardTitle className="text-base">Mora por edad</CardTitle></CardHeader>
               <CardContent>
                 <ReportPieChart data={dataBuckets} formatter="money" />
               </CardContent>
             </Card>
-            <Card>
+            <Card className="glass-hover-card">
               <CardHeader><CardTitle className="text-base">Top 10 sucursales con mora</CardTitle></CardHeader>
               <CardContent>
                 <ReportBarChart
@@ -265,7 +265,7 @@ export default async function MoraReportePage({
             </Card>
           </div>
 
-          <Card>
+          <Card className="glass-hover-card">
             <CardHeader><CardTitle className="text-base">Detalle por cobrador</CardTitle></CardHeader>
             <CardContent className="p-0 overflow-x-auto max-h-96 overflow-y-auto">
               <table className="w-full text-sm">
@@ -294,7 +294,7 @@ export default async function MoraReportePage({
           {/* Detalle cliente por cliente — muestra a quién visitar y cuánto
               debe. Respeta los filtros activos (sucursal / cobrador) y también
               se imprime en el reporte de arriba. */}
-          <Card>
+          <Card className="glass-hover-card">
             <CardHeader>
               <CardTitle className="text-base">
                 Clientes en mora

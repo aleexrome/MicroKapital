@@ -187,7 +187,7 @@ export function TicketsAdminView({ tickets }: Props) {
       </div>
 
       {/* ── FILTROS ────────────────────────────────────────────────────── */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
             <Filter className="h-4 w-4 text-muted-foreground" />
@@ -293,13 +293,13 @@ export function TicketsAdminView({ tickets }: Props) {
 
       {/* Métricas — respetan los filtros */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Total tickets</p>
             <p className="text-2xl font-bold">{totalTickets}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <TicketIcon className="h-3 w-3" /> Originales
@@ -307,7 +307,7 @@ export function TicketsAdminView({ tickets }: Props) {
             <p className="text-2xl font-bold text-emerald-400">{totalOriginales}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <RotateCcw className="h-3 w-3" /> Reimpresiones
@@ -315,7 +315,7 @@ export function TicketsAdminView({ tickets }: Props) {
             <p className="text-2xl font-bold text-amber-400">{totalReimpresiones}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Ban className="h-3 w-3" /> Anulados

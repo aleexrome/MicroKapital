@@ -24,7 +24,7 @@ export default async function CajaHistorialPage() {
     <div className="p-6 space-y-4">
       <h1 className="text-2xl font-bold">Historial de caja</h1>
 
-      <Card>
+      <Card className="glass-hover-card">
         <CardContent className="p-0">
           {registros.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">Sin registros de caja</div>

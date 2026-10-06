@@ -299,7 +299,7 @@ export default async function ReporteAprobacionesPage({
           calendario del cliente). Los que sí tienen fecha en el schedule
           se muestran normal aunque Loan.fechaPrimerPago esté null. */}
       {filasIncompletas.length > 0 && (
-        <Card className="border-amber-500/40 bg-amber-500/5">
+        <Card className="glass-hover-card border-amber-500/40 bg-amber-500/5">
           <CardContent className="p-4 flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="text-sm">
@@ -315,7 +315,7 @@ export default async function ReporteAprobacionesPage({
       )}
 
       {/* Tabla */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader><CardTitle className="text-base">Detalle</CardTitle></CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           {loansVisibles.length === 0 ? (

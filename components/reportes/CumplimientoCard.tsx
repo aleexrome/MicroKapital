@@ -34,7 +34,7 @@ export function CumplimientoCard({ cumplimiento }: Props) {
   const ScopeIcon = goal.cobradorId ? UserIcon : goal.branchId ? Building2 : goal.loanType ? Layers : Target
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="glass-hover-card overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
@@ -106,7 +106,7 @@ export function CumplimientoSummary({ items }: { items: CumplimientoMeta[] }) {
     ? items.reduce((s, i) => s + i.porcentajeGlobal, 0) / total
     : 0
   return (
-    <Card>
+    <Card className="glass-hover-card">
       <CardContent className="p-5">
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>

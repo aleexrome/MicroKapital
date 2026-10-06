@@ -272,13 +272,13 @@ export default async function ReporteMesaControlSemanaPage({
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 print:grid-cols-4">
-        <Card className="print:border print:shadow-none print-kpi-card">
+        <Card className="glass-hover-card print:border print:shadow-none print-kpi-card">
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground print:text-gray-700">Total revisadas</p>
             <p className="text-2xl font-bold text-foreground print:text-black">{total}</p>
           </CardContent>
         </Card>
-        <Card className="print:border print:shadow-none print-kpi-card">
+        <Card className="glass-hover-card print:border print:shadow-none print-kpi-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 print-kpi-aprobadas" />
@@ -288,7 +288,7 @@ export default async function ReporteMesaControlSemanaPage({
             <p className="text-[11px] text-muted-foreground print:text-gray-700 mt-1 money">{formatMoney(capitalAprobado)}</p>
           </CardContent>
         </Card>
-        <Card className="print:border print:shadow-none print-kpi-card">
+        <Card className="glass-hover-card print:border print:shadow-none print-kpi-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <RotateCcw className="h-3.5 w-3.5 text-amber-400 print-kpi-regresadas" />
@@ -297,7 +297,7 @@ export default async function ReporteMesaControlSemanaPage({
             <p className="text-2xl font-bold text-amber-400 print-kpi-regresadas">{regresadas}</p>
           </CardContent>
         </Card>
-        <Card className="print:border print:shadow-none print-kpi-card">
+        <Card className="glass-hover-card print:border print:shadow-none print-kpi-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Percent className="h-3.5 w-3.5 text-primary-400 print-kpi-pct" />
@@ -309,7 +309,7 @@ export default async function ReporteMesaControlSemanaPage({
       </div>
 
       {/* Tabla detallada */}
-      <Card className="print:border print:shadow-none">
+      <Card className="glass-hover-card print:border print:shadow-none">
         <CardContent className="p-0">
           {filasVisibles.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted-foreground">

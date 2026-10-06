@@ -259,7 +259,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
 
       {/* ── Resumen financiero — solo Direccion ─────────────────────── */}
       {mostrarResumenFinanciero && (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4 sm:p-5 space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
               <DollarSign className="h-4 w-4 text-primary-600" />

@@ -176,13 +176,13 @@ export default async function CarteraReportePage({
       </div>
 
       {snapshot.numCreditos === 0 ? (
-        <Card><CardContent className="p-8 text-center text-muted-foreground">
+        <Card className="glass-hover-card"><CardContent className="p-8 text-center text-muted-foreground">"
           Sin cartera activa con los filtros actuales.
         </CardContent></Card>
       ) : (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
+            <Card className="glass-hover-card">
               <CardHeader><CardTitle className="text-base">Por producto</CardTitle></CardHeader>
               <CardContent>
                 <ReportPieChart
@@ -191,7 +191,7 @@ export default async function CarteraReportePage({
                 />
               </CardContent>
             </Card>
-            <Card>
+            <Card className="glass-hover-card">
               <CardHeader><CardTitle className="text-base">Top 10 sucursales</CardTitle></CardHeader>
               <CardContent>
                 <ReportBarChart
@@ -204,7 +204,7 @@ export default async function CarteraReportePage({
             </Card>
           </div>
 
-          <Card>
+          <Card className="glass-hover-card">
             <CardHeader><CardTitle className="text-base">Top 10 cobradores</CardTitle></CardHeader>
             <CardContent>
               <ReportBarChart
@@ -216,7 +216,7 @@ export default async function CarteraReportePage({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="glass-hover-card">
             <CardHeader><CardTitle className="text-base">Detalle por sucursal</CardTitle></CardHeader>
             <CardContent className="overflow-x-auto p-0">
               <table className="w-full text-sm">

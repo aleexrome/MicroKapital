@@ -146,7 +146,7 @@ export function DisbursementVideo({
   // ── VIEW: ya hay video aprobado ─────────────────────────────────────
   if (videoUrl) {
     return (
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Video className="h-4 w-4 text-primary-600" />
@@ -186,7 +186,7 @@ export function DisbursementVideo({
   // ── VIEW: solo hay foto (legacy) ───────────────────────────────────
   if (fotoUrl && !videoUrl) {
     return (
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <PlayCircle className="h-4 w-4 text-primary-600" />
@@ -227,7 +227,7 @@ export function DisbursementVideo({
     const cVideo = grupoInfo!.coordVideoUrl
     const cVideoAt = grupoInfo!.coordVideoAt
     return (
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Users className="h-4 w-4 text-primary-600" />
@@ -579,7 +579,7 @@ export function DisbursementVideo({
 
   // ── RENDER ─────────────────────────────────────────────────────────
   return (
-    <Card>
+    <Card className="glass-hover-card">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           {esGrupalCoord

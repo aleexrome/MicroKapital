@@ -106,7 +106,7 @@ export function DisbursementPhoto({
   if (fotoUrl) {
     return (
       <>
-        <Card className="border-green-500/30">
+        <Card className="glass-hover-card border-green-500/30">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-green-400">
@@ -171,7 +171,7 @@ export function DisbursementPhoto({
 
   // Upload form
   return (
-    <Card className="border-amber-500/30 bg-amber-500/5">
+    <Card className="glass-hover-card border-amber-500/30 bg-amber-500/5">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm text-amber-400 flex items-center gap-2">
           <Camera className="h-4 w-4" />

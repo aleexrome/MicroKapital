@@ -91,7 +91,7 @@ export default async function ReportesMesaControlIndex() {
             href={`/reportes/mesa-control/${w.weekId}`}
             className="block"
           >
-            <Card className="hover:shadow-md hover:border-primary-500/40 transition-all">
+            <Card className="glass-hover-card hover:shadow-md hover:border-primary-500/40 transition-all">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div>

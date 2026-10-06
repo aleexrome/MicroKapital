@@ -124,7 +124,7 @@ export default async function CumplimientoPage({
       </div>
 
       {cumplimientos.length === 0 ? (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-8 text-center space-y-3">
             <Target className="h-12 w-12 mx-auto text-muted-foreground/50" />
             <h2 className="text-lg font-semibold">Sin metas para esta semana</h2>

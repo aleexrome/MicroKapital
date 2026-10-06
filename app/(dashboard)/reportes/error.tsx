@@ -36,7 +36,7 @@ export default function ReportesError({
         <h1 className="text-2xl font-bold text-foreground">Error en Reportes</h1>
       </div>
 
-      <Card>
+      <Card className="glass-hover-card">
         <CardContent className="p-5 space-y-4">
           <div className="flex items-start gap-3">
             <div className="rounded-xl bg-rose-500/15 p-2.5 ring-1 ring-rose-500/30 shrink-0">

@@ -165,13 +165,13 @@ export function DesembolsosVideoList({ rows, rol }: Props) {
     <div className="space-y-4">
       {/* KPIs simples arriba */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-3">
             <p className="text-xs text-muted-foreground">Total</p>
             <p className="text-xl font-bold">{rows.length}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-3">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <CheckCircle className="h-3 w-3 text-emerald-500" /> Aprobados
@@ -179,7 +179,7 @@ export function DesembolsosVideoList({ rows, rol }: Props) {
             <p className="text-xl font-bold text-emerald-500">{conteoAprobados}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-3">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <XCircle className="h-3 w-3 text-red-500" /> Rechazados
@@ -187,7 +187,7 @@ export function DesembolsosVideoList({ rows, rol }: Props) {
             <p className="text-xl font-bold text-red-500">{conteoRechazados}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-3">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <RefreshCw className="h-3 w-3 text-amber-500" /> ≥3 intentos
@@ -195,7 +195,7 @@ export function DesembolsosVideoList({ rows, rol }: Props) {
             <p className="text-xl font-bold text-amber-500">{conteoMultiIntentos}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-3">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <AlertTriangle className="h-3 w-3 text-orange-500" /> Escalados
@@ -206,7 +206,7 @@ export function DesembolsosVideoList({ rows, rol }: Props) {
       </div>
 
       {/* Filtros */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
             <Filter className="h-4 w-4 text-muted-foreground" />
@@ -274,7 +274,7 @@ export function DesembolsosVideoList({ rows, rol }: Props) {
 
       {/* Lista */}
       {filtered.length === 0 ? (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="text-center py-10 text-muted-foreground">
             <Video className="h-10 w-10 mx-auto mb-2 opacity-50" />
             {rows.length === 0

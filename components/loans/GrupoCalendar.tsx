@@ -245,7 +245,7 @@ export function GrupoCalendar({
   return (
     <div className="space-y-6">
       {/* ── Nivel 1: Calendario grupal ────────────────────────────────── */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader>
           <CardTitle className="text-base flex items-center justify-between">
             <span>Calendario grupal</span>
@@ -371,7 +371,7 @@ export function GrupoCalendar({
 
       {/* ── Renovación Grupal Anticipada ──────────────────────────────── */}
       {canRenewGroup && memberRenewalData && (
-        <Card className="border-green-200 bg-green-50">
+        <Card className="glass-hover-card border-green-200 bg-green-50">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center justify-between">
               <span className="flex items-center gap-2 text-green-800">

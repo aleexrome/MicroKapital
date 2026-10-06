@@ -181,21 +181,21 @@ export function NominaClient(props: Props) {
       {/* Totales (solo en vista de director) */}
       {vistaCompleta && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Card><CardContent className="p-4 flex items-center gap-3">
+          <Card className="glass-hover-card"><CardContent className="p-4 flex items-center gap-3">"
             <Coins className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="text-xs text-muted-foreground">Sueldos base</p>
               <p className="text-lg font-bold tabular-nums">{formatMoney(totalBase)}</p>
             </div>
           </CardContent></Card>
-          <Card><CardContent className="p-4 flex items-center gap-3">
+          <Card className="glass-hover-card"><CardContent className="p-4 flex items-center gap-3">"
             <TrendingUp className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="text-xs text-muted-foreground">Comisiones + bonos</p>
               <p className="text-lg font-bold tabular-nums">{formatMoney(totalVar)}</p>
             </div>
           </CardContent></Card>
-          <Card><CardContent className="p-4 flex items-center gap-3 bg-primary-50">
+          <Card className="glass-hover-card"><CardContent className="p-4 flex items-center gap-3 bg-primary-50">"
             <Wallet className="h-5 w-5 text-primary-500" />
             <div>
               <p className="text-xs text-muted-foreground">Total semana</p>
@@ -205,7 +205,7 @@ export function NominaClient(props: Props) {
         </div>
       )}
 
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <CardTitle className="text-base">

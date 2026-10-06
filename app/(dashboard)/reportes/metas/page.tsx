@@ -82,7 +82,7 @@ export default async function MetasPage() {
       </div>
 
       {goals.length === 0 ? (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-8 text-center space-y-3">
             <Target className="h-12 w-12 mx-auto text-muted-foreground/50" />
             <h2 className="text-lg font-semibold">Aún no hay metas definidas</h2>

@@ -127,7 +127,7 @@ export default async function CajaCobradorDetallePage({
 
       {/* Totales por método */}
       <div className="grid grid-cols-2 gap-4">
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Banknote className="h-4 w-4 text-green-600" />
@@ -137,7 +137,7 @@ export default async function CajaCobradorDetallePage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <CreditCard className="h-4 w-4 text-blue-600" />
@@ -147,7 +147,7 @@ export default async function CajaCobradorDetallePage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <span className="text-xs text-muted-foreground">Transferencia (verificada)</span>
             <p className="text-xl font-bold text-purple-700 money">{formatMoney(totalTransferenciaVerificada)}</p>
@@ -159,7 +159,7 @@ export default async function CajaCobradorDetallePage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4">
             <span className="text-xs text-muted-foreground">Cambio entregado</span>
             <p className="text-xl font-bold text-gray-700 money">{formatMoney(totalCambio)}</p>
@@ -167,7 +167,7 @@ export default async function CajaCobradorDetallePage({
           </CardContent>
         </Card>
 
-        <Card className="bg-primary-50 col-span-2">
+        <Card className="glass-hover-card bg-primary-50 col-span-2">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="h-4 w-4 text-primary-700" />
@@ -179,7 +179,7 @@ export default async function CajaCobradorDetallePage({
       </div>
 
       {/* Lista de cobros del día */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader>
           <CardTitle className="text-base">Cobros del día ({pagosDia.length})</CardTitle>
         </CardHeader>

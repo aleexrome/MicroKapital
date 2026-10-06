@@ -218,7 +218,7 @@ export default async function HistorialCobrosPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="bg-emerald-500/15 rounded-xl p-2">
               <DollarSign className="h-5 w-5 text-emerald-400" />
@@ -229,7 +229,7 @@ export default async function HistorialCobrosPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="bg-blue-500/15 rounded-xl p-2">
               <Banknote className="h-5 w-5 text-blue-400" />
@@ -240,7 +240,7 @@ export default async function HistorialCobrosPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="bg-violet-500/15 rounded-xl p-2">
               <CreditCard className="h-5 w-5 text-violet-400" />
@@ -251,7 +251,7 @@ export default async function HistorialCobrosPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="bg-amber-500/15 rounded-xl p-2">
               <CreditCard className="h-5 w-5 text-amber-400" />
@@ -265,7 +265,7 @@ export default async function HistorialCobrosPage() {
       </div>
 
       {rows.length === 0 ? (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="py-12 text-center text-muted-foreground">
             <DollarSign className="h-10 w-10 mx-auto mb-3 opacity-30" />
             <p className="font-medium">Sin cobros registrados hoy</p>
@@ -278,7 +278,7 @@ export default async function HistorialCobrosPage() {
         <>
           {/* Vista directores y gerentes: tabla por coordinador */}
           {(isDirector || isGerente) && byCobraodor.length > 0 && (
-            <Card>
+            <Card className="glass-hover-card">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <Users className="h-4 w-4" />
@@ -332,7 +332,7 @@ export default async function HistorialCobrosPage() {
           )}
 
           {/* Detalle de cobros individuales */}
-          <Card>
+          <Card className="glass-hover-card">
             <CardHeader>
               <CardTitle className="text-base">
                 Detalle — {rows.length} cobro{rows.length !== 1 ? 's' : ''}
@@ -369,7 +369,7 @@ export default async function HistorialCobrosPage() {
 
       {/* ── Últimos cobros registrados (cualquier fecha) ────────────────────── */}
       {soloRecientes.length > 0 && (
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Clock className="h-4 w-4" />

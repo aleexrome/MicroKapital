@@ -178,7 +178,7 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
 
       {/* ── FILTROS ────────────────────────────────────────────────────── */}
       {mostrarFiltros && (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center gap-2 flex-wrap">
               <Filter className="h-4 w-4 text-muted-foreground" />
@@ -303,7 +303,7 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
 
       {/* ── LISTADO — segun la tab activa ──────────────────────────────── */}
       {visibles.length === 0 ? (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="text-center py-10">
             {activeTab === 'PENDIENTE' ? (
               <>

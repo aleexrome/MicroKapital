@@ -153,7 +153,7 @@ export default async function CarteraTipoPage({
         </div>
 
         {groups.length === 0 && (
-          <Card><CardContent className="py-10 text-center text-muted-foreground">No hay grupos solidarios activos en esta sucursal</CardContent></Card>
+          <Card className="glass-hover-card"><CardContent className="py-10 text-center text-muted-foreground">No hay grupos solidarios activos en esta sucursal</CardContent></Card>
         )}
 
         {Array.from(gruposPorCoordinador.entries()).map(([cobradorNombre, gruposCoord]) => (
@@ -235,7 +235,7 @@ export default async function CarteraTipoPage({
       </div>
 
       {loans.length === 0 && (
-        <Card><CardContent className="py-10 text-center text-muted-foreground">No hay créditos {TIPO_LABEL[tipo]} activos en esta sucursal</CardContent></Card>
+        <Card className="glass-hover-card"><CardContent className="py-10 text-center text-muted-foreground">No hay créditos {TIPO_LABEL[tipo]} activos en esta sucursal</CardContent></Card>
       )}
 
       {Array.from(porCoordinador.values()).map(({ nombre: cobradorNombre, loans: cobradorLoans }) => (

@@ -93,7 +93,7 @@ export default async function AdminPage({
 
       {/* Usuarios tab */}
       {tab === 'usuarios' && (
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader>
             <CardTitle className="text-base">
               Usuarios registrados ({users.length})
@@ -113,7 +113,7 @@ export default async function AdminPage({
 
       {/* Pagos retroactivos tab */}
       {tab === 'pagos' && (
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader>
             <CardTitle className="text-base">
               Pagos recientes — Ajuste retroactivo de método de pago

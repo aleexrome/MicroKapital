@@ -235,7 +235,7 @@ export default async function PactadosDiaPage({
 
       {/* Empty state */}
       {Object.keys(branchMap).length === 0 && (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="py-12 text-center text-muted-foreground">
             <CalendarDays className="h-10 w-10 mx-auto mb-3 opacity-30" />
             <p>No hay pagos programados para este día{selectedBranch ? ' en esta sucursal' : ''}.</p>

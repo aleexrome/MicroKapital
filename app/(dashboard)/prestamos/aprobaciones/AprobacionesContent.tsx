@@ -115,7 +115,7 @@ export function AprobacionesContent() {
           <Loader2 className="h-8 w-8 animate-spin text-primary-700" />
         </div>
       ) : loans.length === 0 ? (
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="text-center py-12">
             <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
             <p className="text-muted-foreground">No hay solicitudes pendientes</p>

@@ -117,7 +117,7 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false, canObserve 
   }
 
   return (
-    <Card>
+    <Card className="glass-hover-card">
       <CardHeader>
         <CardTitle className="text-base flex items-center justify-between">
           <div className="flex items-center gap-2">

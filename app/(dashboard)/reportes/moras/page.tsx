@@ -223,21 +223,21 @@ export default async function ReporteMorasPage({
 
       {/* Totales */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-5">
             <p className="text-xs text-muted-foreground">Total generado</p>
             <p className="text-2xl font-bold text-amber-400">{formatMoney(totalGeneradoMonto)}</p>
             <p className="text-xs text-muted-foreground">{totalGeneradoCount} evento(s)</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-5">
             <p className="text-xs text-muted-foreground">Cobrado</p>
             <p className="text-2xl font-bold text-emerald-400">{formatMoney(totalCobradoMonto)}</p>
             <p className="text-xs text-muted-foreground">{totalCobradoCount} evento(s)</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-hover-card">
           <CardContent className="p-5">
             <p className="text-xs text-muted-foreground">Pendiente</p>
             <p className="text-2xl font-bold text-rose-400">{formatMoney(totalPendienteMonto)}</p>
@@ -247,7 +247,7 @@ export default async function ReporteMorasPage({
       </div>
 
       {/* Tabla */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader><CardTitle className="text-base">Detalle</CardTitle></CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           {moras.length === 0 ? (

@@ -62,7 +62,7 @@ export default async function ContractsConfigPage() {
       </div>
 
       {/* Sección 1 — Empresa */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader>
           <CardTitle className="text-base">Configuración de empresa</CardTitle>
         </CardHeader>
@@ -82,7 +82,7 @@ export default async function ContractsConfigPage() {
       </Card>
 
       {/* Sección 2 — Sucursales */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader>
           <CardTitle className="text-base">
             Sucursales ({branchesConfig.length})

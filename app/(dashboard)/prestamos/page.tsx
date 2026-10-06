@@ -285,7 +285,7 @@ export default async function PrestamosPage({
       </div>
 
       {/* Lista */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardContent className="p-0">
           {loans.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">

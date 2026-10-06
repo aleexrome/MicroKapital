@@ -738,7 +738,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
       </div>
 
       {/* Resumen financiero */}
-      <Card>
+      <Card className="glass-hover-card">
         <CardHeader><CardTitle className="text-base">Resumen financiero</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           {/* Banner de renovación con desglose del descuento */}
@@ -922,7 +922,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
 
       {/* Moras y multas del crédito */}
       {loan.moraCobros.length > 0 && (
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-500" />

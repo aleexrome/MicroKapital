@@ -153,7 +153,7 @@ export function NuevoClienteForm({
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Selector de sucursal — solo visible para Directores */}
         {isDirector && (
-          <Card>
+          <Card className="glass-hover-card">
             <CardHeader><CardTitle className="text-base">Sucursal</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -180,7 +180,7 @@ export function NuevoClienteForm({
           </Card>
         )}
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Datos personales</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 space-y-2">
@@ -273,7 +273,7 @@ export function NuevoClienteForm({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Identificación</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -304,7 +304,7 @@ export function NuevoClienteForm({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Referencia</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">

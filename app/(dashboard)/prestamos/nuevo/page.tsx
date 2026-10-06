@@ -364,7 +364,7 @@ export default function NuevaSolicitudPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
 
         {/* ── Tipo de préstamo ────────────────────────────────── */}
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Tipo de préstamo</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {(Object.keys(TIPO_INFO) as LoanTipo[]).map((t) => (
@@ -384,7 +384,7 @@ export default function NuevaSolicitudPage() {
         </Card>
 
         {/* ── Datos de la solicitud ───────────────────────────── */}
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader><CardTitle className="text-base">Datos de la solicitud</CardTitle></CardHeader>
           <CardContent className="space-y-4">
 
@@ -824,7 +824,7 @@ export default function NuevaSolicitudPage() {
         </Card>
 
         {/* ── Documentos del crédito ──────────────────────────── */}
-        <Card>
+        <Card className="glass-hover-card">
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
               <span className="flex items-center gap-2">
@@ -911,7 +911,7 @@ export default function NuevaSolicitudPage() {
           />
         )}
         {tipo === 'SOLIDARIO' && miembrosValidos.some((m) => Number(m.capital) >= 100) && (
-          <Card className="border-primary-200 bg-primary-50">
+          <Card className="glass-hover-card border-primary-200 bg-primary-50">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-primary-700">Resumen por integrante</CardTitle>
             </CardHeader>

@@ -452,7 +452,7 @@ export default async function DashboardPage({
       {isDirector && (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <Link href="/dashboard/detalle?tipo=seguros_mes" className="block">
-            <Card className="transition-all hover:shadow-md hover:border-border cursor-pointer">
+            <Card className="glass-hover transition-all hover:shadow-md hover:border-border cursor-pointer">
               <CardContent className="p-4 flex items-center gap-4">
                 <div className="bg-indigo-500/15 rounded-xl p-2.5">
                   <ShieldCheck className="h-5 w-5 text-indigo-400" />
@@ -465,7 +465,7 @@ export default async function DashboardPage({
             </Card>
           </Link>
           <Link href="/dashboard/detalle?tipo=comisiones_mes" className="block">
-            <Card className="transition-all hover:shadow-md hover:border-border cursor-pointer">
+            <Card className="glass-hover transition-all hover:shadow-md hover:border-border cursor-pointer">
               <CardContent className="p-4 flex items-center gap-4">
                 <div className="bg-orange-500/15 rounded-xl p-2.5">
                   <Percent className="h-5 w-5 text-orange-400" />
@@ -478,7 +478,7 @@ export default async function DashboardPage({
             </Card>
           </Link>
           <Link href="/reportes/moras" className="block">
-            <Card className="transition-all hover:shadow-md hover:border-border cursor-pointer">
+            <Card className="glass-hover transition-all hover:shadow-md hover:border-border cursor-pointer">
               <CardContent className="p-4 flex items-center gap-4">
                 <div className="bg-amber-500/15 rounded-xl p-2.5">
                   <AlertTriangle className="h-5 w-5 text-amber-400" />
@@ -612,7 +612,7 @@ export default async function DashboardPage({
                   {branchBreakdown.map((branch) => {
                     const cap = branch.loans.reduce((s, l) => s + Number(l.capital), 0)
                     return (
-                      <tr key={branch.id} className="hover:bg-muted/30 transition-colors cursor-pointer">
+                      <tr key={branch.id} className="glass-hover hover:bg-muted/30 transition-colors cursor-pointer">
                         <td className="px-4 py-2.5">
                           <Link href={`/cartera/${branch.id}`} className="font-medium hover:underline">
                             {branch.nombre}
@@ -675,7 +675,7 @@ export default async function DashboardPage({
               <Link
                 key={loan.id}
                 href={`/prestamos/${loan.id}`}
-                className="flex items-center justify-between py-2 border-b border-border/50 last:border-0 hover:bg-muted/30 rounded-xl px-2 transition-colors"
+                className="glass-hover flex items-center justify-between py-2 border-b border-border/50 last:border-0 hover:bg-muted/30 rounded-xl px-2 transition-colors"
               >
                 <div>
                   <p className="text-sm font-medium">{loan.client.nombreCompleto}</p>

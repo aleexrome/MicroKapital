@@ -266,9 +266,9 @@ export function Sidebar({
             href={item.href}
             onClick={onNavClick}
             className={cn(
-              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150',
+              'glass-hover flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150',
               isActive(item.href)
-                ? 'bg-primary-500 text-white shadow-glow'
+                ? 'glass-hover-active bg-primary-500 text-white shadow-glow'
                 : 'text-primary-200 hover:bg-white/8 hover:text-white'
             )}
           >
@@ -282,7 +282,7 @@ export function Sidebar({
           <div className="pt-3 mt-1 border-t border-primary-600/50">
             <button
               onClick={() => setTreeOpen((v) => !v)}
-              className="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm font-medium text-primary-200 hover:bg-white/8 hover:text-white transition-all duration-150"
+              className="glass-hover flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm font-medium text-primary-200 hover:bg-white/8 hover:text-white transition-all duration-150"
             >
               <Layers className="h-5 w-5" />
               <span className="flex-1 text-left">Árbol de Cartera</span>

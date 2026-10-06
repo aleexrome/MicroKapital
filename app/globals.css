@@ -106,3 +106,44 @@
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* ────────────────────────────────────────────────────────────────────
+ * Glass-hover — borde glow sutil + glassmorphism para elementos
+ * seleccionables (Sidebar items, dashboard cards, botones de navegación).
+ * Gradiente rosa→azul elegido porque NO colisiona con los colores
+ * semánticos ya en uso (verde=pagado, rojo=vencido, ámbar=parcial,
+ * violeta=financiado, naranja=Kapi/activación). Solo visual.
+ *
+ * Reglas:
+ *   .glass-hover         → efecto suave al pasar el mouse.
+ *   .glass-hover-active  → mismo efecto siempre encendido (ítem activo).
+ *
+ * No sobre-escribe el background original hasta que el usuario interactúa,
+ * así los estados "activo" / "destructive" / etc. no se pierden.
+ * ──────────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .glass-hover {
+    transition: box-shadow 180ms ease,
+                background-color 180ms ease,
+                backdrop-filter 180ms ease,
+                border-color 180ms ease;
+  }
+  .glass-hover:hover {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    background-color: rgba(255, 255, 255, 0.06);
+    box-shadow:
+      0 0 0 1px rgba(236, 72, 153, 0.45),
+      0 0 18px rgba(236, 72, 153, 0.22),
+      0 0 28px rgba(56, 189, 248, 0.14);
+  }
+  .glass-hover-active {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background-color: rgba(255, 255, 255, 0.10);
+    box-shadow:
+      0 0 0 1.5px rgba(236, 72, 153, 0.6),
+      0 0 24px rgba(236, 72, 153, 0.32),
+      0 0 36px rgba(56, 189, 248, 0.22);
+  }
+}

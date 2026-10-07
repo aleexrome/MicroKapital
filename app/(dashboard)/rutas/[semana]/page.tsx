@@ -8,6 +8,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { UserAvatar } from '@/components/ui/UserAvatar'
 import { formatMoney } from '@/lib/utils'
 import {
   ArrowLeft, TrendingUp, Target, CheckCircle2, Clock, AlertCircle,
@@ -326,7 +327,7 @@ interface CobradorPairStats {
 }
 
 function CobradorCard({
-  nombre, rolLabel, propia, heredada, cobradosCount, scheduleCount,
+  nombre, rolLabel, propia, heredada, cobradosCount, scheduleCount, fotoUrl,
 }: {
   nombre: string
   rolLabel: string
@@ -337,12 +338,13 @@ function CobradorCard({
   /** Contadores combinados (propia + heredada) para el encabezado. */
   cobradosCount: number
   scheduleCount: number
+  fotoUrl?: string | null
 }) {
   return (
     <div className="glass-hover-card border rounded-xl p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <User className="h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-2.5">
+          <UserAvatar nombre={nombre} fotoUrl={fotoUrl} size={36} />
           <div>
             <p className="font-semibold text-gray-900 text-sm">{nombre}</p>
             <p className="text-xs text-muted-foreground">{rolLabel}</p>
@@ -731,7 +733,7 @@ export default async function RutaDetallePage({
         rol: { in: ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL'] },
         activo: true,
       },
-      select: { id: true, nombre: true, rol: true },
+      select: { id: true, nombre: true, rol: true, fotoPerfilUrl: true },
       orderBy: { nombre: 'asc' },
     })
 
@@ -740,7 +742,7 @@ export default async function RutaDetallePage({
     if (!allUsers.find((u) => u.id === userId)) {
       const me = await prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, nombre: true, rol: true },
+        select: { id: true, nombre: true, rol: true, fotoPerfilUrl: true },
       })
       if (me) allUsers.unshift(me)
     }
@@ -832,6 +834,7 @@ export default async function RutaDetallePage({
         id: u.id,
         nombre: u.nombre,
         rolLabel: ROL_LABEL_MAP[u.rol] ?? u.rol,
+        fotoUrl: u.fotoPerfilUrl ?? null,
         // Totales combinados para encabezado + agregado de sucursal.
         totalAPagar: propia.totalAPagar + hered.totalAPagar,
         totalCobrado: propia.totalCobrado + hered.totalCobrado,
@@ -935,7 +938,7 @@ export default async function RutaDetallePage({
         // zonaBranchIds nos sirve para gerentes que cubren varias sucursales
         // (ej. Héctor: Toluca + San Mateo Atenco) — su tarjeta debe agregar
         // TODAS sus sucursales, no sólo la "principal" de `branchId`.
-        select: { id: true, nombre: true, rol: true, branchId: true, zonaBranchIds: true },
+        select: { id: true, nombre: true, rol: true, branchId: true, zonaBranchIds: true, fotoPerfilUrl: true },
         orderBy: { nombre: 'asc' },
       }),
       prisma.branch.findMany({
@@ -1038,6 +1041,7 @@ export default async function RutaDetallePage({
         id: u.id,
         nombre: u.nombre,
         rolLabel: ROL_LABEL_MAP[u.rol] ?? u.rol,
+        fotoUrl: u.fotoPerfilUrl ?? null,
         branchId: u.branchId ?? '',
         aggregator,
         totalAPagar: propia.totalAPagar + hered.totalAPagar,

@@ -124,16 +124,22 @@ export default function LoginPage({
         {/* Logo + title */}
         <div className="flex flex-col items-center gap-3 mb-8">
           <div
-            className="rounded-2xl p-3.5"
-            style={{ background: 'linear-gradient(135deg, #1a5fff, #0099ff)' }}
+            className="rounded-2xl bg-primary-500/20 ring-1 ring-primary-500/30 w-16 h-16 flex items-center justify-center"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24"
-              fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/>
-              <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/>
-              <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/>
-              <path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>
-            </svg>
+            {/* Logo "Mk" en fucsia — mismo que el Sidebar del dashboard */}
+            <span
+              aria-hidden
+              className="text-fuchsia-500 font-black leading-none select-none"
+              style={{
+                fontFamily: '"Permanent Marker", "Marker Felt", "Comic Sans MS", cursive',
+                fontSize: '34px',
+                fontStyle: 'italic',
+                letterSpacing: '-0.04em',
+                transform: 'translateY(-2px)',
+              }}
+            >
+              Mk
+            </span>
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold text-white tracking-wide">MicroKapital</h1>

@@ -110,7 +110,7 @@ export default function LoginPage({
   return (
     /* Glass-morphism card con borde fucsia (color del logo Mk) */
     <div
-      className="w-full rounded-2xl border-2 border-fuchsia-500/60 shadow-2xl overflow-hidden"
+      className="w-full rounded-2xl border-4 border-fuchsia-500/70 shadow-2xl overflow-hidden"
       style={{
         background:   'rgba(14, 18, 38, 0.75)',
         backdropFilter: 'blur(20px)',

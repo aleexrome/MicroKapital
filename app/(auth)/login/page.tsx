@@ -108,18 +108,16 @@ export default function LoginPage({
     null
 
   return (
-    /* Glass-morphism card */
+    /* Glass-morphism card con borde fucsia (color del logo Mk) */
     <div
-      className="w-full rounded-2xl border border-white/10 shadow-2xl overflow-hidden"
+      className="w-full rounded-2xl border-2 border-fuchsia-500/60 shadow-2xl overflow-hidden"
       style={{
         background:   'rgba(14, 18, 38, 0.75)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
+        boxShadow: '0 0 40px rgba(236, 72, 153, 0.3), 0 20px 40px rgba(0, 0, 0, 0.5)',
       }}
     >
-      {/* Top accent bar */}
-      <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #1a6fff, #00c6ff)' }} />
-
       <div className="p-8">
         {/* Logo + title */}
         <div className="flex flex-col items-center gap-3 mb-8">

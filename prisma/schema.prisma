@@ -242,6 +242,10 @@ model User {
   telefono     String?
   activo       Boolean   @default(true)
   ultimoAcceso DateTime?
+  // Foto de perfil (circular, se recorta a cuadrado en el frontend
+  // antes de subir a Cloudinary). Null = sin foto, se muestran
+  // iniciales en el UI con getIniciales().
+  fotoPerfilUrl String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

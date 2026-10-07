@@ -32,6 +32,10 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
   const router  = useRouter()
   const { toast } = useToast()
   const [menuOpen, setMenuOpen]   = useState(false)
+  /** Posición calculada del dropdown en el viewport (fixed). Se calcula
+   *  al abrir para que el menú salga FUERA del <aside> (que tiene
+   *  overflow-y-auto y recortaba cualquier `absolute` interno). */
+  const [menuPos, setMenuPos]     = useState<{ top: number; left: number } | null>(null)
   const [cropOpen, setCropOpen]   = useState(false)
   const [imgSrc, setImgSrc]       = useState<string | null>(null)
   const [crop, setCrop]           = useState({ x: 0, y: 0 })
@@ -40,6 +44,26 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
   const [saving, setSaving]       = useState(false)
   const [deleting, setDeleting]   = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  function toggleMenu() {
+    if (menuOpen) {
+      setMenuOpen(false)
+      return
+    }
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) {
+      // Dropdown ARRIBA del botón, hacia la DERECHA (fuera del sidebar).
+      // Si no cabe por arriba, el browser lo acomoda — forzamos al menos
+      // 8px del borde superior del viewport.
+      const MENU_HEIGHT_APROX = 100
+      setMenuPos({
+        top:  Math.max(8, rect.top - MENU_HEIGHT_APROX),
+        left: rect.right + 8,
+      })
+    }
+    setMenuOpen(true)
+  }
 
   function onPickFile() {
     setMenuOpen(false)
@@ -118,53 +142,58 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
 
   return (
     <>
-      <div className="relative flex items-center">
+      <div className="flex items-center">
         <UserAvatar nombre={nombre} fotoUrl={fotoUrl} size={size} />
 
         {/* Botón 3 puntos */}
         <button
+          ref={btnRef}
           type="button"
-          onClick={() => setMenuOpen((v) => !v)}
+          onClick={toggleMenu}
           className="ml-auto p-1 rounded-md text-primary-200 hover:text-white hover:bg-white/10 transition-colors"
           title="Opciones de foto"
           aria-label="Opciones de foto de perfil"
         >
           <MoreVertical className="h-4 w-4" />
         </button>
+      </div>
 
-        {/* Menú dropdown */}
-        {menuOpen && (
-          <>
-            {/* Overlay para cerrar al click afuera */}
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => setMenuOpen(false)}
-              aria-hidden
-            />
-            <div className="absolute right-0 bottom-full mb-2 z-50 min-w-[220px] rounded-lg border border-primary-600/80 bg-primary-800 shadow-xl py-1">
+      {/* Menú dropdown — FUERA del sidebar via position:fixed para
+          que el overflow del aside no lo recorte. Se abre ARRIBA y a
+          la DERECHA del botón (flotando sobre el contenido principal). */}
+      {menuOpen && menuPos && (
+        <>
+          <div
+            className="fixed inset-0 z-[90]"
+            onClick={() => setMenuOpen(false)}
+            aria-hidden
+          />
+          <div
+            className="fixed z-[100] min-w-[220px] rounded-lg border border-primary-600/80 bg-primary-800 shadow-xl py-1"
+            style={{ top: menuPos.top, left: menuPos.left }}
+          >
+            <button
+              type="button"
+              onClick={onPickFile}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-white/10 transition-colors"
+            >
+              <Camera className="h-4 w-4 text-primary-300" />
+              Cambiar foto de perfil
+            </button>
+            {fotoUrl && (
               <button
                 type="button"
-                onClick={onPickFile}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-white/10 transition-colors"
+                onClick={onDelete}
+                disabled={deleting}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-60"
               >
-                <Camera className="h-4 w-4 text-primary-300" />
-                Cambiar foto de perfil
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Quitar foto
               </button>
-              {fotoUrl && (
-                <button
-                  type="button"
-                  onClick={onDelete}
-                  disabled={deleting}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-60"
-                >
-                  {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                  Quitar foto
-                </button>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+            )}
+          </div>
+        </>
+      )}
 
       <input
         ref={fileInputRef}

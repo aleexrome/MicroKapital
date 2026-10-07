@@ -36,7 +36,7 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
   /** Posición calculada del dropdown en el viewport (fixed). Se calcula
    *  al abrir para que el menú salga FUERA del <aside> (que tiene
    *  overflow-y-auto y recortaba cualquier `absolute` interno). */
-  const [menuPos, setMenuPos]     = useState<{ top: number; left: number } | null>(null)
+  const [menuPos, setMenuPos]     = useState<{ bottom: number; left: number } | null>(null)
   const [cropOpen, setCropOpen]   = useState(false)
   const [imgSrc, setImgSrc]       = useState<string | null>(null)
   const [crop, setCrop]           = useState({ x: 0, y: 0 })
@@ -57,13 +57,12 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
     }
     const rect = btnRef.current?.getBoundingClientRect()
     if (rect) {
-      // Dropdown ARRIBA del botón, hacia la DERECHA (fuera del sidebar).
-      // Si no cabe por arriba, el browser lo acomoda — forzamos al menos
-      // 8px del borde superior del viewport.
-      const MENU_HEIGHT_APROX = 100
+      // Dropdown ARRIBA del botón, con la esquina inferior-izquierda
+      // justo 8px arriba del botón. Usamos `bottom` para que no importe
+      // la altura exacta del menú — el navegador la calcula.
       setMenuPos({
-        top:  Math.max(8, rect.top - MENU_HEIGHT_APROX),
-        left: rect.right + 8,
+        bottom: window.innerHeight - rect.top + 8,
+        left:   rect.left + rect.width / 2 - 20, // viñeta queda centrada en el botón
       })
     }
     setMenuOpen(true)
@@ -176,15 +175,19 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
             aria-hidden
           />
           <div
-            className="fixed z-[100] min-w-[220px] rounded-lg border border-primary-600/80 bg-primary-800 shadow-xl py-1"
-            style={{ top: menuPos.top, left: menuPos.left }}
+            className="fixed z-[100] min-w-[220px] rounded-lg border border-fuchsia-500/40 bg-primary-800 shadow-xl py-1"
+            style={{
+              bottom: menuPos.bottom,
+              left:   menuPos.left,
+              boxShadow: '0 0 24px rgba(236, 72, 153, 0.25), 0 10px 30px rgba(0,0,0,0.5)',
+            }}
           >
             <button
               type="button"
               onClick={onPickFile}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-white/10 transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-fuchsia-500/20 hover:text-fuchsia-100 transition-colors"
             >
-              <Camera className="h-4 w-4 text-primary-300" />
+              <Camera className="h-4 w-4 text-fuchsia-400" />
               Cambiar foto de perfil
             </button>
             {fotoUrl && (
@@ -192,12 +195,20 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
                 type="button"
                 onClick={onDelete}
                 disabled={deleting}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-60"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-300 hover:bg-red-500/15 transition-colors disabled:opacity-60"
               >
                 {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 Quitar foto
               </button>
             )}
+            {/* Viñeta/flecha apuntando al botón 3-puntos. Se dibuja
+                con dos divs: uno más grande con el color del border y
+                otro encima con el bg del menú para dar efecto borde. */}
+            <div
+              aria-hidden
+              className="absolute w-3 h-3 rotate-45 bg-primary-800 border-r border-b border-fuchsia-500/40"
+              style={{ bottom: -7, left: 16 }}
+            />
           </div>
         </>,
         document.body,

@@ -141,7 +141,7 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
               onClick={() => setMenuOpen(false)}
               aria-hidden
             />
-            <div className="absolute right-0 top-full mt-1 z-50 min-w-[200px] rounded-lg border border-primary-600/80 bg-primary-800 shadow-xl py-1">
+            <div className="absolute right-0 bottom-full mb-2 z-50 min-w-[220px] rounded-lg border border-primary-600/80 bg-primary-800 shadow-xl py-1">
               <button
                 type="button"
                 onClick={onPickFile}

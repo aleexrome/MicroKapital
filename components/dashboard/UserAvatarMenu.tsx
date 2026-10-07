@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import Cropper from 'react-easy-crop'
 import type { Area } from 'react-easy-crop'
@@ -45,6 +46,9 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
   const [deleting, setDeleting]   = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
+  // Para SSR: createPortal solo puede ejecutar en cliente.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
 
   function toggleMenu() {
     if (menuOpen) {
@@ -158,10 +162,13 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
         </button>
       </div>
 
-      {/* Menú dropdown — FUERA del sidebar via position:fixed para
-          que el overflow del aside no lo recorte. Se abre ARRIBA y a
-          la DERECHA del botón (flotando sobre el contenido principal). */}
-      {menuOpen && menuPos && (
+      {/* Menú dropdown — se renderiza via createPortal directamente
+          en <body> para saltar el backdrop-blur / overflow del Sidebar
+          que convertían position:fixed en absolute (quirk CSS: un
+          padre con transform/filter/backdrop-filter captura los
+          descendientes fixed). El portal es la única forma de salir
+          de ese containing block. */}
+      {mounted && menuOpen && menuPos && createPortal(
         <>
           <div
             className="fixed inset-0 z-[90]"
@@ -192,7 +199,8 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
               </button>
             )}
           </div>
-        </>
+        </>,
+        document.body,
       )}
 
       <input

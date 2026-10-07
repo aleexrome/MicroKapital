@@ -36,6 +36,7 @@ import {
   Video,
 } from 'lucide-react'
 import type { BranchTreeData } from '@/types/tree'
+import { UserAvatarMenu } from '@/components/dashboard/UserAvatarMenu'
 
 interface NavItem {
   href: string
@@ -208,6 +209,9 @@ interface SidebarProps {
    *  (ej. mostrar "Director de Sistemas" para Alejandro aunque su rol
    *  técnico sea DIRECTOR_GENERAL por permisos). */
   userEmail?: string
+  /** URL de la foto de perfil (opcional). Si null → se muestran las
+   *  iniciales del nombre en el avatar circular. */
+  userFotoUrl?: string | null
   companyName?: string
   branchName?: string
   treeData?: BranchTreeData[]
@@ -221,6 +225,7 @@ export function Sidebar({
   userRole,
   userName,
   userEmail,
+  userFotoUrl,
   companyName,
   branchName,
   treeData = [],
@@ -425,11 +430,7 @@ export function Sidebar({
       {/* User info + logout */}
       <div className="border-t border-primary-600/50 p-4 space-y-3">
         <div className="flex items-center gap-3">
-          <div className="bg-primary-500/20 rounded-xl p-2 ring-1 ring-primary-500/25 shrink-0">
-            <span className="text-primary-300 text-xs font-bold">
-              {userName.charAt(0).toUpperCase()}
-            </span>
-          </div>
+          <UserAvatarMenu nombre={userName} fotoUrl={userFotoUrl} size={40} />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-white truncate">{userName}</p>
             <p className="text-xs text-primary-300 truncate">{rolLabel}</p>

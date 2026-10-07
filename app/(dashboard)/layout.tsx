@@ -133,17 +133,18 @@ export default async function DashboardLayout({
 
   // Viewer de banca por sucursal: si el user tiene bancaViewerBranchId
   // seteado, aparece el link /banca en el sidebar (aunque no sea DG/DC).
+  // De paso traemos fotoPerfilUrl para el avatar del sidebar.
   let puedeVerBanca = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
-  if (!puedeVerBanca) {
-    try {
-      const u = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { bancaViewerBranchId: true },
-      })
-      puedeVerBanca = !!u?.bancaViewerBranchId
-    } catch (e) {
-      console.error('[Layout] Error fetching bancaViewerBranchId:', e)
-    }
+  let userFotoUrl: string | null = null
+  try {
+    const u = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { bancaViewerBranchId: true, fotoPerfilUrl: true },
+    })
+    if (!puedeVerBanca) puedeVerBanca = !!u?.bancaViewerBranchId
+    userFotoUrl = u?.fotoPerfilUrl ?? null
+  } catch (e) {
+    console.error('[Layout] Error fetching user extras:', e)
   }
 
   return (
@@ -170,6 +171,7 @@ export default async function DashboardLayout({
         userRole={rol}
         userName={session.user.name ?? ''}
         userEmail={session.user.email ?? ''}
+        userFotoUrl={userFotoUrl}
         companyName={company?.nombre ?? ''}
         branchName={branch?.nombre ?? ''}
         treeData={treeData}

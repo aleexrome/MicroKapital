@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 2. Verificar configs ──────────────────────────────────────────────────
-  const [companyConfig, branchConfig] = await Promise.all([
+  const [companyConfig, branchConfigExisting] = await Promise.all([
     prisma.companyContractConfig.findUnique({ where: { companyId: companyId! } }),
     prisma.branchContractConfig.findUnique({ where: { branchId: loan.branchId } }),
   ])
@@ -102,12 +102,17 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     )
   }
-  if (!branchConfig) {
-    return NextResponse.json(
-      { error: `Falta configurar la sucursal "${loan.branch.nombre}" en /admin/contratos-config` },
-      { status: 400 }
-    )
-  }
+
+  // Si la sucursal es nueva y nunca pasó por /admin/contratos-config, el
+  // config no existe. Antes esto tiraba 400 y bloqueaba el contrato (caso
+  // real: Tenancingo II 2026-10-10). Ahora se auto-crea con defaults
+  // razonables (código derivado del nombre; ciudad = nombre de sucursal;
+  // día/hora estándar) para no bloquear la operación. DG puede ajustarlo
+  // después en /admin/contratos-config sin perder los folios ya emitidos.
+  const branchConfig = branchConfigExisting ?? await ensureBranchContractConfig(
+    loan.branchId,
+    loan.branch.nombre,
+  )
 
   // ── 3. Determinar si es solidario y resolver el "loan ancla" del contrato ─
   let anchorLoanId = loan.id
@@ -486,4 +491,66 @@ export async function POST(req: NextRequest) {
     },
     { status: 201 }
   )
+}
+
+/**
+ * Deriva un codigoSucursal corto y único desde el nombre de la sucursal.
+ *   "Tenancingo"      → "TEN"
+ *   "Tenancingo II"   → "TEN2"  (si "TEN" ya existe)
+ *   "Toluca"          → "TOL"
+ *   "Martínez de la Torre" → "MAR"
+ * Si "MAR" ya existe, prueba "MAR2", "MAR3", ... hasta que no colisione.
+ * El codigoSucursal es UNIQUE a nivel global en la tabla, así que la
+ * búsqueda de colisión no se filtra por companyId.
+ */
+async function deriveUniqueCodigoSucursal(branchNombre: string): Promise<string> {
+  const base = branchNombre
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')  // quitar acentos
+    .toUpperCase()
+    .replace(/[^A-Z]/g, '')  // solo letras
+    .slice(0, 3)
+    .padEnd(3, 'X')  // si el nombre es muy corto, rellena con X
+
+  const existentes = await prisma.branchContractConfig.findMany({
+    where: { codigoSucursal: { startsWith: base } },
+    select: { codigoSucursal: true },
+  })
+  const taken = new Set(existentes.map((e) => e.codigoSucursal))
+  if (!taken.has(base)) return base
+  for (let n = 2; n < 100; n++) {
+    const cand = `${base}${n}`
+    if (!taken.has(cand)) return cand
+  }
+  // Fallback improbable: si por alguna razón hay 100 colisiones.
+  return `${base}${Date.now() % 1000}`
+}
+
+/**
+ * Crea un BranchContractConfig con defaults razonables para una sucursal
+ * que todavía no fue configurada en /admin/contratos-config. Previene
+ * que la primera generación de contrato tras crear una sucursal falle
+ * con "Falta configurar la sucursal X".
+ */
+async function ensureBranchContractConfig(branchId: string, branchNombre: string) {
+  const codigoSucursal = await deriveUniqueCodigoSucursal(branchNombre)
+  // Carrera: si dos requests concurrentes intentan crearlo al mismo
+  // tiempo, el segundo cae por unique constraint — en ese caso leemos
+  // el que acaba de crearse. Esto deja la operación idempotente.
+  try {
+    return await prisma.branchContractConfig.create({
+      data: {
+        branchId,
+        codigoSucursal,
+        ciudad: branchNombre.toUpperCase(),
+        diaCobro: 'LUNES',
+        horaLimiteCobro: '09:00',
+        folioYear: new Date().getFullYear(),
+        folioLastNumber: 0,
+      },
+    })
+  } catch (e) {
+    const found = await prisma.branchContractConfig.findUnique({ where: { branchId } })
+    if (found) return found
+    throw e
+  }
 }

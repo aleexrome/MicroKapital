@@ -2,8 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'MicroKapital — Sistema de Gestión Financiera',
-  description: 'Plataforma SaaS para microfinancieras',
+  title: 'MicroKapital',
   robots: 'noindex, nofollow',
 }
 

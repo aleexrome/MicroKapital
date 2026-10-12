@@ -201,20 +201,62 @@ async function handleGenerate(req: NextRequest) {
     }
   }
 
-  // ── 4. Ver si ya existe un Contract para el ancla ────────────────────────
-  const existing = await prisma.contract.findUnique({
-    where: { loanId: anchorLoanId },
+  // ── 4. Ver si ya existe un Contract para el ancla O para algún integrante ─
+  // Dos búsquedas porque el ancla puede cambiar entre intentos (ej. caso
+  // AURORA BOREAL 2026-10-10: el primer contrato se generó con una
+  // coordinadora distinta, luego Dirección rechazó, añadió a Aurora como
+  // nueva coord, y al regenerar el ancla cambió — el chequeo por loanId
+  // solo veía el ancla nuevo y no detectaba el contrato viejo, lo que
+  // hacía crashear el createMany de ContractGroupMember por unique
+  // constraint en loanId).
+  //
+  // Reglas al encontrar contrato previo:
+  //   - Si tiene firmado subido (loanDocumentFirmadoId != null) → 409
+  //     siempre; es un contrato real y no se puede regenerar sin
+  //     intervención manual.
+  //   - Si NO tiene firmado → es un draft abortado; se borra en silencio
+  //     (cascade limpia ContractGroupMember) y seguimos adelante.
+  const grupoLoanIds = loan.tipo === 'SOLIDARIO'
+    ? groupLoans.map((gl) => gl.id)
+    : [loan.id]
+
+  const previos = await prisma.contract.findMany({
+    where: {
+      OR: [
+        { loanId: { in: grupoLoanIds } },             // contrato cuyo ancla es un loan del grupo
+        { groupMembers: { some: { loanId: { in: grupoLoanIds } } } }, // o contrato donde un loan del grupo es miembro
+      ],
+    },
+    select: {
+      id: true,
+      numeroContrato: true,
+      pdfGeneradoUrl: true,
+      loanDocumentFirmadoId: true,
+    },
   })
-  if (existing) {
+
+  const firmado = previos.find((c) => c.loanDocumentFirmadoId !== null)
+  if (firmado) {
     return NextResponse.json(
       {
-        error: 'Ya existe un contrato generado para este préstamo/grupo',
-        contractId: existing.id,
-        numeroContrato: existing.numeroContrato,
-        pdfUrl: existing.pdfGeneradoUrl,
+        error: 'Ya existe un contrato firmado para este grupo/préstamo. Si necesitas regenerarlo, primero elimina el firmado desde la UI del préstamo.',
+        contractId: firmado.id,
+        numeroContrato: firmado.numeroContrato,
+        pdfUrl: firmado.pdfGeneradoUrl,
       },
       { status: 409 }
     )
+  }
+
+  if (previos.length > 0) {
+    // Drafts abortados — eliminar antes de generar el nuevo contrato.
+    // El Contract tiene onDelete: Cascade sobre ContractGroupMember, así
+    // que un delete sobre Contract limpia también los members huérfanos
+    // que estaban causando el unique-constraint-violation.
+    await prisma.contract.deleteMany({
+      where: { id: { in: previos.map((c) => c.id) } },
+    })
+    console.log('[contracts/generate] borré', previos.length, 'contrato(s) draft previos para loans', grupoLoanIds)
   }
 
   // ── 5. Generar folio (transacción atómica + auto-reset de año) ───────────

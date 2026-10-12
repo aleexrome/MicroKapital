@@ -38,7 +38,29 @@ const generateSchema = z.object({
  * para un Loan en estado APPROVED. El PDF se sube a Cloudinary y se persiste un
  * registro en `Contract` (más `ContractGroupMember[]` para SOLIDARIO).
  */
+/**
+ * Antes el handler regresaba 500 con HTML si cualquier paso crasheaba
+ * (PDF render, Cloudinary, Prisma), lo que en la UI se veía como un
+ * genérico "Error al generar contrato" (el fallback del toast cuando
+ * la respuesta no es JSON parseable). Ahora envolvemos TODO en
+ * try/catch para devolver el mensaje real y además loggearlo con stack
+ * trace para diagnosticar en producción.
+ */
 export async function POST(req: NextRequest) {
+  try {
+    return await handleGenerate(req)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    const stack = e instanceof Error ? e.stack : undefined
+    console.error('[contracts/generate] 500:', msg, '\n', stack)
+    return NextResponse.json(
+      { error: `Error al generar contrato: ${msg}` },
+      { status: 500 },
+    )
+  }
+}
+
+async function handleGenerate(req: NextRequest) {
   const session = await getSession()
   if (!session?.user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -47,7 +69,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const parsed = generateSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 })
+    return NextResponse.json({ error: 'loanId inválido (no es UUID)' }, { status: 400 })
   }
   const { loanId } = parsed.data
   const { companyId, id: userId, rol, branchId: userBranchId, zonaBranchIds } = session.user

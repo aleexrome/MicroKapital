@@ -69,6 +69,8 @@ interface EstadoFlujoActivacionProps {
   loanCobradorId: string
   loanGerenteZonalIds?: string[]
   loanBranchId: string
+  /** branchId del usuario loggeado — para que GERENTE de la sucursal pueda actuar */
+  userBranchId?: string | null
 }
 
 type ChipStatus = 'OK' | 'PENDING' | 'PENDING_TRANSFER' | 'LATER'
@@ -97,7 +99,7 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
     feeConcepto, feeMonto, capital, descuentoRenovacion = 0,
     solidarioGroupInfo,
     activacionVirtual = false,
-    userRole, userId, loanCobradorId, loanGerenteZonalIds, loanBranchId,
+    userRole, userId, loanCobradorId, loanGerenteZonalIds, loanBranchId, userBranchId,
   } = props
 
   // SOLIDARIO grupal: si este loan es de un integrante (no coordinadora),
@@ -129,11 +131,20 @@ export function EstadoFlujoActivacion(props: EstadoFlujoActivacionProps) {
   const esGZDelLoan =
     userRole === 'GERENTE_ZONAL' &&
     !!loanGerenteZonalIds?.includes(loanBranchId)
+  // GERENTE puede sobre cualquier préstamo de SU sucursal (caso real: Adriana —
+  // GERENTE de Tenancingo II — debe poder generar contratos de su cartera
+  // aunque no esté marcada como cobradora del loan).
+  const esGerenteDelLoan =
+    userRole === 'GERENTE' && !!userBranchId && userBranchId === loanBranchId
   // Para SOLIDARIO grupal, los integrantes no-coordinadores NO pueden disparar
   // los candados desde su perfil — toda la activación se hace desde la
   // coordinadora del grupo.
   const puedeActuar =
-    (userRole === 'SUPER_ADMIN' || esCobradorDelLoan || esGZDelLoan) &&
+    (userRole === 'SUPER_ADMIN' ||
+     userRole === 'DIRECTOR_GENERAL' ||
+     esCobradorDelLoan ||
+     esGZDelLoan ||
+     esGerenteDelLoan) &&
     !esIntegranteNoCoord
 
   const isInActivation = loanEstado === 'IN_ACTIVATION'

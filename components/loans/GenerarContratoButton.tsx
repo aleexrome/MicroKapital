@@ -20,6 +20,8 @@ interface GenerarContratoButtonProps {
   estado: string
   userRole: string
   userId: string
+  /** branchId del usuario loggeado — para que GERENTE de la sucursal pueda generar */
+  userBranchId?: string | null
   loanCobradorId: string
   loanGerenteZonalIds?: string[]   // sucursales del gerente zonal del préstamo
   loanBranchId?: string
@@ -44,6 +46,7 @@ export function GenerarContratoButton({
   estado,
   userRole,
   userId,
+  userBranchId,
   loanCobradorId,
   loanGerenteZonalIds,
   loanBranchId,
@@ -62,15 +65,21 @@ export function GenerarContratoButton({
     userRole === 'GERENTE_ZONAL' &&
     !!loanBranchId &&
     !!loanGerenteZonalIds?.includes(loanBranchId)
+  // GERENTE puede sobre cualquier préstamo de SU sucursal. Caso real:
+  // Adriana — GERENTE de Tenancingo II — necesita generar contratos de
+  // su cartera aunque no esté marcada como cobradora del loan.
+  const esGerenteDelLoan =
+    userRole === 'GERENTE' && !!loanBranchId && loanBranchId === userBranchId
 
   const puedeGenerar =
     userRole === 'SUPER_ADMIN' ||
     userRole === 'DIRECTOR_GENERAL' ||
     esCobradorDelLoan ||
-    esGZDelLoan
+    esGZDelLoan ||
+    esGerenteDelLoan
 
   const puedeSubirFirmado =
-    userRole === 'SUPER_ADMIN' || esCobradorDelLoan || esGZDelLoan
+    userRole === 'SUPER_ADMIN' || esCobradorDelLoan || esGZDelLoan || esGerenteDelLoan
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   async function handleGenerar() {

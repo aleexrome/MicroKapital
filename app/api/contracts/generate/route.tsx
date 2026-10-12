@@ -30,8 +30,6 @@ const generateSchema = z.object({
   loanId: z.string().uuid(),
 })
 
-const ROLES_PERMITIDOS = ['SUPER_ADMIN', 'COORDINADOR', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL'] as const
-
 /**
  * POST /api/contracts/generate
  * Body: { loanId: string }
@@ -39,17 +37,11 @@ const ROLES_PERMITIDOS = ['SUPER_ADMIN', 'COORDINADOR', 'GERENTE_ZONAL', 'DIRECT
  * Genera el paquete de contrato (Solicitud + Contrato/Pagaré + Control de Pagos)
  * para un Loan en estado APPROVED. El PDF se sube a Cloudinary y se persiste un
  * registro en `Contract` (más `ContractGroupMember[]` para SOLIDARIO).
- *
- * NO se engancha aún a la UI ni al activate. Sirve para validar visualmente
- * que el output es fiel a las plantillas físicas.
  */
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session?.user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
-  if (!(ROLES_PERMITIDOS as readonly string[]).includes(session.user.rol)) {
-    return NextResponse.json({ error: 'Sin permisos para generar contratos' }, { status: 403 })
   }
 
   const body = await req.json().catch(() => ({}))
@@ -58,7 +50,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 })
   }
   const { loanId } = parsed.data
-  const { companyId, id: userId } = session.user
+  const { companyId, id: userId, rol, branchId: userBranchId, zonaBranchIds } = session.user
 
   // ── 1. Cargar el préstamo con relaciones ───────────────────────────────────
   const loan = await prisma.loan.findFirst({
@@ -75,6 +67,32 @@ export async function POST(req: NextRequest) {
   if (!loan) {
     return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
   }
+
+  // Autorización por préstamo (en lugar de solo-por-rol como antes).
+  // Caso real que lo motivó: Adriana es GERENTE de Tenancingo II y además
+  // cobradora de las loans del grupo AURORA BOREAL — el botón de la UI
+  // le aparece (lógica cobrador-del-préstamo) pero el API la rechazaba
+  // porque GERENTE no estaba en el whitelist de roles.
+  //
+  // Reglas:
+  //   SUPER_ADMIN / DIRECTOR_GENERAL  → cualquier préstamo
+  //   Cobrador asignado al préstamo   → su préstamo
+  //   GERENTE_ZONAL                    → préstamos en sus sucursales (zonaBranchIds)
+  //   GERENTE                          → préstamos en su sucursal (branchId)
+  const esCobrador = loan.cobradorId === userId
+  const esGZDeLaZona = rol === 'GERENTE_ZONAL' && (zonaBranchIds ?? []).includes(loan.branchId)
+  const esGerenteDeSucursal = rol === 'GERENTE' && userBranchId === loan.branchId
+  const puedeGenerar =
+    rol === 'SUPER_ADMIN' ||
+    rol === 'DIRECTOR_GENERAL' ||
+    esCobrador ||
+    esGZDeLaZona ||
+    esGerenteDeSucursal
+
+  if (!puedeGenerar) {
+    return NextResponse.json({ error: 'Sin permisos para generar este contrato' }, { status: 403 })
+  }
+
   if (loan.estado !== 'APPROVED' && loan.estado !== 'IN_ACTIVATION') {
     return NextResponse.json(
       { error: 'El préstamo debe estar en APPROVED o IN_ACTIVATION para generar contrato' },

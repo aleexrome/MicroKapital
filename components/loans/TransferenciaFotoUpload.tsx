@@ -152,18 +152,21 @@ export function TransferenciaFotoUpload({
 
         {!archivo ? (
           <div className="space-y-2">
+            {/* Sin `capture="environment"`: el usuario normalmente ya tiene
+                el screenshot del comprobante en la galería del celular;
+                forzar la cámara era un paso extra inútil. El navegador
+                sigue mostrando la opción de usar cámara si la quiere. */}
             <input
               ref={inputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               onChange={elegirArchivo}
               disabled={subiendo}
               className="text-xs w-full"
             />
             <p className="text-[11px] text-muted-foreground flex items-start gap-1">
               <Info className="h-3 w-3 mt-0.5 shrink-0" />
-              Puedes tomar la foto en el momento (recomendado) o subir una captura del comprobante.
+              Selecciona el screenshot del comprobante desde tu galería (o toma una foto si lo tienes físico).
             </p>
           </div>
         ) : (

@@ -705,6 +705,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                 loanCobradorId={loan.cobradorId}
                 loanGerenteZonalIds={session.user.zonaBranchIds ?? undefined}
                 loanBranchId={loan.branchId}
+                userBranchId={session.user.branchId}
               />
             </div>
           )}

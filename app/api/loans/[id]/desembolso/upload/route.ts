@@ -459,13 +459,18 @@ export async function POST(
     const promptTextIndividual = 'Estas imagenes son frames de un video donde alguien recibe dinero en efectivo. ¿En alguna de las imagenes se ve claramente dinero (billetes de peso mexicano) siendo mostrado por la persona? Responde SOLO en JSON con esta forma exacta: {"dinero_visible": true|false, "explicacion": "breve razon"}.'
 
     const visionResp = await getAnthropic().messages.create({
-      // claude-3-5-sonnet-latest devolvia 404 porque la alias `-latest`
-      // ya no esta accesible en el workspace (Anthropic la deprecio).
-      // Usamos el modelo estable actual — claude-opus-5 tiene vision y
-      // es la opcion recomendada por Anthropic para tareas de analisis
-      // visual con calidad para produccion (anti-fraude).
-      model: 'claude-opus-5',
-      max_tokens: 300,
+      // claude-opus-5-5 es el modelo actual recomendado (Claude 5.5 family).
+      // Antes se usaba claude-opus-5 con max_tokens=300, pero en Opus 5
+      // el thinking está habilitado por default (adaptive) y los 300
+      // tokens se consumían en bloques de thinking, dejando la respuesta
+      // sin bloque text → caía al mensaje genérico "Vision no devolvió
+      // bloque de texto" sin razón real. Con claude-opus-5-5 el thinking
+      // también está always-on (no se puede deshabilitar) así que subimos
+      // max_tokens a 2000 y bajamos effort a "low" (la tarea es simple:
+      // extraer un JSON compacto desde frames).
+      model: 'claude-opus-5-5',
+      max_tokens: 2000,
+      output_config: { effort: 'low' },
       messages: [
         {
           role: 'user',
@@ -514,7 +519,17 @@ export async function POST(
         dineroDetalle = `Vision respondió sin JSON parseable: "${textBlock.text.slice(0, 100)}"`
       }
     } else {
-      dineroDetalle = 'Vision no devolvió bloque de texto — respuesta inesperada'
+      // No llegó bloque text. Distinguir causas comunes:
+      //   - stop_reason: "refusal"  → safety classifier bloqueó
+      //   - stop_reason: "max_tokens" → thinking consumió todo el presupuesto
+      //   - solo thinking blocks → modelo pensó pero no respondió
+      const stopReason  = visionResp.stop_reason ?? 'unknown'
+      const blockTypes  = visionResp.content.map((b) => b.type).join(',') || 'empty'
+      const refusalInfo = visionResp.stop_reason === 'refusal'
+        ? ` (categoría: ${(visionResp as unknown as { stop_details?: { category?: string } }).stop_details?.category ?? '?'})`
+        : ''
+      console.error('[desembolso-video] Vision sin bloque text — stop:', stopReason, 'blocks:', blockTypes, 'usage:', JSON.stringify(visionResp.usage))
+      dineroDetalle = `Vision no devolvió texto (stop_reason=${stopReason}${refusalInfo}, blocks=${blockTypes})`
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

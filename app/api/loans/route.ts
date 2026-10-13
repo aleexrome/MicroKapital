@@ -88,7 +88,11 @@ export async function POST(req: NextRequest) {
 
   const { rol, companyId, branchId, id: userId } = session.user
 
-  const rolesPermitidos = ['COORDINADOR', 'GERENTE_ZONAL', 'SUPER_ADMIN']
+  // GERENTE (gerente de sucursal) también crea solicitudes para su cartera —
+  // caso real: Adriana, GERENTE de Tenancingo II. Antes solo COORDINADOR,
+  // GERENTE_ZONAL y SUPER_ADMIN estaban en el whitelist y Adriana recibía
+  // "Sin permisos para crear solicitudes de crédito".
+  const rolesPermitidos = ['COORDINADOR', 'GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN']
   if (!rolesPermitidos.includes(rol)) {
     return NextResponse.json({ error: 'Sin permisos para crear solicitudes de crédito' }, { status: 403 })
   }
@@ -142,9 +146,9 @@ export async function POST(req: NextRequest) {
   const targetBranchId = data.branchId ?? branchId ?? session.user.zonaBranchIds?.[0] ?? client.branchId
   if (!targetBranchId) return NextResponse.json({ error: 'Sucursal requerida' }, { status: 400 })
 
-  // Coordinador y Gerente Zonal: se asignan a sí mismos como cobrador
+  // Coordinador / Gerente / Gerente Zonal: se asignan a sí mismos como cobrador
   // Solo Super Admin puede asignar a otro cobrador (envía cobradorId en el body)
-  const isCampo = rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL'
+  const isCampo = rol === 'COORDINADOR' || rol === 'GERENTE' || rol === 'GERENTE_ZONAL'
   let cobradorId = data.cobradorId
   if (isCampo) {
     cobradorId = userId

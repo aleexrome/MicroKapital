@@ -28,6 +28,10 @@ export interface TransferRow {
    *  verificacionCentralizada de la sucursal del préstamo). */
   puedeVerificar: boolean
   sucursalNombre: string
+  /** Fase 1 validación: cuando el pago se registró con el flujo nuevo,
+   *  idTransferencia es el código MK-XXXXXX y comprobanteFotoUrl trae
+   *  el screenshot que subió la coord. Legacy = ambos null. */
+  comprobanteFotoUrl?: string | null
 }
 
 interface Props {
@@ -348,7 +352,22 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
                         <p><span className="text-muted-foreground">Cobrador:</span> {p.cobrador.nombre}</p>
                         <p><span className="text-muted-foreground">Capturado:</span> {formatDateTime(p.fechaHora)}</p>
                         {p.idTransferencia && (
-                          <p><span className="text-muted-foreground">Referencia:</span> <span className="font-mono">{p.idTransferencia}</span></p>
+                          // Si el idTransferencia empieza con "MK-" es el código
+                          // Fase 1 (generado por el sistema); lo destacamos para
+                          // que el verificador lo busque visualmente en la foto.
+                          p.idTransferencia.startsWith('MK-') ? (
+                            <p>
+                              <span className="text-muted-foreground">Código esperado en concepto:</span>{' '}
+                              <span className="font-mono font-bold text-fuchsia-600 bg-fuchsia-50 px-1.5 py-0.5 rounded">
+                                {p.idTransferencia}
+                              </span>
+                            </p>
+                          ) : (
+                            <p>
+                              <span className="text-muted-foreground">Referencia:</span>{' '}
+                              <span className="font-mono">{p.idTransferencia}</span>
+                            </p>
+                          )
                         )}
                         {p.cuentaDestino && (
                           <p className="flex items-center gap-1">
@@ -357,6 +376,19 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
                           </p>
                         )}
                         <p><span className="text-muted-foreground">Sucursal:</span> {p.sucursalNombre}</p>
+                        {p.comprobanteFotoUrl && (
+                          <div className="mt-2">
+                            <p className="text-xs text-muted-foreground mb-1">Comprobante subido por la coordinadora:</p>
+                            <a href={p.comprobanteFotoUrl} target="_blank" rel="noreferrer" className="inline-block">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={p.comprobanteFotoUrl}
+                                alt="Comprobante de transferencia"
+                                className="max-h-48 rounded-md border border-border hover:border-primary-500 transition-colors cursor-zoom-in"
+                              />
+                            </a>
+                          </div>
+                        )}
                         {!esPendiente && (
                           <p className="pt-1 mt-1 border-t border-border text-emerald-600">
                             <span className="text-muted-foreground">Validada por:</span>{' '}

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { CashBreakdownCalculator } from '@/components/payments/CashBreakdownCalculator'
-import { TransferPaymentFlow } from '@/components/payments/TransferPaymentFlow'
 import { formatMoney } from '@/lib/utils'
 import {
   Zap,
@@ -13,10 +12,6 @@ import {
   CalendarDays,
   ShieldCheck,
   Banknote,
-  CreditCard,
-  Building2,
-  CheckCircle,
-  BadgePercent,
 } from 'lucide-react'
 import type { CashBreakdownEntry } from '@/types'
 
@@ -31,7 +26,10 @@ interface LoanActivateButtonProps {
   descuentoRenovacion?: number
 }
 
-type Step = 'info' | 'cash' | 'card' | 'transfer' | 'financiado'
+// Comisión / seguro de apertura: desde 2026-10 por decisión de Dirección,
+// SOLO se cobra en efectivo con ticket. Se removieron CARD, TRANSFER y
+// FINANCIADO. El Step type queda minimalista.
+type Step = 'info' | 'cash'
 
 export function LoanActivateButton({
   loanId,
@@ -49,15 +47,10 @@ export function LoanActivateButton({
   const [showForm, setShowForm] = useState(false)
   const [step, setStep] = useState<Step>('info')
 
-  // Transfer state — flujo nuevo Fase 1: el TransferPaymentFlow genera
-  // el código + sube la foto. Guardamos sólo el id del TransferCode para
-  // mandarlo al endpoint de activate.
-  const [transferCodeId, setTransferCodeId] = useState<string | null>(null)
-
   const feeLabel = feeConcepto === 'SEGURO' ? 'Seguro de apertura' : 'Comision de apertura'
 
   async function handleActivate(
-    metodoPago: 'CASH' | 'CARD' | 'TRANSFER' | 'FINANCIADO',
+    metodoPago: 'CASH',
     cashBreakdown?: CashBreakdownEntry[],
     cambioEntregado?: number
   ) {
@@ -68,13 +61,6 @@ export function LoanActivateButton({
       if (metodoPago === 'CASH') {
         body.cashBreakdown = cashBreakdown ?? []
         body.cambioEntregado = cambioEntregado ?? 0
-      }
-
-      if (metodoPago === 'TRANSFER') {
-        if (!transferCodeId) {
-          throw new Error('Selecciona la cuenta y sube el comprobante antes de activar')
-        }
-        body.transferCodeId = transferCodeId
       }
 
       const res = await fetch(`/api/loans/${loanId}/activate`, {
@@ -228,41 +214,26 @@ export function LoanActivateButton({
 
           {/* Payment method buttons — 3-column grid matching payment capture flow */}
           <div>
-            <p className="text-xs text-muted-foreground mb-2">Metodo de pago</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <p className="text-xs text-muted-foreground mb-2">Método de pago</p>
+            {/* Comisión / seguro de apertura: SOLO en efectivo, con ticket.
+                Decisión de Dirección (2026-10): ya no se descuenta del
+                capital (FINANCIADO deshabilitado) y no se acepta
+                TRANSFER ni CARD en la comisión — se cobra siempre en
+                efectivo para que quede ticket físico de respaldo. */}
+            <div className="grid grid-cols-1 gap-3">
               <button
                 type="button"
                 onClick={() => setStep('cash')}
-                className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-600 hover:border-primary-400 hover:bg-primary-500/10 transition-colors"
+                className="flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-primary-400 bg-primary-500/10 hover:bg-primary-500/20 transition-colors"
               >
                 <Banknote className="h-7 w-7 text-primary-400" />
-                <span className="font-medium text-sm">Efectivo</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep('card')}
-                className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-600 hover:border-primary-400 hover:bg-primary-500/10 transition-colors"
-              >
-                <CreditCard className="h-7 w-7 text-primary-400" />
-                <span className="font-medium text-sm">Tarjeta</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep('transfer')}
-                className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-600 hover:border-primary-400 hover:bg-primary-500/10 transition-colors"
-              >
-                <Building2 className="h-7 w-7 text-primary-400" />
-                <span className="font-medium text-sm">Transferencia</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep('financiado')}
-                className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-amber-500/40 hover:border-amber-400 hover:bg-amber-500/10 transition-colors"
-              >
-                <BadgePercent className="h-7 w-7 text-amber-400" />
-                <span className="font-medium text-sm">Financiado</span>
+                <span className="font-semibold text-sm">Pagar en efectivo</span>
               </button>
             </div>
+            <p className="text-[11px] text-amber-300/80 mt-2 text-center">
+              La comisión de apertura se cobra únicamente en efectivo
+              con ticket impreso.
+            </p>
           </div>
 
           {/* Cancel */}
@@ -287,158 +258,10 @@ export function LoanActivateButton({
         />
       )}
 
-      {/* ── STEP: CARD ─────────────────────────────────────────────────────── */}
-      {step === 'card' && (
-        <div className="space-y-4">
-          <div className="bg-primary-500/10 border border-primary-500/30 rounded-lg p-4 text-center">
-            <CreditCard className="h-8 w-8 text-primary-400 mx-auto mb-2" />
-            <p className="font-medium">Pago con tarjeta</p>
-            <p className="text-2xl font-bold text-primary-400 money mt-1">
-              {formatMoney(feeMonto)}
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => setStep('info')}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="flex-1"
-              disabled={loading}
-              onClick={() => handleActivate('CARD')}
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4" /> Confirmar
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* ── STEP: TRANSFER (flujo nuevo Fase 1) ─────────────────────────── */}
-      {step === 'transfer' && (
-        <div className="space-y-4">
-          <div className="bg-primary-500/10 border border-primary-500/30 rounded-lg p-4 text-center">
-            <Building2 className="h-8 w-8 text-primary-400 mx-auto mb-2" />
-            <p className="font-medium">Transferencia bancaria</p>
-            <p className="text-2xl font-bold text-primary-400 money mt-1">
-              {formatMoney(feeMonto)}
-            </p>
-          </div>
-
-          <TransferPaymentFlow
-            loanId={loanId}
-            tipo="COMISION_APERTURA"
-            montoEsperado={feeMonto}
-            onReady={({ transferCodeId: tcId }) => setTransferCodeId(tcId)}
-            onReset={() => setTransferCodeId(null)}
-          />
-
-          <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-            El credito quedara en estado aprobado con pago pendiente de verificacion.
-            El Gerente Zonal confirmara el deposito usando el codigo y la foto que subiste.
-          </p>
-
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => { setStep('info'); setTransferCodeId(null) }}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="flex-1"
-              disabled={loading || !transferCodeId}
-              onClick={() => handleActivate('TRANSFER')}
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4" /> Registrar
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* ── STEP: FINANCIADO ──────────────────────────────────────────────── */}
-      {step === 'financiado' && (
-        <div className="space-y-4">
-          {(() => {
-            const montoFinal = capital - descuentoRenovacion - feeMonto
-            return (
-              <>
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 text-center">
-                  <BadgePercent className="h-8 w-8 text-amber-400 mx-auto mb-2" />
-                  <p className="font-medium text-amber-300">Financiado — descuento sobre capital</p>
-                  <div className="mt-3 space-y-1">
-                    <div className="flex justify-between text-sm px-4">
-                      <span className="text-gray-400">Capital</span>
-                      <span className="money">{formatMoney(capital)}</span>
-                    </div>
-                    {descuentoRenovacion > 0 && (
-                      <div className="flex justify-between text-sm px-4">
-                        <span className="text-gray-400">Descuento renovacion</span>
-                        <span className="text-orange-400 money">- {formatMoney(descuentoRenovacion)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-sm px-4">
-                      <span className="text-gray-400">{feeLabel}</span>
-                      <span className="text-amber-400 money">- {formatMoney(feeMonto)}</span>
-                    </div>
-                    <div className="border-t border-amber-500/30 mt-2 pt-2 flex justify-between text-sm px-4">
-                      <span className="font-semibold">Monto a entregar</span>
-                      <span className="font-bold text-lg text-white money">{formatMoney(montoFinal)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-                  El {feeLabel.toLowerCase()} se descontara del capital. El cliente recibira{' '}
-                  <strong>{formatMoney(montoFinal)}</strong> en lugar de {formatMoney(capital - descuentoRenovacion)}.
-                  El credito se activara de inmediato.
-                </p>
-              </>
-            )
-          })()}
-
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => setStep('info')}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
-              disabled={loading}
-              onClick={() => handleActivate('FINANCIADO')}
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <BadgePercent className="h-4 w-4" /> Confirmar financiado
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Nota: pasos CARD / TRANSFER / FINANCIADO fueron removidos en
+          2026-10 (Dirección) — la comisión / seguro de apertura se cobra
+          únicamente en efectivo con ticket. Si en el futuro se abre
+          nuevamente alguno de esos canales, revivir desde el histórico. */}
     </div>
   )
 }

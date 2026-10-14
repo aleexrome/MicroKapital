@@ -7,8 +7,12 @@ import { calcTarifaApertura } from '@/lib/financial-formulas'
 import { generateTicketNumber, generateTicketQrData } from '@/lib/ticket-generator'
 import { todayMx } from '@/lib/timezone'
 
+// Decisión Dirección 2026-10: la comisión / seguro de apertura se cobra
+// únicamente en EFECTIVO con ticket. Ya no se descuenta del capital
+// (FINANCIADO) y no se acepta CARD ni TRANSFER. Si alguien manda otro
+// método, el endpoint responde 400.
 const registerPaymentSchema = z.object({
-  metodoPago: z.enum(['CASH', 'CARD', 'TRANSFER', 'FINANCIADO']),
+  metodoPago: z.enum(['CASH']),
   cashBreakdown: z.array(z.object({
     denominacion: z.number(),
     cantidad: z.number(),

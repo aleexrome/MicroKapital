@@ -203,101 +203,13 @@ export async function POST(
   const feeMonto = tarifa.monto
   const feeConcepto = esFeeSeguro ? 'Seguro de apertura' : 'Comisión de apertura'
 
-  // Si el pago es por TRANSFER, registrar y esperar verificación (solo en primer llamado, no en verificación)
-  if (data.metodoPago === 'TRANSFER') {
-    // Resolver TransferCode si vino (flujo nuevo Fase 1).
-    let transferCode: {
-      id: string
-      code: string
-      cuentaDestinoId: string
-      comprobanteFotoUrl: string | null
-      comprobanteFotoAt: Date | null
-    } | null = null
-    if (data.transferCodeId) {
-      const tc = await prisma.transferCode.findFirst({
-        where: {
-          id:        data.transferCodeId,
-          companyId: companyId!,
-          loanId:    loan.id,
-          tipo:      'COMISION_APERTURA',
-        },
-      })
-      if (!tc)                                return NextResponse.json({ error: 'Código de transferencia inválido' }, { status: 400 })
-      if (tc.usedAt)                          return NextResponse.json({ error: 'Este código ya fue usado' }, { status: 409 })
-      if (tc.invalidatedAt)                   return NextResponse.json({ error: 'Este código fue invalidado' }, { status: 409 })
-      if (tc.expiresAt.getTime() <= Date.now()) return NextResponse.json({ error: 'Este código ya expiró. Regenera uno nuevo.' }, { status: 409 })
-      if (!tc.comprobanteFotoUrl)             return NextResponse.json({ error: 'Falta subir la foto del comprobante' }, { status: 400 })
-      transferCode = {
-        id:                 tc.id,
-        code:               tc.code,
-        cuentaDestinoId:    tc.cuentaDestinoId,
-        comprobanteFotoUrl: tc.comprobanteFotoUrl,
-        comprobanteFotoAt:  tc.comprobanteFotoAt,
-      }
-    }
-    const efectivoCuentaDestinoId = transferCode?.cuentaDestinoId ?? data.cuentaDestinoId ?? null
-    const efectivoIdTransferencia = transferCode?.code ?? data.idTransferencia ?? null
-    const efectivoComprobanteUrl  = transferCode?.comprobanteFotoUrl ?? null
-    const efectivoComprobanteAt   = transferCode?.comprobanteFotoAt ?? null
+  // Decisión Dirección 2026-10: la comisión / seguro de apertura se cobra
+  // ÚNICAMENTE en EFECTIVO con ticket. Se removieron los bloques TRANSFER
+  // y FINANCIADO (ya no se descuenta del capital). Si en el futuro se
+  // reactiva alguno, revivir desde el histórico de git.
+  const nuevoMontoReal: number | undefined = undefined
 
-    await prisma.$transaction(async (tx) => {
-      // Crear registro de Payment para la tarifa
-      const payment = await tx.payment.create({
-        data: {
-          loanId: loan.id,
-          cobradorId: userId,
-          clientId: loan.clientId,
-          monto: feeMonto,
-          metodoPago: 'TRANSFER',
-          cambioEntregado: 0,
-          notas: feeConcepto,
-          fechaHora: new Date(),
-          cuentaDestinoId:     efectivoCuentaDestinoId,
-          idTransferencia:     efectivoIdTransferencia,
-          statusTransferencia: 'PENDIENTE',
-          comprobanteFotoUrl:  efectivoComprobanteUrl,
-          comprobanteFotoAt:   efectivoComprobanteAt,
-          referenciaBanco:     data.referenciaBanco?.trim() || null,
-        },
-      })
-
-      await tx.loan.update({
-        where: { id: loan.id },
-        data: {
-          seguro: esFeeSeguro ? feeMonto : undefined,
-          seguroMetodoPago: 'TRANSFER',
-          seguroPendiente: true,
-          fechaDesembolso,
-        },
-      })
-
-      if (transferCode) {
-        await tx.transferCode.update({
-          where: { id: transferCode.id },
-          data:  { usedAt: new Date(), paymentId: payment.id },
-        })
-      }
-    })
-
-    createAuditLog({
-      userId,
-      accion: 'REGISTER_ACTIVATION_FEE_TRANSFER',
-      tabla: 'Loan',
-      registroId: loan.id,
-      valoresNuevos: { feeMonto, feeConcepto, metodoPago: 'TRANSFER', seguroPendiente: true },
-    })
-
-    return NextResponse.json({
-      seguroPendiente: true,
-      message: `${feeConcepto} registrado por transferencia. El crédito se activará cuando el gerente verifique.`,
-    })
-  }
-
-  // FINANCIADO — descontar tarifa del montoReal (que ya incluye descuento de renovación si aplica)
-  const esFinanciado = data.metodoPago === 'FINANCIADO'
-  const nuevoMontoReal = esFinanciado ? Number(loan.montoReal) - feeMonto : undefined
-
-  // CASH, CARD o FINANCIADO — activación inmediata
+  // CASH — activación inmediata
   const fechaPrimerPagoRef = loan.fechaPrimerPago ?? null
 
   let fechas: Date[]

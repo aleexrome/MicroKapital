@@ -271,121 +271,13 @@ export async function POST(
     })
   }
 
-  // ── TRANSFER ─────────────────────────────────────────────────────────────
-  if (data.metodoPago === 'TRANSFER') {
-    // Resolver TransferCode si se mandó — ésta es la fuente de verdad en
-    // el flujo nuevo (Fase 1). Si no vino, aceptamos el flujo legacy con
-    // cuentaDestinoId/idTransferencia libres.
-    let transferCode: {
-      id: string
-      code: string
-      cuentaDestinoId: string
-      comprobanteFotoUrl: string | null
-      comprobanteFotoAt: Date | null
-    } | null = null
-    if (data.transferCodeId) {
-      const tc = await prisma.transferCode.findFirst({
-        where: {
-          id:        data.transferCodeId,
-          companyId: companyId!,
-          loanId:    loan.id,
-          tipo:      'COMISION_APERTURA',
-        },
-      })
-      if (!tc) {
-        return NextResponse.json({ error: 'Código de transferencia inválido' }, { status: 400 })
-      }
-      if (tc.usedAt) {
-        return NextResponse.json({ error: 'Este código ya fue usado' }, { status: 409 })
-      }
-      if (tc.invalidatedAt) {
-        return NextResponse.json({ error: 'Este código fue invalidado' }, { status: 409 })
-      }
-      if (tc.expiresAt.getTime() <= Date.now()) {
-        return NextResponse.json({ error: 'Este código ya expiró. Regenera uno nuevo.' }, { status: 409 })
-      }
-      if (!tc.comprobanteFotoUrl) {
-        return NextResponse.json({ error: 'Falta subir la foto del comprobante' }, { status: 400 })
-      }
-      transferCode = {
-        id:                 tc.id,
-        code:               tc.code,
-        cuentaDestinoId:    tc.cuentaDestinoId,
-        comprobanteFotoUrl: tc.comprobanteFotoUrl,
-        comprobanteFotoAt:  tc.comprobanteFotoAt,
-      }
-    }
-    const efectivoCuentaDestinoId = transferCode?.cuentaDestinoId ?? data.cuentaDestinoId ?? null
-    const efectivoIdTransferencia = transferCode?.code ?? data.idTransferencia ?? null
-    const efectivoComprobanteUrl  = transferCode?.comprobanteFotoUrl ?? null
-    const efectivoComprobanteAt   = transferCode?.comprobanteFotoAt ?? null
+  // Decisión Dirección 2026-10: comisión / seguro de apertura ÚNICAMENTE
+  // en CASH con ticket. Los bloques TRANSFER / FINANCIADO fueron
+  // removidos — si en el futuro se reactiva alguno, revivir desde el
+  // histórico de git.
 
-    await prisma.$transaction(async (tx) => {
-      let firstPaymentId: string | null = null
-      for (const t of tarifas) {
-        const created = await tx.payment.create({
-          data: {
-            loanId: t.loan.id,
-            cobradorId: userId,
-            clientId: t.loan.clientId,
-            monto: t.tarifa.monto,
-            metodoPago: 'TRANSFER',
-            cambioEntregado: 0,
-            notas: t.esFeeSeguro ? 'Seguro de apertura' : 'Comisión de apertura',
-            fechaHora: now,
-            cuentaDestinoId:     efectivoCuentaDestinoId,
-            idTransferencia:     efectivoIdTransferencia,
-            statusTransferencia: 'PENDIENTE',
-            comprobanteFotoUrl:  efectivoComprobanteUrl,
-            comprobanteFotoAt:   efectivoComprobanteAt,
-            referenciaBanco:     data.referenciaBanco?.trim() || null,
-          },
-        })
-        if (firstPaymentId === null) firstPaymentId = created.id
-        await tx.loan.update({
-          where: { id: t.loan.id },
-          data: {
-            ...(t.esFeeSeguro ? { seguro: t.tarifa.monto } : {}),
-            seguroMetodoPago: 'TRANSFER',
-            seguroPendiente: true,
-          },
-        })
-      }
-      // Marcar código como usado — en grupal se linkea al primer Payment
-      // (los demás integrantes llevan el idTransferencia duplicado como
-      // string, que es intencional: todos pertenecen a la misma
-      // transferencia bancaria).
-      if (transferCode && firstPaymentId) {
-        await tx.transferCode.update({
-          where: { id: transferCode.id },
-          data:  { usedAt: now, paymentId: firstPaymentId },
-        })
-      }
-    })
-    createAuditLog({
-      userId,
-      accion: pagoGrupal ? 'REGISTER_GROUP_ACTIVATION_FEE_TRANSFER' : 'REGISTER_ACTIVATION_FEE_TRANSFER',
-      tabla: 'Loan',
-      registroId: loan.id,
-      valoresNuevos: {
-        feeTotal,
-        metodoPago: 'TRANSFER',
-        seguroPendiente: true,
-        ...(pagoGrupal ? { integrantes: targetLoans.length } : {}),
-      },
-    })
-    return NextResponse.json({
-      ok: true,
-      seguroPendiente: true,
-      message: pagoGrupal
-        ? `${feeConceptoBase} grupal registrada por transferencia ($${feeTotal.toFixed(2)} de ${targetLoans.length} integrantes). Pendiente de verificación.`
-        : `${feeConceptoBase} registrado por transferencia. Pendiente de verificación por el gerente.`,
-    })
-  }
-
-  // ── CASH / CARD ──────────────────────────────────────────────────────────
-  const metodoCashCard = data.metodoPago as 'CASH' | 'CARD'
-
+  // ── CASH ─────────────────────────────────────────────────────────────────
+  // Hardcoded a 'CASH' porque el enum del schema ya no acepta otro.
   const branchPrefix = loan.branch.nombre
     .split(' ')
     .map((w) => w[0]?.toUpperCase() ?? '')
@@ -404,7 +296,7 @@ export async function POST(
           cobradorId: userId,
           clientId: t.loan.clientId,
           monto: t.tarifa.monto,
-          metodoPago: metodoCashCard,
+          metodoPago: 'CASH',
           cambioEntregado: 0,  // sólo se aplica al primer pago si hay cambio
           notas: t.esFeeSeguro ? 'Seguro de apertura' : 'Comisión de apertura',
           fechaHora: now,
@@ -416,15 +308,15 @@ export async function POST(
         where: { id: t.loan.id },
         data: {
           ...(t.esFeeSeguro ? { seguro: t.tarifa.monto } : {}),
-          seguroMetodoPago: metodoCashCard,
+          seguroMetodoPago: 'CASH',
           seguroPendiente: false,
         },
       })
     }
 
-    // 2. CashBreakdown — sólo CASH, asociado al primer Payment (coordinadora)
-    //    porque el desglose es del total recibido, no por integrante.
-    if (metodoCashCard === 'CASH' && data.cashBreakdown && data.cashBreakdown.length > 0 && payments[0]) {
+    // 2. CashBreakdown asociado al primer Payment (coordinadora) porque
+    //    el desglose es del total recibido, no por integrante.
+    if (data.cashBreakdown && data.cashBreakdown.length > 0 && payments[0]) {
       await tx.cashBreakdown.createMany({
         data: data.cashBreakdown.map((d) => ({
           paymentId: payments[0]!.id,
@@ -443,22 +335,21 @@ export async function POST(
         cobradorId: userId,
         branchId: targetBranchId!,
         fecha: fechaCaja,
-        cobradoEfectivo: metodoCashCard === 'CASH' ? feeTotal : 0,
-        cobradoTarjeta: metodoCashCard === 'CARD' ? feeTotal : 0,
+        cobradoEfectivo: feeTotal,
+        cobradoTarjeta: 0,
         cobradoTransferencia: 0,
         cambioEntregado: data.cambioEntregado ?? 0,
       },
       update: {
-        cobradoEfectivo: metodoCashCard === 'CASH' ? { increment: feeTotal } : undefined,
-        cobradoTarjeta:  metodoCashCard === 'CARD' ? { increment: feeTotal } : undefined,
+        cobradoEfectivo: { increment: feeTotal },
         cambioEntregado: data.cambioEntregado ? { increment: data.cambioEntregado } : undefined,
       },
     })
 
-    // 4. Ticket — sólo CASH, ONE solo ticket por el total grupal,
-    //    asociado al primer Payment (coordinadora).
+    // 4. Ticket — un solo ticket por el total grupal, asociado al
+    //    primer Payment (coordinadora).
     let ticket = null
-    if (metodoCashCard === 'CASH' && feeTotal > 0 && payments[0]) {
+    if (feeTotal > 0 && payments[0]) {
       const year = now.getFullYear()
       const numeroTicket = await generateTicketNumber(branchPrefix, year)
       const qrCode = generateTicketQrData(numeroTicket)
@@ -484,7 +375,7 @@ export async function POST(
     registroId: loan.id,
     valoresNuevos: {
       feeTotal,
-      metodoPago: metodoCashCard,
+      metodoPago: 'CASH',
       ticketNumero: result.ticket?.numeroTicket ?? null,
       ...(pagoGrupal ? { integrantes: targetLoans.length } : {}),
     },

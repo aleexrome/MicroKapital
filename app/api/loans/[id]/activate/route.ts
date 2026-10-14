@@ -14,7 +14,9 @@ import { z } from 'zod'
 
 const activateSchema = z.object({
   fechaDesembolso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
-  metodoPago: z.enum(['CASH', 'CARD', 'TRANSFER', 'FINANCIADO']).optional(),
+  // Decisión Dirección 2026-10: comisión / seguro de apertura solo CASH.
+  // CARD, TRANSFER, FINANCIADO ya no están permitidos.
+  metodoPago: z.enum(['CASH']).optional(),
   cashBreakdown: z.array(z.object({
     denominacion: z.number(),
     cantidad: z.number(),

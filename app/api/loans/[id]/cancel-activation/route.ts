@@ -66,6 +66,7 @@ async function handleCancelActivation(
     select: {
       id: true, estado: true, cobradorId: true, branchId: true, companyId: true,
       desembolsoFotoUrl: true, capital: true,
+      tipo: true, loanGroupId: true, loanOriginalId: true,
       client: { select: { nombreCompleto: true } },
     },
   })
@@ -155,6 +156,32 @@ async function handleCancelActivation(
 
   const fechaCaja = todayMx()
 
+  // ── Propagación al grupo (SOLIDARIO) ───────────────────────────────────
+  // Caso real: cancelar la activación de la coord del grupo dejaba a los
+  // demás integrantes atorados en IN_ACTIVATION — el contrato grupal y
+  // la comisión eran compartidos, así que sin la coord no pueden
+  // continuar. Se propaga la cancelación a hermanos del MISMO ciclo
+  // (loanOriginalId null/not-null) en estados IN_ACTIVATION / APPROVED /
+  // PENDING_APPROVAL. ACTIVE NO se toca (ya desembolsado, no es
+  // revertible).
+  let hermanos: { id: string }[] = []
+  if (loan.tipo === 'SOLIDARIO' && loan.loanGroupId) {
+    const esRenovacion = loan.loanOriginalId !== null
+    const cicloFilter = esRenovacion
+      ? { loanOriginalId: { not: null } }
+      : { loanOriginalId: null }
+    hermanos = await prisma.loan.findMany({
+      where: {
+        loanGroupId: loan.loanGroupId,
+        companyId:   companyId!,
+        id:          { not: loan.id },
+        estado:      { in: ['PENDING_APPROVAL', 'APPROVED', 'IN_ACTIVATION'] },
+        ...cicloFilter,
+      },
+      select: { id: true },
+    })
+  }
+
   await prisma.$transaction(async (tx) => {
     // ── 1. Si el contrato tenía firmado ligado a un LoanDocument de ESTE
     // préstamo, primero rompemos el link — el LoanDocument se irá con el
@@ -190,9 +217,46 @@ async function handleCancelActivation(
       }
     }
 
-    // ── 3. Hard-delete del préstamo (documentos, payments, tickets, schedule,
-    // aprobaciones, notificaciones, contract group members, todo). El helper
-    // se encarga de borrar en el orden correcto por FKs.
+    // ── 3. Hermanos del grupo (SOLIDARIO) → hard-delete ANTES del loan
+    // principal, para que el helper limpie bien los ContractGroupMembers
+    // de cada hermano antes de que caiga el loan ancla. Si algún
+    // hermano también tenía Payment CASH/CARD, revertir su caja también.
+    for (const h of hermanos) {
+      const hPayment = await tx.payment.findFirst({
+        where: {
+          loanId: h.id,
+          scheduleId: null,
+          canceledAt: null,
+          OR: [
+            { notas: { contains: 'apertura', mode: 'insensitive' } },
+            { notas: { contains: 'seguro',   mode: 'insensitive' } },
+            { notas: { contains: 'comisi',   mode: 'insensitive' } },
+          ],
+        },
+      })
+      if (hPayment && (hPayment.metodoPago === 'CASH' || hPayment.metodoPago === 'CARD')) {
+        const cobro  = Number(hPayment.monto)
+        const cambio = Number(hPayment.cambioEntregado)
+        const reg = await tx.cashRegister.findUnique({
+          where: { cobradorId_fecha: { cobradorId: hPayment.cobradorId, fecha: fechaCaja } },
+        })
+        if (reg) {
+          await tx.cashRegister.update({
+            where: { cobradorId_fecha: { cobradorId: hPayment.cobradorId, fecha: fechaCaja } },
+            data: {
+              cobradoEfectivo: hPayment.metodoPago === 'CASH' ? { decrement: cobro } : undefined,
+              cobradoTarjeta:  hPayment.metodoPago === 'CARD' ? { decrement: cobro } : undefined,
+              cambioEntregado: cambio > 0 ? { decrement: cambio } : undefined,
+            },
+          })
+        }
+      }
+      await hardDeleteLoan(tx, h.id)
+    }
+
+    // ── 4. Hard-delete del préstamo principal (documentos, payments,
+    // tickets, schedule, aprobaciones, notificaciones, contract group
+    // members, todo). El helper borra en el orden correcto por FKs.
     await hardDeleteLoan(tx, loan.id)
   })
 
@@ -210,5 +274,8 @@ async function handleCancelActivation(
     console.error('[cancel-activation] notificarCancelacionLimbo failed:', e)
   }
 
-  return NextResponse.json({ ok: true, message: 'Activación cancelada' })
+  const summary = hermanos.length > 0
+    ? ` (grupo: ${hermanos.length + 1} integrantes cancelados)`
+    : ''
+  return NextResponse.json({ ok: true, message: `Activación cancelada${summary}` })
 }

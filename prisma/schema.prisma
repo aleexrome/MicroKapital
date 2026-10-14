@@ -1253,6 +1253,11 @@ model ArqueoCaptura {
   // así para no bloquear a los users ya sin razón.
   canceladoAt DateTime?
 
+  // Heartbeat: la pantalla congelada postea cada 15s mientras el user
+  // la tiene abierta. En la UI admin, "en línea" = ultimoVistoAt dentro
+  // de los últimos 30s; "no ha abierto" = ultimoVistoAt == null.
+  ultimoVistoAt DateTime?
+
   @@unique([arqueoId, userId])
   @@index([userId, capturadoAt, canceladoAt])
 }

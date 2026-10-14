@@ -1,12 +1,19 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Users, Building, Globe2, Clock, CheckCircle2, AlertCircle, X, Info, Filter } from 'lucide-react'
+import { Users, Building, Globe2, Clock, CheckCircle2, AlertCircle, X, Info, Filter, Wifi, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { LanzarArqueoDialog } from './LanzarArqueoDialog'
 import { ArqueoDetalleDialog, type ArqueoCapturaDTO } from './ArqueoDetalleDialog'
+
+/** Un user con pantalla abierta cuyo último heartbeat llegó dentro de este
+ *  umbral se considera "en línea". El heartbeat se envía cada 15s, así que
+ *  30s deja margen por si uno se perdió. */
+const ONLINE_THRESHOLD_MS = 30 * 1000
+/** Cada cuánto el admin page re-fetchea los datos del server. */
+const ADMIN_REFRESH_MS    = 15 * 1000
 
 interface User {
   id:     string
@@ -72,6 +79,19 @@ export function ArqueosView({ arqueos, usuarios, branches, yoId }: Props) {
   const [detalleCaptura, setDetalleCaptura] = useState<ArqueoCapturaDTO | null>(null)
   const [cancelando, setCancelando]           = useState<string | null>(null)
   const [liberandoCaptura, setLiberandoCaptura] = useState<string | null>(null)
+  /** Tick que fuerza re-render cada 5s para que las etiquetas "visto hace Xs"
+   *  avancen aunque el server no mande datos nuevos. */
+  const [nowTick, setNowTick] = useState(() => Date.now())
+
+  // Auto-refresh del server: trae el estado nuevo (heartbeats, capturas
+  // completadas) cada ADMIN_REFRESH_MS. Usa router.refresh() para que el
+  // RSC vuelva a correr y nos re-envíe el payload. Y tickeamos localmente
+  // más seguido para que "visto hace Xs" se vea vivo.
+  useEffect(() => {
+    const refresh = setInterval(() => router.refresh(), ADMIN_REFRESH_MS)
+    const tick    = setInterval(() => setNowTick(Date.now()), 5_000)
+    return () => { clearInterval(refresh); clearInterval(tick) }
+  }, [router])
 
   // Rango de fechas en función del filtro.
   const { desde } = useMemo(() => {
@@ -274,10 +294,57 @@ export function ArqueosView({ arqueos, usuarios, branches, yoId }: Props) {
         <div className="space-y-2">
           {usuariosFiltrados.map((u) => {
             const capturas = capturasPorUser.get(u.id) ?? []
+            // Captura pendiente (si existe) para el indicador de presencia.
+            const pendienteDeEsteUser = capturas.find((c) =>
+              !c.capturadoAt && !c.canceladoAt && !c.arqueo.canceladoAt
+            )
+            const presencia = (() => {
+              if (!pendienteDeEsteUser) return null
+              if (!pendienteDeEsteUser.ultimoVistoAt) {
+                return { tone: 'offline', label: 'No ha abierto' as const }
+              }
+              const diffMs = nowTick - new Date(pendienteDeEsteUser.ultimoVistoAt).getTime()
+              if (diffMs < ONLINE_THRESHOLD_MS) {
+                return { tone: 'online', label: 'En línea' as const }
+              }
+              const segs = Math.floor(diffMs / 1000)
+              if (segs < 60) return { tone: 'away', label: `Visto hace ${segs}s` as const }
+              const mins = Math.floor(segs / 60)
+              if (mins < 60) return { tone: 'away', label: `Visto hace ${mins}m` as const }
+              const horas = Math.floor(mins / 60)
+              return { tone: 'away', label: `Visto hace ${horas}h` as const }
+            })()
             return (
               <div key={u.id} className="rounded-lg border border-gray-200 bg-white p-3 flex items-start gap-3 flex-wrap">
                 <div className="min-w-[220px]">
-                  <p className="font-semibold text-sm text-gray-900">{u.nombre}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-sm text-gray-900">{u.nombre}</p>
+                    {presencia && (
+                      <span
+                        className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${
+                          presencia.tone === 'online'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                            : presencia.tone === 'away'
+                              ? 'bg-amber-50 text-amber-700 border-amber-300'
+                              : 'bg-gray-100 text-gray-500 border-gray-300'
+                        }`}
+                        title={presencia.tone === 'online' ? 'Está viendo la pantalla de arqueo en este momento' : 'Última vez que abrió la pantalla'}
+                      >
+                        {presencia.tone === 'online'
+                          ? <>
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                              </span>
+                              {presencia.label}
+                            </>
+                          : presencia.tone === 'away'
+                            ? <><Wifi className="h-2.5 w-2.5" />{presencia.label}</>
+                            : <><WifiOff className="h-2.5 w-2.5" />{presencia.label}</>
+                        }
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500">
                     {ROL_LABELS[u.rol] ?? u.rol}
                     {u.branch?.nombre && <> · {u.branch.nombre}</>}

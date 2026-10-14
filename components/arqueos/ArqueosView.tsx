@@ -70,7 +70,8 @@ export function ArqueosView({ arqueos, usuarios, branches, yoId }: Props) {
     branch?:     Branch
   } | null>(null)
   const [detalleCaptura, setDetalleCaptura] = useState<ArqueoCapturaDTO | null>(null)
-  const [cancelando, setCancelando] = useState<string | null>(null)
+  const [cancelando, setCancelando]           = useState<string | null>(null)
+  const [liberandoCaptura, setLiberandoCaptura] = useState<string | null>(null)
 
   // Rango de fechas en función del filtro.
   const { desde } = useMemo(() => {
@@ -162,6 +163,37 @@ export function ArqueosView({ arqueos, usuarios, branches, yoId }: Props) {
       })
     } finally {
       setCancelando(null)
+    }
+  }
+
+  /**
+   * Libera a UN usuario de un arqueo pendiente (cancela su captura
+   * individual sin tocar las demás del mismo arqueo). Útil cuando el
+   * admin lanzó un global/branch pero quiere exceptuar a alguien a
+   * mitad de camino.
+   */
+  async function handleLiberarCaptura(capturaId: string, userName: string) {
+    const ok = confirm(`¿Liberar a ${userName} del arqueo? Podrá volver a usar el sistema sin capturar.`)
+    if (!ok) return
+    setLiberandoCaptura(capturaId)
+    try {
+      const res = await fetch(`/api/arqueos/capturas/${capturaId}/cancelar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ razon: `Liberado individualmente por el admin` }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Error al liberar')
+      toast({ title: 'Usuario liberado', description: `${userName} ya no está bloqueado.` })
+      router.refresh()
+    } catch (e) {
+      toast({
+        title: 'Error',
+        description: e instanceof Error ? e.message : 'Error',
+        variant: 'destructive',
+      })
+    } finally {
+      setLiberandoCaptura(null)
     }
   }
 
@@ -263,26 +295,52 @@ export function ArqueosView({ arqueos, usuarios, branches, yoId }: Props) {
                     const diffEf = (c.totalEfectivoDeclarado ?? 0) - (c.totalEfectivoEsperado ?? 0)
                     const diffTr = (c.totalTransferenciasDeclarado ?? 0) - (c.totalTransferenciasEsperado ?? 0)
                     const diffTotal = diffEf + diffTr
+                    const chipClass = cancelled
+                      ? 'bg-gray-100 text-gray-500 border-gray-300 line-through'
+                      : pending
+                        ? 'bg-amber-50 text-amber-700 border-amber-300'
+                        : colorDiferencia(diffTotal)
+                    // Chip de "Pendiente" lleva un botón X embebido para
+                    // liberar al user de ese arqueo sin tocar los demás.
+                    if (pending) {
+                      return (
+                        <span
+                          key={c.id}
+                          className={`text-xs px-1.5 py-1 rounded-md border flex items-center gap-1 ${chipClass}`}
+                          title={new Date(c.arqueo.lanzadoAt).toLocaleString('es-MX')}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setDetalleCaptura(c)}
+                            className="flex items-center gap-1 hover:opacity-80"
+                          >
+                            <Clock className="h-3 w-3" />
+                            Pendiente
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLiberarCaptura(c.id, u.nombre)}
+                            disabled={liberandoCaptura === c.id}
+                            title="Liberar a este usuario del arqueo"
+                            className="ml-1 rounded hover:bg-amber-200/60 p-0.5 disabled:opacity-50"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      )
+                    }
                     return (
                       <button
                         key={c.id}
                         type="button"
                         onClick={() => setDetalleCaptura(c)}
-                        className={`text-xs px-2 py-1 rounded-md border flex items-center gap-1.5 transition-opacity hover:opacity-80 ${
-                          cancelled
-                            ? 'bg-gray-100 text-gray-500 border-gray-300 line-through'
-                            : pending
-                              ? 'bg-amber-50 text-amber-700 border-amber-300'
-                              : colorDiferencia(diffTotal)
-                        }`}
+                        className={`text-xs px-2 py-1 rounded-md border flex items-center gap-1.5 transition-opacity hover:opacity-80 ${chipClass}`}
                         title={new Date(c.arqueo.lanzadoAt).toLocaleString('es-MX')}
                       >
-                        {cancelled ? <X className="h-3 w-3" /> : pending ? <Clock className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+                        {cancelled ? <X className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
                         {cancelled
                           ? 'Cancelado'
-                          : pending
-                            ? 'Pendiente'
-                            : `${diffTotal >= 0 ? '+' : ''}$${diffTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                          : `${diffTotal >= 0 ? '+' : ''}$${diffTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </button>
                     )
                   })}

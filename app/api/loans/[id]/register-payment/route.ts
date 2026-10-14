@@ -224,53 +224,6 @@ export async function POST(
 
   const now = new Date()
 
-  // ── FINANCIADO ───────────────────────────────────────────────────────────
-  if (data.metodoPago === 'FINANCIADO') {
-    await prisma.$transaction(async (tx) => {
-      for (const t of tarifas) {
-        const nuevoMontoReal = Number(t.loan.montoReal) - t.tarifa.monto
-        await tx.loan.update({
-          where: { id: t.loan.id },
-          data: {
-            montoReal: nuevoMontoReal,
-            ...(t.esFeeSeguro ? { seguro: t.tarifa.monto } : {}),
-            seguroMetodoPago: 'CASH',  // por convención, FINANCIADO se asienta como CASH descontado
-            seguroPendiente: false,
-          },
-        })
-        await tx.payment.create({
-          data: {
-            loanId: t.loan.id,
-            cobradorId: userId,
-            clientId: t.loan.clientId,
-            monto: 0,
-            metodoPago: 'CASH',
-            cambioEntregado: 0,
-            notas: `FINANCIADO - apertura registrada (${t.esFeeSeguro ? 'Seguro' : 'Comisión'} de apertura: $${t.tarifa.monto.toFixed(2)})`,
-            fechaHora: now,
-          },
-        })
-      }
-    })
-    createAuditLog({
-      userId,
-      accion: pagoGrupal ? 'REGISTER_GROUP_ACTIVATION_FEE_FINANCED' : 'REGISTER_ACTIVATION_FEE_FINANCED',
-      tabla: 'Loan',
-      registroId: loan.id,
-      valoresNuevos: {
-        feeTotal,
-        metodoPago: 'FINANCIADO',
-        ...(pagoGrupal ? { integrantes: targetLoans.length } : {}),
-      },
-    })
-    return NextResponse.json({
-      ok: true,
-      message: pagoGrupal
-        ? `Comisiones financiadas — descontadas del monto entregado a ${targetLoans.length} integrantes`
-        : 'Comisión financiada — descontada del monto entregado',
-    })
-  }
-
   // Decisión Dirección 2026-10: comisión / seguro de apertura ÚNICAMENTE
   // en CASH con ticket. Los bloques TRANSFER / FINANCIADO fueron
   // removidos — si en el futuro se reactiva alguno, revivir desde el

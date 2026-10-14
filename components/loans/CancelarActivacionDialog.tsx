@@ -44,9 +44,18 @@ export function CancelarActivacionDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: reason.trim() }),
       })
-      const data = await res.json().catch(() => ({}))
+      // Leer como texto primero — así podemos exponer HTML / errores raros
+      // sin que el toast caiga al mensaje genérico "Error al cancelar"
+      // (el peor UX, nos deja ciegos sobre qué pasó).
+      const raw = await res.text()
+      let data: Record<string, unknown> = {}
+      try { data = raw ? JSON.parse(raw) : {} } catch { /* no-json */ }
+
       if (!res.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Error al cancelar')
+        const msg = (typeof data.error === 'string' && data.error) ||
+                    (typeof data.message === 'string' && data.message) ||
+                    `HTTP ${res.status}: ${raw.slice(0, 150) || 'sin cuerpo'}`
+        throw new Error(msg)
       }
       toast({
         title: 'Activación cancelada',
@@ -56,9 +65,12 @@ export function CancelarActivacionDialog({
       onClose()
       router.refresh()
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido'
+      // eslint-disable-next-line no-console
+      console.error('[cancel-activation] falló:', err)
       toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Error',
+        title: 'Error al cancelar',
+        description: msg,
         variant: 'destructive',
       })
     } finally {

@@ -35,6 +35,23 @@ const cancelSchema = z.object({
  */
 export async function POST(
   req: NextRequest,
+  ctx: { params: { id: string } },
+) {
+  try {
+    return await handleCancelActivation(req, ctx)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    const stack = e instanceof Error ? e.stack : undefined
+    console.error('[cancel-activation] 500:', msg, '\n', stack)
+    return NextResponse.json(
+      { error: `Error al cancelar: ${msg}` },
+      { status: 500 },
+    )
+  }
+}
+
+async function handleCancelActivation(
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const session = await getSession()

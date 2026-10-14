@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { CashBreakdownCalculator } from '@/components/payments/CashBreakdownCalculator'
+import { TransferPaymentFlow } from '@/components/payments/TransferPaymentFlow'
 import { TicketPreview } from '@/components/payments/TicketPreview'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -32,14 +33,6 @@ interface ScheduleDetail {
   }
 }
 
-interface BankAccount {
-  id: string
-  banco: string
-  titular: string
-  clabe: string
-  numeroCuenta: string
-}
-
 type PaymentStep = 'modo' | 'method' | 'cash_calc' | 'confirm_card' | 'confirm_transfer' | 'done' | 'transfer_pending'
 type ModoCobro = 'total' | 'parcial'
 
@@ -58,19 +51,15 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
   const [submitting, setSubmitting] = useState(false)
   const [ticketData, setTicketData] = useState<TicketData | null>(null)
   const [ticketId, setTicketId] = useState<string | null>(null)
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
-  const [selectedAccount, setSelectedAccount] = useState<string>('')
-  const [idTransferencia, setIdTransferencia] = useState('')
+  // Transfer flow nuevo (Fase 1): el TransferPaymentFlow genera el
+  // código MK-XXXXXX + sube la foto. Guardamos lo que necesita el endpoint.
+  const [transferCodeId, setTransferCodeId]       = useState<string | null>(null)
+  const [transferReferenciaBanco, setTransferRefBanco] = useState<string>('')
 
   useEffect(() => {
     fetch(`/api/payments/schedule/${params.scheduleId}`)
       .then((r) => r.json())
       .then((d) => { setSchedule(d.data); setLoadingSchedule(false) })
-    // Bank accounts filtradas a la sucursal del préstamo (backend
-    // resuelve branchId desde el scheduleId).
-    fetch(`/api/bank-accounts?scheduleId=${params.scheduleId}`)
-      .then((r) => r.json())
-      .then((d) => { if (d.data?.length) { setBankAccounts(d.data); setSelectedAccount(d.data[0].id) } })
   }, [params.scheduleId])
 
   async function submitPayment(
@@ -97,8 +86,13 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
       }
 
       if (metodoPago === 'TRANSFER') {
-        body.cuentaDestinoId = selectedAccount || undefined
-        body.idTransferencia = idTransferencia || undefined
+        if (!transferCodeId) {
+          toast({ title: 'Falta completar el flujo de transferencia (código + foto)', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        body.transferCodeId = transferCodeId
+        if (transferReferenciaBanco) body.referenciaBanco = transferReferenciaBanco
       }
 
       const res = await fetch('/api/payments', {
@@ -209,7 +203,7 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
             <div className="pt-2 text-yellow-800">
               <p><span className="text-yellow-600/80">Cliente:</span> {schedule.loan.client.nombreCompleto}</p>
               <p><span className="text-yellow-600/80">Monto:</span> <span className="font-semibold money">{formatMoney(monto)}</span></p>
-              {idTransferencia && <p><span className="text-yellow-600/80">Referencia:</span> <span className="font-mono">{idTransferencia}</span></p>}
+              {transferReferenciaBanco && <p><span className="text-yellow-600/80">Ref. banco:</span> <span className="font-mono">{transferReferenciaBanco}</span></p>}
             </div>
           </CardContent>
         </Card>
@@ -395,8 +389,8 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
         />
       )}
 
-      {/* ── PAGO POR TRANSFERENCIA ─────────────────────────────────────────── */}
-      {step === 'confirm_transfer' && (
+      {/* ── PAGO POR TRANSFERENCIA (flujo nuevo Fase 1) ──────────────────── */}
+      {step === 'confirm_transfer' && schedule && (
         <div className="space-y-4">
           <Card className="glass-hover-card bg-blue-50 border-blue-200">
             <CardContent className="p-4 text-center">
@@ -406,50 +400,34 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
             </CardContent>
           </Card>
 
-          {bankAccounts.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Cuenta destino</p>
-              <div className="space-y-2">
-                {bankAccounts.map((acc) => (
-                  <button
-                    key={acc.id}
-                    type="button"
-                    onClick={() => setSelectedAccount(acc.id)}
-                    className={`w-full text-left rounded-lg border-2 p-3 transition-colors ${
-                      selectedAccount === acc.id
-                        ? 'border-primary-700 bg-primary-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <p className="font-medium text-sm">{acc.banco} — {acc.titular}</p>
-                    <p className="text-xs text-muted-foreground">CLABE: {acc.clabe}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <p className="text-sm font-medium">ID / Referencia de transferencia</p>
-            <input
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-              placeholder="Número de referencia..."
-              value={idTransferencia}
-              onChange={(e) => setIdTransferencia(e.target.value)}
-            />
-          </div>
+          <TransferPaymentFlow
+            loanId={schedule.loan.id}
+            tipo="PAYMENT"
+            montoEsperado={monto}
+            scheduleId={schedule.id}
+            onReady={({ transferCodeId: tcId, referenciaBanco }) => {
+              setTransferCodeId(tcId)
+              setTransferRefBanco(referenciaBanco)
+            }}
+            onReset={() => { setTransferCodeId(null); setTransferRefBanco('') }}
+          />
 
           <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-            El pago quedará pendiente de verificación. El Gerente Zonal deberá confirmar que el dinero llegó a la cuenta.
+            El pago quedará pendiente de verificación. El Gerente Zonal confirmará que el dinero llegó buscando el código en la foto subida.
           </p>
 
           <div className="flex gap-3">
-            <Button variant="outline" className="flex-1" onClick={() => setStep('method')} disabled={submitting}>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => { setStep('method'); setTransferCodeId(null); setTransferRefBanco('') }}
+              disabled={submitting}
+            >
               Cancelar
             </Button>
             <Button
               className="flex-1"
-              disabled={submitting}
+              disabled={submitting || !transferCodeId}
               onClick={() => submitPayment('TRANSFER')}
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle className="h-4 w-4" /> Registrar</>}

@@ -33,8 +33,12 @@ interface TransferPaymentFlowProps {
    * Callback cuando el flujo está completo (código generado + foto
    * subida). El parent llama a su endpoint de registrar pago con el
    * `transferCodeId` recibido aquí.
+   *
+   * `referenciaBanco` es el número / ID del banco (ej. autorización SPEI)
+   * que el cliente le dicta al cobrador después de hacer la transferencia.
+   * Es opcional — si no se puso, viene string vacío.
    */
-  onReady:       (data: { transferCodeId: string; code: string }) => void
+  onReady:       (data: { transferCodeId: string; code: string; referenciaBanco: string }) => void
   /** Callback cuando el flujo se "des-arma" (el coord vuelve atrás). */
   onReset?:      () => void
 }
@@ -77,6 +81,7 @@ export function TransferPaymentFlow({
   const [codigoCopiado, setCodigoCopiado] = useState(false)
   const [uploading, setUploading]         = useState(false)
   const [fotoUrl, setFotoUrl]             = useState<string | null>(null)
+  const [referenciaBanco, setReferenciaBanco] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch de cuentas al montar — reusa el endpoint existente que ya
@@ -199,8 +204,10 @@ export function TransferPaymentFlow({
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : 'No se pudo subir la foto')
       setFotoUrl(body.comprobanteFotoUrl)
-      // Avisar al parent que el flujo quedó listo.
-      onReady({ transferCodeId: codeInfo.id, code: codeInfo.code })
+      // Avisar al parent que el flujo quedó listo. El referenciaBanco
+      // se envía con el valor actual (puede estar vacío si aún no lo
+      // escribió — el parent re-llamará a onReady al cambiarlo).
+      onReady({ transferCodeId: codeInfo.id, code: codeInfo.code, referenciaBanco: referenciaBanco.trim() })
     } catch (e) {
       toast({
         title: 'Error al subir',
@@ -357,7 +364,7 @@ export function TransferPaymentFlow({
           />
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="rounded-xl border border-emerald-500/40 overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={fotoUrl} alt="Comprobante" className="w-full h-auto max-h-72 object-contain bg-black/40" />
@@ -370,6 +377,33 @@ export function TransferPaymentFlow({
               Cambiar foto
             </Button>
           </div>
+
+          {/* ID / número del banco opcional — queda al final porque muchos
+              clientes no lo capturan al momento. */}
+          <div className="space-y-1.5 pt-2 border-t border-gray-700">
+            <label className="block text-xs text-gray-300">
+              ID / número de la transferencia bancaria <span className="text-gray-500">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              className="w-full rounded-md bg-gray-900 border border-gray-700 px-2 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-fuchsia-500"
+              placeholder="Ej. 12345678 (autorización SPEI del banco)"
+              value={referenciaBanco}
+              onChange={(e) => {
+                const v = e.target.value
+                setReferenciaBanco(v)
+                // Re-emitir al parent con el nuevo valor del campo de banco.
+                if (codeInfo) {
+                  onReady({ transferCodeId: codeInfo.id, code: codeInfo.code, referenciaBanco: v.trim() })
+                }
+              }}
+            />
+            <p className="text-[11px] text-gray-500">
+              Si el cliente te comparte el número que le dio su banca al confirmar
+              la transferencia, cópialo aquí para auditoría.
+            </p>
+          </div>
+
           <input
             ref={fileInputRef}
             type="file"

@@ -32,6 +32,7 @@ const bodySchema = z.object({
   // y se toman cuenta destino / código / url foto desde ese registro.
   // Legacy: TRANSFER sin transferCodeId sigue aceptado (compat).
   transferCodeId:  z.string().uuid().optional(),
+  referenciaBanco: z.string().max(100).optional(),
   // Número de cuota que el coordinador piensa estar cobrando. Lo manda el
   // frontend tomado de la UI (Pago N de M). Si el backend encuentra que
   // la próxima cuota pendiente del grupo es distinta, rechaza para evitar
@@ -272,6 +273,7 @@ export async function POST(
             statusTransferencia: 'PENDIENTE',
             comprobanteFotoUrl:  efectivoComprobanteUrl,
             comprobanteFotoAt:   efectivoComprobanteAt,
+            referenciaBanco:     data.referenciaBanco?.trim() || null,
           } : {}),
         },
       })

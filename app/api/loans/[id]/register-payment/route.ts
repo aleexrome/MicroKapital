@@ -24,6 +24,7 @@ const registerPaymentSchema = z.object({
   // el pago queda con el código único en vez de un texto libre.
   // Legacy: TRANSFER sin transferCodeId sigue aceptado (compat).
   transferCodeId: z.string().uuid().optional(),
+  referenciaBanco: z.string().max(100).optional(),
 })
 
 /**
@@ -333,6 +334,7 @@ export async function POST(
             statusTransferencia: 'PENDIENTE',
             comprobanteFotoUrl:  efectivoComprobanteUrl,
             comprobanteFotoAt:   efectivoComprobanteAt,
+            referenciaBanco:     data.referenciaBanco?.trim() || null,
           },
         })
         if (firstPaymentId === null) firstPaymentId = created.id

@@ -30,6 +30,7 @@ const createPaymentSchema = z.object({
   // la foto, y acá sólo manda el id — la cuenta destino, el código y la
   // URL de la foto se toman del TransferCode como fuente de verdad.
   transferCodeId:  z.string().uuid().optional(),
+  referenciaBanco: z.string().max(100).optional(),
   // Admin override: permite cobrar más del montoEsperado de la cuota.
   // Sólo DG / SUPER_ADMIN; coordinadores/gerentes nunca pueden sobrepasar.
   excedeMontoConfirmado: z.boolean().optional(),
@@ -286,6 +287,7 @@ export async function POST(req: NextRequest) {
           statusTransferencia: 'PENDIENTE',
           comprobanteFotoUrl:  efectivoComprobanteUrl,
           comprobanteFotoAt:   efectivoComprobanteAt,
+          referenciaBanco:     data.referenciaBanco?.trim() || null,
         } : {}),
       },
     })

@@ -26,6 +26,10 @@ const createPaymentSchema = z.object({
   // Transferencia
   cuentaDestinoId: z.string().uuid().optional(),
   idTransferencia: z.string().optional(),
+  // Flujo nuevo (Fase 1): el UI primero genera un TransferCode y sube
+  // la foto, y acá sólo manda el id — la cuenta destino, el código y la
+  // URL de la foto se toman del TransferCode como fuente de verdad.
+  transferCodeId:  z.string().uuid().optional(),
   // Admin override: permite cobrar más del montoEsperado de la cuota.
   // Sólo DG / SUPER_ADMIN; coordinadores/gerentes nunca pueden sobrepasar.
   excedeMontoConfirmado: z.boolean().optional(),
@@ -224,6 +228,43 @@ export async function POST(req: NextRequest) {
 
   const esTransferencia = data.metodoPago === 'TRANSFER'
 
+  // Resolver TransferCode cuando el UI nuevo lo manda. Fuente de verdad
+  // para cuentaDestino / idTransferencia / foto comprobante.
+  // Legacy: TRANSFER sin transferCodeId sigue aceptado (compat).
+  let transferCode: {
+    id: string
+    code: string
+    cuentaDestinoId: string
+    comprobanteFotoUrl: string | null
+    comprobanteFotoAt: Date | null
+  } | null = null
+  if (esTransferencia && data.transferCodeId) {
+    const tc = await prisma.transferCode.findFirst({
+      where: {
+        id:        data.transferCodeId,
+        companyId: companyId!,
+        loanId:    loan.id,
+        tipo:      'PAYMENT',
+      },
+    })
+    if (!tc)                                return NextResponse.json({ error: 'Código de transferencia inválido' }, { status: 400 })
+    if (tc.usedAt)                          return NextResponse.json({ error: 'Este código ya fue usado' }, { status: 409 })
+    if (tc.invalidatedAt)                   return NextResponse.json({ error: 'Este código fue invalidado' }, { status: 409 })
+    if (tc.expiresAt.getTime() <= Date.now()) return NextResponse.json({ error: 'Este código ya expiró. Regenera uno nuevo.' }, { status: 409 })
+    if (!tc.comprobanteFotoUrl)             return NextResponse.json({ error: 'Falta subir la foto del comprobante' }, { status: 400 })
+    transferCode = {
+      id:                 tc.id,
+      code:               tc.code,
+      cuentaDestinoId:    tc.cuentaDestinoId,
+      comprobanteFotoUrl: tc.comprobanteFotoUrl,
+      comprobanteFotoAt:  tc.comprobanteFotoAt,
+    }
+  }
+  const efectivoCuentaDestinoId = transferCode?.cuentaDestinoId ?? data.cuentaDestinoId ?? null
+  const efectivoIdTransferencia = transferCode?.code ?? data.idTransferencia ?? null
+  const efectivoComprobanteUrl  = transferCode?.comprobanteFotoUrl ?? null
+  const efectivoComprobanteAt   = transferCode?.comprobanteFotoAt ?? null
+
   const result = await prisma.$transaction(async (tx) => {
     const now = new Date()
 
@@ -240,12 +281,22 @@ export async function POST(req: NextRequest) {
         notas: data.notas ?? null,
         fechaHora: now,
         ...(esTransferencia ? {
-          cuentaDestinoId: data.cuentaDestinoId ?? null,
-          idTransferencia: data.idTransferencia ?? null,
+          cuentaDestinoId:     efectivoCuentaDestinoId,
+          idTransferencia:     efectivoIdTransferencia,
           statusTransferencia: 'PENDIENTE',
+          comprobanteFotoUrl:  efectivoComprobanteUrl,
+          comprobanteFotoAt:   efectivoComprobanteAt,
         } : {}),
       },
     })
+
+    // Marcar el TransferCode como usado y linkear al payment creado.
+    if (esTransferencia && transferCode) {
+      await tx.transferCode.update({
+        where: { id: transferCode.id },
+        data:  { usedAt: now, paymentId: payment.id },
+      })
+    }
 
     // 2. Crear desglose de efectivo
     if (data.metodoPago === 'CASH' && data.cashBreakdown.length > 0) {

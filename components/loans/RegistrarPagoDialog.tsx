@@ -1,23 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { CashBreakdownCalculator } from '@/components/payments/CashBreakdownCalculator'
+import { TransferPaymentFlow } from '@/components/payments/TransferPaymentFlow'
 import { formatMoney } from '@/lib/utils'
 import {
   Loader2, Banknote, CreditCard, Building2, BadgePercent,
   CheckCircle, X,
 } from 'lucide-react'
 import type { CashBreakdownEntry } from '@/types'
-
-interface BankAccount {
-  id: string
-  banco: string
-  titular: string
-  clabe: string
-}
 
 interface RegistrarPagoDialogProps {
   loanId: string
@@ -54,23 +48,11 @@ export function RegistrarPagoDialog({
   const [step, setStep] = useState<Step>('menu')
   const [loading, setLoading] = useState(false)
 
-  // Transferencia
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
-  const [selectedAccount, setSelectedAccount] = useState('')
-  const [idTransferencia, setIdTransferencia] = useState('')
-
-  useEffect(() => {
-    if (!open) return
-    fetch(`/api/bank-accounts?loanId=${loanId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.data?.length) {
-          setBankAccounts(d.data)
-          setSelectedAccount(d.data[0].id)
-        }
-      })
-      .catch(() => {})
-  }, [open])
+  // Transferencia (flujo nuevo Fase 1): el TransferPaymentFlow genera
+  // el código + sube la foto, y nos devuelve el `transferCodeId` que
+  // mandamos al endpoint. Los campos legacy quedan como fallback por
+  // compat pero el UI ya no los expone.
+  const [transferCodeId, setTransferCodeId] = useState<string | null>(null)
 
   if (!open) return null
 
@@ -79,7 +61,7 @@ export function RegistrarPagoDialog({
   function handleClose() {
     if (loading) return
     setStep('menu')
-    setIdTransferencia('')
+    setTransferCodeId(null)
     onClose()
   }
 
@@ -96,8 +78,10 @@ export function RegistrarPagoDialog({
         body.cambioEntregado = cambioEntregado ?? 0
       }
       if (metodoPago === 'TRANSFER') {
-        body.cuentaDestinoId = selectedAccount || undefined
-        body.idTransferencia = idTransferencia || undefined
+        if (!transferCodeId) {
+          throw new Error('Selecciona una cuenta y sube el comprobante antes de registrar')
+        }
+        body.transferCodeId = transferCodeId
       }
 
       const res = await fetch(`/api/loans/${loanId}/register-payment`, {
@@ -235,7 +219,7 @@ export function RegistrarPagoDialog({
           </div>
         )}
 
-        {/* ── Step: TRANSFER ──────────────────────────────────────────────── */}
+        {/* ── Step: TRANSFER (flujo nuevo Fase 1 — tarjetas + código + foto) */}
         {step === 'transfer' && (
           <div className="space-y-4">
             <div className="bg-primary-500/10 border border-primary-500/30 rounded-lg p-4 text-center">
@@ -246,48 +230,23 @@ export function RegistrarPagoDialog({
               </p>
             </div>
 
-            {bankAccounts.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-sm font-medium">Cuenta destino</p>
-                <div className="space-y-2">
-                  {bankAccounts.map((acc) => (
-                    <button
-                      key={acc.id}
-                      type="button"
-                      onClick={() => setSelectedAccount(acc.id)}
-                      className={`w-full text-left rounded-lg border-2 p-3 transition-colors ${
-                        selectedAccount === acc.id
-                          ? 'border-primary-500 bg-primary-500/10'
-                          : 'border-gray-600 hover:border-gray-500'
-                      }`}
-                    >
-                      <p className="font-medium text-sm">{acc.banco} — {acc.titular}</p>
-                      <p className="text-xs text-muted-foreground">CLABE: {acc.clabe}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">ID / Referencia de transferencia</p>
-              <input
-                className="w-full border border-gray-600 bg-gray-800 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="Número de referencia..."
-                value={idTransferencia}
-                onChange={(e) => setIdTransferencia(e.target.value)}
-              />
-            </div>
+            <TransferPaymentFlow
+              loanId={loanId}
+              tipo="COMISION_APERTURA"
+              montoEsperado={feeMonto}
+              onReady={({ transferCodeId: tcId }) => setTransferCodeId(tcId)}
+              onReset={() => setTransferCodeId(null)}
+            />
 
             <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-              El candado 2 quedará pendiente. El Gerente Zonal debe verificar que el dinero llegó a la cuenta para que el flujo continúe.
+              El candado 2 quedará pendiente. El Gerente Zonal verificará que el código llegó a la cuenta antes de activar.
             </p>
 
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" disabled={loading} onClick={() => setStep('menu')}>
+              <Button variant="outline" className="flex-1" disabled={loading} onClick={() => { setStep('menu'); setTransferCodeId(null) }}>
                 Atrás
               </Button>
-              <Button className="flex-1" disabled={loading} onClick={() => handleRegister('TRANSFER')}>
+              <Button className="flex-1" disabled={loading || !transferCodeId} onClick={() => handleRegister('TRANSFER')}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle className="h-4 w-4" /> Registrar</>}
               </Button>
             </div>

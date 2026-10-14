@@ -274,6 +274,7 @@ model User {
   clientsHeredadosDe          Client[]                    @relation("HeredadoDeCoordinador")
   clientUser                  Client?                     @relation("ClienteUsuario")
   payments                    Payment[]
+  transferCodesCreated        TransferCode[]              @relation("TransferCodeCreator")
   cashRegisters               CashRegister[]
   ticketsPrinted              Ticket[]
   auditLogs                   AuditLog[]
@@ -546,6 +547,7 @@ model Loan {
 
   schedule                  PaymentSchedule[]
   payments                  Payment[]
+  transferCodes             TransferCode[]
   approvals                 LoanApproval[]
   scoreEvents               ScoreEvent[]
   documents                 LoanDocument[]
@@ -672,11 +674,17 @@ model Payment {
   // Transferencia bancaria
   cuentaDestinoId     String?
   cuentaDestino       CompanyBankAccount? @relation(fields: [cuentaDestinoId], references: [id])
-  idTransferencia     String? // Referencia/ID de la transferencia
+  idTransferencia     String? // Referencia/ID de la transferencia (legacy: texto libre; nuevo: código MK-XXXXXX)
   statusTransferencia String? // "PENDIENTE" | "VERIFICADO"
   verificadoPorId     String?
   verificadoPor       User?               @relation("VerifiedTransfers", fields: [verificadoPorId], references: [id])
   verificadoAt        DateTime?
+  // Foto del comprobante que sube el coord con la transferencia (Fase 1
+  // verificación — ya no se depende solo del número de referencia; además
+  // se persiste el código único generado por el sistema vía TransferCode).
+  comprobanteFotoUrl  String?
+  comprobanteFotoAt   DateTime?
+  transferCode        TransferCode?
   // Cobertura solidaria (grupo Solidario)
   esCoberturaGrupal   Boolean             @default(false)
   cubridoPorClienteId String?
@@ -713,7 +721,8 @@ model CompanyBankAccount {
   activa       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  payments Payment[]
+  payments      Payment[]
+  transferCodes TransferCode[]
   // Sucursales que pueden usar esta cuenta al capturar una
   // transferencia. Vacío = ninguna (equivale a no aparecer en el
   // dropdown). Tenancingo — al ser central — se etiqueta en todas las
@@ -1096,4 +1105,71 @@ model NominaEsquemaOverride {
 
   @@unique([userId, semanaSabado])
   @@index([companyId, semanaSabado])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// TransferCode — Fase 1 validación de transferencias (2026-10-14)
+//
+// Cuando una cobradora elige "pago por transferencia" (en RegistrarPago,
+// comisión de apertura, o cobro grupal), el sistema le genera un código
+// único MK-XXXXXX que el cliente debe copiar al concepto de la
+// transferencia bancaria. El código:
+//   - Es único a nivel global (@unique).
+//   - Expira a las 6 horas de creado (expiresAt).
+//   - Se puede invalidar explícitamente (invalidatedAt) cuando la coord
+//     cambia de cuenta o quiere regenerar.
+//   - Se marca como usado (usedAt + paymentId) cuando el pago se
+//     registra efectivamente contra él.
+//
+// Comprobante (foto del screenshot de la transferencia):
+//   - Se sube durante el flujo (comprobanteFotoUrl + comprobanteFotoAt)
+//     y queda vinculado al código ANTES de que se cree el Payment.
+//   - Al confirmar el pago, los valores se copian también al Payment
+//     (Payment.comprobanteFotoUrl) para quedar en el histórico aunque
+//     el TransferCode se purgue después.
+//
+// Legacy: pagos TRANSFER previos a esta fase quedan tal cual (sin
+// código y sin foto). El backend permite esos casos para compat; nuevos
+// pagos TRANSFER sí requieren código + foto.
+// ─────────────────────────────────────────────────────────────────────
+enum TransferCodeTipo {
+  PAYMENT           // pago de amortización (cuota)
+  COMISION_APERTURA // candado 2 de activación / seguro
+  GROUP_PAYMENT     // cobro grupal (varias cuotas al grupo)
+}
+
+model TransferCode {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  companyId       String
+  loanId          String
+  loan            Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  cuentaDestinoId String
+  cuentaDestino   CompanyBankAccount @relation(fields: [cuentaDestinoId], references: [id])
+  montoEsperado   Decimal  @db.Decimal(12, 2)
+  tipo            TransferCodeTipo
+  // IDs opcionales para contexto — permiten regenerar/validar sobre el
+  // mismo "intento" (ej. mismo schedule del mismo loan).
+  scheduleId      String?
+  groupId         String?
+
+  // Comprobante — se puede subir antes de que exista el Payment.
+  comprobanteFotoUrl String?
+  comprobanteFotoAt  DateTime?
+
+  createdById String
+  createdBy   User     @relation("TransferCodeCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  invalidatedAt     DateTime?
+  invalidatedReason String?
+
+  usedAt    DateTime?
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([loanId, tipo, usedAt, invalidatedAt])
+  @@index([expiresAt])
+  @@index([companyId, createdAt])
 }

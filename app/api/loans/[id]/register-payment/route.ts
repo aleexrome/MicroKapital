@@ -17,6 +17,13 @@ const registerPaymentSchema = z.object({
   cambioEntregado: z.number().optional(),
   cuentaDestinoId: z.string().uuid().optional(),
   idTransferencia: z.string().optional(),
+  // Flujo nuevo (Fase 1 validación transferencias): el UI genera un
+  // TransferCode primero (POST /api/transfer-codes), sube la foto del
+  // comprobante y manda el id aquí. Si se envía, se usa como fuente de
+  // verdad para cuentaDestino / idTransferencia / comprobanteFotoUrl —
+  // el pago queda con el código único en vez de un texto libre.
+  // Legacy: TRANSFER sin transferCodeId sigue aceptado (compat).
+  transferCodeId: z.string().uuid().optional(),
 })
 
 /**
@@ -261,9 +268,57 @@ export async function POST(
 
   // ── TRANSFER ─────────────────────────────────────────────────────────────
   if (data.metodoPago === 'TRANSFER') {
+    // Resolver TransferCode si se mandó — ésta es la fuente de verdad en
+    // el flujo nuevo (Fase 1). Si no vino, aceptamos el flujo legacy con
+    // cuentaDestinoId/idTransferencia libres.
+    let transferCode: {
+      id: string
+      code: string
+      cuentaDestinoId: string
+      comprobanteFotoUrl: string | null
+      comprobanteFotoAt: Date | null
+    } | null = null
+    if (data.transferCodeId) {
+      const tc = await prisma.transferCode.findFirst({
+        where: {
+          id:        data.transferCodeId,
+          companyId: companyId!,
+          loanId:    loan.id,
+          tipo:      'COMISION_APERTURA',
+        },
+      })
+      if (!tc) {
+        return NextResponse.json({ error: 'Código de transferencia inválido' }, { status: 400 })
+      }
+      if (tc.usedAt) {
+        return NextResponse.json({ error: 'Este código ya fue usado' }, { status: 409 })
+      }
+      if (tc.invalidatedAt) {
+        return NextResponse.json({ error: 'Este código fue invalidado' }, { status: 409 })
+      }
+      if (tc.expiresAt.getTime() <= Date.now()) {
+        return NextResponse.json({ error: 'Este código ya expiró. Regenera uno nuevo.' }, { status: 409 })
+      }
+      if (!tc.comprobanteFotoUrl) {
+        return NextResponse.json({ error: 'Falta subir la foto del comprobante' }, { status: 400 })
+      }
+      transferCode = {
+        id:                 tc.id,
+        code:               tc.code,
+        cuentaDestinoId:    tc.cuentaDestinoId,
+        comprobanteFotoUrl: tc.comprobanteFotoUrl,
+        comprobanteFotoAt:  tc.comprobanteFotoAt,
+      }
+    }
+    const efectivoCuentaDestinoId = transferCode?.cuentaDestinoId ?? data.cuentaDestinoId ?? null
+    const efectivoIdTransferencia = transferCode?.code ?? data.idTransferencia ?? null
+    const efectivoComprobanteUrl  = transferCode?.comprobanteFotoUrl ?? null
+    const efectivoComprobanteAt   = transferCode?.comprobanteFotoAt ?? null
+
     await prisma.$transaction(async (tx) => {
+      let firstPaymentId: string | null = null
       for (const t of tarifas) {
-        await tx.payment.create({
+        const created = await tx.payment.create({
           data: {
             loanId: t.loan.id,
             cobradorId: userId,
@@ -273,11 +328,14 @@ export async function POST(
             cambioEntregado: 0,
             notas: t.esFeeSeguro ? 'Seguro de apertura' : 'Comisión de apertura',
             fechaHora: now,
-            cuentaDestinoId: data.cuentaDestinoId ?? null,
-            idTransferencia: data.idTransferencia ?? null,
+            cuentaDestinoId:     efectivoCuentaDestinoId,
+            idTransferencia:     efectivoIdTransferencia,
             statusTransferencia: 'PENDIENTE',
+            comprobanteFotoUrl:  efectivoComprobanteUrl,
+            comprobanteFotoAt:   efectivoComprobanteAt,
           },
         })
+        if (firstPaymentId === null) firstPaymentId = created.id
         await tx.loan.update({
           where: { id: t.loan.id },
           data: {
@@ -285,6 +343,16 @@ export async function POST(
             seguroMetodoPago: 'TRANSFER',
             seguroPendiente: true,
           },
+        })
+      }
+      // Marcar código como usado — en grupal se linkea al primer Payment
+      // (los demás integrantes llevan el idTransferencia duplicado como
+      // string, que es intencional: todos pertenecen a la misma
+      // transferencia bancaria).
+      if (transferCode && firstPaymentId) {
+        await tx.transferCode.update({
+          where: { id: transferCode.id },
+          data:  { usedAt: now, paymentId: firstPaymentId },
         })
       }
     })

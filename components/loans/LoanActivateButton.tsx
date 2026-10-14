@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { CashBreakdownCalculator } from '@/components/payments/CashBreakdownCalculator'
+import { TransferPaymentFlow } from '@/components/payments/TransferPaymentFlow'
 import { formatMoney } from '@/lib/utils'
 import {
   Zap,
@@ -19,13 +20,6 @@ import {
 } from 'lucide-react'
 import type { CashBreakdownEntry } from '@/types'
 
-interface BankAccount {
-  id: string
-  banco: string
-  titular: string
-  clabe: string
-}
-
 interface LoanActivateButtonProps {
   loanId: string
   seguroPendiente?: boolean
@@ -35,7 +29,6 @@ interface LoanActivateButtonProps {
   feeMonto: number
   capital: number
   descuentoRenovacion?: number
-  bankAccountsUrl?: string
 }
 
 type Step = 'info' | 'cash' | 'card' | 'transfer' | 'financiado'
@@ -49,7 +42,6 @@ export function LoanActivateButton({
   feeMonto,
   capital,
   descuentoRenovacion = 0,
-  bankAccountsUrl = '/api/bank-accounts',
 }: LoanActivateButtonProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -57,26 +49,10 @@ export function LoanActivateButton({
   const [showForm, setShowForm] = useState(false)
   const [step, setStep] = useState<Step>('info')
 
-  // Transfer state
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
-  const [selectedAccount, setSelectedAccount] = useState('')
-  const [idTransferencia, setIdTransferencia] = useState('')
-
-  // Fetch bank accounts on mount, filtradas a la sucursal del préstamo.
-  useEffect(() => {
-    const url = bankAccountsUrl.includes('?')
-      ? `${bankAccountsUrl}&loanId=${loanId}`
-      : `${bankAccountsUrl}?loanId=${loanId}`
-    fetch(url)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.data?.length) {
-          setBankAccounts(d.data)
-          setSelectedAccount(d.data[0].id)
-        }
-      })
-      .catch(() => {})
-  }, [bankAccountsUrl])
+  // Transfer state — flujo nuevo Fase 1: el TransferPaymentFlow genera
+  // el código + sube la foto. Guardamos sólo el id del TransferCode para
+  // mandarlo al endpoint de activate.
+  const [transferCodeId, setTransferCodeId] = useState<string | null>(null)
 
   const feeLabel = feeConcepto === 'SEGURO' ? 'Seguro de apertura' : 'Comision de apertura'
 
@@ -95,8 +71,10 @@ export function LoanActivateButton({
       }
 
       if (metodoPago === 'TRANSFER') {
-        body.cuentaDestinoId = selectedAccount || undefined
-        body.idTransferencia = idTransferencia || undefined
+        if (!transferCodeId) {
+          throw new Error('Selecciona la cuenta y sube el comprobante antes de activar')
+        }
+        body.transferCodeId = transferCodeId
       }
 
       const res = await fetch(`/api/loans/${loanId}/activate`, {
@@ -345,7 +323,7 @@ export function LoanActivateButton({
         </div>
       )}
 
-      {/* ── STEP: TRANSFER ─────────────────────────────────────────────────── */}
+      {/* ── STEP: TRANSFER (flujo nuevo Fase 1) ─────────────────────────── */}
       {step === 'transfer' && (
         <div className="space-y-4">
           <div className="bg-primary-500/10 border border-primary-500/30 rounded-lg p-4 text-center">
@@ -356,64 +334,31 @@ export function LoanActivateButton({
             </p>
           </div>
 
-          {/* Bank account selector */}
-          {bankAccounts.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Cuenta destino</p>
-              <div className="space-y-2">
-                {bankAccounts.map((acc) => (
-                  <button
-                    key={acc.id}
-                    type="button"
-                    onClick={() => setSelectedAccount(acc.id)}
-                    className={`w-full text-left rounded-lg border-2 p-3 transition-colors ${
-                      selectedAccount === acc.id
-                        ? 'border-primary-500 bg-primary-500/10'
-                        : 'border-gray-600 hover:border-gray-500'
-                    }`}
-                  >
-                    <p className="font-medium text-sm">
-                      {acc.banco} — {acc.titular}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      CLABE: {acc.clabe}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <TransferPaymentFlow
+            loanId={loanId}
+            tipo="COMISION_APERTURA"
+            montoEsperado={feeMonto}
+            onReady={({ transferCodeId: tcId }) => setTransferCodeId(tcId)}
+            onReset={() => setTransferCodeId(null)}
+          />
 
-          {/* Transfer reference */}
-          <div className="space-y-1.5">
-            <p className="text-sm font-medium">ID / Referencia de transferencia</p>
-            <input
-              className="w-full border border-gray-600 bg-gray-800 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="Numero de referencia..."
-              value={idTransferencia}
-              onChange={(e) => setIdTransferencia(e.target.value)}
-            />
-          </div>
-
-          {/* Transfer warning */}
           <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
             El credito quedara en estado aprobado con pago pendiente de verificacion.
-            El Gerente Zonal debera confirmar que el dinero llego a la cuenta para
-            activar el credito.
+            El Gerente Zonal confirmara el deposito usando el codigo y la foto que subiste.
           </p>
 
           <div className="flex gap-3">
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => setStep('info')}
+              onClick={() => { setStep('info'); setTransferCodeId(null) }}
               disabled={loading}
             >
               Cancelar
             </Button>
             <Button
               className="flex-1"
-              disabled={loading}
+              disabled={loading || !transferCodeId}
               onClick={() => handleActivate('TRANSFER')}
             >
               {loading ? (

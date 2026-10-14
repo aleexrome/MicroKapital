@@ -168,18 +168,35 @@ export function GrupoCalendar({
   async function applyGroup(numeroPago: number) {
     setLoadingApply(true)
     try {
-      const res  = await fetch(`/api/loan-groups/${groupId}/schedule/apply`, {
+      const res = await fetch(`/api/loan-groups/${groupId}/schedule/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ numeroPago }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Error')
-      toast({ title: data.message ?? `Pago ${numeroPago} aplicado al grupo` })
+      // Capturamos el body como texto primero por si la respuesta no es
+      // JSON válido (p.ej. error 500 con HTML de Next.js). Así el toast
+      // nos dice el status y los primeros chars del body — útil para
+      // diagnosticar errores nativos del browser (Safari a veces lanza
+      // "The string did not match the expected pattern" si la respuesta
+      // está malformada).
+      const raw = await res.text()
+      let data: Record<string, unknown> = {}
+      try { data = raw ? JSON.parse(raw) : {} } catch { /* no-json */ }
+
+      if (!res.ok) {
+        const msg = (typeof data.error === 'string' && data.error) ||
+                    (typeof data.message === 'string' && data.message) ||
+                    `HTTP ${res.status}: ${raw.slice(0, 120) || 'sin cuerpo'}`
+        throw new Error(msg)
+      }
+      toast({ title: (data.message as string) ?? `Pago ${numeroPago} aplicado al grupo` })
       setConfirmApply(null)
       router.refresh()
     } catch (e) {
-      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+      const msg = e instanceof Error ? e.message : 'Error desconocido'
+      // eslint-disable-next-line no-console
+      console.error('[applyGroup] falló:', e)
+      toast({ title: 'Error al aplicar', description: msg, variant: 'destructive' })
     } finally {
       setLoadingApply(false)
     }

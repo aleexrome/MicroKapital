@@ -61,6 +61,7 @@ export default async function ArqueosPage() {
       user:                         c.user,
       capturadoAt:                  c.capturadoAt?.toISOString() ?? null,
       canceladoAt:                  c.canceladoAt?.toISOString() ?? null,
+      ultimoVistoAt:                c.ultimoVistoAt?.toISOString() ?? null,
       totalEfectivoDeclarado:       c.totalEfectivoDeclarado ? Number(c.totalEfectivoDeclarado) : null,
       totalTransferenciasDeclarado: c.totalTransferenciasDeclarado ? Number(c.totalTransferenciasDeclarado) : null,
       totalEfectivoEsperado:        c.totalEfectivoEsperado ? Number(c.totalEfectivoEsperado) : null,

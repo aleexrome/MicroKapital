@@ -8,6 +8,9 @@ export interface ArqueoCapturaDTO {
   user:                         { id: string; nombre: string; rol: string; branch: { id: string; nombre: string } | null }
   capturadoAt:                  string | null
   canceladoAt:                  string | null
+  /** Heartbeat — última vez que el user tuvo la pantalla congelada abierta.
+   *  Null = nunca abrió. En línea = < 30s desde ahora. */
+  ultimoVistoAt?:               string | null
   totalEfectivoDeclarado:       number | null
   totalTransferenciasDeclarado: number | null
   totalEfectivoEsperado:        number | null

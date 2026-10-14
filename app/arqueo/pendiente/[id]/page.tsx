@@ -96,6 +96,7 @@ export default async function ArqueoPendientePage({
 
           <ArqueoCapturaForm
             arqueoId={captura.arqueoId}
+            capturaId={captura.id}
             denominaciones={[...DENOMINACIONES_MXN]}
           />
 

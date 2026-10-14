@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
@@ -8,6 +8,8 @@ import { Banknote, Coins, Loader2, Send } from 'lucide-react'
 
 interface ArqueoCapturaFormProps {
   arqueoId:        string
+  /** ID de la ArqueoCaptura (para el heartbeat). */
+  capturaId:       string
   denominaciones:  number[]   // en pesos; 0.5 = 50¢
 }
 
@@ -24,13 +26,31 @@ interface ArqueoCapturaFormProps {
  * snapshot del esperado, y libera la pantalla congelada (router.push
  * a /dashboard).
  */
-export function ArqueoCapturaForm({ arqueoId, denominaciones }: ArqueoCapturaFormProps) {
+export function ArqueoCapturaForm({ arqueoId, capturaId, denominaciones }: ArqueoCapturaFormProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [cantidades, setCantidades] = useState<Record<string, string>>({})
   const [transferTxt, setTransferTxt] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [confirmado, setConfirmado] = useState(false)
+
+  // Heartbeat cada 15s para que el admin vea "en línea" mientras el user
+  // tiene esta pantalla abierta. Se dispara inmediatamente al montar + en
+  // intervalo + al volver a visibilidad (p.ej. el user minimizó y volvió).
+  useEffect(() => {
+    const ping = () => {
+      fetch(`/api/arqueos/capturas/${capturaId}/heartbeat`, { method: 'POST', keepalive: true })
+        .catch(() => {}) // silencioso — heartbeat perdido no es crítico
+    }
+    ping()
+    const id = setInterval(ping, 15_000)
+    const onVisibility = () => { if (document.visibilityState === 'visible') ping() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [capturaId])
 
   // Billetes vs monedas (visual) — billetes >= 20 son los papelitos, el
   // "20" se duplica si querés tener ambos; aquí tratamos >=20 como

@@ -135,6 +135,7 @@ model Company {
   notifications Notification[]
   settings      CompanySetting[]
   bankAccounts  CompanyBankAccount[]
+  arqueos       Arqueo[]
   goals         Goal[]
   employees     EmployeeRecord[]
   extraFunds    BranchExtraFund[]
@@ -185,6 +186,7 @@ model Branch {
   moraCobros    MoraCobro[]
   bancaViewers  User[]             @relation("BancaViewers")
   bankAccounts  BankAccountBranch[]
+  arqueos       Arqueo[]
 }
 
 // Aporte adicional que Dirección envía a una sucursal fuera del ciclo
@@ -275,6 +277,9 @@ model User {
   clientUser                  Client?                     @relation("ClienteUsuario")
   payments                    Payment[]
   transferCodesCreated        TransferCode[]              @relation("TransferCodeCreator")
+  arqueosLanzados             Arqueo[]                    @relation("ArqueosLanzados")
+  arqueosCancelados           Arqueo[]                    @relation("ArqueosCancelados")
+  arqueoCapturas              ArqueoCaptura[]             @relation("ArqueoCapturasUsuario")
   cashRegisters               CashRegister[]
   ticketsPrinted              Ticket[]
   auditLogs                   AuditLog[]
@@ -1172,4 +1177,82 @@ model TransferCode {
   @@index([loanId, tipo, usedAt, invalidatedAt])
   @@index([expiresAt])
   @@index([companyId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Arqueos sorpresivos (2026-10-14) — DG / DC / DS lanzan un arqueo
+// (individual, por sucursal o global) y los usuarios target reciben una
+// pantalla congelada hasta que capturen cuánto dinero tienen (efectivo
+// con desglose por denominación + total declarado de transferencias de
+// la semana MK actual). El sistema compara contra lo que esperaría
+// (suma de pagos CASH / TRANSFER cobrados en la semana) y marca
+// diferencias.
+//
+// Reglas:
+//   - DG / DC / DS / SUPER_ADMIN pueden lanzar; NO reciben arqueo (ellos
+//     solo visualizan). Todos los demás roles sí reciben.
+//   - Un user no puede tener más de una ArqueoCaptura PENDING al mismo
+//     tiempo — si ya está en uno activo, los nuevos arqueos que lo
+//     incluirían lo saltan (y la UI lo reporta).
+//   - Nunca expira: la pantalla congela al user hasta que capture o
+//     hasta que el admin cancele el arqueo.
+// ─────────────────────────────────────────────────────────────────────
+enum ArqueoTipo {
+  INDIVIDUAL // target: un user específico
+  BRANCH     // target: todos los users activos de una sucursal
+  GLOBAL     // target: todos los users activos de la empresa (menos DG/DC/DS/SA)
+}
+
+model Arqueo {
+  id              String       @id @default(uuid())
+  companyId       String
+  company         Company      @relation(fields: [companyId], references: [id])
+  tipo            ArqueoTipo
+  branchId        String?      // solo cuando tipo = BRANCH
+  branch          Branch?      @relation(fields: [branchId], references: [id])
+  lanzadoPorId    String
+  lanzadoPor      User         @relation("ArqueosLanzados", fields: [lanzadoPorId], references: [id])
+  lanzadoAt       DateTime     @default(now())
+  // Cancelación (opcional) — el que lanzó o cualquier DG/DC/DS puede
+  // cancelar un arqueo que todavía tenga capturas pendientes.
+  canceladoAt     DateTime?
+  canceladoPorId  String?
+  canceladoPor    User?        @relation("ArqueosCancelados", fields: [canceladoPorId], references: [id])
+  canceladoRazon  String?
+
+  capturas        ArqueoCaptura[]
+
+  @@index([companyId, lanzadoAt])
+  @@index([branchId])
+}
+
+model ArqueoCaptura {
+  id         String   @id @default(uuid())
+  arqueoId   String
+  arqueo     Arqueo   @relation(fields: [arqueoId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation("ArqueoCapturasUsuario", fields: [userId], references: [id])
+  // Null hasta que el user captura. Mientras siga null, la pantalla
+  // sigue congelada para ese user.
+  capturadoAt DateTime?
+
+  // Desglose capturado por el user — array JSON con {denominacion, cantidad}.
+  // Denominación en pesos (p.ej. 0.5 para 50 centavos; 1000 para billete
+  // de mil). Se guarda como Json para no explotar en una 3a tabla.
+  desgloseEfectivo             Json?
+  totalEfectivoDeclarado       Decimal? @db.Decimal(12, 2)
+  totalTransferenciasDeclarado Decimal? @db.Decimal(12, 2)
+
+  // Snapshot de lo que el sistema esperaba al momento de capturar —
+  // así la comparativa queda inmutable aunque luego se cancelen pagos.
+  totalEfectivoEsperado        Decimal? @db.Decimal(12, 2)
+  totalTransferenciasEsperado  Decimal? @db.Decimal(12, 2)
+  semanaMKSabado               DateTime? @db.Date  // sábado inicio de la semana MK sobre la que se calculó
+
+  // Cuando el admin cancela un arqueo con capturas pendientes, se marca
+  // así para no bloquear a los users ya sin razón.
+  canceladoAt DateTime?
+
+  @@unique([arqueoId, userId])
+  @@index([userId, capturadoAt, canceladoAt])
 }

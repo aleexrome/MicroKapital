@@ -5,6 +5,7 @@ import { DashboardShell } from '@/components/dashboard/DashboardShell'
 import { PlexusBackground } from '@/components/ui/PlexusBackground'
 import { Toaster } from '@/components/ui/toaster'
 import { checkLicense } from '@/lib/license-check'
+import { arqueoPendienteDe } from '@/lib/arqueos'
 import type { BranchTreeData } from '@/types/tree'
 
 export default async function DashboardLayout({
@@ -23,6 +24,16 @@ export default async function DashboardLayout({
   if (companyId) {
     const licenseResult = await checkLicense(companyId)
     if (!licenseResult.allowed) redirect('/licencia-suspendida')
+  }
+
+  // Arqueo sorpresivo pendiente → congelar al usuario en la pantalla
+  // de captura. Lo chequeamos ANTES de renderizar cualquier contenido
+  // del dashboard. La propia pantalla de captura vive fuera de este
+  // layout (app/arqueo/pendiente/[id]/page.tsx) así que redirigir aquí
+  // no entra en loop.
+  const pendiente = await arqueoPendienteDe(prisma, userId)
+  if (pendiente) {
+    redirect(`/arqueo/pendiente/${pendiente.id}`)
   }
 
   // MESA_CONTROL ve toda la empresa (mismo alcance que Dirección) para poder

@@ -149,6 +149,14 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   {
+    // Arqueos sorpresivos — solo DG / DC / SA (DS = Alejandro con rol DG).
+    // Los demás NO ven este botón: ellos reciben el arqueo, no lo lanzan.
+    href: '/arqueos',
+    label: 'Arqueos',
+    icon: <ClipboardList className="h-5 w-5" />,
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
+  },
+  {
     href: '/recursos-humanos',
     label: 'Recursos Humanos',
     icon: <BriefcaseBusiness className="h-5 w-5" />,

@@ -31,9 +31,22 @@ export default async function DashboardLayout({
   // del dashboard. La propia pantalla de captura vive fuera de este
   // layout (app/arqueo/pendiente/[id]/page.tsx) así que redirigir aquí
   // no entra en loop.
-  const pendiente = await arqueoPendienteDe(prisma, userId)
-  if (pendiente) {
-    redirect(`/arqueo/pendiente/${pendiente.id}`)
+  //
+  // Try/catch defensivo: si por alguna razón la tabla ArqueoCaptura no
+  // existe (migración pendiente en producción) o Prisma falla la query,
+  // registramos el error pero NO rompemos el dashboard entero — mejor
+  // dejar al usuario trabajar que mostrar un 500 sobre todo el sistema.
+  // Es Next.js (que re-lanza `redirect()`), así que separamos el intento
+  // de encontrar el pendiente del redirect propiamente dicho.
+  let pendienteId: string | null = null
+  try {
+    const pendiente = await arqueoPendienteDe(prisma, userId)
+    pendienteId = pendiente?.id ?? null
+  } catch (e) {
+    console.error('[DashboardLayout] arqueoPendienteDe falló (migración pendiente?):', e)
+  }
+  if (pendienteId) {
+    redirect(`/arqueo/pendiente/${pendienteId}`)
   }
 
   // MESA_CONTROL ve toda la empresa (mismo alcance que Dirección) para poder

@@ -156,6 +156,22 @@ export function ArqueosView({ arqueos, usuarios, branches, yoId }: Props) {
     return map
   }, [arqueosFiltrados])
 
+  // Captura PENDIENTE actual por user (SIN filtrar) — para el indicador
+  // de presencia. Si filtramos por "Hoy" o por sucursal pero el arqueo
+  // pendiente vive fuera, el badge aún así debe salir porque es lo que
+  // está bloqueando al user AHORA MISMO.
+  const pendienteActualPorUser = useMemo(() => {
+    const map = new Map<string, ArqueoCapturaDTO & { arqueo: ArqueoDTO }>()
+    for (const a of arqueos) {
+      if (a.canceladoAt) continue
+      for (const c of a.capturas) {
+        if (c.capturadoAt || c.canceladoAt) continue
+        map.set(c.user.id, { ...c, arqueo: a })
+      }
+    }
+    return map
+  }, [arqueos])
+
   const usuariosFiltrados = useMemo(() => {
     if (!branchId) return usuarios
     return usuarios.filter((u) => u.branch?.id === branchId)
@@ -294,10 +310,11 @@ export function ArqueosView({ arqueos, usuarios, branches, yoId }: Props) {
         <div className="space-y-2">
           {usuariosFiltrados.map((u) => {
             const capturas = capturasPorUser.get(u.id) ?? []
-            // Captura pendiente (si existe) para el indicador de presencia.
-            const pendienteDeEsteUser = capturas.find((c) =>
-              !c.capturadoAt && !c.canceladoAt && !c.arqueo.canceladoAt
-            )
+            // Captura pendiente para el indicador de presencia — se saca
+            // del mapa SIN filtrar para que el badge sea fiel al estado
+            // ahora mismo del user (quién está bloqueado), sin importar
+            // el rango de fecha / sucursal que esté viendo el admin.
+            const pendienteDeEsteUser = pendienteActualPorUser.get(u.id) ?? null
             const presencia = (() => {
               if (!pendienteDeEsteUser) return null
               if (!pendienteDeEsteUser.ultimoVistoAt) {

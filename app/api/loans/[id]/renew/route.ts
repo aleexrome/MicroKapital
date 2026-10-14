@@ -138,14 +138,20 @@ export async function POST(
       .reduce((sum, s) => sum + Number(s.montoEsperado), 0)
     pagosFinanciadosIds = data.pagosFinanciadosIds
   } else {
-    // Retrocompatibilidad: auto-financiar últimos N pagos
-    const montoPorPago =
-      loanOriginal.tipo === 'AGIL'       ? Number(loanOriginal.pagoDiario) :
-      loanOriginal.tipo === 'FIDUCIARIO' ? Number(loanOriginal.pagoQuincenal) :
-                                           Number(loanOriginal.pagoSemanal)
-    montoFinanciado = montoPorPago * regla.financiados
-    // Tomar los primeros N pagos pendientes como financiados
-    pagosFinanciadosIds = pagosPendientes.slice(0, regla.financiados).map((s) => s.id)
+    // Retrocompatibilidad: auto-financiar hasta `regla.financiados` pagos
+    // pendientes, EMPEZANDO POR LOS PRIMEROS pendientes (los más viejos).
+    // BUG previo (fixed): se calculaba `montoFinanciado = montoPorPago *
+    // regla.financiados` ignorando cuántos pagos realmente quedan — si
+    // el cliente ya cobró casi todo el ciclo y queda 1 pago pendiente,
+    // el monto se inflaba (ej. $2450 por "2 pagos") pero el count
+    // quedaba en 1, descuadrando el texto "1 pago financiado ($2450)".
+    // Ahora el monto se suma desde los pagos realmente seleccionados.
+    const seleccionados = pagosPendientes.slice(0, regla.financiados)
+    pagosFinanciadosIds = seleccionados.map((s) => s.id)
+    montoFinanciado    = seleccionados.reduce(
+      (sum, s) => sum + Number(s.montoEsperado),
+      0,
+    )
   }
 
   // Tipo del nuevo crédito (puede cambiar)

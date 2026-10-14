@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { formatMoney } from '@/lib/utils'
 import { CashBreakdownCalculator } from '@/components/payments/CashBreakdownCalculator'
+import { TransferPaymentFlow } from '@/components/payments/TransferPaymentFlow'
 import {
   ArrowLeft, CheckCircle, Users, Banknote, CreditCard, Building2,
   Loader2, Printer, Download,
@@ -30,14 +31,6 @@ interface MiembroInfo {
   totalPagos:   number
   monto:        number
   estadoActual: string
-}
-
-interface BankAccount {
-  id: string
-  banco: string
-  titular: string
-  clabe: string
-  numeroCuenta: string
 }
 
 interface GroupTicketMeta {
@@ -67,9 +60,10 @@ export default function CapturarGrupoPage() {
   const [step, setStep]               = useState<Step>('summary')
   const [submitting, setSubmitting]   = useState(false)
 
-  const [bankAccounts, setBankAccounts]     = useState<BankAccount[]>([])
-  const [selectedAccount, setSelectedAccount] = useState('')
-  const [idTransferencia, setIdTransferencia] = useState('')
+  // Flujo nuevo (Fase 1) para TRANSFER grupal: TransferPaymentFlow genera
+  // código + sube foto. Guardamos sólo lo que necesita el endpoint.
+  const [transferCodeId, setTransferCodeId]       = useState<string | null>(null)
+  const [transferReferenciaBanco, setTransferRefBanco] = useState<string>('')
 
   const [tickets, setTickets]     = useState<TicketItem[]>([])
   const [groupMeta, setGroupMeta] = useState<GroupTicketMeta | null>(null)
@@ -87,14 +81,6 @@ export default function CapturarGrupoPage() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
-    fetch(`/api/bank-accounts?groupId=${groupId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.data?.length) {
-          setBankAccounts(d.data)
-          setSelectedAccount(d.data[0].id)
-        }
-      })
   }, [groupId])
 
   async function submitPayment(
@@ -114,8 +100,13 @@ export default function CapturarGrupoPage() {
         numeroPago:      miembros[0]?.numeroPago,
       }
       if (metodoPago === 'TRANSFER') {
-        body.cuentaDestinoId = selectedAccount || undefined
-        body.idTransferencia = idTransferencia || undefined
+        if (!transferCodeId) {
+          toast({ title: 'Falta completar el flujo de transferencia (código + foto)', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        body.transferCodeId = transferCodeId
+        if (transferReferenciaBanco) body.referenciaBanco = transferReferenciaBanco
       }
 
       const res = await fetch(`/api/cobros/grupo/${groupId}/pay`, {
@@ -422,7 +413,12 @@ export default function CapturarGrupoPage() {
     )
   }
 
-  // ── TRANSFER ────────────────────────────────────────────────────────────────
+  // ── TRANSFER (flujo nuevo Fase 1 — tarjetas + código + foto + ref banco) ──
+  // Para TransferPaymentFlow necesitamos un loanId: el grupal cobra a
+  // todos los integrantes pero el flujo generador de código solo pide
+  // uno — usamos el del primer miembro (es solo para resolver la
+  // sucursal y asociar el código al grupo).
+  const loanIdRef = miembros[0]?.loanId ?? ''
   return (
     <div className="p-4 space-y-4 max-w-md mx-auto">
       {header}
@@ -434,48 +430,38 @@ export default function CapturarGrupoPage() {
         </CardContent>
       </Card>
 
-      {bankAccounts.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-sm font-medium">Cuenta destino</p>
-          <div className="space-y-2">
-            {bankAccounts.map((acc) => (
-              <button
-                key={acc.id}
-                type="button"
-                onClick={() => setSelectedAccount(acc.id)}
-                className={`w-full text-left rounded-lg border-2 p-3 transition-colors ${
-                  selectedAccount === acc.id
-                    ? 'border-primary-500 bg-primary-500/5'
-                    : 'border-border hover:border-primary-500/50'
-                }`}
-              >
-                <p className="font-medium text-sm">{acc.banco} — {acc.titular}</p>
-                <p className="text-xs text-muted-foreground">CLABE: {acc.clabe}</p>
-              </button>
-            ))}
-          </div>
-        </div>
+      {loanIdRef && (
+        <TransferPaymentFlow
+          loanId={loanIdRef}
+          tipo="GROUP_PAYMENT"
+          groupId={groupId}
+          montoEsperado={totalEsperado}
+          onReady={({ transferCodeId: tcId, referenciaBanco }) => {
+            setTransferCodeId(tcId)
+            setTransferRefBanco(referenciaBanco)
+          }}
+          onReset={() => { setTransferCodeId(null); setTransferRefBanco('') }}
+        />
       )}
 
-      <div className="space-y-1.5">
-        <p className="text-sm font-medium">ID / Referencia de transferencia</p>
-        <input
-          className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-          placeholder="Número de referencia…"
-          value={idTransferencia}
-          onChange={(e) => setIdTransferencia(e.target.value)}
-        />
-      </div>
-
       <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-        El pago quedará pendiente de verificación. El Gerente Zonal deberá confirmar que el dinero llegó a la cuenta.
+        El pago quedará pendiente de verificación. El Gerente Zonal confirmará que el dinero llegó buscando el código en la foto.
       </p>
 
       <div className="flex gap-3">
-        <Button variant="outline" className="flex-1" onClick={() => setStep('method')} disabled={submitting}>
+        <Button
+          variant="outline"
+          className="flex-1"
+          onClick={() => { setStep('method'); setTransferCodeId(null); setTransferRefBanco('') }}
+          disabled={submitting}
+        >
           Atrás
         </Button>
-        <Button className="flex-1" onClick={() => submitPayment('TRANSFER')} disabled={submitting}>
+        <Button
+          className="flex-1"
+          onClick={() => submitPayment('TRANSFER')}
+          disabled={submitting || !transferCodeId}
+        >
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle className="h-4 w-4" /> Registrar</>}
         </Button>
       </div>

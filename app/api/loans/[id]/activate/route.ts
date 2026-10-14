@@ -26,6 +26,7 @@ const activateSchema = z.object({
   // Flujo nuevo Fase 1 — ver /api/transfer-codes. Si vino, se toma como
   // fuente de verdad (cuenta, código, foto). Legacy sigue aceptado.
   transferCodeId:  z.string().uuid().optional(),
+  referenciaBanco: z.string().max(100).optional(),
 })
 
 export async function POST(
@@ -254,6 +255,7 @@ export async function POST(
           statusTransferencia: 'PENDIENTE',
           comprobanteFotoUrl:  efectivoComprobanteUrl,
           comprobanteFotoAt:   efectivoComprobanteAt,
+          referenciaBanco:     data.referenciaBanco?.trim() || null,
         },
       })
 

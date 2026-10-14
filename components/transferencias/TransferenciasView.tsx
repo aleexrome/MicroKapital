@@ -32,6 +32,9 @@ export interface TransferRow {
    *  idTransferencia es el código MK-XXXXXX y comprobanteFotoUrl trae
    *  el screenshot que subió la coord. Legacy = ambos null. */
   comprobanteFotoUrl?: string | null
+  /** Número / ID del banco (autorización SPEI) que capturó el coord
+   *  opcionalmente. Pista extra para auditoría. */
+  referenciaBanco?: string | null
 }
 
 interface Props {
@@ -373,6 +376,12 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
                           <p className="flex items-center gap-1">
                             <Building2 className="h-3 w-3 text-muted-foreground" />
                             {p.cuentaDestino.banco} — CLABE: {p.cuentaDestino.clabe}
+                          </p>
+                        )}
+                        {p.referenciaBanco && (
+                          <p>
+                            <span className="text-muted-foreground">Ref. banco:</span>{' '}
+                            <span className="font-mono">{p.referenciaBanco}</span>
                           </p>
                         )}
                         <p><span className="text-muted-foreground">Sucursal:</span> {p.sucursalNombre}</p>

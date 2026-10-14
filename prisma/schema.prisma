@@ -689,6 +689,11 @@ model Payment {
   // se persiste el código único generado por el sistema vía TransferCode).
   comprobanteFotoUrl  String?
   comprobanteFotoAt   DateTime?
+  // Número / ID devuelto por el banco al cliente al hacer la transferencia
+  // (ej. número de autorización SPEI). Opcional — si el cliente lo tiene
+  // lo captura y queda como pista extra para auditoría; distinto del código
+  // MK-XXXXXX que vive en idTransferencia / TransferCode.code.
+  referenciaBanco     String?
   transferCode        TransferCode?
   // Cobertura solidaria (grupo Solidario)
   esCoberturaGrupal   Boolean             @default(false)

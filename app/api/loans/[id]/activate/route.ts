@@ -23,10 +23,11 @@ const activateSchema = z.object({
     subtotal: z.number(),
   })).optional(),
   cambioEntregado: z.number().optional(),
+  // Campos legacy del flujo TRANSFER — ya no se usan (Dirección 2026-10:
+  // comisión apertura solo CASH). Dejamos los campos en el schema para
+  // no romper el UI/clients si todavía los mandan; el backend los ignora.
   cuentaDestinoId: z.string().uuid().optional(),
   idTransferencia: z.string().optional(),
-  // Flujo nuevo Fase 1 — ver /api/transfer-codes. Si vino, se toma como
-  // fuente de verdad (cuenta, código, foto). Legacy sigue aceptado.
   transferCodeId:  z.string().uuid().optional(),
   referenciaBanco: z.string().max(100).optional(),
 })
@@ -207,7 +208,6 @@ export async function POST(
   // ÚNICAMENTE en EFECTIVO con ticket. Se removieron los bloques TRANSFER
   // y FINANCIADO (ya no se descuenta del capital). Si en el futuro se
   // reactiva alguno, revivir desde el histórico de git.
-  const nuevoMontoReal: number | undefined = undefined
 
   // CASH — activación inmediata
   const fechaPrimerPagoRef = loan.fechaPrimerPago ?? null
@@ -243,24 +243,27 @@ export async function POST(
   const result = await prisma.$transaction(async (tx) => {
     const now = new Date()
 
-    // 1. Crear Payment para la tarifa de apertura (solo si hay pago real — no en verificación ni financiado)
+    // 1. Crear Payment para la tarifa de apertura (siempre CASH ahora
+    // que la decisión de Dirección 2026-10 es efectivo+ticket únicamente).
+    // La condición `data.metodoPago` sigue existiendo porque es `optional`
+    // en el schema — hay rutas de verificación que no mandan el método.
     let payment: { id: string } | null = null
-    if (data.metodoPago && data.metodoPago !== 'FINANCIADO') {
+    if (data.metodoPago) {
       payment = await tx.payment.create({
         data: {
           loanId: loan.id,
           cobradorId: userId,
           clientId: loan.clientId,
           monto: feeMonto,
-          metodoPago: data.metodoPago as 'CASH' | 'CARD' | 'TRANSFER',
+          metodoPago: 'CASH',
           cambioEntregado: data.cambioEntregado ?? 0,
           notas: feeConcepto,
           fechaHora: now,
         },
       })
 
-      // 2. Desglose de efectivo (solo CASH)
-      if (data.metodoPago === 'CASH' && payment && data.cashBreakdown && data.cashBreakdown.length > 0) {
+      // 2. Desglose de efectivo
+      if (payment && data.cashBreakdown && data.cashBreakdown.length > 0) {
         await tx.cashBreakdown.createMany({
           data: data.cashBreakdown.map((d) => ({
             paymentId: payment!.id,
@@ -278,13 +281,12 @@ export async function POST(
       data: {
         estado: 'ACTIVE',
         fechaDesembolso,
-        ...(esFinanciado ? { montoReal: nuevoMontoReal } : {}),
         ...(esFeeSeguro ? {
           seguro: feeMonto,
-          seguroMetodoPago: esFinanciado ? 'CASH' : ((data.metodoPago ?? 'CASH') as 'CASH' | 'CARD' | 'TRANSFER'),
+          seguroMetodoPago: 'CASH',
           seguroPendiente: false,
         } : {
-          seguroMetodoPago: esFinanciado ? 'CASH' : ((data.metodoPago ?? 'CASH') as 'CASH' | 'CARD' | 'TRANSFER'),
+          seguroMetodoPago: 'CASH',
           seguroPendiente: false,
         }),
       },
@@ -334,9 +336,10 @@ export async function POST(
       })
     }
 
-    // 6. Actualizar caja y generar ticket (solo si hay pago real, no financiado)
+    // 6. Actualizar caja y generar ticket (solo si hay pago real).
+    //    Siempre CASH ahora (Dirección 2026-10: comisión apertura solo efectivo).
     let ticket = null
-    if (data.metodoPago && data.metodoPago !== 'FINANCIADO' && payment) {
+    if (data.metodoPago && payment) {
       const fechaCaja = todayMx()
       const targetBranchId = session.user.branchId ?? loan.branchId
 
@@ -346,20 +349,19 @@ export async function POST(
           cobradorId: userId,
           branchId: targetBranchId!,
           fecha: fechaCaja,
-          cobradoEfectivo: data.metodoPago === 'CASH' ? feeMonto : 0,
-          cobradoTarjeta: data.metodoPago === 'CARD' ? feeMonto : 0,
+          cobradoEfectivo: feeMonto,
+          cobradoTarjeta: 0,
           cobradoTransferencia: 0,
           cambioEntregado: data.cambioEntregado ?? 0,
         },
         update: {
-          cobradoEfectivo: data.metodoPago === 'CASH' ? { increment: feeMonto } : undefined,
-          cobradoTarjeta: data.metodoPago === 'CARD' ? { increment: feeMonto } : undefined,
+          cobradoEfectivo: { increment: feeMonto },
           cambioEntregado: data.cambioEntregado ? { increment: data.cambioEntregado } : undefined,
         },
       })
 
-      // Generar ticket solo para CASH (CARD lo genera la terminal)
-      if (data.metodoPago === 'CASH' && feeMonto > 0) {
+      // Generar ticket (siempre CASH ahora)
+      if (feeMonto > 0) {
         const year = now.getFullYear()
         const numeroTicket = await generateTicketNumber(branchPrefix, year)
         const qrCode = generateTicketQrData(numeroTicket)

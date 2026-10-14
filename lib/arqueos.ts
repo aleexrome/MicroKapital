@@ -9,18 +9,18 @@
  *     — ellos solo visualizan.
  */
 
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, UserRole } from '@prisma/client'
 import { getSaturday, getFriday } from '@/lib/week-utils'
 
 /** Roles habilitados a lanzar / cancelar / ver arqueos. */
-export const ROLES_LANZAN_ARQUEO: readonly string[] = [
+export const ROLES_LANZAN_ARQUEO: readonly UserRole[] = [
   'SUPER_ADMIN',
   'DIRECTOR_GENERAL',
   'DIRECTOR_COMERCIAL',
 ] as const
 
 /** Roles que SÍ reciben arqueo cuando están en scope. */
-export const ROLES_RECIBEN_ARQUEO: readonly string[] = [
+export const ROLES_RECIBEN_ARQUEO: readonly UserRole[] = [
   'MESA_CONTROL',
   'GERENTE_ZONAL',
   'GERENTE',
@@ -29,11 +29,11 @@ export const ROLES_RECIBEN_ARQUEO: readonly string[] = [
 ] as const
 
 export function puedeLanzarArqueo(rol: string): boolean {
-  return ROLES_LANZAN_ARQUEO.includes(rol)
+  return (ROLES_LANZAN_ARQUEO as readonly string[]).includes(rol)
 }
 
 export function recibeArqueo(rol: string): boolean {
-  return ROLES_RECIBEN_ARQUEO.includes(rol)
+  return (ROLES_RECIBEN_ARQUEO as readonly string[]).includes(rol)
 }
 
 /**

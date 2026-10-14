@@ -175,6 +175,16 @@ model Branch {
   // no los gerentes locales.
   verificacionCentralizada Boolean @default(false)
 
+  // Concentrador local del corte del día (quien recibe de los coords
+  // de esta sucursal y a su vez entrega a DG o DC). Null = los coords
+  // de la sucursal entregan DIRECTO a DG/DC sin escalón intermedio
+  // (ej. caso Tenancingo II / Carol MC — pero actualmente Carol es
+  // la concentradora, así que todas las sucursales de este deploy
+  // tienen concentradorUserId lleno).
+  // Admin lo asigna/cambia desde /admin cuando alguien se da de baja.
+  concentradorUserId String?
+  concentrador       User?   @relation("BranchConcentrador", fields: [concentradorUserId], references: [id])
+
   users         User[]
   clients       Client[]
   loans         Loan[]
@@ -187,6 +197,7 @@ model Branch {
   bancaViewers  User[]             @relation("BancaViewers")
   bankAccounts  BankAccountBranch[]
   arqueos       Arqueo[]
+  cortes        Corte[]            @relation("CortesEnBranch")
 }
 
 // Aporte adicional que Dirección envía a una sucursal fuera del ciclo
@@ -280,6 +291,9 @@ model User {
   arqueosLanzados             Arqueo[]                    @relation("ArqueosLanzados")
   arqueosCancelados           Arqueo[]                    @relation("ArqueosCancelados")
   arqueoCapturas              ArqueoCaptura[]             @relation("ArqueoCapturasUsuario")
+  cortesPropios               Corte[]                     @relation("CortesPropios")
+  cortesRecibidos             Corte[]                     @relation("CortesRecibidos")
+  branchesConcentra           Branch[]                    @relation("BranchConcentrador")
   cashRegisters               CashRegister[]
   ticketsPrinted              Ticket[]
   auditLogs                   AuditLog[]
@@ -1265,4 +1279,94 @@ model ArqueoCaptura {
 
   @@unique([arqueoId, userId])
   @@index([userId, capturadoAt, canceladoAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Corte del día (2026-10-14) — pipeline del dinero desde el campo hasta
+// DG/DC. TODOS los que cobran (coord, cobrador, gerente, y los
+// concentradores locales que a su vez concentran y entregan) deben
+// cerrar su corte al final del día.
+//
+// Flujo:
+//   1. Usuario cobra en campo → CashRegister acumula totales (en tiempo real).
+//   2. A las 18:00 MX el cron abre un Corte ABIERTO si no existe uno
+//      para ese user+día. También se puede abrir manual antes.
+//   3. Usuario revisa totales, elige receptor (según cadena por sucursal),
+//      sube foto del ticket firmado, marca "entregado" → ENTREGADO.
+//   4. Receptor entra a su panel, acepta o rechaza:
+//        - ACEPTA → ACEPTADO. Coord se desbloquea.
+//        - RECHAZA (razón: discrepancia de monto) → vuelve a ABIERTO.
+//          Coord debe re-entregar.
+//
+// Cadena (configurada por sucursal via Branch.concentradorUserId):
+//   - Coord local → Concentrador local → DC o DG (fin).
+//   - Tenancingo II: coord Adriana → Carol MC → DC o DG.
+//   - DC/DG = último eslabón. No se bloquean, no entregan a nadie.
+//
+// Bloqueo: en el DashboardLayout, si el user tiene cortes sin cerrar
+// de días pasados (o del día actual pasado 18:00), pantalla congelada
+// hasta cerrar. DC/DG exentos.
+// ─────────────────────────────────────────────────────────────────────
+enum CorteEstado {
+  ABIERTO    // Usuario ya puede entregar; está revisando o editando.
+  ENTREGADO  // Subió foto + marcó "entregado"; pendiente de aceptación.
+  ACEPTADO   // Receptor confirmó. Pipeline cerrado para este Corte.
+  RECHAZADO  // Receptor rechazó. Vuelve a ABIERTO después de la razón
+             // visible al dueño; este estado es solo un marker histórico
+             // (cuando sucede, el flujo real continúa en un nuevo ciclo).
+}
+
+model Corte {
+  id        String   @id @default(uuid())
+  companyId String
+  userId    String
+  user      User     @relation("CortesPropios", fields: [userId], references: [id])
+  // Día civil MX al que pertenece este corte (00:00 - 23:59 local).
+  // Un user solo puede tener un corte por día (unique abajo).
+  fecha     DateTime @db.Date
+  branchId  String   // sucursal del user al momento de abrir el corte
+  branch    Branch   @relation("CortesEnBranch", fields: [branchId], references: [id])
+
+  // Snapshot de totales del CashRegister al momento de entregar.
+  // Se congela aquí para que la auditoría no cambie si CashRegister se
+  // modifica después (ej. cancelaciones tardías).
+  totalEfectivoCobrado      Decimal @default(0) @db.Decimal(12, 2)
+  totalTarjetaCobrado       Decimal @default(0) @db.Decimal(12, 2)
+  totalTransferenciaCobrado Decimal @default(0) @db.Decimal(12, 2)
+  // Para concentradores: suma de los cortes aceptados que recibieron
+  // de otros coords el mismo día. Snapshot al entregar.
+  totalRecibidoDeOtros      Decimal @default(0) @db.Decimal(12, 2)
+  // Lo que FÍSICAMENTE entrega el user al receptor (efectivo que sale
+  // de sus manos). Normalmente = totalEfectivoCobrado + totalRecibidoDeOtros.
+  totalAEntregar            Decimal @default(0) @db.Decimal(12, 2)
+
+  // Receptor seleccionado (concentrador local o DC/DG).
+  receptorId String?
+  receptor   User?    @relation("CortesRecibidos", fields: [receptorId], references: [id])
+
+  // Evidencia de entrega
+  fotoTicketUrl  String?
+  fotoTicketAt   DateTime?
+  entregadoAt    DateTime?
+
+  // Flujo de aceptación por el receptor
+  aceptadoAt    DateTime?
+  // Monto que el receptor dice haber recibido realmente. Si coincide
+  // con totalAEntregar, no hay discrepancia. Si no, se rechaza (regla A).
+  montoAceptado Decimal? @db.Decimal(12, 2)
+
+  rechazadoAt     DateTime?
+  rechazoRazon    String?
+
+  estado      CorteEstado @default(ABIERTO)
+
+  // Metadata adicional
+  autoCreadoAt DateTime?  // marcado por el cron 18:00 (vs manual)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([userId, fecha])
+  @@index([companyId, fecha])
+  @@index([receptorId, estado])
+  @@index([estado, fecha])
 }

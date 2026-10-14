@@ -6,6 +6,7 @@ import { PlexusBackground } from '@/components/ui/PlexusBackground'
 import { Toaster } from '@/components/ui/toaster'
 import { checkLicense } from '@/lib/license-check'
 import { arqueoPendienteDe } from '@/lib/arqueos'
+import { cortePendienteDe }  from '@/lib/cortes'
 import type { BranchTreeData } from '@/types/tree'
 
 export default async function DashboardLayout({
@@ -47,6 +48,21 @@ export default async function DashboardLayout({
   }
   if (pendienteId) {
     redirect(`/arqueo/pendiente/${pendienteId}`)
+  }
+
+  // Corte del día pendiente — misma regla que arqueo: si el user tiene
+  // un corte sin cerrar de días pasados (o del día actual pasado 18:00
+  // MX), se congela su pantalla hasta cerrar. DG/DC/SA exentos. Try/
+  // catch defensivo igual que arqueo.
+  let cortePendienteId: string | null = null
+  try {
+    const c = await cortePendienteDe(prisma, { id: userId, rol })
+    cortePendienteId = c?.id ?? null
+  } catch (e) {
+    console.error('[DashboardLayout] cortePendienteDe falló (migración pendiente?):', e)
+  }
+  if (cortePendienteId) {
+    redirect(`/corte/pendiente/${cortePendienteId}`)
   }
 
   // MESA_CONTROL ve toda la empresa (mismo alcance que Dirección) para poder

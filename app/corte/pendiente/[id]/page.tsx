@@ -2,7 +2,11 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
-import { receptoresValidosPara } from '@/lib/cortes'
+import {
+  receptoresValidosPara,
+  snapshotCashRegisterDelDia,
+  totalRecibidoDeOtrosEnDia,
+} from '@/lib/cortes'
 import { CorteCongeladoForm } from '@/components/cortes/CorteCongeladoForm'
 import { Wallet, Inbox } from 'lucide-react'
 
@@ -51,6 +55,29 @@ export default async function CortePendientePage({
     companyId: session.user.companyId,
   })
 
+  // Totales DINÁMICOS — el snapshot que crea el cron a las 18:00 es solo
+  // el punto de partida. Hay que recalcular en vivo porque:
+  //   1) El concentrador (p.ej. Cristina) va aceptando cortes de su equipo
+  //      DESPUÉS de las 18:00 — totalRecibidoDeOtros empieza en 0 y crece.
+  //   2) El coord puede cobrar más efectivo después de las 18:00 — el
+  //      CashRegister refleja el día completo.
+  // Si el corte YA está ENTREGADO/RECHAZADO, respetamos los números
+  // congelados en el momento de la entrega (son los que el receptor vio).
+  let efectivo      = Number(corte.totalEfectivoCobrado)
+  let tarjeta       = Number(corte.totalTarjetaCobrado)
+  let transferencia = Number(corte.totalTransferenciaCobrado)
+  let recibido      = Number(corte.totalRecibidoDeOtros)
+  let aEntregar     = Number(corte.totalAEntregar)
+  if (corte.estado === 'ABIERTO') {
+    const snap    = await snapshotCashRegisterDelDia(prisma, session.user.id, corte.fecha)
+    const rec     = await totalRecibidoDeOtrosEnDia(prisma, session.user.id, corte.fecha)
+    efectivo      = snap.efectivo
+    tarjeta       = snap.tarjeta
+    transferencia = snap.transferencia
+    recibido      = rec
+    aEntregar     = snap.efectivo + rec
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-900 via-primary-950 to-black flex items-center justify-center p-4">
       <div className="w-full max-w-2xl rounded-2xl border-2 border-fuchsia-500/50 bg-primary-900/80 backdrop-blur-xl shadow-2xl overflow-hidden">
@@ -80,11 +107,11 @@ export default async function CortePendientePage({
             estado={corte.estado}
             fecha={corte.fecha.toISOString()}
             branchNombre={corte.branch.nombre}
-            totalEfectivoCobrado={Number(corte.totalEfectivoCobrado)}
-            totalTarjetaCobrado={Number(corte.totalTarjetaCobrado)}
-            totalTransferenciaCobrado={Number(corte.totalTransferenciaCobrado)}
-            totalRecibidoDeOtros={Number(corte.totalRecibidoDeOtros)}
-            totalAEntregar={Number(corte.totalAEntregar)}
+            totalEfectivoCobrado={efectivo}
+            totalTarjetaCobrado={tarjeta}
+            totalTransferenciaCobrado={transferencia}
+            totalRecibidoDeOtros={recibido}
+            totalAEntregar={aEntregar}
             receptorActual={corte.receptor}
             receptoresDisponibles={receptoresDisponibles}
             fotoTicketUrl={corte.fotoTicketUrl}

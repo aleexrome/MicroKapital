@@ -34,6 +34,7 @@ import {
   BriefcaseBusiness,
   ClipboardList,
   Video,
+  Inbox,
 } from 'lucide-react'
 import type { BranchTreeData } from '@/types/tree'
 import { UserAvatarMenu } from '@/components/dashboard/UserAvatarMenu'
@@ -155,6 +156,16 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Arqueos',
     icon: <ClipboardList className="h-5 w-5" />,
     roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
+  },
+  {
+    // Cortes recibidos — receptores (concentradores locales + DG/DC/SA).
+    // El sidebar lo muestra a GERENTE_ZONAL (Edgar, Cristina), COORDINADOR
+    // (Diana, Jessika), MESA_CONTROL (Carol), y a los superiores. Si el
+    // usuario entra y no es receptor de nada, la página redirige.
+    href: '/cortes/recibidos',
+    label: 'Cortes recibidos',
+    icon: <Inbox className="h-5 w-5" />,
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL', 'GERENTE_ZONAL', 'COORDINADOR'],
   },
   {
     href: '/recursos-humanos',

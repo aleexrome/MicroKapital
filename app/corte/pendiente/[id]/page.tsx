@@ -1,8 +1,10 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { receptoresValidosPara } from '@/lib/cortes'
 import { CorteCongeladoForm } from '@/components/cortes/CorteCongeladoForm'
+import { Wallet, Inbox } from 'lucide-react'
 
 /**
  * Pantalla congelada del Corte del día — se muestra al user que tiene
@@ -93,6 +95,27 @@ export default async function CortePendientePage({
             No podrás usar el sistema hasta que el receptor acepte tu corte.
             Si hubo discrepancia y rechazaron, re-entrega con el monto correcto.
           </p>
+
+          {/* Nav mínimo — las ÚNICAS 2 rutas accesibles mientras el corte
+              esté pendiente. /caja para imprimir el ticket resumen antes
+              de entregar; /cortes/recibidos para aceptar los que otros
+              te entregaron (si eres concentrador). */}
+          <div className="border-t border-primary-700/50 pt-3 flex gap-2 justify-center">
+            <Link
+              href="/caja"
+              className="flex items-center gap-2 rounded-md border border-primary-600 bg-primary-800/60 px-3 py-2 text-xs text-primary-100 hover:bg-primary-700/60 transition-colors"
+            >
+              <Wallet className="h-3.5 w-3.5" />
+              Ver mi caja (imprimir ticket)
+            </Link>
+            <Link
+              href="/cortes/recibidos"
+              className="flex items-center gap-2 rounded-md border border-primary-600 bg-primary-800/60 px-3 py-2 text-xs text-primary-100 hover:bg-primary-700/60 transition-colors"
+            >
+              <Inbox className="h-3.5 w-3.5" />
+              Cortes que recibí
+            </Link>
+          </div>
         </div>
       </div>
     </div>

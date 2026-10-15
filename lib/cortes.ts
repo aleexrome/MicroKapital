@@ -60,6 +60,16 @@ export async function concentradorDeSucursal(
 }
 
 /**
+ * Emails que NO deben aparecer como receptores aunque técnicamente tengan
+ * rol que lo permita. Caso: Alejandro Romero tiene rol DIRECTOR_GENERAL
+ * en BD (por permisos de sistema) pero realmente es Director de Sistemas
+ * y NO maneja dinero físico — no debe salir en el dropdown de receptores.
+ */
+const EMAILS_EXCLUIR_RECEPTOR: readonly string[] = [
+  'alejandro.romero@microkapital.com',
+]
+
+/**
  * Receptores válidos para un corte de este user:
  *   - Si el user ES el concentrador local de su sucursal → solo DG/DC/SA.
  *   - Si el user NO es concentrador local → solo el concentrador local (si existe);
@@ -83,6 +93,7 @@ export async function receptoresValidosPara(
         activo:    true,
         rol:       { in: [...ROLES_RECEPTORES_FINALES] },
         id:        { not: user.id },
+        email:     { notIn: [...EMAILS_EXCLUIR_RECEPTOR] },
       },
       select:  { id: true, nombre: true, rol: true },
       orderBy: { nombre: 'asc' },

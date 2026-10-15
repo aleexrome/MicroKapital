@@ -83,7 +83,14 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
-  return NextResponse.next()
+  // 7. Propagar el pathname al server component via REQUEST header para
+  //    que el DashboardLayout pueda exentar ciertas rutas del bloqueo
+  //    de corte pendiente (p.ej. /caja y /cortes/recibidos — para que
+  //    el user pueda imprimir ticket y aceptar cortes recibidos aun
+  //    con su propio corte pendiente de entregar).
+  const requestHeaders = new Headers(req.headers)
+  requestHeaders.set('x-pathname', pathname)
+  return NextResponse.next({ request: { headers: requestHeaders } })
 }
 
 export const config = {

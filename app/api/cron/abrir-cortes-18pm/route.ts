@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import {
   ROLES_HACEN_CORTE,
   snapshotCashRegisterDelDia,
   totalRecibidoDeOtrosEnDia,
 } from '@/lib/cortes'
-import { todayMx } from '@/lib/timezone'
+import { todayMx, parseMxYMD } from '@/lib/timezone'
 
 /**
  * GET /api/cron/abrir-cortes-18pm
@@ -20,12 +20,37 @@ import { todayMx } from '@/lib/timezone'
  *
  * Idempotente: upsert por (userId, fecha). Si ya existe cualquier
  * estado, no toca nada.
+ *
+ * BACKFILL manual: acepta ?fecha=YYYY-MM-DD. Útil cuando el cron de
+ * Vercel no corrió (p.ej. deploy tardío, Hobby plan limit, etc.) y
+ * hay que crear los cortes retroactivos para que los users caigan a
+ * pantalla congelada el siguiente día. Solo DG/DC/SA pueden pasar
+ * fecha manual — se chequea con el header x-vercel-cron o la sesión.
  */
-export async function GET() {
-  // Vercel incluye el header `x-vercel-cron: 1` solo en invocaciones
-  // propias del cron. En otros entornos aceptamos también para pruebas.
-  const fecha = todayMx()
-  const dia   = fecha.toISOString().slice(0, 10)
+export async function GET(req: NextRequest) {
+  const fechaParam = req.nextUrl.searchParams.get('fecha')
+  const esCron = req.headers.get('x-vercel-cron') === '1'
+
+  let fecha = todayMx()
+  if (fechaParam) {
+    // Backfill manual — solo permitido fuera de la invocación del cron
+    // (que siempre usa hoy). Validamos formato YYYY-MM-DD.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaParam)) {
+      return NextResponse.json({ error: 'fecha debe ser YYYY-MM-DD' }, { status: 400 })
+    }
+    if (!esCron) {
+      // Autenticación por sesión para que no cualquiera pueda disparar.
+      const { getSession } = await import('@/lib/session')
+      const session = await getSession()
+      const rol = session?.user?.rol
+      if (!session?.user || !['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'].includes(rol ?? '')) {
+        return NextResponse.json({ error: 'Solo DG/DC/SA pueden backfillear' }, { status: 403 })
+      }
+    }
+    fecha = parseMxYMD(fechaParam)
+  }
+
+  const dia = fecha.toISOString().slice(0, 10)
   let abiertos = 0
   let saltados = 0
   const errores: string[] = []

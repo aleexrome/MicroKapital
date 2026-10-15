@@ -120,6 +120,15 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
   },
   {
+    // Cortes recibidos — receptores (concentradores locales + DG/DC/SA).
+    // Agrupado junto a "Corte del Día" para que el user los asocie
+    // visualmente (uno es el que yo entrego, el otro los que recibo).
+    href: '/cortes/recibidos',
+    label: 'Cortes recibidos',
+    icon: <Inbox className="h-5 w-5" />,
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL', 'GERENTE_ZONAL', 'COORDINADOR'],
+  },
+  {
     href: '/tickets',
     label: 'Tickets',
     icon: <Ticket className="h-5 w-5" />,
@@ -158,16 +167,6 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
   },
   {
-    // Cortes recibidos — receptores (concentradores locales + DG/DC/SA).
-    // El sidebar lo muestra a GERENTE_ZONAL (Edgar, Cristina), COORDINADOR
-    // (Diana, Jessika), MESA_CONTROL (Carol), y a los superiores. Si el
-    // usuario entra y no es receptor de nada, la página redirige.
-    href: '/cortes/recibidos',
-    label: 'Cortes recibidos',
-    icon: <Inbox className="h-5 w-5" />,
-    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL', 'GERENTE_ZONAL', 'COORDINADOR'],
-  },
-  {
     href: '/recursos-humanos',
     label: 'Recursos Humanos',
     icon: <BriefcaseBusiness className="h-5 w-5" />,
@@ -190,6 +189,23 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Folio y sede de contratos',
     icon: <FileText className="h-5 w-5" />,
     roles: ['SUPER_ADMIN', 'DIRECTOR_GENERAL'],
+  },
+  {
+    // Admin: asignar concentrador del corte del día por sucursal.
+    // Si alguien se da de baja o rota, desde aquí se cambia (sin
+    // suplencias automáticas — así quedó con Dirección).
+    href: '/admin/concentradores',
+    label: 'Concentradores de corte',
+    icon: <Users className="h-5 w-5" />,
+    roles: ['SUPER_ADMIN', 'DIRECTOR_GENERAL'],
+  },
+  {
+    // Banca: pipeline del Corte del día por sucursal (en campo →
+    // concentrador → DG/DC). Complemento del /banca existente.
+    href: '/banca/cortes',
+    label: 'Banca — Pipeline de cortes',
+    icon: <Landmark className="h-5 w-5" />,
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL'],
   },
 ]
 

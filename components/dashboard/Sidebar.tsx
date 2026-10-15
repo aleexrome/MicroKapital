@@ -191,6 +191,23 @@ const NAV_ITEMS: NavItem[] = [
     icon: <FileText className="h-5 w-5" />,
     roles: ['SUPER_ADMIN', 'DIRECTOR_GENERAL'],
   },
+  {
+    // Admin: asignar concentrador del corte del día por sucursal.
+    // Si alguien se da de baja o rota, desde aquí se cambia (sin
+    // suplencias automáticas — así quedó con Dirección).
+    href: '/admin/concentradores',
+    label: 'Concentradores de corte',
+    icon: <Users className="h-5 w-5" />,
+    roles: ['SUPER_ADMIN', 'DIRECTOR_GENERAL'],
+  },
+  {
+    // Banca: pipeline del Corte del día por sucursal (en campo →
+    // concentrador → DG/DC). Complemento del /banca existente.
+    href: '/banca/cortes',
+    label: 'Banca — Pipeline de cortes',
+    icon: <Landmark className="h-5 w-5" />,
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL'],
+  },
 ]
 
 const ROL_ETIQUETAS: Partial<Record<UserRole, string>> = {

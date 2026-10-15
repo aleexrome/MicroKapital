@@ -4,7 +4,11 @@ import { z } from 'zod'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
-import { receptoresValidosPara } from '@/lib/cortes'
+import {
+  receptoresValidosPara,
+  snapshotCashRegisterDelDia,
+  totalRecibidoDeOtrosEnDia,
+} from '@/lib/cortes'
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -103,18 +107,31 @@ export async function POST(
     stream.end(buffer)
   })
 
+  // Refrescar totales JUSTO ANTES de persistir — el snapshot del cron a
+  // las 18:00 es stale: el concentrador va aceptando cortes de su equipo
+  // después, y el coord puede cobrar más efectivo. Lo que ve y entrega
+  // debe ser lo real al momento, no lo del cron.
+  const snap     = await snapshotCashRegisterDelDia(prisma, session.user.id, corte.fecha)
+  const recibido = await totalRecibidoDeOtrosEnDia(prisma, session.user.id, corte.fecha)
+  const aEntregar = snap.efectivo + recibido
+
   const now = new Date()
   await prisma.corte.update({
     where: { id: corte.id },
     data: {
-      receptorId:    parsed.data.receptorId,
-      fotoTicketUrl: upload.url,
-      fotoTicketAt:  now,
-      entregadoAt:   now,
-      estado:        'ENTREGADO',
+      receptorId:                parsed.data.receptorId,
+      fotoTicketUrl:             upload.url,
+      fotoTicketAt:              now,
+      entregadoAt:               now,
+      estado:                    'ENTREGADO',
+      totalEfectivoCobrado:      snap.efectivo,
+      totalTarjetaCobrado:       snap.tarjeta,
+      totalTransferenciaCobrado: snap.transferencia,
+      totalRecibidoDeOtros:      recibido,
+      totalAEntregar:            aEntregar,
       // Si venía de RECHAZADO, limpiamos la razón previa (es un nuevo intento).
-      rechazadoAt:   null,
-      rechazoRazon:  null,
+      rechazadoAt:               null,
+      rechazoRazon:              null,
     },
   })
 
@@ -124,8 +141,8 @@ export async function POST(
     tabla:         'Corte',
     registroId:    corte.id,
     valoresNuevos: {
-      receptorId:   parsed.data.receptorId,
-      totalAEntregar: Number(corte.totalAEntregar),
+      receptorId:     parsed.data.receptorId,
+      totalAEntregar: aEntregar,
     },
   })
 

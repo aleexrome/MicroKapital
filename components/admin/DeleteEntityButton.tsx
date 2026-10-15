@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { Trash2, Loader2, AlertTriangle } from 'lucide-react'
 
@@ -30,10 +31,19 @@ export function DeleteEntityButton({
   entityKind: 'cliente' | 'grupo'
 }) {
   const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<{ mensaje: string; loans: LoanCounts } | null>(null)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
+
+  // El modal se renderiza vía portal al <body> para escapar stacking
+  // contexts creados por ancestros con transform/contain (p.ej. las
+  // .glass-hover-card con `transform: translateZ(0)` + `contain: paint`
+  // atrapan a los position:fixed dentro de la card en lugar del viewport
+  // — en móvil el modal quedaba recortado dentro de la row del cliente
+  // y los botones Cancelar / Sí, eliminar no se veían).
+  useEffect(() => { setMounted(true) }, [])
 
   function resetState() {
     setError(null)
@@ -91,9 +101,9 @@ export function DeleteEntityButton({
         <Trash2 className="h-4 w-4" />
       </button>
 
-      {open && (
+      {open && mounted && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isPending) {
               setOpen(false)
@@ -102,7 +112,7 @@ export function DeleteEntityButton({
           }}
         >
           <div
-            className={`bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4 ${
+            className={`bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto ${
               warning ? 'ring-2 ring-red-500' : ''
             }`}
           >
@@ -220,7 +230,8 @@ export function DeleteEntityButton({
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )

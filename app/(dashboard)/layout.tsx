@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
@@ -54,6 +55,11 @@ export default async function DashboardLayout({
   // un corte sin cerrar de días pasados (o del día actual pasado 18:00
   // MX), se congela su pantalla hasta cerrar. DG/DC/SA exentos. Try/
   // catch defensivo igual que arqueo.
+  //
+  // Excepciones al bloqueo: /caja (para imprimir ticket y ver cobranza
+  // del día) y /cortes/recibidos (para aceptar los que le entregaron
+  // otros). Sin estas excepciones el user NO podría cerrar su propio
+  // corte porque necesita el ticket impreso de /caja.
   let cortePendienteId: string | null = null
   try {
     const c = await cortePendienteDe(prisma, { id: userId, rol })
@@ -62,7 +68,12 @@ export default async function DashboardLayout({
     console.error('[DashboardLayout] cortePendienteDe falló (migración pendiente?):', e)
   }
   if (cortePendienteId) {
-    redirect(`/corte/pendiente/${cortePendienteId}`)
+    const pathname = headers().get('x-pathname') ?? ''
+    const exentas = ['/caja', '/cortes/recibidos']
+    const esExenta = exentas.some((p) => pathname === p || pathname.startsWith(p + '/'))
+    if (!esExenta) {
+      redirect(`/corte/pendiente/${cortePendienteId}`)
+    }
   }
 
   // MESA_CONTROL ve toda la empresa (mismo alcance que Dirección) para poder
@@ -217,6 +228,22 @@ export default async function DashboardLayout({
         treeData={treeData}
         puedeVerBanca={puedeVerBanca}
       >
+        {/* Banner persistente cuando hay corte pendiente y estamos en
+            una ruta exenta (/caja o /cortes/recibidos) — el user ya
+            NO está bloqueado pero debe recordar cerrar el corte. */}
+        {cortePendienteId && (
+          <div className="sticky top-0 z-40 bg-fuchsia-600 text-white px-4 py-2 flex items-center justify-between gap-3 shadow-md">
+            <p className="text-sm font-medium">
+              ⚠️ Tienes un corte del día pendiente de entregar.
+            </p>
+            <a
+              href={`/corte/pendiente/${cortePendienteId}`}
+              className="rounded-md bg-white/20 hover:bg-white/30 px-3 py-1 text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              Ir a cerrar corte →
+            </a>
+          </div>
+        )}
         {children}
       </DashboardShell>
       <Toaster />

@@ -130,8 +130,13 @@ export async function cortePendienteDe(
   const ahora = new Date()
   // "Hora de corte obligatorio" — 18:00 hora MX.
   // Si todavía no son las 18:00 MX, los cortes del día actual no bloquean.
-  const corteObligatorioAt = new Date(hoy)
-  corteObligatorioAt.setHours(18, 0, 0, 0)
+  //
+  // OJO con el cálculo: todayMx() devuelve 06:00 UTC (= 00:00 CDMX).
+  // Si usáramos `new Date(hoy).setHours(18,…)` el método opera en la
+  // zona del servidor (UTC en Vercel) y resultaría en 18:00 UTC = 12:00
+  // CDMX — bloqueaba al usuario a mediodía. Lo correcto: sumar 18h a
+  // las 00:00 CDMX → 18:00 CDMX = 00:00 UTC del día siguiente.
+  const corteObligatorioAt = new Date(hoy.getTime() + 18 * 60 * 60 * 1000)
   const hoyBloquea = ahora.getTime() >= corteObligatorioAt.getTime()
 
   // Buscar el corte más viejo que no esté ACEPTADO.

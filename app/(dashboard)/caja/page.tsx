@@ -214,13 +214,25 @@ export default async function CajaPage({
         <AgendaDatePicker fecha={fechaStr} fechaFin={fechaFinStr} baseHref="/caja" maxDate={todayStr} />
       </div>
 
-      {/* Botón imprimir corte — solo trabajadores con corte personal. La vista
-          agregada (gerente/director) imprime distinto y aún no está hecha. */}
+      {/* Botón imprimir corte — vista individual (coord sin aggregate). */}
       {!isAggregateView && (
         <div className="flex justify-end">
           <Button asChild>
             <Link href={`/caja/imprimir?fecha=${fechaStr}${isRange ? `&fechaFin=${fechaFinStr}` : ''}`}>
               <Printer className="h-4 w-4" /> Imprimir corte
+            </Link>
+          </Button>
+        </div>
+      )}
+      {/* En vista agregada (gerente/director) también permitimos imprimir
+          el ticket PERSONAL del user actual. Útil para gerentes zonales
+          (Cristina, Edgar) que además cobran — necesitan su propio
+          ticket para entregar su corte del día. */}
+      {isAggregateView && !isDirectorView && (
+        <div className="flex justify-end">
+          <Button asChild>
+            <Link href={`/caja/cobrador/${cobrador.id}?fecha=${fechaStr}${isRange ? `&fechaFin=${fechaFinStr}` : ''}`}>
+              <Printer className="h-4 w-4" /> Imprimir mi ticket
             </Link>
           </Button>
         </div>

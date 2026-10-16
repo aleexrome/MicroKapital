@@ -133,6 +133,8 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
   // el ícono "i" en cada fila pagada.
   type PaymentInfo = { quien: string; rol: string; cuando: string }
   const paymentInfoMap: Record<string, PaymentInfo> = {}
+  // Rastreo de "quién revirtió" — solo para cuotas PENDING tras un undo.
+  const revertInfoMap: Record<string, PaymentInfo> = {}
 
   if (canViewInterestData(rol) && grupo.loans.length > 0) {
     const scheduleIds = grupo.loans.flatMap((l) => l.schedule.map((s) => s.id))
@@ -177,6 +179,58 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
             quien: p.cobrador.nombre,
             rol: p.cobrador.rol,
             cuando: p.fechaHora.toISOString(),
+          }
+        }
+      }
+
+      // "Quién revirtió" — audit log de SUPER_ADMIN_UNDO_PAYMENT
+      // (individual, por scheduleId) y SUPER_ADMIN_UNDO_PAYMENT_GRUPO
+      // (por groupId con numeroPago en valoresNuevos). Solo para schedules
+      // PENDING ahora.
+      const schedulesPendientes = grupo.loans.flatMap((l) =>
+        l.schedule.filter((s) => s.estado === 'PENDING').map((s) => ({ id: s.id, numeroPago: s.numeroPago })),
+      )
+      if (schedulesPendientes.length > 0) {
+        const scheduleIdsPend = schedulesPendientes.map((s) => s.id)
+        const undoAudits = await prisma.auditLog.findMany({
+          where: {
+            OR: [
+              { accion: 'SUPER_ADMIN_UNDO_PAYMENT', registroId: { in: scheduleIdsPend } },
+              { accion: 'SUPER_ADMIN_UNDO_PAYMENT_GRUPO', registroId: params.groupId },
+            ],
+          },
+          select: {
+            accion: true,
+            registroId: true,
+            createdAt: true,
+            valoresNuevos: true,
+            user: { select: { nombre: true, rol: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+        for (const a of undoAudits) {
+          if (!a.user) continue
+          if (a.accion === 'SUPER_ADMIN_UNDO_PAYMENT' && a.registroId) {
+            if (!revertInfoMap[a.registroId]) {
+              revertInfoMap[a.registroId] = {
+                quien:  a.user.nombre,
+                rol:    a.user.rol,
+                cuando: a.createdAt.toISOString(),
+              }
+            }
+          } else if (a.accion === 'SUPER_ADMIN_UNDO_PAYMENT_GRUPO') {
+            const numPago = (a.valoresNuevos as { numeroPago?: unknown } | null)?.numeroPago
+            if (typeof numPago === 'number') {
+              for (const s of schedulesPendientes) {
+                if (s.numeroPago === numPago && !revertInfoMap[s.id]) {
+                  revertInfoMap[s.id] = {
+                    quien:  a.user.nombre,
+                    rol:    a.user.rol,
+                    cuando: a.createdAt.toISOString(),
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -413,6 +467,7 @@ export default async function GrupoCalendarioPage({ params }: { params: { groupI
         }
         memberRenewalData={memberRenewalData}
         paymentInfoMap={paymentInfoMap}
+        revertInfoMap={revertInfoMap}
       />
     </div>
   )

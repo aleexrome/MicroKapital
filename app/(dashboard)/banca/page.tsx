@@ -52,6 +52,10 @@ interface DesembolsoRow {
   // queda en 0 para solidario y ágil (su fee vive en loan.seguro).
   cargoApertura: number
   cargoConcepto: 'COMISION' | 'SEGURO'
+  // Pagos financiados retenidos al desembolsar (SOLIDARIO/ÁGIL típicos):
+  // capital = cargoApertura + financiado + montoReal.
+  // Para INDIVIDUAL/FIDUCIARIO suele ser 0.
+  financiado: number
   montoReal: number
 }
 
@@ -331,6 +335,10 @@ export default async function BancaPage({
       capitalNum,
       Number(d.comision),
     )
+    // Pagos financiados retenidos al desembolsar — es lo que explica
+    // la diferencia cuando capital - cargoApertura ≠ montoReal (típico
+    // en SOLIDARIO/ÁGIL). Piso en 0 por redondeos.
+    const financiado = Math.max(0, capitalNum - tarifa.monto - montoReal)
     b.desembolsos.push({
       id: d.id,
       fecha,
@@ -339,6 +347,7 @@ export default async function BancaPage({
       capital: capitalNum,
       cargoApertura: tarifa.monto,
       cargoConcepto: tarifa.concepto,
+      financiado,
       montoReal,
     })
     b.totalDesembolsos += montoReal
@@ -722,6 +731,7 @@ export default async function BancaPage({
                                       <th className="py-1 pr-3 font-medium">Cliente</th>
                                       <th className="py-1 pr-3 text-right font-medium">Capital</th>
                                       <th className="py-1 pr-3 text-right font-medium">Comisión / Seguro</th>
+                                      <th className="py-1 pr-3 text-right font-medium text-fuchsia-300">Pagos financiados</th>
                                       <th className="py-1 text-right font-medium">Neto</th>
                                     </tr>
                                   </thead>
@@ -737,6 +747,12 @@ export default async function BancaPage({
                                           title={d.cargoConcepto === 'SEGURO' ? 'Seguro de apertura' : 'Comisión de apertura'}
                                         >
                                           - {formatMoney(d.cargoApertura)}
+                                        </td>
+                                        <td
+                                          className="py-1.5 pr-3 text-right text-fuchsia-300 money"
+                                          title="Pagos retenidos al desembolsar (solidario/ágil). Se descuentan del capital para quedar como pagos 'prefinanciados' en el calendario."
+                                        >
+                                          {d.financiado > 0 ? `- ${formatMoney(d.financiado)}` : formatMoney(0)}
                                         </td>
                                         <td className="py-1.5 text-right font-medium money">{formatMoney(d.montoReal)}</td>
                                       </tr>

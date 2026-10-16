@@ -131,12 +131,14 @@ interface Props {
   canRenewGroup?: boolean
   memberRenewalData?: MemberRenewalData[]
   paymentInfoMap?: Record<string, PaymentInfo>
+  /** Rastreo de "quién revirtió" para cuotas PENDING tras un undo. */
+  revertInfoMap?: Record<string, PaymentInfo>
   /** Si la cobradora del grupo tiene préstamos en limbo > 72h. */
   bloqueoLimbo?: { bloqueado: boolean; prestamosCount: number }
 }
 
 export function GrupoCalendar({
-  groupId, loans, canActGroup, canRenewGroup, memberRenewalData, paymentInfoMap, bloqueoLimbo,
+  groupId, loans, canActGroup, canRenewGroup, memberRenewalData, paymentInfoMap, revertInfoMap, bloqueoLimbo,
 }: Props) {
   const router    = useRouter()
   const { toast } = useToast()
@@ -537,6 +539,7 @@ export function GrupoCalendar({
                         estado:           s.estado,
                         pagadoAt:         s.pagadoAt ?? null,
                         paymentInfo:      paymentInfoMap?.[s.id],
+                        revertInfo:       revertInfoMap?.[s.id],
                       }))}
                       canCapture={false}
                       canEditDates={canActGroup}

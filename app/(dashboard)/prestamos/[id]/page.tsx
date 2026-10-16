@@ -87,6 +87,10 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   // Para DG y SUPER_ADMIN: construir mapa de quién y cuándo cobró/aplicó cada pago
   type PaymentInfo = { quien: string; rol: string; cuando: string }
   let paymentInfoMap: Record<string, PaymentInfo> = {}
+  // Mapa paralelo para "quién revirtió" — solo poblado para cuotas que
+  // están PENDING tras un undo (individual o grupal). Se consulta del
+  // AuditLog; no hay columna dedicada en PaymentSchedule.
+  let revertInfoMap:  Record<string, PaymentInfo> = {}
 
   type ChecklistItem = { id: string; label: string; checked: boolean }
 
@@ -310,6 +314,60 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
             quien: p.cobrador.nombre,
             rol: p.cobrador.rol,
             cuando: p.fechaHora.toISOString(),
+          }
+        }
+      }
+
+      // "Quién revirtió" — leer del AuditLog. Dos acciones posibles:
+      //   SUPER_ADMIN_UNDO_PAYMENT        → registroId = scheduleId
+      //   SUPER_ADMIN_UNDO_PAYMENT_GRUPO  → registroId = loanGroupId,
+      //                                     valoresNuevos.numeroPago indica cuál cuota
+      // Solo poblamos para schedules que están PENDING ahora (si volvió a
+      // pagarse, el undo ya quedó obsoleto y no tiene sentido mostrarlo).
+      const schedulesPendientes = loan.schedule.filter((s) => s.estado === 'PENDING')
+      if (schedulesPendientes.length > 0) {
+        const scheduleIdsPend = schedulesPendientes.map((s) => s.id)
+        const undoAudits = await prisma.auditLog.findMany({
+          where: {
+            OR: [
+              { accion: 'SUPER_ADMIN_UNDO_PAYMENT', registroId: { in: scheduleIdsPend } },
+              ...(loan.loanGroupId
+                ? [{ accion: 'SUPER_ADMIN_UNDO_PAYMENT_GRUPO', registroId: loan.loanGroupId }]
+                : []),
+            ],
+          },
+          select: {
+            accion: true,
+            registroId: true,
+            createdAt: true,
+            valoresNuevos: true,
+            user: { select: { nombre: true, rol: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+        for (const a of undoAudits) {
+          if (!a.user) continue
+          if (a.accion === 'SUPER_ADMIN_UNDO_PAYMENT' && a.registroId) {
+            if (!revertInfoMap[a.registroId]) {
+              revertInfoMap[a.registroId] = {
+                quien:  a.user.nombre,
+                rol:    a.user.rol,
+                cuando: a.createdAt.toISOString(),
+              }
+            }
+          } else if (a.accion === 'SUPER_ADMIN_UNDO_PAYMENT_GRUPO') {
+            const numPago = (a.valoresNuevos as { numeroPago?: unknown } | null)?.numeroPago
+            if (typeof numPago === 'number') {
+              for (const s of schedulesPendientes) {
+                if (s.numeroPago === numPago && !revertInfoMap[s.id]) {
+                  revertInfoMap[s.id] = {
+                    quien:  a.user.nombre,
+                    rol:    a.user.rol,
+                    cuando: a.createdAt.toISOString(),
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1035,6 +1093,7 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
                   estado: s.estado as ScheduleStatus,
                   pagadoAt: s.pagadoAt ?? null,
                   paymentInfo: paymentInfoMap[s.id],
+                  revertInfo:  revertInfoMap[s.id],
                   tickets: ticketMap[s.id] ?? [],
                   parciales: parcialesMap[s.id] ?? [],
                   moras: ms.map((m) => ({

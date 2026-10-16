@@ -64,6 +64,12 @@ interface ScheduleItem {
   estado: ScheduleStatus
   pagadoAt?: Date | string | null
   paymentInfo?: PaymentInfo
+  /** Si la cuota está PENDING tras un "Deshacer" aplicado por Dirección,
+   *  aquí viene quién lo revirtió y cuándo. Se muestra como panel ámbar
+   *  debajo del renglón, mismo patrón que paymentInfo pero en rojo/ámbar
+   *  para distinguirlo. Si la cuota se vuelve a pagar, el server deja
+   *  de enviar este campo (porque ya no está PENDING). */
+  revertInfo?: PaymentInfo
   tickets?: { numeroTicket: string; esReimpresion: boolean; impresoAt: string }[]
   /** Historial de cada parcial cobrado (fecha, monto, ticket). Se
    *  muestra desglosado en sub-filas cuando hay más de un cobro o
@@ -301,6 +307,19 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
               </button>
             )}
 
+            {/* Icono de información para cuotas REVERTIDAS — mismo patrón
+                que el pagado, pero en ámbar porque indica un rollback.
+                Solo aparece si el schedule está PENDING por un undo. */}
+            {!isPaidStatus && s.revertInfo && (
+              <button
+                onClick={() => setOpenInfoId(infoOpen ? null : s.id)}
+                className={`shrink-0 rounded-full p-0.5 transition-colors ${infoOpen ? 'text-amber-300' : 'text-amber-300/70 hover:text-amber-300'}`}
+                title="Ver quién revirtió este pago"
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            )}
+
             {canCapture && (s.estado === 'PENDING' || s.estado === 'OVERDUE' || s.estado === 'PARTIAL') && (
               <a
                 href={`/cobros/capturar/${s.id}`}
@@ -410,11 +429,21 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
             )}
           </div>
 
-          {/* Panel de información de cobro — visible solo al hacer clic en ⓘ */}
-          {infoOpen && s.paymentInfo && (
+          {/* Panel de información de cobro — visible solo al hacer clic en ⓘ.
+              Si la cuota está PAID muestra el panel azul (quién registró);
+              si está PENDING tras un undo muestra el panel ámbar (quién
+              revirtió). Son mutuamente excluyentes porque solo uno de los
+              dos campos viene poblado a la vez. */}
+          {infoOpen && isPaidStatus && s.paymentInfo && (
             <div className="ml-7 mt-1 mb-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 flex flex-col gap-0.5">
               <p><span className="font-semibold">Registrado por:</span> {s.paymentInfo.quien} <span className="text-sky-600">({ROL_LABEL[s.paymentInfo.rol] ?? s.paymentInfo.rol})</span></p>
               <p><span className="font-semibold">Fecha y hora:</span> {new Date(s.paymentInfo.cuando).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+            </div>
+          )}
+          {infoOpen && !isPaidStatus && s.revertInfo && (
+            <div className="ml-7 mt-1 mb-1 rounded-lg border border-amber-300/50 bg-amber-500/15 px-3 py-2 text-xs text-amber-100 flex flex-col gap-0.5">
+              <p><span className="font-semibold text-amber-200">Revertido por:</span> {s.revertInfo.quien} <span className="text-amber-300/80">({ROL_LABEL[s.revertInfo.rol] ?? s.revertInfo.rol})</span></p>
+              <p><span className="font-semibold text-amber-200">Fecha y hora:</span> {new Date(s.revertInfo.cuando).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
             </div>
           )}
 

@@ -235,8 +235,16 @@ export default async function BancaPage({
     friday: getFriday(sat),
     key: saturdayToId(sat),
   }))
+  // IMPORTANTE: comparamos el DÍA CALENDARIO CDMX de `t` contra los
+  // límites de la semana, no el timestamp UTC crudo. Si no, un pago
+  // hecho un viernes 10 PM CDMX (= sábado 04:00 UTC) terminaba en la
+  // semana siguiente, aunque visualmente se mostrara con fecha viernes
+  // (porque `diaMx` sí usa CDMX). Mediodía UTC del YMD CDMX siempre cae
+  // dentro de las 24 h de ese día tanto en UTC como en CDMX.
   function findWeek(t: Date) {
-    return weekRanges.find((w) => t >= w.sat && t <= w.friday) ?? null
+    const ymd = toMxYMD(t)
+    const dayAsUtc = new Date(`${ymd}T12:00:00.000Z`)
+    return weekRanges.find((w) => dayAsUtc >= w.sat && dayAsUtc <= w.friday) ?? null
   }
 
   const weeks = new Map<string, WeekAgg>()

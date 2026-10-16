@@ -199,14 +199,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: <Users className="h-5 w-5" />,
     roles: ['SUPER_ADMIN', 'DIRECTOR_GENERAL'],
   },
-  {
-    // Banca: pipeline del Corte del día por sucursal (en campo →
-    // concentrador → DG/DC). Complemento del /banca existente.
-    href: '/banca/cortes',
-    label: 'Banca — Pipeline de cortes',
-    icon: <Landmark className="h-5 w-5" />,
-    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL'],
-  },
 ]
 
 const ROL_ETIQUETAS: Partial<Record<UserRole, string>> = {

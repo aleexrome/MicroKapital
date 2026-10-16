@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
 import { startOfDayMx } from '@/lib/timezone'
 
+// Justificación: mínimo 5 caracteres para evitar texto chatarra tipo
+// ".", "x", "ok" — se guarda en el AuditLog y se consulta en la vista
+// /pagos-revertidos. Dirección puede auditar.
+const schema = z.object({
+  justificacion: z.string().trim().min(5, 'La justificación debe tener al menos 5 caracteres').max(500),
+})
+
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string; scheduleId: string } }
 ) {
   const session = await getSession()
@@ -23,6 +31,18 @@ export async function POST(
   if (!tienePermiso) {
     return NextResponse.json({ error: 'No autorizado para deshacer pagos' }, { status: 403 })
   }
+
+  // Parseo tolerante — si el body viene vacío (clientes legacy) no
+  // crasheamos con JSON parse error, devolvemos 400 claro.
+  const bodyRaw = await req.json().catch(() => ({}))
+  const parsed = schema.safeParse(bodyRaw)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.errors[0]?.message ?? 'Justificación requerida' },
+      { status: 400 },
+    )
+  }
+  const justificacion = parsed.data.justificacion
 
   const loanFilter = esOpAdmin
     ? { companyId: companyId! }
@@ -148,6 +168,8 @@ export async function POST(
       montoPagado: 0,
       pagadoAt: null,
       loanEstado: schedule.loan.estado === 'LIQUIDATED' ? 'ACTIVE' : schedule.loan.estado,
+      justificacion,
+      loanId: params.id,
     },
   })
 

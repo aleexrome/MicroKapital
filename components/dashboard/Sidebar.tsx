@@ -35,6 +35,7 @@ import {
   ClipboardList,
   Video,
   Inbox,
+  Undo2,
 } from 'lucide-react'
 import type { BranchTreeData } from '@/types/tree'
 import { UserAvatarMenu } from '@/components/dashboard/UserAvatarMenu'
@@ -157,6 +158,15 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Banca',
     icon: <Landmark className="h-5 w-5" />,
     roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
+  },
+  {
+    // Histórico de pagos revertidos — auditoría. MESA_CONTROL se incluye
+    // porque Cristina tiene permisoAplicarPagos; la página valida ese
+    // permiso en servidor y redirige si no lo tiene.
+    href: '/pagos-revertidos',
+    label: 'Pagos revertidos',
+    icon: <Undo2 className="h-5 w-5" />,
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL'],
   },
   {
     // Arqueos sorpresivos — solo DG / DC / SA (DS = Alejandro con rol DG).

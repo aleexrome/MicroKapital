@@ -5,7 +5,10 @@ import { createAuditLog } from '@/lib/audit'
 import { startOfDayMx } from '@/lib/timezone'
 import { z } from 'zod'
 
-const schema = z.object({ numeroPago: z.number().int().positive() })
+const schema = z.object({
+  numeroPago: z.number().int().positive(),
+  justificacion: z.string().trim().min(5, 'La justificación debe tener al menos 5 caracteres').max(500),
+})
 
 export async function POST(
   req: NextRequest,
@@ -22,11 +25,16 @@ export async function POST(
 
   const { companyId, id: userId, branchId: userBranchId } = session.user
 
-  const body = await req.json()
+  const body = await req.json().catch(() => ({}))
   const parsed = schema.safeParse(body)
-  if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.errors[0]?.message ?? 'Datos inválidos' },
+      { status: 400 },
+    )
+  }
 
-  const { numeroPago } = parsed.data
+  const { numeroPago, justificacion } = parsed.data
 
   const loanFilter = esOpAdmin
     ? { loanGroupId: params.groupId, companyId: companyId! }
@@ -122,7 +130,12 @@ export async function POST(
     accion: 'SUPER_ADMIN_UNDO_PAYMENT_GRUPO',
     tabla: 'LoanGroup',
     registroId: params.groupId,
-    valoresNuevos: { numeroPago, schedulesRevertidos: schedules.length },
+    valoresNuevos: {
+      numeroPago,
+      schedulesRevertidos: schedules.length,
+      justificacion,
+      scheduleIds: schedules.map((s) => s.id),
+    },
   })
 
   return NextResponse.json({

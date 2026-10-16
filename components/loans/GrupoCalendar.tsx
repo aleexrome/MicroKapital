@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/use-toast'
@@ -148,6 +149,9 @@ export function GrupoCalendar({
   const [confirmUndo,  setConfirmUndo]        = useState<number | null>(null)
   const [loadingApply, setLoadingApply]       = useState(false)
   const [loadingUndo,  setLoadingUndo]        = useState(false)
+  const [undoReason,   setUndoReason]         = useState('')
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
 
   const [renewOpen,    setRenewOpen]    = useState(false)
   const [renewLoading, setRenewLoading] = useState(false)
@@ -205,17 +209,23 @@ export function GrupoCalendar({
   }
 
   async function undoGroup(numeroPago: number) {
+    const justificacion = undoReason.trim()
+    if (justificacion.length < 5) {
+      toast({ title: 'Justificación muy corta', description: 'Mínimo 5 caracteres.', variant: 'destructive' })
+      return
+    }
     setLoadingUndo(true)
     try {
       const res  = await fetch(`/api/loan-groups/${groupId}/schedule/undo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ numeroPago }),
+        body: JSON.stringify({ numeroPago, justificacion }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Error')
       toast({ title: data.message ?? `Pago ${numeroPago} revertido en el grupo` })
       setConfirmUndo(null)
+      setUndoReason('')
       router.refresh()
     } catch (e) {
       toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
@@ -347,38 +357,17 @@ export function GrupoCalendar({
                     </div>
                   )}
 
-                  {/* Deshacer todos */}
+                  {/* Deshacer todos — abre modal con justificación obligatoria */}
                   {canUndoRow && (
                     <div className="ml-auto shrink-0">
-                      {confirmUndo === row.numeroPago ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-amber-400">¿Revertir grupo?</span>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            className="h-6 px-2 text-xs"
-                            disabled={loadingUndo}
-                            onClick={() => undoGroup(row.numeroPago)}
-                          >
-                            {loadingUndo ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sí'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-6 px-2 text-xs"
-                            disabled={loadingUndo}
-                            onClick={() => setConfirmUndo(null)}
-                          >No</Button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setConfirmUndo(row.numeroPago)}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-amber-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-amber-400/50"
-                        >
-                          <Undo2 className="h-3 w-3" />
-                          Deshacer grupo
-                        </button>
-                      )}
+                      <button
+                        onClick={() => { setUndoReason(''); setConfirmUndo(row.numeroPago) }}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-amber-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-amber-400/50"
+                        title="Deshacer pago del grupo (requiere justificación)"
+                      >
+                        <Undo2 className="h-3 w-3" />
+                        Deshacer grupo
+                      </button>
                     </div>
                   )}
                 </div>
@@ -552,6 +541,64 @@ export function GrupoCalendar({
           })}
         </div>
       </div>
+
+      {/* Modal de justificación para "Deshacer grupo" */}
+      {confirmUndo !== null && mounted && createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !loadingUndo) {
+              setConfirmUndo(null); setUndoReason('')
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Deshacer pago #{confirmUndo} del grupo
+            </h2>
+            <p className="text-sm text-gray-600">
+              Esta acción regresa la cuota a <strong>Pendiente para todos los integrantes</strong> y
+              borra los tickets. Escribe por qué estás revirtiendo este pago — se guarda en el
+              histórico de pagos revertidos para auditoría.
+            </p>
+            <textarea
+              autoFocus
+              value={undoReason}
+              onChange={(e) => setUndoReason(e.target.value)}
+              disabled={loadingUndo}
+              rows={3}
+              maxLength={500}
+              placeholder="Ej.: Grupo reportó que el depósito no se concretó, cargo erróneo."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 disabled:opacity-50"
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                Mínimo 5 caracteres · {undoReason.trim().length}/500
+              </span>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={loadingUndo}
+                onClick={() => { setConfirmUndo(null); setUndoReason('') }}
+                className="px-4 py-2 text-sm rounded-md border border-input bg-background hover:bg-secondary disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={loadingUndo || undoReason.trim().length < 5}
+                onClick={() => undoGroup(confirmUndo)}
+                className="px-4 py-2 text-sm rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60 inline-flex items-center gap-2"
+              >
+                {loadingUndo && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Revertir pago del grupo
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

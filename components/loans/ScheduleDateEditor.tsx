@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
@@ -109,6 +110,10 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
 
   const [confirmUndoId, setConfirmUndoId]   = useState<string | null>(null)
   const [undoing, setUndoing]               = useState(false)
+  const [undoReason, setUndoReason]         = useState('')
+  // Mount flag para createPortal — evita hydration mismatch en SSR.
+  const [mounted, setMounted]               = useState(false)
+  useEffect(() => { setMounted(true) }, [])
 
   const [confirmApplyId, setConfirmApplyId] = useState<string | null>(null)
   const [applying, setApplying]             = useState(false)
@@ -145,13 +150,23 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
   }
 
   async function undoPayment(s: ScheduleItem) {
+    const justificacion = undoReason.trim()
+    if (justificacion.length < 5) {
+      toast({ title: 'Justificación muy corta', description: 'Mínimo 5 caracteres.', variant: 'destructive' })
+      return
+    }
     setUndoing(true)
     try {
-      const res = await fetch(`/api/loans/${loanId}/schedule/${s.id}/undo`, { method: 'POST' })
+      const res = await fetch(`/api/loans/${loanId}/schedule/${s.id}/undo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ justificacion }),
+      })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Error')
       toast({ title: data.message ?? `Pago ${s.numeroPago} revertido a Pendiente` })
       setConfirmUndoId(null)
+      setUndoReason('')
       router.refresh()
     } catch (e) {
       toast({ title: 'Error', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
@@ -390,41 +405,17 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
               </div>
             )}
 
-            {/* Deshacer Pago — solo Director, para filas PAID */}
+            {/* Deshacer Pago — abre modal que pide justificación obligatoria */}
             {canUndoRow && (
               <div className="ml-auto shrink-0">
-                {confirmUndoId === s.id ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-amber-400">¿Revertir?</span>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="h-6 px-2 text-xs"
-                      disabled={undoing}
-                      onClick={() => undoPayment(s)}
-                    >
-                      {undoing ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sí'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 px-2 text-xs"
-                      disabled={undoing}
-                      onClick={() => setConfirmUndoId(null)}
-                    >
-                      No
-                    </Button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setConfirmUndoId(s.id)}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-amber-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-amber-400/50"
-                    title="Deshacer pago (Director)"
-                  >
-                    <Undo2 className="h-3 w-3" />
-                    Deshacer
-                  </button>
-                )}
+                <button
+                  onClick={() => { setUndoReason(''); setConfirmUndoId(s.id) }}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-amber-400 transition-colors border border-dashed border-border/50 rounded px-2 py-1 hover:border-amber-400/50"
+                  title="Deshacer pago (requiere justificación)"
+                >
+                  <Undo2 className="h-3 w-3" />
+                  Deshacer
+                </button>
               </div>
             )}
           </div>
@@ -625,6 +616,72 @@ export function ScheduleDateEditor({ loanId, schedule, canCapture, canEditDates,
           </div>
         )
       })}
+
+      {/* Modal de justificación para "Deshacer". Vive en un portal al
+          body para escapar stacking contexts de las cards del detalle
+          del préstamo (mismo issue que el modal de eliminar cliente). */}
+      {confirmUndoId && mounted && createPortal(
+        (() => {
+          const target = schedule.find((s) => s.id === confirmUndoId)
+          if (!target) return null
+          return (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !undoing) {
+                  setConfirmUndoId(null); setUndoReason('')
+                }
+              }}
+            >
+              <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Deshacer pago #{target.numeroPago}
+                </h2>
+                <p className="text-sm text-gray-600">
+                  Esta acción regresa la cuota a <strong>Pendiente</strong> y borra el ticket.
+                  Escribe por qué estás revirtiendo este pago — se guarda en el histórico
+                  de pagos revertidos para auditoría.
+                </p>
+                <textarea
+                  autoFocus
+                  value={undoReason}
+                  onChange={(e) => setUndoReason(e.target.value)}
+                  disabled={undoing}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Ej.: Cliente reportó que no realizó el depósito, se cargó por error."
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 disabled:opacity-50"
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    Mínimo 5 caracteres · {undoReason.trim().length}/500
+                  </span>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    disabled={undoing}
+                    onClick={() => { setConfirmUndoId(null); setUndoReason('') }}
+                    className="px-4 py-2 text-sm rounded-md border border-input bg-background hover:bg-secondary disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={undoing || undoReason.trim().length < 5}
+                    onClick={() => undoPayment(target)}
+                    className="px-4 py-2 text-sm rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60 inline-flex items-center gap-2"
+                  >
+                    {undoing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    Revertir pago
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })(),
+        document.body,
+      )}
     </div>
   )
 }

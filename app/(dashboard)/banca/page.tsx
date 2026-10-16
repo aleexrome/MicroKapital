@@ -20,7 +20,7 @@ import {
 } from '@/lib/week-utils'
 import { scopedLoanWhere, loanNotDeletedWhere } from '@/lib/access'
 import { calcTarifaApertura } from '@/lib/financial-formulas'
-import { Landmark, Banknote, TrendingDown, Wallet, PlusCircle, MinusCircle } from 'lucide-react'
+import { Landmark, Banknote, TrendingDown, Wallet, PlusCircle, MinusCircle, ArrowRightLeft } from 'lucide-react'
 
 // Semanas laborales (sábado→viernes) hacia atrás que se muestran (incluye la actual).
 const WEEKS_BACK = 8
@@ -36,6 +36,7 @@ interface CorteRow {
   cobrador: string
   efectivo: number
   tarjeta: number
+  transferencia: number
   total: number
 }
 
@@ -77,7 +78,8 @@ interface BranchAgg {
   desembolsos: DesembolsoRow[]
   adicionales: AdicionalRow[]
   retiros: RetiroRow[]
-  totalCortes: number
+  totalCortes: number          // efectivo + tarjeta (dinero físico que entra a sucursal)
+  totalTransferencia: number   // transferencias — ya están en banca, NO entran al neto físico
   totalDesembolsos: number
   totalAdicional: number
   totalRetiro: number
@@ -250,6 +252,7 @@ export default async function BancaPage({
         adicionales: [],
         retiros: [],
         totalCortes: 0,
+        totalTransferencia: 0,
         totalDesembolsos: 0,
         totalAdicional: 0,
         totalRetiro: 0,
@@ -259,12 +262,17 @@ export default async function BancaPage({
     return branch
   }
 
-  // Cortes: agrupados por (cobrador, día). Solo cuentan efectivo y tarjeta.
-  // Las transferencias se excluyen — banca es solo del dinero que se
-  // deposita físicamente; las transferencias ya llegan al banco por otro
-  // canal y no forman parte del "Neto para banca".
+  // Cortes: agrupados por (cobrador, día). Se contabiliza efectivo,
+  // tarjeta Y transferencia por separado. Pero el "Neto para banca"
+  // (= dinero físico disponible en la sucursal) suma SOLO efectivo
+  // + tarjeta. Las transferencias se muestran como columna informativa
+  // porque ese dinero ya está en banca directamente y no forma parte
+  // de lo que la sucursal tiene físicamente que depositar.
   for (const p of pagos) {
-    const cuenta = p.metodoPago === 'CASH' || p.metodoPago === 'CARD'
+    const cuenta =
+      p.metodoPago === 'CASH' ||
+      p.metodoPago === 'CARD' ||
+      p.metodoPago === 'TRANSFER'
     if (!cuenta) continue
 
     const fecha = new Date(p.fechaHora)
@@ -284,15 +292,25 @@ export default async function BancaPage({
         cobrador: p.cobrador.nombre,
         efectivo: 0,
         tarjeta: 0,
+        transferencia: 0,
         total: 0,
       }
       b.cortes.set(ck, corte)
     }
     const m = Number(p.monto)
-    if (p.metodoPago === 'CASH') corte.efectivo += m
-    else corte.tarjeta += m
-    corte.total += m
-    b.totalCortes += m
+    if (p.metodoPago === 'CASH') {
+      corte.efectivo += m
+      corte.total += m
+      b.totalCortes += m
+    } else if (p.metodoPago === 'CARD') {
+      corte.tarjeta += m
+      corte.total += m
+      b.totalCortes += m
+    } else {
+      // TRANSFER — se muestra pero NO entra al total físico ni al neto.
+      corte.transferencia += m
+      b.totalTransferencia += m
+    }
   }
 
   // Desembolsos netos — el fee "cargoApertura" se calcula con la fórmula
@@ -368,17 +386,22 @@ export default async function BancaPage({
 
   // Totales del periodo mostrado.
   let grandCortes = 0
+  let grandTransferencia = 0
   let grandDesembolsos = 0
   let grandAdicional = 0
   let grandRetiro = 0
   for (const w of weeksSorted) {
     for (const b of Array.from(w.branches.values())) {
       grandCortes += b.totalCortes
+      grandTransferencia += b.totalTransferencia
       grandDesembolsos += b.totalDesembolsos
       grandAdicional += b.totalAdicional
       grandRetiro += b.totalRetiro
     }
   }
+  // Neto para banca = SOLO dinero físico (cortes = efectivo + tarjeta)
+  // + aportes - desembolsos - retiros. Las transferencias NO entran,
+  // ya están en el banco directamente.
   const grandNeto = grandCortes + grandAdicional - grandDesembolsos - grandRetiro
 
   const sucursalNombre = sucursalFilter
@@ -421,12 +444,18 @@ export default async function BancaPage({
       </div>
 
       {/* Resumen del periodo */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         <MetricCard
-          title={`Cortes (últimas ${WEEKS_BACK} sem.)`}
+          title={`Cortes físicos (${WEEKS_BACK} sem.)`}
           value={formatMoney(grandCortes)}
           icon={Banknote}
           color="green"
+        />
+        <MetricCard
+          title="Transferencia (ya en banca)"
+          value={formatMoney(grandTransferencia)}
+          icon={ArrowRightLeft}
+          color="blue"
         />
         <MetricCard
           title="Monto adicional"
@@ -506,14 +535,20 @@ export default async function BancaPage({
                   return (
                     <div key={b.branchId} className="rounded-lg border border-border">
                       {/* Resumen de la sucursal */}
-                      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 border-b border-border bg-secondary/40 px-4 py-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-7 gap-2 border-b border-border bg-secondary/40 px-4 py-3">
                         <div className="col-span-2 sm:col-span-1">
                           <p className="text-xs text-muted-foreground">Sucursal</p>
                           <p className="font-semibold text-foreground">🏢 {b.branchName}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">Cortes</p>
+                          <p className="text-xs text-muted-foreground">Cortes (físico)</p>
                           <p className="font-semibold text-green-700 money">{formatMoney(b.totalCortes)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Transferencia</p>
+                          <p className="font-semibold text-blue-300 money" title="Ya está en banca — no se cuenta en el neto físico de sucursal">
+                            {b.totalTransferencia > 0 ? formatMoney(b.totalTransferencia) : formatMoney(0)}
+                          </p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Adicional</p>
@@ -561,7 +596,8 @@ export default async function BancaPage({
                                       <th className="py-1 pr-3 font-medium">Cobrador</th>
                                       <th className="py-1 pr-3 text-right font-medium">Efectivo</th>
                                       <th className="py-1 pr-3 text-right font-medium">Tarjeta</th>
-                                      <th className="py-1 text-right font-medium">Total</th>
+                                      <th className="py-1 pr-3 text-right font-medium text-blue-300">Transferencia</th>
+                                      <th className="py-1 text-right font-medium">Total físico</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-border/50">
@@ -571,6 +607,7 @@ export default async function BancaPage({
                                         <td className="py-1.5 pr-3">{c.cobrador}</td>
                                         <td className="py-1.5 pr-3 text-right money">{formatMoney(c.efectivo)}</td>
                                         <td className="py-1.5 pr-3 text-right money">{formatMoney(c.tarjeta)}</td>
+                                        <td className="py-1.5 pr-3 text-right money text-blue-300">{formatMoney(c.transferencia)}</td>
                                         <td className="py-1.5 text-right font-medium money">{formatMoney(c.total)}</td>
                                       </tr>
                                     ))}

@@ -53,7 +53,7 @@ export default async function PagosRevertidosPage({
   const where = {
     accion: { in: ['SUPER_ADMIN_UNDO_PAYMENT', 'SUPER_ADMIN_UNDO_PAYMENT_GRUPO'] },
     user: { companyId },
-  } as const
+  }
 
   const [audits, total] = await Promise.all([
     prisma.auditLog.findMany({

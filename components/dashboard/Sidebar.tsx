@@ -36,6 +36,7 @@ import {
   Video,
   Inbox,
   Undo2,
+  CheckCircle2,
 } from 'lucide-react'
 import type { BranchTreeData } from '@/types/tree'
 import { UserAvatarMenu } from '@/components/dashboard/UserAvatarMenu'
@@ -158,6 +159,13 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Banca',
     icon: <Landmark className="h-5 w-5" />,
     roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
+  },
+  {
+    // Histórico de pagos APLICADOS por Dirección (DG/DC/SA/Cristina).
+    href: '/pagos-aplicados',
+    label: 'Pagos aplicados',
+    icon: <CheckCircle2 className="h-5 w-5" />,
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL'],
   },
   {
     // Histórico de pagos revertidos — auditoría. MESA_CONTROL se incluye

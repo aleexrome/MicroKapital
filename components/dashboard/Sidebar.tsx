@@ -161,20 +161,18 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
   {
-    // Histórico de pagos APLICADOS por Dirección (DG/DC/SA/Cristina).
+    // Histórico de pagos APLICADOS — solo DG, DC y DS (SUPER_ADMIN).
     href: '/pagos-aplicados',
     label: 'Pagos aplicados',
     icon: <CheckCircle2 className="h-5 w-5" />,
-    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL'],
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
   },
   {
-    // Histórico de pagos revertidos — auditoría. MESA_CONTROL se incluye
-    // porque Cristina tiene permisoAplicarPagos; la página valida ese
-    // permiso en servidor y redirige si no lo tiene.
+    // Histórico de pagos revertidos — solo DG, DC y DS (SUPER_ADMIN).
     href: '/pagos-revertidos',
     label: 'Pagos revertidos',
     icon: <Undo2 className="h-5 w-5" />,
-    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL'],
+    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
   },
   {
     // Arqueos sorpresivos — solo DG / DC / SA (DS = Alejandro con rol DG).

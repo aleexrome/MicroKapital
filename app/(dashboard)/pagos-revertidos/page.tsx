@@ -29,19 +29,16 @@ export default async function PagosRevertidosPage({
   const session = await getSession()
   if (!session?.user) redirect('/login')
 
-  const { rol, companyId, id: userId } = session.user
+  const { rol, companyId } = session.user
   if (!companyId) redirect('/dashboard')
 
-  const esOpAdmin =
+  // Acceso restringido a DG / DC / DS (SUPER_ADMIN). Antes también se
+  // permitía a quien tuviera permisoAplicarPagos (Cristina), pero por
+  // decisión de Dirección este histórico es solo de los 3 titulares.
+  const puedeVer =
     rol === 'DIRECTOR_GENERAL' ||
     rol === 'DIRECTOR_COMERCIAL' ||
     rol === 'SUPER_ADMIN'
-
-  const permisos = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { permisoAplicarPagos: true },
-  })
-  const puedeVer = esOpAdmin || permisos?.permisoAplicarPagos === true
   if (!puedeVer) redirect('/dashboard')
 
   const page = Math.max(1, parseInt(searchParams.page ?? '1', 10) || 1)

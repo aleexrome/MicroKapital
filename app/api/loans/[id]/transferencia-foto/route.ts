@@ -214,17 +214,20 @@ export async function POST(
         target.tipo === 'FIDUCIARIO' ? Number(target.pagoQuincenal) :
                                        Number(target.pagoSemanal)
 
-      // La foto de transferencia solo se guarda en el prestamo donde
-      // el coord la subio. Los demas integrantes del grupo se activan
-      // pero conservan transferenciaFotoUrl = null (queda en la coord).
+      // La foto de transferencia se guarda en TODOS los integrantes del
+      // grupo — es la misma evidencia compartida (una sola transferencia
+      // por el total del grupo). Antes solo se guardaba en el loan del
+      // coord, y los demás integrantes quedaban con transferenciaFotoUrl
+      // = null → el detalle del préstamo marcaba el calendario como
+      // congelado (opacity-40 pointer-events-none) para esos integrantes
+      // porque `tieneEvidenciaDesembolso` evalúa 3 campos y los 3 eran
+      // null.
       const dataUpdate: Prisma.LoanUpdateInput = {
-        estado: 'ACTIVE',
+        estado:                  'ACTIVE',
         fechaDesembolso,
-      }
-      if (target.id === loan.id) {
-        dataUpdate.transferenciaFotoUrl     = uploadResult.url
-        dataUpdate.transferenciaFotoAt      = fechaFoto
-        dataUpdate.transferenciaSubidaPorId = userId
+        transferenciaFotoUrl:     uploadResult.url,
+        transferenciaFotoAt:      fechaFoto,
+        transferenciaSubidaPorId: userId,
       }
       await tx.loan.update({ where: { id: target.id }, data: dataUpdate })
 

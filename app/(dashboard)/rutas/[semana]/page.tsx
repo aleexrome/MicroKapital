@@ -759,6 +759,11 @@ export default async function RutaDetallePage({
             cobradorId: { in: allIds },
             companyId: companyId!,
             estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
+            // Mismo filtro de soft-delete que la query de coordinador.
+            // Sin esto los gerentes y DG veían pagos de clientes/grupos
+            // borrados que la propia coordinadora no veía, lo que descuadra
+            // los totales entre vistas.
+            AND: [loanNotDeletedWhere],
           },
         },
         select: {
@@ -960,6 +965,10 @@ export default async function RutaDetallePage({
             cobradorId: { in: allIds },
             companyId: companyId!,
             estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
+            // Mismo filtro de soft-delete que la query de coordinador. Sin
+            // esto la vista de DG/DC sumaba pagos de clientes/grupos
+            // borrados que la propia coordinadora no veía.
+            AND: [loanNotDeletedWhere],
           },
         },
         select: {

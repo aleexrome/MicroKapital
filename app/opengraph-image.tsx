@@ -7,11 +7,19 @@ export const contentType = 'image/png'
 
 /**
  * Open Graph image del landing — luce idéntico al banner aprobado:
- * badge FINANCIERA, Mk gigante, wordmark MicroKapital + Crédito en
- * movimiento, headline con "impulsan" en gradient claro, footer con
- * microkapital.com, y mockup del iPhone de Guadalupe a la derecha.
+ * badge FINANCIERA, Mk gigante en Permanent Marker (fuente real
+ * del logo), wordmark MicroKapital + Crédito en movimiento, slogan
+ * oficial, footer microkapital.com, iPhone a la derecha.
+ *
+ * La fuente Permanent Marker se descarga directo de fonts.gstatic.com
+ * (Google Fonts static). Si el fetch falla por lo que sea, cae a
+ * italic bold (fallback que no rompe la ruta).
  */
-export default function Image() {
+export default async function Image() {
+  const permanentMarker = await fetch(
+    'https://fonts.gstatic.com/s/permanentmarker/v16/Fh4uPib9Iyv2ucM6pGQMWimMp004Hao.ttf',
+  ).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null)
+
   return new ImageResponse(
     (
       <div
@@ -55,17 +63,18 @@ export default function Image() {
             Financiera
           </div>
 
-          {/* Mk marker gigante */}
+          {/* Mk marker gigante — Permanent Marker si cargó la fuente */}
           <div
             style={{
               display: 'flex',
-              fontSize: 210,
+              fontFamily: permanentMarker ? 'PermanentMarker' : 'sans-serif',
+              fontSize: permanentMarker ? 230 : 210,
               lineHeight: 0.85,
-              letterSpacing: -14,
+              letterSpacing: permanentMarker ? -4 : -14,
               color: '#fff',
-              fontWeight: 900,
-              fontStyle: 'italic',
-              transform: 'rotate(-6deg) translateX(-6px)',
+              fontWeight: permanentMarker ? 400 : 900,
+              fontStyle: permanentMarker ? 'normal' : 'italic',
+              transform: 'rotate(-5deg) translateX(-6px)',
               textShadow: '0 10px 30px rgba(0,0,0,.22)',
               marginTop: 14,
               marginBottom: 4,
@@ -191,11 +200,12 @@ export default function Image() {
                 <div
                   style={{
                     display: 'flex',
-                    fontSize: 32,
-                    fontWeight: 900,
-                    fontStyle: 'italic',
+                    fontFamily: permanentMarker ? 'PermanentMarker' : 'sans-serif',
+                    fontSize: permanentMarker ? 36 : 32,
+                    fontWeight: permanentMarker ? 400 : 900,
+                    fontStyle: permanentMarker ? 'normal' : 'italic',
                     color: '#ec4899',
-                    letterSpacing: -2,
+                    letterSpacing: -1,
                     transform: 'rotate(-5deg)',
                     lineHeight: 1,
                   }}
@@ -276,6 +286,11 @@ export default function Image() {
         </div>
       </div>
     ),
-    { ...size },
+    {
+      ...size,
+      fonts: permanentMarker
+        ? [{ name: 'PermanentMarker', data: permanentMarker, style: 'normal', weight: 400 }]
+        : undefined,
+    },
   )
 }

@@ -43,12 +43,12 @@ export default function Image() {
             padding: '60px 70px',
           }}
         >
-          {/* COLUMNA IZQUIERDA — Logo + copy */}
+          {/* COLUMNA IZQUIERDA — Logo + copy, pegado arriba */}
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'space-between',
+              gap: 18,
               flex: 1,
               marginRight: 50,
             }}

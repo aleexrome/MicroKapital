@@ -27,7 +27,7 @@ interface Slide {
 const SLIDES: Slide[] = [
   {
     key: 'microcredito',
-    badge: '💰 Financiera · desde 2024',
+    badge: '💰 Financiera · desde 2020',
     title: (
       <>
         Microcréditos que{' '}

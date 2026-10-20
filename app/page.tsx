@@ -61,7 +61,7 @@ export default async function RootPage() {
           }}
         >
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight max-w-xl mx-auto text-balance">
-            Lista para hacer crecer tu negocio
+            Lista para dar tu siguiente paso
           </h2>
           <p className="text-white/70 mt-3 max-w-md mx-auto">
             Acércate con tu coordinadora o visita cualquiera de nuestras sucursales

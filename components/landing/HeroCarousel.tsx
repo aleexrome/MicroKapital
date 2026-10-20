@@ -30,11 +30,11 @@ const SLIDES: Slide[] = [
     badge: '💰 Financiera · desde 2020',
     title: (
       <>
-        Microcréditos que{' '}
+        Cuando nadie apuesta por ti,{' '}
         <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(90deg,#ffd6ea,#bae6fd)' }}>
-          impulsan
-        </span>{' '}
-        tu negocio.
+          nosotros sí
+        </span>
+        .
       </>
     ),
     body: 'Préstamos grupales e individuales a tu medida. Aprobación en 48 horas, sin aval, con acompañamiento real en cada etapa.',
@@ -71,7 +71,7 @@ const SLIDES: Slide[] = [
     badge: '🎫 Tickets digitales',
     title: (<>Comprobante <em className="not-italic">al instante.</em></>),
     body: 'Cada pago genera un ticket con folio único. Lo descargas, lo compartes y queda guardado para siempre.',
-    bullets: ['Folio único por cobro', 'Descarga en PDF', 'Comparte por WhatsApp o email'],
+    bullets: ['Folio único por cobro', 'Descarga en PDF', 'Comparte o guarda al instante'],
     gradient: `radial-gradient(140% 180% at 10% 10%, #fb7185 0%, transparent 55%),
                radial-gradient(110% 170% at 95% 90%, #818cf8 0%, transparent 55%),
                linear-gradient(125deg, #e11d48 0%, #ec4899 45%, #6366f1 100%)`,
@@ -80,8 +80,8 @@ const SLIDES: Slide[] = [
   {
     key: 'grupos',
     badge: '👥 Grupos solidarios',
-    title: (<>Impulsamos <em className="not-italic">mujeres</em> emprendedoras.</>),
-    body: 'Grupos de hasta 5 integrantes que se respaldan entre sí. Juntas crecen más rápido y con tasas más accesibles.',
+    title: (<>Juntas crecemos <em className="not-italic">más rápido.</em></>),
+    body: 'Grupos de hasta 5 integrantes que se respaldan entre sí. En solidario avanzan juntas y con tasas más accesibles.',
     bullets: ['Hasta 5 integrantes por grupo', 'Respaldo solidario', 'Mejores tasas al crecer'],
     gradient: `radial-gradient(130% 170% at 8% 95%, #f472b6 0%, transparent 55%),
                radial-gradient(110% 170% at 95% 5%, #38bdf8 0%, transparent 55%),

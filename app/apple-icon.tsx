@@ -24,20 +24,19 @@ export default async function AppleIcon() {
           alignItems: 'center',
           justifyContent: 'center',
           fontFamily: 'Inter',
-          backgroundImage: 'linear-gradient(135deg, #ec4899 0%, #0ea5e9 100%)',
+          backgroundImage: 'linear-gradient(135deg, #ff2d92 0%, #0ea5e9 100%)',
         }}
       >
         <div
           style={{
             display: 'flex',
             fontFamily: permanentMarker ? 'PermanentMarker' : 'Inter',
-            fontSize: permanentMarker ? 105 : 140,
-            lineHeight: 0.85,
-            letterSpacing: permanentMarker ? -3 : -8,
+            fontSize: permanentMarker ? 100 : 140,
+            lineHeight: 1,
+            letterSpacing: permanentMarker ? -2 : -8,
             color: '#fff',
             fontWeight: permanentMarker ? 400 : 900,
             fontStyle: permanentMarker ? 'normal' : 'italic',
-            transform: 'rotate(-5deg) translateY(4px)',
             textShadow: '0 6px 12px rgba(0,0,0,.22)',
           }}
         >

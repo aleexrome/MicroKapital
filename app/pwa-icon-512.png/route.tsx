@@ -17,7 +17,7 @@ export async function GET() {
           alignItems: 'center',
           justifyContent: 'center',
           fontFamily: 'Inter',
-          backgroundImage: 'linear-gradient(135deg, #ec4899 0%, #0ea5e9 100%)',
+          backgroundImage: 'linear-gradient(135deg, #ff2d92 0%, #0ea5e9 100%)',
         }}
       >
         <div
@@ -25,12 +25,12 @@ export async function GET() {
             display: 'flex',
             fontFamily: permanentMarker ? 'PermanentMarker' : 'Inter',
             fontSize: permanentMarker ? 310 : 400,
-            lineHeight: 0.85,
+            lineHeight: 1,
             letterSpacing: permanentMarker ? -8 : -20,
             color: '#fff',
             fontWeight: permanentMarker ? 400 : 900,
             fontStyle: permanentMarker ? 'normal' : 'italic',
-            transform: 'rotate(-5deg) translateY(14px)',
+            lineHeight: 1,
             textShadow: '0 15px 30px rgba(0,0,0,.22)',
           }}
         >

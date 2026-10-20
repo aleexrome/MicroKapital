@@ -286,6 +286,49 @@ export default async function Image() {
                   Pagar
                 </div>
               </div>
+
+              {/* Tab bar inferior — igual al artifact */}
+              <div
+                style={{
+                  display: 'flex',
+                  marginTop: 'auto',
+                  paddingTop: 10,
+                  borderTop: '1px solid rgba(255,255,255,.06)',
+                  gap: 4,
+                }}
+              >
+                {[
+                  { label: 'Inicio', active: true },
+                  { label: 'Pagos', active: false },
+                  { label: 'Tickets', active: false },
+                  { label: 'Perfil', active: false },
+                ].map((t) => (
+                  <div
+                    key={t.label}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      flex: 1,
+                      fontSize: 8,
+                      color: t.active ? '#ec4899' : 'rgba(255,255,255,.4)',
+                      gap: 2,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        width: 12,
+                        height: 12,
+                        borderRadius: 3,
+                        background: 'currentColor',
+                        opacity: 0.9,
+                      }}
+                    />
+                    {t.label}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

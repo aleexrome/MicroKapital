@@ -8,12 +8,16 @@ const PUBLIC_PATHS = [
   '/api/internal',
   '/licencia-suspendida',
   '/verificar',
-  // Open Graph image del landing — WhatsApp / Facebook / Slack piden
-  // esta URL sin cookies para armar el preview al compartir el link.
-  // Sin esto el middleware la redirigía al /login y el crawler no
-  // obtenía imagen válida → preview sin banner.
+  // Rutas públicas de preview + PWA — crawlers (WhatsApp/Facebook) y el
+  // browser al registrar la app instalable las piden sin cookies. Si el
+  // middleware las redirige al /login el preview no carga y el PWA no
+  // se instala.
   '/opengraph-image',
   '/twitter-image',
+  '/sw.js',
+  '/manifest.webmanifest',
+  '/pwa-icon',   // cubre /pwa-icon-192.png, /pwa-icon-512.png, maskable
+  '/apple-icon', // apple-icon.png e índices (apple-icon-0, -1, ...)
 ]
 
 const SUPER_ADMIN_PATH = '/sys-mnt-9x7k'

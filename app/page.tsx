@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
+import { InstallAppButton } from '@/components/landing/InstallAppButton'
+import { FeatureCarousel } from '@/components/landing/FeatureCarousel'
 
 /**
  * Página pública raíz.
@@ -94,6 +96,7 @@ export default async function RootPage() {
               >
                 Soy cliente — Entrar
               </Link>
+              <InstallAppButton />
             </div>
             <div className="flex items-center gap-5 pt-4 text-xs text-white/70">
               <span className="flex items-center gap-1.5">
@@ -220,8 +223,25 @@ export default async function RootPage() {
         </div>
       </header>
 
+      {/* CARRUSEL DE PANTALLAS */}
+      <section className="max-w-6xl mx-auto px-5 py-16 sm:py-20">
+        <div className="text-center mb-8 sm:mb-10">
+          <span className="text-[11px] font-bold uppercase tracking-[.25em] text-pink-400">
+            Portal del cliente
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mt-2 text-balance">
+            Tu crédito, siempre en tu bolsillo.
+          </h2>
+          <p className="text-white/65 mt-3 max-w-xl mx-auto">
+            Todo lo que necesitas para administrar tu préstamo, desde cualquier
+            celular, sin descargar nada de la Play Store.
+          </p>
+        </div>
+        <FeatureCarousel />
+      </section>
+
       {/* FEATURES */}
-      <section className="max-w-6xl mx-auto px-5 py-16 sm:py-20 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <section className="max-w-6xl mx-auto px-5 pb-16 sm:pb-20 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {[
           { title: 'Desde $4,000', desc: 'Préstamos ajustados al tamaño real de tu negocio, sin aval.' },
           { title: 'Grupos solidarios', desc: 'Hasta 5 personas se respaldan entre sí y crecen juntas.' },

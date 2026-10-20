@@ -31,18 +31,14 @@ export default async function AppleIcon() {
           style={{
             display: 'flex',
             fontFamily: permanentMarker ? 'PermanentMarker' : 'Inter',
-            fontSize: permanentMarker ? 100 : 140,
+            fontSize: permanentMarker ? 150 : 170,
             lineHeight: 1,
-            letterSpacing: permanentMarker ? -2 : -8,
+            letterSpacing: permanentMarker ? -4 : -8,
             color: '#fff',
             fontWeight: permanentMarker ? 400 : 900,
             fontStyle: permanentMarker ? 'normal' : 'italic',
             textShadow: '0 6px 12px rgba(0,0,0,.22)',
-            // Permanent Marker tiene bearing izquierdo grande — el texto
-            // mide más del lado izq que del der, visualmente queda corrido
-            // a la izquierda aunque flex lo centre. Compensamos con padding.
             paddingLeft: 0,
-            transform: permanentMarker ? 'translateY(-18px)' : 'none',
           }}
         >
           Mk

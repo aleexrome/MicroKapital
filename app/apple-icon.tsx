@@ -41,7 +41,8 @@ export default async function AppleIcon() {
             // Permanent Marker tiene bearing izquierdo grande — el texto
             // mide más del lado izq que del der, visualmente queda corrido
             // a la izquierda aunque flex lo centre. Compensamos con padding.
-            paddingLeft: permanentMarker ? 10 : 0,
+            paddingLeft: 0,
+            marginTop: permanentMarker ? -16 : 0,
           }}
         >
           Mk

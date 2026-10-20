@@ -28,6 +28,11 @@ export default async function Image() {
           height: '100%',
           display: 'flex',
           color: '#fff',
+          // Explícito: todo el banner usa sans-serif de next/og por default.
+          // Solo el div del "Mk" fuerza Permanent Marker. Sin esto, el
+          // registrar la fuente marker la convertía en default y se
+          // aplicaba a MicroKapital, headline, footer, etc.
+          fontFamily: 'sans-serif',
           backgroundImage: `
             radial-gradient(130% 170% at 8% 8%, #ff6ab0 0%, transparent 55%),
             radial-gradient(110% 170% at 95% 95%, #38bdf8 0%, transparent 55%),

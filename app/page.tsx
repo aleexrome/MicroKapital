@@ -40,7 +40,7 @@ export default async function RootPage() {
             href="/login"
             className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-1.5 rounded-full bg-fuchsia-500 text-white hover:bg-fuchsia-400 transition"
           >
-            Entrar →
+            Acceso equipo →
           </Link>
         </div>
       </nav>
@@ -67,14 +67,6 @@ export default async function RootPage() {
             Acércate con tu coordinadora o visita cualquiera de nuestras sucursales
             para conocer el crédito que te queda mejor.
           </p>
-          <div className="flex flex-wrap gap-3 justify-center mt-6">
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white text-pink-600 font-semibold hover:bg-white/95 transition"
-            >
-              Soy cliente — Entrar
-            </Link>
-          </div>
         </div>
       </section>
 
@@ -92,7 +84,7 @@ export default async function RootPage() {
           </div>
           <div className="flex items-center gap-4">
             <Link href="/login" className="hover:text-white transition">
-              Soy cliente
+              Acceso del equipo
             </Link>
           </div>
         </div>

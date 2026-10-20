@@ -40,7 +40,7 @@ export default function Image() {
             display: 'flex',
             width: '100%',
             height: '100%',
-            padding: '60px 70px',
+            padding: '30px 70px 50px',
           }}
         >
           {/* COLUMNA IZQUIERDA — Logo + copy, pegado arriba */}

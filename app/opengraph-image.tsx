@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og'
 
 export const runtime = 'edge'
-export const alt = 'MicroKapital — Microcréditos que impulsan tu negocio'
+export const alt = 'MicroKapital — Cuando nadie apuesta por ti, nosotros sí'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -94,19 +94,19 @@ export default function Image() {
             </div>
           </div>
 
-          {/* Headline con "impulsan" en gradient claro */}
+          {/* Slogan oficial */}
           <div
             style={{
               display: 'flex',
               flexWrap: 'wrap',
-              fontSize: 38,
+              fontSize: 34,
               fontWeight: 700,
-              letterSpacing: -0.8,
-              lineHeight: 1.1,
+              letterSpacing: -0.5,
+              lineHeight: 1.15,
               marginTop: 20,
             }}
           >
-            <span style={{ display: 'flex' }}>Microcréditos que&nbsp;</span>
+            <span style={{ display: 'flex' }}>Cuando nadie apuesta por ti,&nbsp;</span>
             <span
               style={{
                 display: 'flex',
@@ -115,9 +115,9 @@ export default function Image() {
                 color: 'transparent',
               }}
             >
-              impulsan
+              nosotros sí
             </span>
-            <span style={{ display: 'flex' }}>&nbsp;tu negocio.</span>
+            <span style={{ display: 'flex' }}>.</span>
           </div>
 
           {/* Footer: solo dominio */}

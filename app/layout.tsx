@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.microkapital.com',
   ),
-  title: 'MicroKapital — Microcréditos que impulsan tu negocio',
+  title: 'MicroKapital — Cuando nadie apuesta por ti, nosotros sí',
   description:
     'Préstamos grupales e individuales desde $4,000. Aprobación en 48 horas, sin aval, con acompañamiento real en cada etapa.',
   // Panel interno sigue sin indexar; solo /mantenimiento y el landing son
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   robots: 'index, follow',
   openGraph: {
     title: 'MicroKapital Financiera',
-    description: 'Microcréditos que impulsan tu negocio.',
+    description: 'Cuando nadie apuesta por ti, nosotros sí.',
     url: '/',
     siteName: 'MicroKapital',
     locale: 'es_MX',
@@ -44,14 +44,14 @@ export const metadata: Metadata = {
         url: '/opengraph-image',
         width: 1200,
         height: 630,
-        alt: 'MicroKapital — Microcréditos que impulsan tu negocio',
+        alt: 'MicroKapital — Cuando nadie apuesta por ti, nosotros sí',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'MicroKapital Financiera',
-    description: 'Microcréditos que impulsan tu negocio.',
+    description: 'Cuando nadie apuesta por ti, nosotros sí.',
     images: ['/opengraph-image'],
   },
 }

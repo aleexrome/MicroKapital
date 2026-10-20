@@ -13,6 +13,12 @@ import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 
 const TABS: { label: string; value: string | null }[] = [
   { label: 'Todos', value: null },
+  // En revisión por Mesa (PENDING_REVIEW) y regresados por Mesa
+  // (RETURNED_TO_COORDINATOR) no tenían tab — quedaban escondidos
+  // dentro de "Todos" y los coords no sabían que había crédito en
+  // vuelo pendiente de corregir.
+  { label: 'En revisión', value: 'PENDING_REVIEW' },
+  { label: 'Regresadas', value: 'RETURNED_TO_COORDINATOR' },
   { label: 'Pendientes', value: 'PENDING_APPROVAL' },
   { label: 'Aprobados', value: 'APPROVED' },
   { label: 'En activación', value: 'IN_ACTIVATION' },

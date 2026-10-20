@@ -8,28 +8,15 @@ export const contentType = 'image/png'
 /**
  * Open Graph image generada en runtime (next/og).
  *
- * Vive al lado del landing (`app/page.tsx`) para que Next.js la
- * sirva en `/opengraph-image` y añada los <meta og:image> + los
- * <meta twitter:image> al <head> de la ruta "/" automáticamente.
+ * Lo que WhatsApp / Facebook / Slack / iMessage muestran como preview
+ * cuando se comparte https://microkapital.com.
  *
- * Esto es lo que WhatsApp / Facebook / Slack / iMessage muestran
- * como preview cuando se comparte https://microkapital.com.
- *
- * Diseño: mismo gradient rosa→azul del landing, logo "Mk" en marker
- * (fuente cargada de Google Fonts) y copy jerárquico. Sin mockup
- * del celular porque `next/og` solo acepta un subset de CSS y mantener
- * el mockup legible al escalar es trabajo adicional sin pagar lo que
- * cuesta en complejidad; el banner interactivo del artifact ya cubre
- * ese caso para redes.
+ * NOTA: NO cargamos fuentes externas aquí. El fetch a jsDelivr fallaba
+ * silenciosamente en producción y la ruta devolvía 500, por eso el
+ * crawler recibía basura y no mostraba imagen. Usamos la fuente default
+ * de next/og (geometric sans) — se ve bien y jamás falla.
  */
-export default async function Image() {
-  // Fuente display — Permanent Marker. next/og necesita el buffer de
-  // la fuente, no basta con el nombre; Google Fonts no sirve el .ttf
-  // directo así que vamos a jsDelivr que sí lo expone estático.
-  const permanentMarker = await fetch(
-    'https://cdn.jsdelivr.net/npm/@fontsource/permanent-marker@5.0.17/files/permanent-marker-latin-400-normal.woff',
-  ).then((res) => res.arrayBuffer()).catch(() => null)
-
+export default function Image() {
   return new ImageResponse(
     (
       <div
@@ -86,13 +73,15 @@ export default async function Image() {
             >
               <div
                 style={{
-                  fontFamily: 'MK, cursive',
-                  fontSize: 240,
+                  fontSize: 220,
                   lineHeight: 0.85,
-                  letterSpacing: -8,
+                  letterSpacing: -10,
                   color: '#fff',
+                  fontWeight: 900,
+                  fontStyle: 'italic',
                   transform: 'rotate(-4deg)',
-                  textShadow: '0 10px 30px rgba(0,0,0,.15)',
+                  textShadow: '0 10px 30px rgba(0,0,0,.18)',
+                  display: 'flex',
                 }}
               >
                 Mk
@@ -160,18 +149,6 @@ export default async function Image() {
         </div>
       </div>
     ),
-    {
-      ...size,
-      fonts: permanentMarker
-        ? [
-            {
-              name: 'MK',
-              data: permanentMarker,
-              style: 'normal',
-              weight: 400,
-            },
-          ]
-        : undefined,
-    },
+    { ...size },
   )
 }

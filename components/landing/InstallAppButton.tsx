@@ -86,28 +86,25 @@ export function InstallAppButton() {
       }
       return
     }
-    // Sin prompt disponible (iOS o Android que aún no cumplió el
-    // umbral de visitas) → mostramos la guía manual.
+    // Sin prompt disponible → siempre mostramos la guía manual con
+    // instrucciones para iOS y para desktop/otros browsers. Así el
+    // botón NUNCA desaparece ni se queda sin hacer nada al tocarlo.
     setShowIOSHelp(true)
   }
-
-  // Si no es iOS y aún no tenemos prompt, no renderizamos el botón.
-  // El prompt se habilita cuando Chrome lo dispara.
-  if (!canInstall && !isIOS) return null
 
   return (
     <>
       <button
         onClick={handleClick}
-        className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white/10 backdrop-blur border border-white/30 text-white font-semibold hover:bg-white/20 transition"
+        className="inline-flex items-center gap-2 px-5 py-3 rounded-full border-2 border-white/60 bg-white/10 backdrop-blur text-white font-semibold hover:bg-white/20 hover:border-white transition"
         type="button"
       >
-        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 3v12" />
           <path d="m7 10 5 5 5-5" />
           <path d="M5 21h14" />
         </svg>
-        Instalar app
+        Descargar app
       </button>
 
       {showIOSHelp && mounted && createPortal(

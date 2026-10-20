@@ -167,8 +167,8 @@ export default async function Image() {
           <div
             style={{
               display: 'flex',
-              width: 270,
-              height: 540,
+              width: 260,
+              height: 570,
               background: '#0f0d24',
               borderRadius: 46,
               border: '4px solid #1a1735',
@@ -199,7 +199,7 @@ export default async function Image() {
                 height: '100%',
                 background: 'linear-gradient(165deg, #1a1738, #0f0d24)',
                 borderRadius: 38,
-                padding: '40px 16px 16px',
+                padding: '34px 14px 10px',
                 color: '#fff',
               }}
             >

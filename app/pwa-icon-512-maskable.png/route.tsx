@@ -1,7 +1,6 @@
 import { ImageResponse } from 'next/og'
 
 export const runtime = 'edge'
-export const contentType = 'image/png'
 
 /**
  * Maskable icon — Android recorta el borde según la forma del launcher

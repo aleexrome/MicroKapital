@@ -171,7 +171,7 @@ export function HeroCarousel() {
             </span>
 
             {/* Headline + body — cross-fade */}
-            <div className="relative min-h-[22rem] sm:min-h-[20rem]">
+            <div className="relative min-h-[26rem] sm:min-h-[22rem] lg:min-h-[24rem]">
               {SLIDES.map((s, i) => (
                 <div
                   key={s.key}
@@ -198,7 +198,7 @@ export function HeroCarousel() {
               ))}
             </div>
 
-            <div className="flex flex-wrap gap-3 mt-2">
+            <div className="flex flex-wrap gap-3 mt-6">
               <InstallAppButton />
               <Link
                 href="/login"

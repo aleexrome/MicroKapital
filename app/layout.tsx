@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Permanent_Marker } from 'next/font/google'
 import './globals.css'
 
@@ -54,6 +54,12 @@ export const metadata: Metadata = {
     description: 'Microcréditos que impulsan tu negocio.',
     images: ['/opengraph-image'],
   },
+}
+
+// Status bar + safe-area del browser/PWA en negro para que no se vea
+// una franja rosa arriba (antes el theme-color era #ec4899).
+export const viewport: Viewport = {
+  themeColor: '#0b0a1a',
 }
 
 export default function RootLayout({

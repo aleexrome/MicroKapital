@@ -204,7 +204,7 @@ export function HeroCarousel() {
                 href="/login"
                 className="inline-flex items-center gap-2 px-5 py-3 rounded-full border-2 border-white/40 text-white/90 font-semibold hover:bg-white/10 hover:border-white/70 transition text-sm"
               >
-                Soy del equipo — Entrar
+                Iniciar sesión
               </Link>
             </div>
           </div>

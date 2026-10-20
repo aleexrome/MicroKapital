@@ -40,7 +40,7 @@ export default async function RootPage() {
             href="/login"
             className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-1.5 rounded-full bg-fuchsia-500 text-white hover:bg-fuchsia-400 transition"
           >
-            Acceso equipo →
+            Iniciar sesión
           </Link>
         </div>
       </nav>

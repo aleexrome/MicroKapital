@@ -24,9 +24,9 @@ export async function GET() {
           style={{
             display: 'flex',
             fontFamily: permanentMarker ? 'PermanentMarker' : 'sans-serif',
-            fontSize: permanentMarker ? 160 : 150,
+            fontSize: permanentMarker ? 115 : 150,
             lineHeight: 0.85,
-            letterSpacing: permanentMarker ? -5 : -8,
+            letterSpacing: permanentMarker ? -3 : -8,
             color: '#fff',
             fontWeight: permanentMarker ? 400 : 900,
             fontStyle: permanentMarker ? 'normal' : 'italic',

@@ -31,9 +31,9 @@ export default async function AppleIcon() {
           style={{
             display: 'flex',
             fontFamily: permanentMarker ? 'PermanentMarker' : 'sans-serif',
-            fontSize: permanentMarker ? 150 : 140,
+            fontSize: permanentMarker ? 105 : 140,
             lineHeight: 0.85,
-            letterSpacing: permanentMarker ? -4 : -8,
+            letterSpacing: permanentMarker ? -3 : -8,
             color: '#fff',
             fontWeight: permanentMarker ? 400 : 900,
             fontStyle: permanentMarker ? 'normal' : 'italic',

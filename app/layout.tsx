@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   ),
   title: 'MicroKapital — Cuando nadie apuesta por ti, nosotros sí',
   description:
-    'Préstamos grupales e individuales desde $4,000. Aprobación en 48 horas, sin aval, con acompañamiento real en cada etapa.',
+    'Préstamos grupales e individuales desde $4,000. Aprobación ágil con acompañamiento real en cada etapa.',
   // Panel interno sigue sin indexar; solo /mantenimiento y el landing son
   // públicos. Como /dashboard, /admin, etc. están detrás de login, no hay
   // riesgo de que Google indexe datos privados. Permitimos indexar el

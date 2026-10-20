@@ -37,8 +37,8 @@ const SLIDES: Slide[] = [
         .
       </>
     ),
-    body: 'Préstamos grupales e individuales a tu medida. Aprobación en 48 horas, sin aval, con acompañamiento real en cada etapa.',
-    bullets: ['Préstamos desde $4,000', 'Sin aval ni comisiones ocultas', 'Resolución en 48 horas'],
+    body: 'Préstamos grupales e individuales a tu medida. Aprobación ágil con acompañamiento real en cada etapa.',
+    bullets: ['Préstamos desde $4,000', 'Tasas y condiciones claras', 'Resolución en 48 horas'],
     gradient: `radial-gradient(130% 170% at 8% 8%, #ff6ab0 0%, transparent 55%),
                radial-gradient(110% 170% at 95% 95%, #38bdf8 0%, transparent 55%),
                linear-gradient(120deg, #ec4899 0%, #d946ef 35%, #6366f1 65%, #0ea5e9 100%)`,
@@ -171,7 +171,7 @@ export function HeroCarousel() {
             </span>
 
             {/* Headline + body — cross-fade */}
-            <div className="relative min-h-[14rem] sm:min-h-[16rem]">
+            <div className="relative min-h-[22rem] sm:min-h-[20rem]">
               {SLIDES.map((s, i) => (
                 <div
                   key={s.key}

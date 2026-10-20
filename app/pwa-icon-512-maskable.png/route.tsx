@@ -28,15 +28,14 @@ export async function GET() {
           style={{
             display: 'flex',
             fontFamily: permanentMarker ? 'PermanentMarker' : 'Inter',
-            fontSize: permanentMarker ? 210 : 260,
+            fontSize: permanentMarker ? 300 : 340,
             lineHeight: 1,
-            letterSpacing: permanentMarker ? -6 : -12,
+            letterSpacing: permanentMarker ? -8 : -14,
             color: '#fff',
             fontWeight: permanentMarker ? 400 : 900,
             fontStyle: permanentMarker ? 'normal' : 'italic',
             textShadow: '0 10px 20px rgba(0,0,0,.22)',
             paddingLeft: 0,
-            transform: permanentMarker ? 'translateY(-38px)' : 'none',
           }}
         >
           Mk

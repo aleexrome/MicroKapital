@@ -8,6 +8,12 @@ const PUBLIC_PATHS = [
   '/api/internal',
   '/licencia-suspendida',
   '/verificar',
+  // Open Graph image del landing — WhatsApp / Facebook / Slack piden
+  // esta URL sin cookies para armar el preview al compartir el link.
+  // Sin esto el middleware la redirigía al /login y el crawler no
+  // obtenía imagen válida → preview sin banner.
+  '/opengraph-image',
+  '/twitter-image',
 ]
 
 const SUPER_ADMIN_PATH = '/sys-mnt-9x7k'

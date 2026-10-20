@@ -10,7 +10,13 @@ const permanentMarker = Permanent_Marker({
   display: 'swap',
 })
 
+// metadataBase se usa para resolver URLs relativas (opengraph-image,
+// twitter-image, canonical). Sin esto, el crawler recibe URLs relativas
+// y no puede descargar la imagen → WhatsApp muestra solo texto.
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? 'https://microkapital.com',
+  ),
   title: 'MicroKapital — Microcréditos que impulsan tu negocio',
   description:
     'Préstamos grupales e individuales desde $4,000. Aprobación en 48 horas, sin aval, con acompañamiento real en cada etapa.',
@@ -22,8 +28,18 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'MicroKapital Financiera',
     description: 'Microcréditos que impulsan tu negocio.',
+    url: '/',
+    siteName: 'MicroKapital',
     locale: 'es_MX',
     type: 'website',
+    // La imagen se agrega automáticamente desde app/opengraph-image.tsx —
+    // Next.js inyecta <meta property="og:image"> + dimensiones.
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'MicroKapital Financiera',
+    description: 'Microcréditos que impulsan tu negocio.',
+    // app/twitter-image.tsx (si existe) o cae al opengraph-image.
   },
 }
 

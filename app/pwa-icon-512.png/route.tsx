@@ -30,7 +30,6 @@ export async function GET() {
             color: '#fff',
             fontWeight: permanentMarker ? 400 : 900,
             fontStyle: permanentMarker ? 'normal' : 'italic',
-            lineHeight: 1,
             textShadow: '0 15px 30px rgba(0,0,0,.22)',
           }}
         >

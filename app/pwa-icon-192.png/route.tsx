@@ -1,7 +1,6 @@
 import { ImageResponse } from 'next/og'
 
 export const runtime = 'edge'
-export const contentType = 'image/png'
 
 /**
  * PWA icon 192x192 — generado en runtime con next/og para mantener

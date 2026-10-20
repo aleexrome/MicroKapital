@@ -132,7 +132,7 @@ export function RecursosHumanosClient({ empleados, sucursalesSugeridas, viewerUs
                 </thead>
                 <tbody>
                   {filtrados.map((emp) => (
-                    <tr key={emp.id} className="border-b last:border-0 hover:glass-hover-card">
+                    <tr key={emp.id} className="border-b last:border-0 hover:bg-white/5 transition-colors">
                       <td className="py-2 px-2 font-medium">{emp.nombre}</td>
                       <td className="py-2 px-2 text-muted-foreground">{emp.sucursal ?? '—'}</td>
                       <td className="py-2 px-2 text-muted-foreground text-xs">{emp.puesto ?? '—'}</td>

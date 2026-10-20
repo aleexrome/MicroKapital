@@ -161,32 +161,32 @@ export default async function Image() {
             display: 'flex',
             alignItems: 'flex-start',
             justifyContent: 'center',
-            width: 320,
+            width: 400,
             marginBottom: -260,  // empuja el iPhone fuera del banner por abajo
           }}
         >
           <div
             style={{
               display: 'flex',
-              width: 300,
-              height: 650,
+              width: 380,
+              height: 900,
               background: '#0f0d24',
-              borderRadius: 50,
-              border: '5px solid #1a1735',
-              padding: 10,
+              borderRadius: 60,
+              border: '6px solid #1a1735',
+              padding: 12,
               boxShadow: '0 30px 60px rgba(0,0,0,.4)',
-              transform: 'rotate(5deg)',
+              transform: 'rotate(4deg)',
               position: 'relative',
             }}
           >
             <div
               style={{
                 position: 'absolute',
-                top: 14,
+                top: 18,
                 left: '50%',
                 transform: 'translateX(-50%)',
-                width: 88,
-                height: 20,
+                width: 110,
+                height: 25,
                 background: '#000',
                 borderRadius: 999,
                 display: 'flex',
@@ -199,8 +199,8 @@ export default async function Image() {
                 width: '100%',
                 height: '100%',
                 background: 'linear-gradient(165deg, #1a1738, #0f0d24)',
-                borderRadius: 38,
-                padding: '34px 14px 10px',
+                borderRadius: 48,
+                padding: '46px 18px 10px',
                 color: '#fff',
               }}
             >

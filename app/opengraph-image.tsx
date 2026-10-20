@@ -74,28 +74,27 @@ export default async function Image() {
             Financiera
           </div>
 
-          {/* Mk marker gigante — Permanent Marker si cargó la fuente */}
+          {/* Mk marker — proporción como en el artifact */}
           <div
             style={{
               display: 'flex',
               fontFamily: permanentMarker ? 'PermanentMarker' : 'Inter',
-              fontSize: permanentMarker ? 230 : 210,
+              fontSize: permanentMarker ? 150 : 140,
               lineHeight: 0.85,
-              letterSpacing: permanentMarker ? -4 : -14,
+              letterSpacing: permanentMarker ? -2 : -10,
               color: '#fff',
               fontWeight: permanentMarker ? 400 : 900,
               fontStyle: permanentMarker ? 'normal' : 'italic',
-              transform: 'rotate(-5deg) translateX(-6px)',
-              textShadow: '0 10px 30px rgba(0,0,0,.22)',
-              marginTop: 14,
-              marginBottom: 4,
+              textShadow: '0 8px 20px rgba(0,0,0,.22)',
+              marginTop: 12,
+              marginBottom: 0,
             }}
           >
             Mk
           </div>
 
           {/* Wordmark */}
-          <div style={{ display: 'flex', flexDirection: 'column', marginTop: 2 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', marginTop: 0 }}>
             <div style={{ display: 'flex', fontSize: 60, fontWeight: 800, letterSpacing: -2, lineHeight: 1 }}>
               MicroKapital
             </div>

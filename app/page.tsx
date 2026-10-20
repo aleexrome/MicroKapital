@@ -21,8 +21,8 @@ export default async function RootPage() {
   }
 
   // ─────────── Landing comercial (visitantes anónimos) ────────────
-  // Server component sin JS: carga rápida, SEO limpio, Facebook/WhatsApp
-  // crawler lo lee bien.
+  // Server component sin JS: carga rápida, SEO limpio y OG previews
+  // correctos cuando se comparte el link.
   return (
     <div className="min-h-screen bg-[#0b0a1a] text-white antialiased">
       {/* NAVBAR */}
@@ -39,14 +39,6 @@ export default async function RootPage() {
             <span className="font-semibold tracking-tight">MicroKapital</span>
           </Link>
           <div className="flex items-center gap-2">
-            <Link
-              href="https://wa.me/525226262627?text=Hola%2C+quisiera+información+sobre+un+microcrédito"
-              target="_blank"
-              rel="noopener"
-              className="hidden sm:inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border border-white/15 text-white/90 hover:border-white/40 hover:text-white transition"
-            >
-              WhatsApp
-            </Link>
             <Link
               href="/login"
               className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-1.5 rounded-full bg-fuchsia-500 text-white hover:bg-fuchsia-400 transition"
@@ -97,16 +89,8 @@ export default async function RootPage() {
             </p>
             <div className="flex flex-wrap gap-3 mt-2">
               <Link
-                href="https://wa.me/525226262627?text=Hola%2C+quisiera+información+sobre+un+microcrédito"
-                target="_blank"
-                rel="noopener"
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white text-pink-600 font-semibold hover:bg-white/95 transition shadow-lg shadow-black/20"
-              >
-                Solicitar crédito por WhatsApp
-              </Link>
-              <Link
                 href="/login"
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-full border border-white/50 text-white font-semibold hover:bg-white/10 transition"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white text-pink-600 font-semibold hover:bg-white/95 transition shadow-lg shadow-black/20"
               >
                 Soy cliente — Entrar
               </Link>
@@ -273,25 +257,15 @@ export default async function RootPage() {
             Lista para hacer crecer tu negocio
           </h2>
           <p className="text-white/70 mt-3 max-w-md mx-auto">
-            Platica con una asesora. Te decimos en minutos si calificas y cuánto podrías
-            recibir en tu primer crédito.
+            Acércate con tu coordinadora o visita cualquiera de nuestras sucursales
+            para conocer el crédito que te queda mejor.
           </p>
           <div className="flex flex-wrap gap-3 justify-center mt-6">
             <Link
-              href="https://wa.me/525226262627?text=Hola%2C+quisiera+información+sobre+un+microcrédito"
-              target="_blank"
-              rel="noopener"
+              href="/login"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white text-pink-600 font-semibold hover:bg-white/95 transition"
             >
-              Hablar por WhatsApp
-            </Link>
-            <Link
-              href="https://www.facebook.com/microkapital"
-              target="_blank"
-              rel="noopener"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full border border-white/25 font-semibold hover:bg-white/10 transition"
-            >
-              Síguenos en Facebook
+              Soy cliente — Entrar
             </Link>
           </div>
         </div>
@@ -310,9 +284,6 @@ export default async function RootPage() {
             <span>© {new Date().getFullYear()} MicroKapital Financiera · Todos los derechos reservados.</span>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="https://www.facebook.com/microkapital" target="_blank" rel="noopener" className="hover:text-white transition">
-              Facebook
-            </Link>
             <Link href="/login" className="hover:text-white transition">
               Soy cliente
             </Link>

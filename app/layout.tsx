@@ -32,14 +32,23 @@ export const metadata: Metadata = {
     siteName: 'MicroKapital',
     locale: 'es_MX',
     type: 'website',
-    // La imagen se agrega automáticamente desde app/opengraph-image.tsx —
-    // Next.js inyecta <meta property="og:image"> + dimensiones.
+    // Imagen explícita (además de la que Next inyecta de
+    // app/opengraph-image.tsx). WhatsApp a veces no sigue la convención
+    // de Next; con esto nos aseguramos que siempre haya un og:image.
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: 'MicroKapital — Microcréditos que impulsan tu negocio',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'MicroKapital Financiera',
     description: 'Microcréditos que impulsan tu negocio.',
-    // app/twitter-image.tsx (si existe) o cae al opengraph-image.
+    images: ['/opengraph-image'],
   },
 }
 

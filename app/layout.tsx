@@ -14,8 +14,12 @@ const permanentMarker = Permanent_Marker({
 // twitter-image, canonical). Sin esto, el crawler recibe URLs relativas
 // y no puede descargar la imagen → WhatsApp muestra solo texto.
 export const metadata: Metadata = {
+  // IMPORTANTE: usar la MISMA forma del dominio que la gente comparte
+  // (con www). Si metadataBase es non-www pero el crawler visita www,
+  // el og:image resuelve a non-www y el crawler de WhatsApp no sigue
+  // el redirect — resultado: no se descarga la imagen.
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? 'https://microkapital.com',
+    process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.microkapital.com',
   ),
   title: 'MicroKapital — Microcréditos que impulsan tu negocio',
   description:

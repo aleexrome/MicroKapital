@@ -23,17 +23,17 @@ export default async function AppleIcon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontFamily: 'sans-serif',
+          fontFamily: 'Inter',
           backgroundImage: 'linear-gradient(135deg, #ec4899 0%, #0ea5e9 100%)',
         }}
       >
         <div
           style={{
             display: 'flex',
-            fontFamily: permanentMarker ? 'PermanentMarker' : 'sans-serif',
-            fontSize: permanentMarker ? 150 : 140,
+            fontFamily: permanentMarker ? 'PermanentMarker' : 'Inter',
+            fontSize: permanentMarker ? 105 : 140,
             lineHeight: 0.85,
-            letterSpacing: permanentMarker ? -4 : -8,
+            letterSpacing: permanentMarker ? -3 : -8,
             color: '#fff',
             fontWeight: permanentMarker ? 400 : 900,
             fontStyle: permanentMarker ? 'normal' : 'italic',

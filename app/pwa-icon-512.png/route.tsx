@@ -16,17 +16,17 @@ export async function GET() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontFamily: 'sans-serif',
+          fontFamily: 'Inter',
           backgroundImage: 'linear-gradient(135deg, #ec4899 0%, #0ea5e9 100%)',
         }}
       >
         <div
           style={{
             display: 'flex',
-            fontFamily: permanentMarker ? 'PermanentMarker' : 'sans-serif',
-            fontSize: permanentMarker ? 430 : 400,
+            fontFamily: permanentMarker ? 'PermanentMarker' : 'Inter',
+            fontSize: permanentMarker ? 310 : 400,
             lineHeight: 0.85,
-            letterSpacing: permanentMarker ? -14 : -20,
+            letterSpacing: permanentMarker ? -8 : -20,
             color: '#fff',
             fontWeight: permanentMarker ? 400 : 900,
             fontStyle: permanentMarker ? 'normal' : 'italic',

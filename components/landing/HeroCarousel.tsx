@@ -171,7 +171,7 @@ export function HeroCarousel() {
             </span>
 
             {/* Headline + body — cross-fade */}
-            <div className="relative min-h-[26rem] sm:min-h-[22rem] lg:min-h-[24rem]">
+            <div className="relative min-h-[30rem] sm:min-h-[26rem] lg:min-h-[28rem]">
               {SLIDES.map((s, i) => (
                 <div
                   key={s.key}

@@ -114,16 +114,16 @@ export default async function Image() {
             </div>
           </div>
 
-          {/* Slogan oficial */}
+          {/* Slogan oficial — grande para llenar el espacio vertical */}
           <div
             style={{
               display: 'flex',
               flexWrap: 'wrap',
-              fontSize: 34,
+              fontSize: 46,
               fontWeight: 700,
-              letterSpacing: -0.5,
+              letterSpacing: -1,
               lineHeight: 1.15,
-              marginTop: 20,
+              marginTop: 32,
             }}
           >
             <span style={{ display: 'flex' }}>Cuando nadie apuesta por ti,&nbsp;</span>
@@ -145,8 +145,8 @@ export default async function Image() {
             style={{
               display: 'flex',
               marginTop: 'auto',
-              paddingTop: 24,
-              fontSize: 22,
+              paddingTop: 28,
+              fontSize: 24,
               fontWeight: 600,
               letterSpacing: 1,
             }}

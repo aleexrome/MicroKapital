@@ -16,14 +16,14 @@ export async function GET() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontFamily: 'sans-serif',
+          fontFamily: 'Inter',
           backgroundImage: 'linear-gradient(135deg, #ec4899 0%, #0ea5e9 100%)',
         }}
       >
         <div
           style={{
             display: 'flex',
-            fontFamily: permanentMarker ? 'PermanentMarker' : 'sans-serif',
+            fontFamily: permanentMarker ? 'PermanentMarker' : 'Inter',
             fontSize: permanentMarker ? 310 : 400,
             lineHeight: 0.85,
             letterSpacing: permanentMarker ? -8 : -20,

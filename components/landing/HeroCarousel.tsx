@@ -146,8 +146,24 @@ export function HeroCarousel() {
         }}
       />
 
+      {/* Flechas al viewport (pegadas a los bordes de la pantalla, no al container) */}
+      <button
+        onClick={() => go(-1)}
+        aria-label="Slide anterior"
+        className="hidden sm:flex absolute left-3 md:left-6 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-white/15 backdrop-blur-sm border border-white/30 items-center justify-center text-white hover:bg-white/25 transition"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+      </button>
+      <button
+        onClick={() => go(+1)}
+        aria-label="Slide siguiente"
+        className="hidden sm:flex absolute right-3 md:right-6 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-white/15 backdrop-blur-sm border border-white/30 items-center justify-center text-white hover:bg-white/25 transition"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+      </button>
+
       {/* Contenido */}
-      <div className="relative max-w-6xl mx-auto px-5 pt-14 pb-20 sm:pt-20 sm:pb-28">
+      <div className="relative max-w-6xl mx-auto px-5 pt-14 pb-16 sm:pt-20 sm:pb-20">
         <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_.9fr] gap-10 items-center">
           <div className="min-w-0 flex flex-col gap-4">
             <span className="self-start text-[11px] font-bold uppercase tracking-[.2em] px-3 py-1.5 rounded-full border border-white/50 backdrop-blur-sm text-white">
@@ -214,33 +230,18 @@ export function HeroCarousel() {
           </div>
         </div>
 
-        {/* Flechas chevron laterales — ocultas en mobile (hay swipe por scroll-snap si se quiere agregar) */}
-        <button
-          onClick={() => go(-1)}
-          aria-label="Slide anterior"
-          className="hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/15 backdrop-blur-sm border border-white/30 items-center justify-center text-white hover:bg-white/25 transition"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-        </button>
-        <button
-          onClick={() => go(+1)}
-          aria-label="Slide siguiente"
-          className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/15 backdrop-blur-sm border border-white/30 items-center justify-center text-white hover:bg-white/25 transition"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
-        </button>
+      </div>
 
-        {/* Dots */}
-        <div className="relative flex justify-center gap-2 mt-10">
-          {SLIDES.map((s, i) => (
-            <button
-              key={s.key}
-              onClick={() => { setIdx(i); setPaused(true) }}
-              aria-label={`Ir al slide ${i + 1}`}
-              className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-8 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'}`}
-            />
-          ))}
-        </div>
+      {/* Dots centrados absolutos abajo del carrusel entero */}
+      <div className="relative flex justify-center gap-2 pb-6 sm:pb-8">
+        {SLIDES.map((s, i) => (
+          <button
+            key={s.key}
+            onClick={() => { setIdx(i); setPaused(true) }}
+            aria-label={`Ir al slide ${i + 1}`}
+            className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-8 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'}`}
+          />
+        ))}
       </div>
     </div>
   )

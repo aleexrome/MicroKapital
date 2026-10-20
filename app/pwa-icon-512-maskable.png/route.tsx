@@ -36,7 +36,7 @@ export async function GET() {
             fontStyle: permanentMarker ? 'normal' : 'italic',
             textShadow: '0 10px 20px rgba(0,0,0,.22)',
             paddingLeft: 0,
-            marginTop: permanentMarker ? -32 : 0,
+            transform: permanentMarker ? 'translateY(-38px)' : 'none',
           }}
         >
           Mk

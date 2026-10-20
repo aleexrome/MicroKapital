@@ -199,13 +199,13 @@ export function HeroCarousel() {
             </div>
 
             <div className="flex flex-wrap gap-3 mt-2">
+              <InstallAppButton />
               <Link
                 href="/login"
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white text-pink-600 font-semibold hover:bg-white/95 transition shadow-lg shadow-black/20"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-full border-2 border-white/40 text-white/90 font-semibold hover:bg-white/10 hover:border-white/70 transition text-sm"
               >
-                Soy cliente — Entrar
+                Soy del equipo — Entrar
               </Link>
-              <InstallAppButton />
             </div>
           </div>
 

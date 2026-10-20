@@ -6,9 +6,14 @@ export const contentType = 'image/png'
 
 /**
  * Apple touch icon — iOS Safari lo usa cuando "Añadir a pantalla
- * de inicio". Siempre PNG, nunca SVG (iOS lo ignora).
+ * de inicio". Permanent Marker para el "Mk", gradient rosa→azul
+ * directo (sin pasar por morado).
  */
-export default function AppleIcon() {
+export default async function AppleIcon() {
+  const permanentMarker = await fetch(
+    'https://fonts.gstatic.com/s/permanentmarker/v16/Fh4uPib9Iyv2ucM6pGQMWimMp004Hao.ttf',
+  ).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null)
+
   return new ImageResponse(
     (
       <div
@@ -18,28 +23,33 @@ export default function AppleIcon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundImage: `radial-gradient(130% 170% at 10% 10%, #ff6ab0 0%, transparent 55%),
-                             radial-gradient(110% 170% at 90% 90%, #38bdf8 0%, transparent 55%),
-                             linear-gradient(120deg, #ec4899 0%, #d946ef 45%, #0ea5e9 100%)`,
+          fontFamily: 'sans-serif',
+          backgroundImage: 'linear-gradient(135deg, #ec4899 0%, #0ea5e9 100%)',
         }}
       >
         <div
           style={{
-            fontSize: 140,
-            lineHeight: 0.85,
-            letterSpacing: -8,
-            color: '#fff',
-            fontWeight: 900,
-            fontStyle: 'italic',
-            transform: 'rotate(-5deg)',
-            textShadow: '0 6px 12px rgba(0,0,0,.22)',
             display: 'flex',
+            fontFamily: permanentMarker ? 'PermanentMarker' : 'sans-serif',
+            fontSize: permanentMarker ? 150 : 140,
+            lineHeight: 0.85,
+            letterSpacing: permanentMarker ? -4 : -8,
+            color: '#fff',
+            fontWeight: permanentMarker ? 400 : 900,
+            fontStyle: permanentMarker ? 'normal' : 'italic',
+            transform: 'rotate(-5deg) translateY(4px)',
+            textShadow: '0 6px 12px rgba(0,0,0,.22)',
           }}
         >
           Mk
         </div>
       </div>
     ),
-    { ...size },
+    {
+      ...size,
+      fonts: permanentMarker
+        ? [{ name: 'PermanentMarker', data: permanentMarker, style: 'normal', weight: 400 }]
+        : undefined,
+    },
   )
 }

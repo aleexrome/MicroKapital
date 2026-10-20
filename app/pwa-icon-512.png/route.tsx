@@ -3,6 +3,10 @@ import { ImageResponse } from 'next/og'
 export const runtime = 'edge'
 
 export async function GET() {
+  const permanentMarker = await fetch(
+    'https://fonts.gstatic.com/s/permanentmarker/v16/Fh4uPib9Iyv2ucM6pGQMWimMp004Hao.ttf',
+  ).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null)
+
   return new ImageResponse(
     (
       <div
@@ -12,28 +16,34 @@ export async function GET() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundImage: `radial-gradient(130% 170% at 10% 10%, #ff6ab0 0%, transparent 55%),
-                             radial-gradient(110% 170% at 90% 90%, #38bdf8 0%, transparent 55%),
-                             linear-gradient(120deg, #ec4899 0%, #d946ef 45%, #0ea5e9 100%)`,
+          fontFamily: 'sans-serif',
+          backgroundImage: 'linear-gradient(135deg, #ec4899 0%, #0ea5e9 100%)',
         }}
       >
         <div
           style={{
-            fontSize: 400,
-            lineHeight: 0.85,
-            letterSpacing: -20,
-            color: '#fff',
-            fontWeight: 900,
-            fontStyle: 'italic',
-            transform: 'rotate(-5deg)',
-            textShadow: '0 15px 30px rgba(0,0,0,.22)',
             display: 'flex',
+            fontFamily: permanentMarker ? 'PermanentMarker' : 'sans-serif',
+            fontSize: permanentMarker ? 430 : 400,
+            lineHeight: 0.85,
+            letterSpacing: permanentMarker ? -14 : -20,
+            color: '#fff',
+            fontWeight: permanentMarker ? 400 : 900,
+            fontStyle: permanentMarker ? 'normal' : 'italic',
+            transform: 'rotate(-5deg) translateY(14px)',
+            textShadow: '0 15px 30px rgba(0,0,0,.22)',
           }}
         >
           Mk
         </div>
       </div>
     ),
-    { width: 512, height: 512 },
+    {
+      width: 512,
+      height: 512,
+      fonts: permanentMarker
+        ? [{ name: 'PermanentMarker', data: permanentMarker, style: 'normal', weight: 400 }]
+        : undefined,
+    },
   )
 }

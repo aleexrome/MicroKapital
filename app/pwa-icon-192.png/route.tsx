@@ -32,7 +32,7 @@ export async function GET() {
             fontStyle: permanentMarker ? 'normal' : 'italic',
             textShadow: '0 6px 12px rgba(0,0,0,.22)',
             paddingLeft: 0,
-            marginTop: permanentMarker ? -17 : 0,
+            transform: permanentMarker ? 'translateY(-20px)' : 'none',
           }}
         >
           Mk

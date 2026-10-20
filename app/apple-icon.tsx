@@ -42,7 +42,7 @@ export default async function AppleIcon() {
             // mide más del lado izq que del der, visualmente queda corrido
             // a la izquierda aunque flex lo centre. Compensamos con padding.
             paddingLeft: 0,
-            marginTop: permanentMarker ? -16 : 0,
+            transform: permanentMarker ? 'translateY(-18px)' : 'none',
           }}
         >
           Mk

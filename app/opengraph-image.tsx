@@ -16,9 +16,16 @@ export const contentType = 'image/png'
  * italic bold (fallback que no rompe la ruta).
  */
 export default async function Image() {
-  const permanentMarker = await fetch(
-    'https://fonts.gstatic.com/s/permanentmarker/v16/Fh4uPib9Iyv2ucM6pGQMWimMp004Hao.ttf',
-  ).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null)
+  // Cargamos AMBAS fuentes: Permanent Marker para el "Mk", Inter 700
+  // para el resto. Si solo registramos Permanent Marker, next/og la
+  // usa para TODO el texto (ignora fontFamily: 'Inter' porque Inter no
+  // está disponible). Registrar las dos resuelve el bug.
+  const [permanentMarker, inter] = await Promise.all([
+    fetch('https://fonts.gstatic.com/s/permanentmarker/v16/Fh4uPib9Iyv2ucM6pGQMWimMp004Hao.ttf')
+      .then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null),
+    fetch('https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf')
+      .then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null),
+  ])
 
   return new ImageResponse(
     (
@@ -335,9 +342,10 @@ export default async function Image() {
     ),
     {
       ...size,
-      fonts: permanentMarker
-        ? [{ name: 'PermanentMarker', data: permanentMarker, style: 'normal', weight: 400 }]
-        : undefined,
+      fonts: [
+        ...(inter ? [{ name: 'Inter' as const, data: inter, style: 'normal' as const, weight: 700 as const }] : []),
+        ...(permanentMarker ? [{ name: 'PermanentMarker' as const, data: permanentMarker, style: 'normal' as const, weight: 400 as const }] : []),
+      ],
     },
   )
 }

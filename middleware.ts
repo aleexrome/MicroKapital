@@ -38,8 +38,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // 1. Rutas públicas → pasar
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  // 1. Rutas públicas → pasar.
+  //    "/" se compara exacto para no bloquear al RootPage: ese server
+  //    component decide si redirigir al dashboard (con sesión) o
+  //    renderizar el landing comercial público (sin sesión).
+  if (pathname === '/' || PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next()
   }
 

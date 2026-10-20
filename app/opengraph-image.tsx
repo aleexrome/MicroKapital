@@ -45,6 +45,7 @@ export default async function Image() {
             linear-gradient(120deg, #ec4899 0%, #d946ef 35%, #6366f1 65%, #0ea5e9 100%)
           `,
           padding: '36px 56px 44px',
+          overflow: 'hidden',
         }}
       >
         {/* COLUMNA IZQUIERDA — texto */}
@@ -79,7 +80,7 @@ export default async function Image() {
             style={{
               display: 'flex',
               fontFamily: permanentMarker ? 'PermanentMarker' : 'Inter',
-              fontSize: permanentMarker ? 150 : 140,
+              fontSize: permanentMarker ? 140 : 130,
               lineHeight: 0.85,
               letterSpacing: permanentMarker ? -2 : -10,
               color: '#fff',
@@ -87,7 +88,7 @@ export default async function Image() {
               fontStyle: permanentMarker ? 'normal' : 'italic',
               textShadow: '0 8px 20px rgba(0,0,0,.22)',
               marginTop: 12,
-              marginBottom: 0,
+              marginBottom: 20,
             }}
           >
             Mk
@@ -154,24 +155,25 @@ export default async function Image() {
           </div>
         </div>
 
-        {/* COLUMNA DERECHA — Mockup iPhone */}
+        {/* COLUMNA DERECHA — Mockup iPhone (sale por el borde inferior) */}
         <div
           style={{
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
-            width: 300,
+            width: 320,
+            marginBottom: -260,  // empuja el iPhone fuera del banner por abajo
           }}
         >
           <div
             style={{
               display: 'flex',
-              width: 260,
-              height: 570,
+              width: 300,
+              height: 650,
               background: '#0f0d24',
-              borderRadius: 46,
-              border: '4px solid #1a1735',
-              padding: 8,
+              borderRadius: 50,
+              border: '5px solid #1a1735',
+              padding: 10,
               boxShadow: '0 30px 60px rgba(0,0,0,.4)',
               transform: 'rotate(5deg)',
               position: 'relative',

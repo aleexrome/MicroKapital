@@ -126,7 +126,13 @@ export function SubirContratoFirmadoDialog({
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(typeof body.error === 'string' ? body.error : 'Error al subir')
+        // Si la respuesta no trae mensaje (504 timeout, 502 Bad Gateway,
+        // crash de la función), mostramos el código HTTP para que no
+        // quede como "Error al subir" misterioso.
+        const msg = typeof body.error === 'string'
+          ? body.error
+          : `Error ${res.status} al subir — intenta de nuevo o convierte la foto a PDF antes de subir.`
+        throw new Error(msg)
       }
       toast({ title: 'Contrato firmado subido' })
       setFiles([])

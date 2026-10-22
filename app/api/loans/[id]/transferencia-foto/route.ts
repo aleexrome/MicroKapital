@@ -11,6 +11,11 @@ import { todayMx } from '@/lib/timezone'
 import { crearNotificacion, getDirectoresIds } from '@/lib/notifications'
 import type { Prisma } from '@prisma/client'
 
+// Vercel default 10s es insuficiente para: upload Cloudinary + transacción
+// Prisma (schedule.createMany para 24+ cuotas + updates grupo SOLIDARIO).
+// 60s cubre con margen incluso con red celular lenta.
+export const maxDuration = 60
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -164,28 +169,45 @@ export async function POST(
   const bytes = await file.arrayBuffer()
   const buffer = Buffer.from(bytes)
 
-  const uploadResult = await new Promise<{ url: string }>((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'microkapital/transferencias',
-        public_id: `${loan.id}-${Date.now()}`,
-        resource_type: 'image',
-        type: 'upload',
-        access_mode: 'public',
-        quality: 'auto',
-        fetch_format: 'auto',
-        transformation: [{ width: 1600, crop: 'limit' }],
-      },
-      (error, result) => {
-        if (error || !result) {
-          reject(error ?? new Error('Upload failed'))
-          return
+  // Vercel limita el body a 4.5 MB en Hobby. Si el usuario mandó una foto
+  // más grande (iPhone en modo HEIC puede dar 5+ MB), Vercel la rechazaba
+  // antes de llegar aquí; con el preshrink client-side ya no debería pasar
+  // pero validamos por si acaso.
+  if (buffer.length > 10 * 1024 * 1024) {
+    return NextResponse.json({
+      error: 'La foto pesa más de 10 MB. Reduce la calidad o re-tómala.',
+    }, { status: 400 })
+  }
+
+  let uploadResult: { url: string }
+  try {
+    uploadResult = await new Promise<{ url: string }>((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'microkapital/transferencias',
+          public_id: `${loan.id}-${Date.now()}`,
+          resource_type: 'image',
+          type: 'upload',
+          access_mode: 'public',
+          quality: 'auto',
+          fetch_format: 'auto',
+          transformation: [{ width: 1600, crop: 'limit' }],
+        },
+        (error, result) => {
+          if (error || !result) {
+            reject(error ?? new Error('Upload failed'))
+            return
+          }
+          resolve({ url: result.secure_url })
         }
-        resolve({ url: result.secure_url })
-      }
-    )
-    stream.end(buffer)
-  })
+      )
+      stream.end(buffer)
+    })
+  } catch (err) {
+    console.error('[transferencia-foto] cloudinary error:', err)
+    const msg = err instanceof Error ? err.message : 'Error al subir a Cloudinary'
+    return NextResponse.json({ error: `No se pudo subir la foto: ${msg}` }, { status: 500 })
+  }
 
   // ── Activación (misma lógica que disbursement-photo/upload) ─────
   const fechaFoto = new Date()

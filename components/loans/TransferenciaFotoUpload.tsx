@@ -95,12 +95,43 @@ export function TransferenciaFotoUpload({
     if (inputRef.current) inputRef.current.value = ''
   }
 
+  // Comprimir la foto antes de subir. Vercel Hobby limita body a 4.5 MB
+  // y los JPEG del iPhone pesan 3-5 MB directo de cámara. Resize a 1600px
+  // (misma transformación que hace Cloudinary) + quality 0.82 baja a
+  // ~300-400 KB sin perder legibilidad del comprobante.
+  async function comprimirFoto(file: File): Promise<File> {
+    if (/\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type)) return file
+    try {
+      const bitmap = await createImageBitmap(file)
+      const MAX = 1600
+      const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height))
+      const w = Math.round(bitmap.width * scale)
+      const h = Math.round(bitmap.height * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return file
+      ctx.drawImage(bitmap, 0, 0, w, h)
+      bitmap.close?.()
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, 'image/jpeg', 0.82)
+      )
+      if (!blob || blob.size >= file.size) return file
+      const newName = file.name.replace(/\.(jpe?g|png|webp)$/i, '.jpg') || `${file.name}.jpg`
+      return new File([blob], newName, { type: 'image/jpeg', lastModified: Date.now() })
+    } catch {
+      return file
+    }
+  }
+
   async function subir() {
     if (!archivo) return
     setSubiendo(true)
     try {
+      const comprimido = await comprimirFoto(archivo)
       const form = new FormData()
-      form.append('foto', archivo)
+      form.append('foto', comprimido)
 
       const r = await fetch(`/api/loans/${loanId}/transferencia-foto`, {
         method: 'POST',

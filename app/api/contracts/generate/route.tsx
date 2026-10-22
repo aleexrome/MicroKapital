@@ -371,10 +371,17 @@ async function handleGenerate(req: NextRequest) {
       monto:  Number(gl.capital),
     }))
     const montoTotalPagare = groupLoans.reduce((s, gl) => s + totalPorMiembro(gl), 0)
+    // Control de Pagos muestra el CAPITAL aprobado por DG (lo que recibe
+    // el cliente), no el total a pagar con intereses — para que coincida
+    // con la expectativa de gerencia y con el ControlPagosIndividual que
+    // ya usa capital. Antes usaba totalPorMiembro (pagoSemanal × plazo),
+    // lo cual confundía a los coords porque la coordinadora salía con el
+    // monto × tasa (ej. $14k en vez de $10k) y los otros integrantes
+    // también con intereses incluidos.
     const integrantesControl = groupLoans.map((gl, idx) => ({
       nombre: gl.client.nombreCompleto,
       esCoordinadora: idx === 0,
-      monto: totalPorMiembro(gl),
+      monto: Number(gl.capital),
       pago:  Number(gl.pagoSemanal ?? 0),
     }))
 

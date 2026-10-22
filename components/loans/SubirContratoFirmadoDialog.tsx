@@ -112,14 +112,51 @@ export function SubirContratoFirmadoDialog({
     setFiles((prev) => prev.filter((_, i) => i !== idx))
   }
 
+  // Comprimir una foto a JPEG max 2000px lado largo @ quality 0.82.
+  // Baja un JPEG de iPhone típico de 3 MB a ~350 KB. Esto es clave:
+  // @react-pdf/renderer tarda ~1s por MB en el server; con imágenes grandes
+  // se pasaba del timeout de Vercel y volvía 504. Al comprimir en el browser
+  // la conversión a PDF ya no revienta aunque Vercel tenga timeout chico.
+  // HEIC no lo acepta Canvas → se envía original y lo maneja el backend.
+  async function compressImage(file: File): Promise<File> {
+    if (/\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type)) return file
+    try {
+      const bitmap = await createImageBitmap(file)
+      const MAX = 2000
+      const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height))
+      const w = Math.round(bitmap.width * scale)
+      const h = Math.round(bitmap.height * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return file
+      ctx.drawImage(bitmap, 0, 0, w, h)
+      bitmap.close?.()
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, 'image/jpeg', 0.82)
+      )
+      if (!blob || blob.size >= file.size) return file  // no comprimió, mejor el original
+      const newName = file.name.replace(/\.(jpe?g|png|webp)$/i, '.jpg') || `${file.name}.jpg`
+      return new File([blob], newName, { type: 'image/jpeg', lastModified: Date.now() })
+    } catch {
+      return file  // fallback: subir el original
+    }
+  }
+
   async function handleUpload() {
     if (files.length === 0) return
     setUploading(true)
     try {
+      // Comprimir las imágenes en el browser antes de subir. PDFs intactos.
+      const procesados = await Promise.all(
+        files.map((f) => (isImage(f) ? compressImage(f) : Promise.resolve(f)))
+      )
+
       const fd = new FormData()
       // Mantener el nombre `file` para compatibilidad con el endpoint viejo.
       // El backend usa `formData.getAll('file')` para recibir múltiples.
-      for (const f of files) fd.append('file', f)
+      for (const f of procesados) fd.append('file', f)
       const res = await fetch(`/api/contracts/${contractId}/upload-signed`, {
         method: 'POST',
         body: fd,

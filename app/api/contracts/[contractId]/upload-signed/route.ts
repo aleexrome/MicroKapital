@@ -6,6 +6,11 @@ import { createAuditLog } from '@/lib/audit'
 import { Document, Page, Image, renderToBuffer } from '@react-pdf/renderer'
 import React from 'react'
 
+// Imágenes grandes convertidas a PDF con @react-pdf fácil se pasan de 10s
+// (el default de Vercel), lo que devuelve 504 y el frontend muestra el
+// genérico "Error al subir". 60s cubre JPEGs de hasta ~10 MB.
+export const maxDuration = 60
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key:    process.env.CLOUDINARY_API_KEY,

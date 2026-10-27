@@ -14,6 +14,7 @@ import { TimelineDia } from './TimelineDia'
 import { ParcialPrintButton } from './ParcialPrintButton'
 import { ConsolidadoPrintButton } from './ConsolidadoPrintButton'
 import { HistoricoCortes } from './HistoricoCortes'
+import { CancelarCorteButton } from './CancelarCorteButton'
 
 type Receptor = { id: string; nombre: string; rol: string }
 type Corte = {
@@ -264,9 +265,12 @@ export function CorteDelDiaView(props: Props) {
                         />
                       )}
                       {p.estado === 'ABIERTO' && (
-                        <Button size="sm" variant="default" onClick={() => setEntregarParcial(p)}>
-                          <Upload className="h-3.5 w-3.5" /> Entregar
-                        </Button>
+                        <>
+                          <CancelarCorteButton corteId={p.id} tipo="PARCIAL" />
+                          <Button size="sm" variant="default" onClick={() => setEntregarParcial(p)}>
+                            <Upload className="h-3.5 w-3.5" /> Entregar
+                          </Button>
+                        </>
                       )}
                       {p.estado === 'RECHAZADO' && (
                         <Button size="sm" variant="outline" onClick={() => setEntregarParcial(p)}>
@@ -337,6 +341,9 @@ export function CorteDelDiaView(props: Props) {
                             concentradoraNombre={userNombre}
                             sucursalNombre={branchNombre}
                           />
+                          {c.estado === 'ABIERTO' && (
+                            <CancelarCorteButton corteId={c.id} tipo="CONSOLIDADO" />
+                          )}
                           <Button size="sm" onClick={() => setEntregarConsolidado(c)}>
                             <Upload className="h-3.5 w-3.5" />
                             {c.estado === 'RECHAZADO' ? 'Re-entregar' : 'Entregar a DG/DC'}

@@ -61,18 +61,31 @@ export default async function DashboardLayout({
   // otros). Sin estas excepciones el user NO podría cerrar su propio
   // corte porque necesita el ticket impreso de /caja.
   let cortePendienteId: string | null = null
+  let cortePendienteTipo: 'PROPIO' | 'COLGANDO_CONSOLIDAR' | null = null
   try {
     const c = await cortePendienteDe(prisma, { id: userId, rol })
     cortePendienteId = c?.id ?? null
+    cortePendienteTipo = c?.tipo ?? null
   } catch (e) {
     console.error('[DashboardLayout] cortePendienteDe falló (migración pendiente?):', e)
   }
   if (cortePendienteId) {
     const pathname = headers().get('x-pathname') ?? ''
-    const exentas = ['/caja', '/cortes/recibidos']
-    const esExenta = exentas.some((p) => pathname === p || pathname.startsWith(p + '/'))
-    if (!esExenta) {
-      redirect(`/corte/pendiente/${cortePendienteId}`)
+    // COLGANDO_CONSOLIDAR: la concentradora tiene parciales ACEPTADOS sin
+    // bajar a DG/DC. Debe ir a /corte-del-dia a crear el consolidado,
+    // NO a /corte/pendiente/[id] (ese parcial ya está ACEPTADO, la
+    // pantalla redirigiría a /dashboard y haría loop).
+    if (cortePendienteTipo === 'COLGANDO_CONSOLIDAR') {
+      const esExenta = pathname === '/corte-del-dia' || pathname.startsWith('/corte-del-dia/')
+      if (!esExenta) {
+        redirect('/corte-del-dia')
+      }
+    } else {
+      const exentas = ['/caja', '/cortes/recibidos', '/corte-del-dia']
+      const esExenta = exentas.some((p) => pathname === p || pathname.startsWith(p + '/'))
+      if (!esExenta) {
+        redirect(`/corte/pendiente/${cortePendienteId}`)
+      }
     }
   }
 
@@ -229,18 +242,25 @@ export default async function DashboardLayout({
         puedeVerBanca={puedeVerBanca}
       >
         {/* Banner persistente cuando hay corte pendiente y estamos en
-            una ruta exenta (/caja o /cortes/recibidos) — el user ya
-            NO está bloqueado pero debe recordar cerrar el corte. */}
+            una ruta exenta (/caja, /cortes/recibidos o /corte-del-dia)
+            — el user ya NO está bloqueado pero debe recordar cerrar
+            el corte (o bajar el consolidado si es concentradora). */}
         {cortePendienteId && (
           <div className="sticky top-0 z-40 bg-fuchsia-600 text-white px-4 py-2 flex items-center justify-between gap-3 shadow-md">
             <p className="text-sm font-medium">
-              ⚠️ Tienes un corte del día pendiente de entregar.
+              ⚠️ {cortePendienteTipo === 'COLGANDO_CONSOLIDAR'
+                    ? 'Tienes dinero recibido de coords sin consolidar a DG/DC.'
+                    : 'Tienes un corte del día pendiente de entregar.'}
             </p>
             <a
-              href={`/corte/pendiente/${cortePendienteId}`}
+              href={cortePendienteTipo === 'COLGANDO_CONSOLIDAR'
+                ? '/corte-del-dia'
+                : `/corte/pendiente/${cortePendienteId}`}
               className="rounded-md bg-white/20 hover:bg-white/30 px-3 py-1 text-xs font-semibold transition-colors whitespace-nowrap"
             >
-              Ir a cerrar corte →
+              {cortePendienteTipo === 'COLGANDO_CONSOLIDAR'
+                ? 'Ir a consolidar →'
+                : 'Ir a cerrar corte →'}
             </a>
           </div>
         )}

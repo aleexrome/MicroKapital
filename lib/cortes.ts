@@ -121,7 +121,7 @@ export async function receptoresValidosPara(
 export async function cortePendienteDe(
   prisma: PrismaClient,
   user: { id: string; rol: string },
-): Promise<{ id: string } | null> {
+): Promise<{ id: string; tipo: 'PROPIO' | 'COLGANDO_CONSOLIDAR' } | null> {
   // DG/DC/SA no se bloquean nunca.
   if (esReceptorFinal(user.rol)) return null
   if (!debeHacerCorte(user.rol)) return null
@@ -139,7 +139,7 @@ export async function cortePendienteDe(
   const corteObligatorioAt = new Date(hoy.getTime() + 18 * 60 * 60 * 1000)
   const hoyBloquea = ahora.getTime() >= corteObligatorioAt.getTime()
 
-  // Buscar el corte más viejo que no esté ACEPTADO (sea PARCIAL o CONSOLIDADO).
+  // Buscar el corte PROPIO más viejo que no esté ACEPTADO (PARCIAL o CONSOLIDADO).
   const row = await prisma.corte.findFirst({
     where: {
       userId: user.id,
@@ -151,22 +151,26 @@ export async function cortePendienteDe(
     orderBy: { fecha: 'asc' },
     select:  { id: true },
   })
-  if (row) return row
+  if (row) return { id: row.id, tipo: 'PROPIO' }
 
   // Bloqueo adicional (rework): concentradora con parciales ACEPTADOS
   // recibidos de ayer o antes que NO están en un consolidado ACEPTADO.
   // Significa que "hay dinero colgando" sin entregar a DG/DC.
+  // IMPORTANTE: el id devuelto es el del parcial ACEPTADO — la UI congelada
+  // NO debe mandarlo a /corte/pendiente/[id] (haría loop porque ACEPTADO
+  // redirige a /dashboard que vuelve a bloquear). La layout detecta el
+  // tipo COLGANDO_CONSOLIDAR y manda a /corte-del-dia donde la
+  // concentradora crea el consolidado.
   const parcialColgando = await prisma.corte.findFirst({
     where: {
       receptorId: user.id,
       tipo:       'PARCIAL',
       estado:     'ACEPTADO',
-      fecha:      { lt: hoy },  // solo días pasados; hoy sigue siendo del día
+      fecha:      { lt: hoy },
       OR: [
-        { consolidadoPadreId: null },  // nunca se agrupó
+        { consolidadoPadreId: null },
         {
           consolidadoPadre: {
-            // está en un consolidado que NO fue aceptado (rechazado o colgado)
             estado: { in: ['ABIERTO', 'ENTREGADO', 'RECHAZADO'] },
           },
         },
@@ -175,7 +179,10 @@ export async function cortePendienteDe(
     orderBy: { fecha: 'asc' },
     select:  { id: true },
   })
-  return parcialColgando
+  if (parcialColgando) {
+    return { id: parcialColgando.id, tipo: 'COLGANDO_CONSOLIDAR' }
+  }
+  return null
 }
 
 /**

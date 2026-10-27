@@ -34,7 +34,6 @@ import {
   BriefcaseBusiness,
   ClipboardList,
   Video,
-  Inbox,
   Undo2,
   CheckCircle2,
 } from 'lucide-react'
@@ -116,19 +115,10 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL'],
   },
   {
-    href: '/caja',
+    href: '/corte-del-dia',
     label: 'Corte del Día',
     icon: <Wallet className="h-5 w-5" />,
-    roles: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
-  },
-  {
-    // Cortes recibidos — receptores (concentradores locales + DG/DC/SA).
-    // Agrupado junto a "Corte del Día" para que el user los asocie
-    // visualmente (uno es el que yo entrego, el otro los que recibo).
-    href: '/cortes/recibidos',
-    label: 'Cortes recibidos',
-    icon: <Inbox className="h-5 w-5" />,
-    roles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL', 'GERENTE_ZONAL', 'COORDINADOR'],
+    roles: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL', 'MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
   },
   {
     href: '/tickets',

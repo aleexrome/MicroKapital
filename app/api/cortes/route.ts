@@ -37,14 +37,20 @@ export async function POST(_req: NextRequest) {
   const snap  = await snapshotCashRegisterDelDia(prisma, userId, fecha)
   const recibido = await totalRecibidoDeOtrosEnDia(prisma, userId, fecha)
 
-  // Upsert — un corte por user por día.
+  // Upsert — primer PARCIAL del día (compat con el flujo viejo pre-rework).
+  // En el flujo nuevo, el coord puede abrir varios parciales vía
+  // /api/cortes/parcial/iniciar; este endpoint devuelve/crea solo el
+  // primer parcial para que el UI legacy (pantalla congelada) siga
+  // funcionando hasta que se migre.
   const corte = await prisma.corte.upsert({
-    where: { userId_fecha: { userId, fecha } },
+    where: { userId_fecha_numeroCorte_tipo: { userId, fecha, numeroCorte: 1, tipo: 'PARCIAL' } },
     create: {
       companyId: companyId!,
       userId,
       fecha,
       branchId,
+      tipo: 'PARCIAL',
+      numeroCorte: 1,
       totalEfectivoCobrado:      snap.efectivo,
       totalTarjetaCobrado:       snap.tarjeta,
       totalTransferenciaCobrado: snap.transferencia,

@@ -179,8 +179,9 @@ export async function snapshotCashRegisterDelDia(
 }
 
 /**
- * Suma de cortes ACEPTADOS donde el receptor fue este user, para la
- * fecha dada. Es lo que un concentrador "recibió" de otros ese día.
+ * Suma de cortes PARCIALES ACEPTADOS donde el receptor fue este user,
+ * para la fecha dada. Es lo que un concentrador "recibió" de otros ese
+ * día (excluye CONSOLIDADOS para no doble-contar).
  */
 export async function totalRecibidoDeOtrosEnDia(
   prisma: PrismaClient,
@@ -192,8 +193,121 @@ export async function totalRecibidoDeOtrosEnDia(
       receptorId: userId,
       fecha,
       estado: 'ACEPTADO',
+      tipo:   'PARCIAL',
     },
     _sum: { montoAceptado: true },
   })
   return Number(agg._sum.montoAceptado ?? 0)
+}
+
+// ═════════════════════════════════════════════════════════════════════
+//  REWORK (2026-10-27) — parciales + consolidado
+// ═════════════════════════════════════════════════════════════════════
+
+/**
+ * Para el siguiente PARCIAL del día: cuánto cobró el user DESDE el
+ * parcial anterior. Un parcial representa SOLO lo nuevo, no el
+ * acumulado total del día (si no, se contaría doble al sumar los
+ * parciales en el consolidado).
+ *
+ * Fórmula:
+ *   cash register del día (total acumulado)
+ *   − suma de totalEfectivoCobrado de parciales anteriores no-rechazados
+ *   = efectivo nuevo para este parcial
+ *
+ * Lo mismo para tarjeta / transferencia (aunque esos no entran al
+ * flujo físico, los capturamos para el ticket).
+ */
+export async function snapshotParcialIncremental(
+  prisma: PrismaClient,
+  userId: string,
+  fecha: Date,
+): Promise<{ efectivo: number; tarjeta: number; transferencia: number; recibidoDeOtros: number }> {
+  const [reg, previos, recibidosPrev] = await Promise.all([
+    prisma.cashRegister.findFirst({
+      where:  { cobradorId: userId, fecha },
+      select: { cobradoEfectivo: true, cobradoTarjeta: true, cobradoTransferencia: true },
+    }),
+    prisma.corte.aggregate({
+      where: {
+        userId, fecha, tipo: 'PARCIAL',
+        estado: { in: ['ABIERTO', 'ENTREGADO', 'ACEPTADO'] },
+      },
+      _sum: {
+        totalEfectivoCobrado:      true,
+        totalTarjetaCobrado:       true,
+        totalTransferenciaCobrado: true,
+        totalRecibidoDeOtros:      true,
+      },
+    }),
+    prisma.corte.aggregate({
+      where: {
+        receptorId: userId, fecha, tipo: 'PARCIAL',
+        estado: 'ACEPTADO',
+      },
+      _sum: { montoAceptado: true },
+    }),
+  ])
+
+  const totalEfectivoDia      = Number(reg?.cobradoEfectivo ?? 0)
+  const totalTarjetaDia       = Number(reg?.cobradoTarjeta ?? 0)
+  const totalTransferenciaDia = Number(reg?.cobradoTransferencia ?? 0)
+  const yaCapturadoEfectivo      = Number(previos._sum.totalEfectivoCobrado ?? 0)
+  const yaCapturadoTarjeta       = Number(previos._sum.totalTarjetaCobrado ?? 0)
+  const yaCapturadoTransferencia = Number(previos._sum.totalTransferenciaCobrado ?? 0)
+  const yaCapturadoRecibido      = Number(previos._sum.totalRecibidoDeOtros ?? 0)
+  const totalRecibidoDia         = Number(recibidosPrev._sum.montoAceptado ?? 0)
+
+  return {
+    efectivo:        Math.max(0, totalEfectivoDia      - yaCapturadoEfectivo),
+    tarjeta:         Math.max(0, totalTarjetaDia       - yaCapturadoTarjeta),
+    transferencia:   Math.max(0, totalTransferenciaDia - yaCapturadoTransferencia),
+    recibidoDeOtros: Math.max(0, totalRecibidoDia      - yaCapturadoRecibido),
+  }
+}
+
+/**
+ * Siguiente número de corte para user+fecha+tipo. Primer parcial del
+ * día es 1, segundo es 2, etc. Igual para consolidados.
+ */
+export async function siguienteNumeroCorte(
+  prisma: PrismaClient,
+  userId: string,
+  fecha: Date,
+  tipo: 'PARCIAL' | 'CONSOLIDADO',
+): Promise<number> {
+  const last = await prisma.corte.findFirst({
+    where:   { userId, fecha, tipo },
+    orderBy: { numeroCorte: 'desc' },
+    select:  { numeroCorte: true },
+  })
+  return (last?.numeroCorte ?? 0) + 1
+}
+
+/**
+ * Parciales ACEPTADOS del día en los que el `concentradoraId` fue
+ * receptor Y que NO estén ya en un consolidado (padre null o padre
+ * rechazado). Son los candidatos a agruparse en el próximo consolidado.
+ */
+export async function parcialesParaConsolidar(
+  prisma: PrismaClient,
+  concentradoraId: string,
+  fecha: Date,
+): Promise<Array<{ id: string; userId: string; montoAceptado: number }>> {
+  const rows = await prisma.corte.findMany({
+    where: {
+      receptorId:         concentradoraId,
+      fecha,
+      tipo:               'PARCIAL',
+      estado:             'ACEPTADO',
+      consolidadoPadreId: null,
+    },
+    select: { id: true, userId: true, montoAceptado: true },
+    orderBy: { createdAt: 'asc' },
+  })
+  return rows.map((r) => ({
+    id:            r.id,
+    userId:        r.userId,
+    montoAceptado: Number(r.montoAceptado ?? 0),
+  }))
 }

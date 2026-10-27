@@ -42,6 +42,11 @@ export async function POST(
   if (!corte) {
     return NextResponse.json({ error: 'Corte no encontrado o no eres el receptor' }, { status: 404 })
   }
+  if (corte.tipo === 'CONSOLIDADO') {
+    return NextResponse.json({
+      error: 'Un CONSOLIDADO se confirma vía /api/cortes/consolidado/[id]/confirmar',
+    }, { status: 400 })
+  }
   if (corte.estado !== 'ENTREGADO') {
     return NextResponse.json({ error: 'Solo se puede aceptar un corte ENTREGADO' }, { status: 409 })
   }

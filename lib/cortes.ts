@@ -139,7 +139,7 @@ export async function cortePendienteDe(
   const corteObligatorioAt = new Date(hoy.getTime() + 18 * 60 * 60 * 1000)
   const hoyBloquea = ahora.getTime() >= corteObligatorioAt.getTime()
 
-  // Buscar el corte más viejo que no esté ACEPTADO.
+  // Buscar el corte más viejo que no esté ACEPTADO (sea PARCIAL o CONSOLIDADO).
   const row = await prisma.corte.findFirst({
     where: {
       userId: user.id,
@@ -151,7 +151,31 @@ export async function cortePendienteDe(
     orderBy: { fecha: 'asc' },
     select:  { id: true },
   })
-  return row
+  if (row) return row
+
+  // Bloqueo adicional (rework): concentradora con parciales ACEPTADOS
+  // recibidos de ayer o antes que NO están en un consolidado ACEPTADO.
+  // Significa que "hay dinero colgando" sin entregar a DG/DC.
+  const parcialColgando = await prisma.corte.findFirst({
+    where: {
+      receptorId: user.id,
+      tipo:       'PARCIAL',
+      estado:     'ACEPTADO',
+      fecha:      { lt: hoy },  // solo días pasados; hoy sigue siendo del día
+      OR: [
+        { consolidadoPadreId: null },  // nunca se agrupó
+        {
+          consolidadoPadre: {
+            // está en un consolidado que NO fue aceptado (rechazado o colgado)
+            estado: { in: ['ABIERTO', 'ENTREGADO', 'RECHAZADO'] },
+          },
+        },
+      ],
+    },
+    orderBy: { fecha: 'asc' },
+    select:  { id: true },
+  })
+  return parcialColgando
 }
 
 /**

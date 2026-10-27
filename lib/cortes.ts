@@ -12,7 +12,7 @@
  */
 
 import type { PrismaClient, UserRole } from '@prisma/client'
-import { todayMx } from '@/lib/timezone'
+import { todayMx, inicioSemanaMk } from '@/lib/timezone'
 
 /** Roles que deben hacer corte del día (cobran en campo o concentran). */
 export const ROLES_HACEN_CORTE: readonly UserRole[] = [
@@ -153,20 +153,26 @@ export async function cortePendienteDe(
   })
   if (row) return { id: row.id, tipo: 'PROPIO' }
 
-  // Bloqueo adicional (rework): concentradora con parciales ACEPTADOS
-  // recibidos de ayer o antes que NO están en un consolidado ACEPTADO.
-  // Significa que "hay dinero colgando" sin entregar a DG/DC.
-  // IMPORTANTE: el id devuelto es el del parcial ACEPTADO — la UI congelada
-  // NO debe mandarlo a /corte/pendiente/[id] (haría loop porque ACEPTADO
-  // redirige a /dashboard que vuelve a bloquear). La layout detecta el
-  // tipo COLGANDO_CONSOLIDAR y manda a /corte-del-dia donde la
-  // concentradora crea el consolidado.
+  // Bloqueo adicional (semana MK): concentradora con parciales ACEPTADOS
+  // de la SEMANA ANTERIOR (o más vieja) que NO están en un consolidado
+  // ACEPTADO. "Semana MK" = sábado→viernes; Dirección hace corte con
+  // concentradores los viernes. Si llegamos al sábado (nueva semana) y
+  // la concentradora no bajó el consolidado de la semana que terminó,
+  // hay dinero colgando.
+  //
+  // Dentro de la semana en curso NO se bloquea aunque haya parciales
+  // sin consolidar — es normal, se consolidan hasta el viernes.
+  //
+  // IMPORTANTE: el id devuelto es el del parcial ACEPTADO. La layout
+  // detecta tipo COLGANDO_CONSOLIDAR y manda a /corte-del-dia (NO a
+  // /corte/pendiente que haría loop).
+  const inicioSemanaActual = inicioSemanaMk(hoy)
   const parcialColgando = await prisma.corte.findFirst({
     where: {
       receptorId: user.id,
       tipo:       'PARCIAL',
       estado:     'ACEPTADO',
-      fecha:      { lt: hoy },
+      fecha:      { lt: inicioSemanaActual },
       OR: [
         { consolidadoPadreId: null },
         {
@@ -325,10 +331,15 @@ export async function parcialesParaConsolidar(
   concentradoraId: string,
   fecha: Date,
 ): Promise<Array<{ id: string; userId: string; montoAceptado: number }>> {
+  // La semana MK va de sábado 00:00 CDMX al viernes 23:59. El
+  // consolidado agrupa TODOS los parciales ACEPTADOS de esa ventana
+  // (coord → concentradora durante la semana) y se entrega los viernes
+  // cuando Dirección hace corte con concentradores.
+  const semanaDesde = inicioSemanaMk(fecha)
   const rows = await prisma.corte.findMany({
     where: {
       receptorId:         concentradoraId,
-      fecha,
+      fecha:              { gte: semanaDesde, lte: fecha },
       tipo:               'PARCIAL',
       estado:             'ACEPTADO',
       consolidadoPadreId: null,

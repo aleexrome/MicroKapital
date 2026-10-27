@@ -77,6 +77,7 @@ interface Props {
   snapIncremental: { efectivo: number; tarjeta: number; transferencia: number; recibidoDeOtros: number }
   cortesTimeline: Corte[]
   cortesHistoricos: Corte[]
+  esViernes: boolean
 }
 
 function money(n: string | number) {
@@ -105,6 +106,7 @@ export function CorteDelDiaView(props: Props) {
     parcialesPropios, parcialesDetalle, consolidadosPropios, parcialesEntregadosRecibidos,
     parcialesParaConsolidar, consolidadosPendientesConfirmar,
     receptoresValidos, snapIncremental, cortesTimeline, cortesHistoricos,
+    esViernes,
   } = props
   const detalleMap = new Map(parcialesDetalle.map((d) => [d.corteId, d]))
   const [parcialExpandido, setParcialExpandido] = useState<string | null>(null)
@@ -393,20 +395,26 @@ export function CorteDelDiaView(props: Props) {
             </h2>
             <Button
               size="sm"
-              disabled={parcialesParaConsolidar.length === 0 || loading === 'iniciarConsolidado'}
+              disabled={!esViernes || parcialesParaConsolidar.length === 0 || loading === 'iniciarConsolidado'}
               onClick={iniciarConsolidado}
+              title={!esViernes ? 'Los consolidados se arman los viernes' : ''}
             >
               {loading === 'iniciarConsolidado' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
-              Iniciar consolidado ({parcialesParaConsolidar.length} disponibles)
+              {esViernes
+                ? `Iniciar consolidado (${parcialesParaConsolidar.length} disponibles)`
+                : `Disponible viernes (${parcialesParaConsolidar.length} parciales de la semana)`}
             </Button>
           </div>
 
           {consolidadosPropios.length === 0 ? (
             <Card className="p-6 text-center text-sm text-muted-foreground">
-              Sin consolidados hoy.
-              {parcialesParaConsolidar.length > 0
-                ? ` Tienes ${parcialesParaConsolidar.length} parciales listos para agrupar.`
-                : ' Cuando aceptes parciales de los coords podrás consolidar.'}
+              {esViernes
+                ? parcialesParaConsolidar.length > 0
+                  ? `Hoy es viernes — tienes ${parcialesParaConsolidar.length} parciales de la semana listos para consolidar y entregar a Dirección.`
+                  : 'Hoy es viernes pero no hay parciales acumulados esta semana.'
+                : parcialesParaConsolidar.length > 0
+                  ? `Llevas ${parcialesParaConsolidar.length} parciales acumulados esta semana. Los consolidarás y entregarás a Dirección el viernes.`
+                  : 'Cuando aceptes parciales de los coords podrás consolidarlos y entregarlos el viernes.'}
             </Card>
           ) : (
             <div className="grid gap-2">

@@ -1,7 +1,7 @@
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
-import { todayMx } from '@/lib/timezone'
+import { todayMx, esViernesMk } from '@/lib/timezone'
 import {
   debeHacerCorte,
   esReceptorFinal,
@@ -229,6 +229,7 @@ export default async function CorteDelDiaPage() {
       snapIncremental={snapIncremental}
       cortesTimeline={JSON.parse(JSON.stringify(cortesTimeline))}
       cortesHistoricos={JSON.parse(JSON.stringify(cortesHistoricos))}
+      esViernes={esViernesMk(fecha)}
     />
   )
 }

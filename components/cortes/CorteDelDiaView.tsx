@@ -78,6 +78,7 @@ interface Props {
   cortesTimeline: Corte[]
   cortesHistoricos: Corte[]
   esViernes: boolean
+  efectivoPropioSemana: { efectivo: number; tarjeta: number; transferencia: number; desde: string }
 }
 
 function money(n: string | number) {
@@ -106,7 +107,7 @@ export function CorteDelDiaView(props: Props) {
     parcialesPropios, parcialesDetalle, consolidadosPropios, parcialesEntregadosRecibidos,
     parcialesParaConsolidar, consolidadosPendientesConfirmar,
     receptoresValidos, snapIncremental, cortesTimeline, cortesHistoricos,
-    esViernes,
+    esViernes, efectivoPropioSemana,
   } = props
   const detalleMap = new Map(parcialesDetalle.map((d) => [d.corteId, d]))
   const [parcialExpandido, setParcialExpandido] = useState<string | null>(null)
@@ -166,7 +167,7 @@ export function CorteDelDiaView(props: Props) {
         <p className="text-sm text-muted-foreground">
           {hacesCorte
             ? puedeConsolidar
-              ? 'Como concentradora puedes abrir parciales de tu propia cartera y consolidar lo recibido para entregarlo a DG/DC.'
+              ? 'Como concentradora acumulas los parciales de los coords de tu sucursal durante la semana y los consolidas (junto con tu propio efectivo) los viernes para entregarlos a Dirección.'
               : 'Abre cuantos parciales necesites durante el día. Cada parcial se entrega a tu concentradora.'
             : 'Confirma recepción de los consolidados que te entregan.'}
         </p>
@@ -238,8 +239,28 @@ export function CorteDelDiaView(props: Props) {
         </section>
       )}
 
-      {/* ─── Mis parciales del día (coord) ────────────────────────────── */}
-      {hacesCorte && (
+      {/* ─── Efectivo propio de la semana (solo concentradora) ────────── */}
+      {puedeConsolidar && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Mi efectivo propio esta semana
+          </h2>
+          <Card className="p-4 bg-primary/5 border-primary/30">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-xs text-muted-foreground">Pendiente de consolidar</div>
+                <div className="text-2xl font-bold tabular-nums">{money(efectivoPropioSemana.efectivo)}</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  No necesitas abrir parciales. Al Iniciar consolidado el viernes el sistema registra este efectivo automáticamente y lo entrega junto con lo recibido de otros coords.
+                </div>
+              </div>
+            </div>
+          </Card>
+        </section>
+      )}
+
+      {/* ─── Mis parciales del día (coord — NO concentradora) ─────────── */}
+      {hacesCorte && !puedeConsolidar && (
         <section className="space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">

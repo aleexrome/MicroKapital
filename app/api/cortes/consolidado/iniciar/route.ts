@@ -7,6 +7,7 @@ import {
   parcialesParaConsolidar,
   siguienteNumeroCorte,
   concentradorDeSucursal,
+  efectivoPropioResiduoSemana,
 } from '@/lib/cortes'
 import { todayMx, esViernesMk } from '@/lib/timezone'
 
@@ -56,6 +57,38 @@ export async function POST(_req: NextRequest) {
     return NextResponse.json({
       error: 'Los consolidados se entregan los viernes (día de corte con Dirección). Hoy no es viernes.',
     }, { status: 400 })
+  }
+
+  // Antes de agrupar: si el user es concentradora (o coord sin
+  // concentradora) tiene efectivo propio de la semana que no entró a
+  // un parcial, le creamos un parcial auto-aceptado con ese residuo.
+  // Así la concentradora no tiene que apretar "Iniciar parcial" durante
+  // la semana — todo se consolida con un solo botón el viernes.
+  const residuo = await efectivoPropioResiduoSemana(prisma, userId, fecha)
+  if (residuo.efectivo > 0 || residuo.tarjeta > 0 || residuo.transferencia > 0) {
+    const totalResiduo = residuo.efectivo  // solo efectivo va al físico
+    const numeroParcialAuto = await siguienteNumeroCorte(prisma, userId, fecha, 'PARCIAL')
+    await prisma.corte.create({
+      data: {
+        companyId: companyId!,
+        userId,
+        fecha,
+        branchId,
+        tipo: 'PARCIAL',
+        numeroCorte: numeroParcialAuto,
+        totalEfectivoCobrado:      residuo.efectivo,
+        totalTarjetaCobrado:       residuo.tarjeta,
+        totalTransferenciaCobrado: residuo.transferencia,
+        totalRecibidoDeOtros:      0,
+        totalAEntregar:            totalResiduo,
+        estado:         'ACEPTADO',
+        receptorId:     userId,
+        entregadoAt:    new Date(),
+        aceptadoAt:     new Date(),
+        montoAceptado:  totalResiduo,
+        autoCreadoAt:   new Date(),
+      },
+    })
   }
 
   const parciales = await parcialesParaConsolidar(prisma, userId, fecha)

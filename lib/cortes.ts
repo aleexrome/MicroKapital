@@ -304,6 +304,57 @@ export async function snapshotParcialIncremental(
 }
 
 /**
+ * Para la CONCENTRADORA: cuánto efectivo propio llevan cobrado en
+ * la semana MK (sábado → hoy) que todavía NO entró a un parcial.
+ * Se usa el viernes al Iniciar Consolidado para crear automáticamente
+ * un parcial propio con el residuo antes de agrupar.
+ *
+ * Fórmula:
+ *   SUM(cashRegister.cobradoEfectivo) sabado..hoy
+ *   − SUM(corte.totalEfectivoCobrado) parciales propios no-rechazados sabado..hoy
+ *   = residuo propio pendiente
+ */
+export async function efectivoPropioResiduoSemana(
+  prisma: PrismaClient,
+  userId: string,
+  fecha: Date,
+): Promise<{ efectivo: number; tarjeta: number; transferencia: number; desde: Date }> {
+  const desde = inicioSemanaMk(fecha)
+  const [regs, previos] = await Promise.all([
+    prisma.cashRegister.aggregate({
+      where: {
+        cobradorId: userId,
+        fecha: { gte: desde, lte: fecha },
+      },
+      _sum: {
+        cobradoEfectivo:      true,
+        cobradoTarjeta:       true,
+        cobradoTransferencia: true,
+      },
+    }),
+    prisma.corte.aggregate({
+      where: {
+        userId,
+        tipo: 'PARCIAL',
+        fecha: { gte: desde, lte: fecha },
+        estado: { in: ['ABIERTO', 'ENTREGADO', 'ACEPTADO'] },
+      },
+      _sum: {
+        totalEfectivoCobrado:      true,
+        totalTarjetaCobrado:       true,
+        totalTransferenciaCobrado: true,
+      },
+    }),
+  ])
+  return {
+    efectivo:      Math.max(0, Number(regs._sum.cobradoEfectivo ?? 0)      - Number(previos._sum.totalEfectivoCobrado ?? 0)),
+    tarjeta:       Math.max(0, Number(regs._sum.cobradoTarjeta ?? 0)       - Number(previos._sum.totalTarjetaCobrado ?? 0)),
+    transferencia: Math.max(0, Number(regs._sum.cobradoTransferencia ?? 0) - Number(previos._sum.totalTransferenciaCobrado ?? 0)),
+    desde,
+  }
+}
+
+/**
  * Siguiente número de corte para user+fecha+tipo. Primer parcial del
  * día es 1, segundo es 2, etc. Igual para consolidados.
  */

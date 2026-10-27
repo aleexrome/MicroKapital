@@ -74,10 +74,15 @@ export default async function CorteDelDiaPage() {
   //    cayeron dentro de la ventana de ese parcial, y qué parciales de
   //    OTROS coords acepté entre un parcial y el siguiente (que es el
   //    origen de "Recibido $X"). Permite expandir cada card para auditar.
+  //
+  // La ventana del PRIMER parcial del día empieza en el inicio del día
+  // (no `null`) — si no, agarraba TODOS los pagos históricos del
+  // cobrador y mostraba 3,969 cobros en el desglose.
+  const inicioDelDiaMx = fecha  // todayMx() ya devuelve 00:00 CDMX
   const parcialesDetalle = await Promise.all(parcialesPropios.map(async (p, idx) => {
-    const prevCreatedAt = idx > 0 ? parcialesPropios[idx - 1].createdAt : null
+    const limiteInferior = idx > 0 ? parcialesPropios[idx - 1].createdAt : inicioDelDiaMx
     const ventana = {
-      ...(prevCreatedAt ? { gt: prevCreatedAt } : {}),
+      gt:  limiteInferior,
       lte: p.createdAt,
     }
     const [pagosClientes, parcialesIngesta] = await Promise.all([

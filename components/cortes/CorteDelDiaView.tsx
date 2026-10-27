@@ -20,6 +20,7 @@ type Receptor = { id: string; nombre: string; rol: string }
 type Corte = {
   id: string
   fecha: string
+  createdAt: string
   numeroCorte: number
   tipo: 'PARCIAL' | 'CONSOLIDADO'
   estado: 'ABIERTO' | 'ENTREGADO' | 'ACEPTADO' | 'RECHAZADO'
@@ -245,12 +246,19 @@ export function CorteDelDiaView(props: Props) {
                 <Card key={p.id} className="p-3">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-3">
-                      <div className="font-mono text-xs text-muted-foreground">#{p.numeroCorte}</div>
+                      <div className="font-mono text-xs text-muted-foreground min-w-[46px]">
+                        #{p.numeroCorte}
+                        <div className="text-[10px] opacity-70">
+                          {new Date(p.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
                       <div className="space-y-0.5">
                         <div className="text-lg font-semibold tabular-nums">{money(p.totalAEntregar)}</div>
                         <div className="text-xs text-muted-foreground">
-                          Efectivo {money(p.totalEfectivoCobrado)}
-                          {Number(p.totalRecibidoDeOtros) > 0 && ` · Recibido ${money(p.totalRecibidoDeOtros)}`}
+                          Efectivo cobrado por ti: {money(p.totalEfectivoCobrado)}
+                          {Number(p.totalRecibidoDeOtros) > 0 && (
+                            <> · Recibido de coords de tu sucursal: {money(p.totalRecibidoDeOtros)}</>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -322,10 +330,15 @@ export function CorteDelDiaView(props: Props) {
           ) : (
             <div className="grid gap-2">
               {consolidadosPropios.map((c) => (
-                <Card key={c.id} className="p-3">
+                <Card key={c.id} className="p-3 space-y-2">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="space-y-0.5">
-                      <div className="text-xs text-muted-foreground">Consolidado #{c.numeroCorte}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Consolidado #{c.numeroCorte}
+                        <span className="opacity-70 ml-1">
+                          · {new Date(c.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
                       <div className="text-lg font-semibold tabular-nums">{money(c.totalAEntregar)}</div>
                       <div className="text-xs text-muted-foreground">
                         {c.consolidadoHijos?.length ?? 0} parciales
@@ -355,8 +368,22 @@ export function CorteDelDiaView(props: Props) {
                       )}
                     </div>
                   </div>
+                  {c.consolidadoHijos && c.consolidadoHijos.length > 0 && (
+                    <div className="pt-2 border-t border-border/50 space-y-0.5">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Desglose</div>
+                      {c.consolidadoHijos.map((h) => (
+                        <div key={h.id} className="flex justify-between text-xs">
+                          <span className="truncate">
+                            {h.user.nombre}
+                            <span className="text-muted-foreground ml-1">· parcial #{h.numeroCorte}</span>
+                          </span>
+                          <span className="tabular-nums font-medium shrink-0">{money(h.totalAEntregar)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {c.estado === 'RECHAZADO' && c.rechazoRazon && (
-                    <div className="mt-2 text-xs text-red-400">Rechazado: {c.rechazoRazon}</div>
+                    <div className="text-xs text-red-400">Rechazado: {c.rechazoRazon}</div>
                   )}
                 </Card>
               ))}

@@ -134,7 +134,7 @@ export function CorteDelDiaView(props: Props) {
   const totalColectado = parcialesPropios.filter(p => p.estado !== 'RECHAZADO').reduce((s, p) => s + Number(p.totalAEntregar), 0)
 
   return (
-    <div className="space-y-6 py-6">
+    <div className="space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Corte del día</h1>
         <p className="text-sm text-muted-foreground">

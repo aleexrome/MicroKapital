@@ -11,10 +11,14 @@ import { EntregarConsolidadoDialog } from './EntregarConsolidadoDialog'
 import { ConfirmarConsolidadoDialog } from './ConfirmarConsolidadoDialog'
 import { AceptarParcialButton } from './AceptarParcialButton'
 import { TimelineDia } from './TimelineDia'
+import { ParcialPrintButton } from './ParcialPrintButton'
+import { ConsolidadoPrintButton } from './ConsolidadoPrintButton'
+import { HistoricoCortes } from './HistoricoCortes'
 
 type Receptor = { id: string; nombre: string; rol: string }
 type Corte = {
   id: string
+  fecha: string
   numeroCorte: number
   tipo: 'PARCIAL' | 'CONSOLIDADO'
   estado: 'ABIERTO' | 'ENTREGADO' | 'ACEPTADO' | 'RECHAZADO'
@@ -36,7 +40,9 @@ type Corte = {
 
 interface Props {
   userId: string
+  userNombre: string
   userRol: string
+  branchNombre: string
   esConcentradora: boolean
   sinConcentradora: boolean
   concentradora: { id: string; nombre: string } | null
@@ -48,6 +54,7 @@ interface Props {
   receptoresValidos: Receptor[]
   snapIncremental: { efectivo: number; tarjeta: number; transferencia: number; recibidoDeOtros: number }
   cortesTimeline: Corte[]
+  cortesHistoricos: Corte[]
 }
 
 function money(n: string | number) {
@@ -72,10 +79,10 @@ function estadoBadge(estado: Corte['estado']) {
 
 export function CorteDelDiaView(props: Props) {
   const {
-    userId, userRol, esConcentradora, sinConcentradora, concentradora,
+    userId, userNombre, userRol, branchNombre, esConcentradora, sinConcentradora, concentradora,
     parcialesPropios, consolidadosPropios, parcialesEntregadosRecibidos,
     parcialesParaConsolidar, consolidadosPendientesConfirmar,
-    receptoresValidos, snapIncremental, cortesTimeline,
+    receptoresValidos, snapIncremental, cortesTimeline, cortesHistoricos,
   } = props
 
   const router = useRouter()
@@ -246,8 +253,16 @@ export function CorteDelDiaView(props: Props) {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {estadoBadge(p.estado)}
+                      {(p.estado === 'ABIERTO' || p.estado === 'RECHAZADO') && (
+                        <ParcialPrintButton
+                          parcial={p}
+                          cobradorNombre={userNombre}
+                          sucursalNombre={branchNombre}
+                          receptorNombre={concentradora?.nombre ?? p.receptor?.nombre}
+                        />
+                      )}
                       {p.estado === 'ABIERTO' && (
                         <Button size="sm" variant="default" onClick={() => setEntregarParcial(p)}>
                           <Upload className="h-3.5 w-3.5" /> Entregar
@@ -313,13 +328,20 @@ export function CorteDelDiaView(props: Props) {
                         {c.metodoEntregaFinal && ` · ${c.metodoEntregaFinal === 'TRANSFERENCIA' ? '💳 Transf.' : '💵 Efectivo'}`}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {estadoBadge(c.estado)}
                       {(c.estado === 'ABIERTO' || c.estado === 'RECHAZADO') && (
-                        <Button size="sm" onClick={() => setEntregarConsolidado(c)}>
-                          <Upload className="h-3.5 w-3.5" />
-                          {c.estado === 'RECHAZADO' ? 'Re-entregar' : 'Entregar a DG/DC'}
-                        </Button>
+                        <>
+                          <ConsolidadoPrintButton
+                            consolidado={c}
+                            concentradoraNombre={userNombre}
+                            sucursalNombre={branchNombre}
+                          />
+                          <Button size="sm" onClick={() => setEntregarConsolidado(c)}>
+                            <Upload className="h-3.5 w-3.5" />
+                            {c.estado === 'RECHAZADO' ? 'Re-entregar' : 'Entregar a DG/DC'}
+                          </Button>
+                        </>
                       )}
                       {c.estado === 'ENTREGADO' && c.receptor && (
                         <span className="text-xs text-muted-foreground">esperando a {c.receptor.nombre}</span>
@@ -343,6 +365,9 @@ export function CorteDelDiaView(props: Props) {
         </h2>
         <TimelineDia cortes={cortesTimeline} userId={userId} />
       </section>
+
+      {/* ─── Histórico de días pasados ───────────────────────────────── */}
+      <HistoricoCortes cortes={cortesHistoricos} />
 
       {/* Dialogs */}
       {entregarParcial && (

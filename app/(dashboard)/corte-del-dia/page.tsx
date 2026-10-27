@@ -24,7 +24,7 @@ import { CorteDelDiaView } from '@/components/cortes/CorteDelDiaView'
 export default async function CorteDelDiaPage() {
   const session = await getSession()
   if (!session?.user) redirect('/login')
-  const { id: userId, rol, companyId, branchId } = session.user
+  const { id: userId, rol, companyId, branchId, name: userNombre } = session.user
 
   const fecha = todayMx()
   const esReceptor = esReceptorFinal(rol)
@@ -33,6 +33,11 @@ export default async function CorteDelDiaPage() {
   if (!esReceptor && !hacesCorte) {
     redirect('/dashboard')
   }
+
+  const branchRow = branchId
+    ? await prisma.branch.findUnique({ where: { id: branchId }, select: { nombre: true } })
+    : null
+  const branchNombre = branchRow?.nombre ?? '—'
 
   // ── Datos del user (COORD/CONC/GERENTE) ─────────────────────────────
   const [parcialesPropios, consolidadosPropios, concentradora, receptoresValidos, snapIncremental] = await Promise.all([
@@ -109,6 +114,22 @@ export default async function CorteDelDiaPage() {
       })
     : []
 
+  // ── Histórico: cortes de los últimos 14 días (sin incluir hoy) ───
+  const haceDosSemanas = new Date(fecha.getTime() - 14 * 24 * 60 * 60 * 1000)
+  const cortesHistoricos = await prisma.corte.findMany({
+    where: {
+      companyId: companyId!,
+      fecha: { gte: haceDosSemanas, lt: fecha },
+      OR: [{ userId }, { receptorId: userId }],
+    },
+    orderBy: [{ fecha: 'desc' }, { numeroCorte: 'asc' }],
+    take: 300,
+    include: {
+      user:     { select: { id: true, nombre: true } },
+      receptor: { select: { id: true, nombre: true } },
+    },
+  })
+
   // ── Timeline por sucursal (para DG/DC/SA ve todas; coord/conc ve la suya) ─
   const sucursalIdsParaTimeline = esReceptor
     ? (await prisma.branch.findMany({ where: { companyId: companyId! }, select: { id: true } })).map((b) => b.id)
@@ -132,7 +153,9 @@ export default async function CorteDelDiaPage() {
   return (
     <CorteDelDiaView
       userId={userId}
+      userNombre={userNombre}
       userRol={rol}
+      branchNombre={branchNombre}
       esConcentradora={esConcentradora}
       sinConcentradora={sinConcentradora}
       concentradora={concentradora}
@@ -144,6 +167,7 @@ export default async function CorteDelDiaPage() {
       receptoresValidos={receptoresValidos}
       snapIncremental={snapIncremental}
       cortesTimeline={JSON.parse(JSON.stringify(cortesTimeline))}
+      cortesHistoricos={JSON.parse(JSON.stringify(cortesHistoricos))}
     />
   )
 }

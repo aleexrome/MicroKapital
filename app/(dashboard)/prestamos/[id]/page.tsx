@@ -5,6 +5,7 @@ import { ApprovalBadge } from '@/components/loans/ApprovalBadge'
 import { LoanApprovalActions } from '@/components/loans/LoanApprovalActions'
 import { MesaControlActions } from '@/components/loans/MesaControlActions'
 import { ResubmitLoanButton } from '@/components/loans/ResubmitLoanButton'
+import { CancelReturnedLoanButton } from '@/components/loans/CancelReturnedLoanButton'
 import { DisbursementVideo } from '@/components/loans/DisbursementVideo'
 import { TransferenciaFotoUpload } from '@/components/loans/TransferenciaFotoUpload'
 import { LoanActivateButton } from '@/components/loans/LoanActivateButton'
@@ -687,9 +688,17 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               ) : (
                 <p className="text-sm italic text-amber-800">Sin nota general — revisa las observaciones por documento del expediente.</p>
               )}
-              {(rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN') && (loan.cobradorId === userId || rol !== 'COORDINADOR') && (
-                <ResubmitLoanButton loanId={loan.id} />
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                {(rol === 'COORDINADOR' || rol === 'GERENTE_ZONAL' || rol === 'SUPER_ADMIN') && (loan.cobradorId === userId || rol !== 'COORDINADOR') && (
+                  <ResubmitLoanButton loanId={loan.id} />
+                )}
+                {(loan.cobradorId === userId
+                  || (rol === 'GERENTE' && session.user.branchId === loan.branchId)
+                  || rol === 'GERENTE_ZONAL'
+                  || rol === 'SUPER_ADMIN') && (
+                  <CancelReturnedLoanButton loanId={loan.id} clienteNombre={loan.client.nombreCompleto} />
+                )}
+              </div>
             </div>
           )}
 

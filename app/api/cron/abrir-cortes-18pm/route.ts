@@ -6,6 +6,7 @@ import {
   totalRecibidoDeOtrosEnDia,
 } from '@/lib/cortes'
 import { todayMx, parseMxYMD } from '@/lib/timezone'
+import { purgeDeletedTask } from '@/lib/cron-tasks'
 
 /**
  * GET /api/cron/abrir-cortes-18pm
@@ -108,11 +109,26 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Encadenamos la purga de soft-deletes aquí porque Vercel Hobby limita
+  // a 2 cron jobs y necesitamos los otros 2 slots para check-prestamos-limbo
+  // (14:00 UTC) y este mismo (00:00 UTC = 18:00 CDMX). La purga puede
+  // correr a cualquier hora, así que entra piggyback.
+  let purge: Awaited<ReturnType<typeof purgeDeletedTask>> | { error: string } | null = null
+  if (!fechaParam) {
+    // Solo en invocación real del cron, no en backfill manual.
+    try {
+      purge = await purgeDeletedTask()
+    } catch (e) {
+      purge = { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
   return NextResponse.json({
     dia,
     candidatos: candidatos.length,
     abiertos,
     saltados,
     errores,
+    purge,
   })
 }

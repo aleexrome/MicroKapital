@@ -37,8 +37,6 @@ function money(n: string | number) {
 export function HistoricoCortes({ cortes }: { cortes: Corte[] }) {
   const [abierto, setAbierto] = useState(false)
 
-  if (cortes.length === 0) return null
-
   // Agrupar por fecha (día civil)
   const porFecha = new Map<string, Corte[]>()
   for (const c of cortes) {
@@ -48,21 +46,29 @@ export function HistoricoCortes({ cortes }: { cortes: Corte[] }) {
 
   const diasOrdenados = Array.from(porFecha.entries())
     .sort((a, b) => b[0].localeCompare(a[0]))  // desc
+  const vacio = diasOrdenados.length === 0
 
   return (
     <section className="space-y-3">
       <button
-        onClick={() => setAbierto((x) => !x)}
-        className="flex items-center justify-between w-full text-sm font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
+        onClick={() => !vacio && setAbierto((x) => !x)}
+        disabled={vacio}
+        className="flex items-center justify-between w-full text-sm font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition disabled:cursor-default disabled:opacity-70"
       >
         <span className="flex items-center gap-2">
           <History className="h-4 w-4" />
           Días pasados ({diasOrdenados.length})
         </span>
-        {abierto ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        {!vacio && (abierto ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />)}
       </button>
 
-      {abierto && (
+      {vacio && (
+        <Card className="p-4 text-sm text-muted-foreground text-center">
+          No tienes cortes registrados en los últimos 14 días. Cuando cierres parciales o consolidados aparecerán aquí.
+        </Card>
+      )}
+
+      {!vacio && abierto && (
         <div className="space-y-3">
           {diasOrdenados.map(([fechaKey, cs]) => {
             const d = new Date(fechaKey + 'T12:00:00')

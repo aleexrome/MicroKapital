@@ -70,6 +70,61 @@ export default async function CorteDelDiaPage() {
   const esConcentradora = concentradora?.id === userId
   const sinConcentradora = !concentradora
 
+  // ── Detalle de cada parcial propio: qué Payments (cliente+monto+método)
+  //    cayeron dentro de la ventana de ese parcial, y qué parciales de
+  //    OTROS coords acepté entre un parcial y el siguiente (que es el
+  //    origen de "Recibido $X"). Permite expandir cada card para auditar.
+  const parcialesDetalle = await Promise.all(parcialesPropios.map(async (p, idx) => {
+    const prevCreatedAt = idx > 0 ? parcialesPropios[idx - 1].createdAt : null
+    const ventana = {
+      ...(prevCreatedAt ? { gt: prevCreatedAt } : {}),
+      lte: p.createdAt,
+    }
+    const [pagosClientes, parcialesIngesta] = await Promise.all([
+      prisma.payment.findMany({
+        where: {
+          cobradorId: userId,
+          canceledAt: null,
+          fechaHora:  ventana,
+        },
+        include: {
+          client:   { select: { nombreCompleto: true } },
+          schedule: { select: { numeroPago: true } },
+        },
+        orderBy: { fechaHora: 'asc' },
+      }),
+      prisma.corte.findMany({
+        where: {
+          receptorId: userId,
+          tipo:       'PARCIAL',
+          estado:     'ACEPTADO',
+          userId:     { not: userId },
+          aceptadoAt: ventana,
+        },
+        include: { user: { select: { nombre: true } } },
+        orderBy: { aceptadoAt: 'asc' },
+      }),
+    ])
+    return {
+      corteId: p.id,
+      pagosClientes: pagosClientes.map((pay) => ({
+        id:         pay.id,
+        clienteNombre: pay.client.nombreCompleto,
+        monto:         Number(pay.monto),
+        metodoPago:    pay.metodoPago,
+        numeroPago:    pay.schedule?.numeroPago ?? null,
+        fechaHora:     pay.fechaHora.toISOString(),
+      })),
+      parcialesIngesta: parcialesIngesta.map((pr) => ({
+        id:            pr.id,
+        numeroCorte:   pr.numeroCorte,
+        total:         Number(pr.totalAEntregar),
+        userNombre:    pr.user.nombre,
+        aceptadoAt:    pr.aceptadoAt?.toISOString() ?? null,
+      })),
+    }
+  }))
+
   // ── Si soy concentradora/coord-sin-concentradora: parciales a consolidar ─
   const parcialesParaMiConsolidado = (esConcentradora || sinConcentradora) && hacesCorte
     ? await parcialesParaConsolidar(prisma, userId, fecha)
@@ -160,6 +215,7 @@ export default async function CorteDelDiaPage() {
       sinConcentradora={sinConcentradora}
       concentradora={concentradora}
       parcialesPropios={JSON.parse(JSON.stringify(parcialesPropios))}
+      parcialesDetalle={parcialesDetalle}
       consolidadosPropios={JSON.parse(JSON.stringify(consolidadosPropios))}
       parcialesEntregadosRecibidos={JSON.parse(JSON.stringify(parcialesEntregadosRecibidos))}
       parcialesParaConsolidar={parcialesParaMiConsolidado}

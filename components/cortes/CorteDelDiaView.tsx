@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { Card } from '@/components/ui/card'
-import { Loader2, Plus, Package, CheckCircle2, Clock, AlertCircle, Upload } from 'lucide-react'
+import { Loader2, Plus, Package, CheckCircle2, Clock, AlertCircle, Upload, ChevronDown, ChevronUp } from 'lucide-react'
 import { EntregarParcialDialog } from './EntregarParcialDialog'
 import { EntregarConsolidadoDialog } from './EntregarConsolidadoDialog'
 import { ConfirmarConsolidadoDialog } from './ConfirmarConsolidadoDialog'
@@ -40,6 +40,25 @@ type Corte = {
   consolidadoHijos?: Array<{ id: string; numeroCorte: number; totalAEntregar: string; user: { nombre: string } }>
 }
 
+type ParcialDetalle = {
+  corteId: string
+  pagosClientes: Array<{
+    id: string
+    clienteNombre: string
+    monto: number
+    metodoPago: string
+    numeroPago: number | null
+    fechaHora: string
+  }>
+  parcialesIngesta: Array<{
+    id: string
+    numeroCorte: number
+    total: number
+    userNombre: string
+    aceptadoAt: string | null
+  }>
+}
+
 interface Props {
   userId: string
   userNombre: string
@@ -49,6 +68,7 @@ interface Props {
   sinConcentradora: boolean
   concentradora: { id: string; nombre: string } | null
   parcialesPropios: Corte[]
+  parcialesDetalle: ParcialDetalle[]
   consolidadosPropios: Corte[]
   parcialesEntregadosRecibidos: Corte[]
   parcialesParaConsolidar: Array<{ id: string; userId: string; montoAceptado: number }>
@@ -82,10 +102,12 @@ function estadoBadge(estado: Corte['estado']) {
 export function CorteDelDiaView(props: Props) {
   const {
     userId, userNombre, userRol, branchNombre, esConcentradora, sinConcentradora, concentradora,
-    parcialesPropios, consolidadosPropios, parcialesEntregadosRecibidos,
+    parcialesPropios, parcialesDetalle, consolidadosPropios, parcialesEntregadosRecibidos,
     parcialesParaConsolidar, consolidadosPendientesConfirmar,
     receptoresValidos, snapIncremental, cortesTimeline, cortesHistoricos,
   } = props
+  const detalleMap = new Map(parcialesDetalle.map((d) => [d.corteId, d]))
+  const [parcialExpandido, setParcialExpandido] = useState<string | null>(null)
 
   const router = useRouter()
   const { toast } = useToast()
@@ -242,8 +264,12 @@ export function CorteDelDiaView(props: Props) {
             </Card>
           ) : (
             <div className="grid gap-2">
-              {parcialesPropios.map((p) => (
-                <Card key={p.id} className="p-3">
+              {parcialesPropios.map((p) => {
+                const detalle = detalleMap.get(p.id)
+                const expandido = parcialExpandido === p.id
+                const hayDesglose = !!detalle && (detalle.pagosClientes.length > 0 || detalle.parcialesIngesta.length > 0)
+                return (
+                <Card key={p.id} className="p-3 space-y-2">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-3">
                       <div className="font-mono text-xs text-muted-foreground min-w-[46px]">
@@ -260,6 +286,16 @@ export function CorteDelDiaView(props: Props) {
                             <> · Recibido de coords de tu sucursal: {money(p.totalRecibidoDeOtros)}</>
                           )}
                         </div>
+                        {hayDesglose && (
+                          <button
+                            type="button"
+                            onClick={() => setParcialExpandido(expandido ? null : p.id)}
+                            className="mt-1 text-[11px] text-primary hover:underline inline-flex items-center gap-1"
+                          >
+                            {expandido ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            {expandido ? 'Ocultar' : 'Ver'} desglose ({(detalle!.pagosClientes.length) + (detalle!.parcialesIngesta.length)})
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -293,8 +329,53 @@ export function CorteDelDiaView(props: Props) {
                   {p.estado === 'RECHAZADO' && p.rechazoRazon && (
                     <div className="mt-2 text-xs text-red-400">Rechazado: {p.rechazoRazon}</div>
                   )}
+                  {expandido && detalle && (
+                    <div className="pt-2 border-t border-border/50 space-y-1">
+                      {detalle.pagosClientes.length > 0 && (
+                        <>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Cobros propios ({detalle.pagosClientes.length})
+                          </div>
+                          {detalle.pagosClientes.map((pc) => (
+                            <div key={pc.id} className="flex justify-between text-xs">
+                              <span className="truncate">
+                                {new Date(pc.fechaHora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} ·{' '}
+                                {pc.clienteNombre}
+                                {pc.numeroPago != null && <span className="text-muted-foreground"> ·#{pc.numeroPago}</span>}
+                                <span className="text-muted-foreground ml-1">
+                                  ({pc.metodoPago === 'CASH' ? 'efectivo' : pc.metodoPago === 'CARD' ? 'tarjeta' : 'transf.'})
+                                </span>
+                              </span>
+                              <span className="tabular-nums font-medium shrink-0">{money(pc.monto)}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      {detalle.parcialesIngesta.length > 0 && (
+                        <>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-2">
+                            Parciales recibidos de otros coords ({detalle.parcialesIngesta.length})
+                          </div>
+                          {detalle.parcialesIngesta.map((pi) => (
+                            <div key={pi.id} className="flex justify-between text-xs">
+                              <span className="truncate">
+                                {pi.aceptadoAt && (
+                                  <>
+                                    {new Date(pi.aceptadoAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} ·{' '}
+                                  </>
+                                )}
+                                {pi.userNombre} <span className="text-muted-foreground">parcial #{pi.numeroCorte}</span>
+                              </span>
+                              <span className="tabular-nums font-medium shrink-0">{money(pi.total)}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </Card>
-              ))}
+                )
+              })}
               <div className="text-right text-sm text-muted-foreground">
                 Total aceptado hoy: <span className="font-semibold text-foreground">{money(totalColectado)}</span>
               </div>

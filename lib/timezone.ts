@@ -67,6 +67,38 @@ export function endOfDayMx(d: Date): Date {
 }
 
 /**
+ * Semana MK: comienza SÁBADO 00:00 CDMX, termina VIERNES 23:59:59
+ * CDMX. Dirección hace corte con los concentradores los viernes, por
+ * eso el ciclo semanal arranca al día siguiente (sábado).
+ *
+ * Devuelve el sábado 00:00 CDMX de la semana en curso para la fecha
+ * dada. Si la fecha es sábado → ese mismo sábado 00:00. Si es viernes
+ * → el sábado anterior.
+ */
+export function inicioSemanaMk(d: Date): Date {
+  const ymd = toMxYMD(d)
+  const base = new Date(`${ymd}T06:00:00.000Z`)  // 00:00 CDMX del día d
+  // getUTCDay() de un timestamp a las 06:00 UTC corresponde al día civil
+  // CDMX (porque 00:00 CDMX = 06:00 UTC). 0=domingo, 6=sábado.
+  const dow = base.getUTCDay()
+  // Días a retroceder hasta el sábado: sábado→0, dom→1, lun→2, mar→3,
+  // mié→4, jue→5, vie→6.
+  const retroceso = (dow + 1) % 7
+  return new Date(base.getTime() - retroceso * 24 * 60 * 60 * 1000)
+}
+
+/**
+ * ¿La fecha dada es viernes en CDMX? Usamos esto para habilitar el
+ * botón de "Iniciar consolidado" (concentradora → DG/DC) solo los
+ * viernes.
+ */
+export function esViernesMk(d: Date): boolean {
+  const ymd = toMxYMD(d)
+  const base = new Date(`${ymd}T06:00:00.000Z`)
+  return base.getUTCDay() === 5
+}
+
+/**
  * Construye un Date a partir de un string YYYY-MM-DD interpretándolo
  * como inicio del día CDMX. Útil para convertir el filtro de un
  * <input type="date"> (que el usuario rellenó en CDMX) a un Date

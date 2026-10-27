@@ -8,7 +8,7 @@ import {
   siguienteNumeroCorte,
   concentradorDeSucursal,
 } from '@/lib/cortes'
-import { todayMx } from '@/lib/timezone'
+import { todayMx, esViernesMk } from '@/lib/timezone'
 
 /**
  * POST /api/cortes/consolidado/iniciar
@@ -49,11 +49,20 @@ export async function POST(_req: NextRequest) {
   }
 
   const fecha = todayMx()
+
+  // Semana MK: concentradora entrega consolidado a DG/DC solo los viernes
+  // (día que Dirección hace corte con los concentradores).
+  if (!esViernesMk(fecha)) {
+    return NextResponse.json({
+      error: 'Los consolidados se entregan los viernes (día de corte con Dirección). Hoy no es viernes.',
+    }, { status: 400 })
+  }
+
   const parciales = await parcialesParaConsolidar(prisma, userId, fecha)
 
   if (parciales.length === 0) {
     return NextResponse.json({
-      error: 'No hay parciales aceptados pendientes para consolidar.',
+      error: 'No hay parciales aceptados pendientes para consolidar esta semana.',
     }, { status: 400 })
   }
 

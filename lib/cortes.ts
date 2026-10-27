@@ -154,47 +154,20 @@ export async function cortePendienteDe(
   if (row) return { id: row.id, tipo: 'PROPIO' }
 
   // Bloqueo adicional (semana MK): concentradora con parciales ACEPTADOS
-  // sin consolidar. La regla es:
+  // sin consolidar. Regla simple:
   //
-  //   • Durante la semana (lun-jue): NO se bloquea aunque haya parciales
-  //     recibidos — es normal, se consolidan hasta el viernes.
-  //   • Los viernes: SE bloquea si hay parciales de la semana sin
-  //     consolidar (es el día de corte con Dirección — recordatorio
-  //     visible).
-  //   • Si quedan parciales de MÁS DE 2 semanas atrás sin consolidar
-  //     (olvido/falta grave): bloquea cualquier día.
+  //   • Lun-jue: NUNCA se bloquea aunque haya parciales recibidos — es
+  //     normal, se consolidan hasta el viernes.
+  //   • Viernes: SE bloquea si hay parciales ACEPTADOS sin consolidar
+  //     (de esta semana o de semanas anteriores). Es el día de corte con
+  //     Dirección y le recuerda consolidar.
+  //
+  // Si una concentradora olvida consolidar un viernes, el próximo viernes
+  // le vuelve a aparecer el recordatorio — no la acosamos lun-jue.
   //
   // IMPORTANTE: el id devuelto es el del parcial ACEPTADO. La layout
   // detecta tipo COLGANDO_CONSOLIDAR y manda a /corte-del-dia (NO a
   // /corte/pendiente que haría loop).
-  const inicioSemanaActual = inicioSemanaMk(hoy)
-  const haceDosSemanas = new Date(inicioSemanaActual.getTime() - 7 * 24 * 60 * 60 * 1000)
-
-  // Caso 1: parciales de hace >2 semanas sin consolidar — bloqueo serio.
-  const parcialMuyViejo = await prisma.corte.findFirst({
-    where: {
-      receptorId: user.id,
-      tipo:       'PARCIAL',
-      estado:     'ACEPTADO',
-      fecha:      { lt: haceDosSemanas },
-      OR: [
-        { consolidadoPadreId: null },
-        {
-          consolidadoPadre: {
-            estado: { in: ['ABIERTO', 'ENTREGADO', 'RECHAZADO'] },
-          },
-        },
-      ],
-    },
-    orderBy: { fecha: 'asc' },
-    select:  { id: true },
-  })
-  if (parcialMuyViejo) {
-    return { id: parcialMuyViejo.id, tipo: 'COLGANDO_CONSOLIDAR' }
-  }
-
-  // Caso 2: hoy es viernes — recordatorio del día de corte. Bloquea si
-  // hay parciales sin consolidar de la semana en curso.
   if (esViernesMk(hoy)) {
     const parcialViernes = await prisma.corte.findFirst({
       where: {

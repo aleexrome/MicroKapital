@@ -73,8 +73,11 @@ export async function GET(req: NextRequest) {
       continue
     }
     try {
-      const existe = await prisma.corte.findUnique({
-        where: { userId_fecha: { userId: u.id, fecha } },
+      // Si el user ya tiene AL MENOS un parcial del día (manual o auto),
+      // no abrimos otro — el cron solo cubre el caso de user con cobros
+      // que nunca abrió un parcial manual.
+      const existe = await prisma.corte.findFirst({
+        where: { userId: u.id, fecha, tipo: 'PARCIAL' },
         select: { id: true },
       })
       if (existe) {
@@ -89,6 +92,8 @@ export async function GET(req: NextRequest) {
           userId:    u.id,
           fecha,
           branchId:  u.branchId,
+          tipo: 'PARCIAL',
+          numeroCorte: 1,
           totalEfectivoCobrado:      snap.efectivo,
           totalTarjetaCobrado:       snap.tarjeta,
           totalTransferenciaCobrado: snap.transferencia,

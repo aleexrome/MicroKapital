@@ -1322,10 +1322,21 @@ model Corte {
   userId    String
   user      User     @relation("CortesPropios", fields: [userId], references: [id])
   // Día civil MX al que pertenece este corte (00:00 - 23:59 local).
-  // Un user solo puede tener un corte por día (unique abajo).
+  // Un user puede tener VARIOS parciales por día + varios consolidados.
+  // Unique: (userId, fecha, numeroCorte, tipo).
   fecha     DateTime @db.Date
   branchId  String   // sucursal del user al momento de abrir el corte
   branch    Branch   @relation("CortesEnBranch", fields: [branchId], references: [id])
+
+  // ─── Tipo + numeración ──────────────────────────────────────────────
+  // PARCIAL: coord/gerente hace N parciales al día, los entrega uno a
+  //   uno a su concentradora conforme los cierra. Cada parcial representa
+  //   lo cobrado desde el parcial anterior (incremental, no snapshot total).
+  // CONSOLIDADO: concentradora agrupa todos los PARCIALES ACEPTADOS del
+  //   día (de otros coords + los propios) y lo entrega a DG/DC. Puede
+  //   hacer varios consolidados en un día (ej. uno a las 2pm, otro a las 6pm).
+  tipo        CorteTipo @default(PARCIAL)
+  numeroCorte Int       @default(1)
 
   // Snapshot de totales del CashRegister al momento de entregar.
   // Se congela aquí para que la auditoría no cambie si CashRegister se
@@ -1360,13 +1371,43 @@ model Corte {
 
   estado      CorteEstado @default(ABIERTO)
 
+  // ─── CONSOLIDADO (concentradora → DG/DC) ────────────────────────────
+  // Link bidireccional: cada PARCIAL que está incluido en un consolidado
+  // referencia aquí. Cuando el consolidado se RECHAZA, los parciales se
+  // liberan (consolidadoPadreId = null) para que puedan agruparse en un
+  // consolidado nuevo.
+  consolidadoPadreId    String?
+  consolidadoPadre      Corte?   @relation("ConsolidadoHijos", fields: [consolidadoPadreId], references: [id], onDelete: SetNull)
+  consolidadoHijos      Corte[]  @relation("ConsolidadoHijos")
+
+  // Método de entrega del CONSOLIDADO. Null para PARCIAL.
+  //   EFECTIVO_FIRMADO: concentradora entregó físico + foto del ticket
+  //     firmado por DG/DC al recibir.
+  //   TRANSFERENCIA: concentradora hizo transferencia bancaria + foto
+  //     del comprobante.
+  metodoEntregaFinal    MetodoEntregaFinal?
+  transferenciaFotoUrl  String?
+  transferenciaFotoAt   DateTime?
+
   // Metadata adicional
   autoCreadoAt DateTime?  // marcado por el cron 18:00 (vs manual)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  @@unique([userId, fecha])
+  @@unique([userId, fecha, numeroCorte, tipo])
   @@index([companyId, fecha])
   @@index([receptorId, estado])
   @@index([estado, fecha])
+  @@index([consolidadoPadreId])
+  @@index([tipo, fecha])
+}
+
+enum CorteTipo {
+  PARCIAL        // coord → concentradora (varios/día)
+  CONSOLIDADO    // concentradora → DG/DC (varios/día, agrupa parciales)
+}
+
+enum MetodoEntregaFinal {
+  EFECTIVO_FIRMADO
+  TRANSFERENCIA
 }

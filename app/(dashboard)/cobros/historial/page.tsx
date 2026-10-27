@@ -95,31 +95,43 @@ export default async function HistorialCobrosPage() {
       },
     },
     payments: {
+      where: { canceledAt: null },
       select: {
         monto: true,
         metodoPago: true,
         statusTransferencia: true,
+        fechaHora: true,
       },
     },
   } satisfies Prisma.PaymentScheduleSelect
 
-  // ── Consulta principal: PaymentSchedule pagados hoy ──────────────────────
+  // ── Consulta principal: schedules con AL MENOS un Payment hecho hoy ──────
+  // Antes filtrábamos por PaymentSchedule.pagadoAt (fecha en que el schedule
+  // se marcó PAID). Eso ignoraba:
+  //   - pagos parciales (schedule queda PARTIAL, pagadoAt null)
+  //   - pagos aplicados contra schedules que ya estaban PAID antes
+  //   - pagos de hoy que llenaron un schedule marcado como PAID ayer
+  // Ahora filtramos por Payment.fechaHora directamente para que coincida
+  // con lo que ve /corte-del-dia (que lee del CashRegister de hoy).
   const [schedulesHoy, schedulesRecientes] = await Promise.all([
     prisma.paymentSchedule.findMany({
       where: {
         loan: loanScope,
-        estado: { in: ['PAID', 'ADVANCE'] },
-        pagadoAt: { gte: today, lt: tomorrow },
+        payments: {
+          some: {
+            fechaHora: { gte: today, lt: tomorrow },
+            canceledAt: null,
+          },
+        },
       },
       select: scheduleSelect,
       orderBy: { pagadoAt: 'desc' },
     }),
-    // Last 20 payments (any date) — fallback section to verify the system is recording
+    // Last 20 schedules with any payment (fallback para verificar que el sistema registra).
     prisma.paymentSchedule.findMany({
       where: {
         loan: loanScope,
-        estado: { in: ['PAID', 'ADVANCE'] },
-        pagadoAt: { not: null },
+        payments: { some: { canceledAt: null } },
       },
       select: scheduleSelect,
       orderBy: { pagadoAt: 'desc' },
@@ -127,24 +139,35 @@ export default async function HistorialCobrosPage() {
     }),
   ])
 
-  function normalizeRows(schedules: typeof schedulesHoy): ScheduleRow[] {
+  function normalizeRows(schedules: typeof schedulesHoy, filtroFechaHoy = false): ScheduleRow[] {
     return schedules.map((s) => {
-      const efectivo = s.payments
+      // Para "Cobros de hoy" solo contamos los Payments con fechaHora hoy
+      // (ignora los pagos previos en el mismo schedule). Para "recientes"
+      // mostramos todo el historial del schedule.
+      const payments = filtroFechaHoy
+        ? s.payments.filter((p) => p.fechaHora >= today && p.fechaHora < tomorrow)
+        : s.payments
+      const efectivo = payments
         .filter((p) => p.metodoPago === 'CASH')
         .reduce((sum, p) => sum + Number(p.monto), 0)
-      const tarjeta = s.payments
+      const tarjeta = payments
         .filter((p) => p.metodoPago === 'CARD')
         .reduce((sum, p) => sum + Number(p.monto), 0)
-      const transferenciaVerificada = s.payments
+      const transferenciaVerificada = payments
         .filter((p) => p.metodoPago === 'TRANSFER' && p.statusTransferencia === 'VERIFICADO')
         .reduce((sum, p) => sum + Number(p.monto), 0)
-      const transferenciaTotal = s.payments
+      const transferenciaTotal = payments
         .filter((p) => p.metodoPago === 'TRANSFER')
         .reduce((sum, p) => sum + Number(p.monto), 0)
+      // Para "hoy" montoPagado = suma de los pagos de hoy (lo que efectivamente
+      // entró ese día). Para "recientes" usamos el schedule.montoPagado acumulado.
+      const montoPagado = filtroFechaHoy
+        ? efectivo + tarjeta + transferenciaTotal
+        : Number(s.montoPagado)
 
       return {
         id:                      s.id,
-        montoPagado:             Number(s.montoPagado),
+        montoPagado,
         pagadoAt:                s.pagadoAt,
         clientNombre:            s.loan.client.nombreCompleto,
         numeroPago:              s.numeroPago,
@@ -156,13 +179,13 @@ export default async function HistorialCobrosPage() {
         tarjeta,
         transferenciaVerificada,
         transferenciaTotal,
-        hasPaymentRecord:        s.payments.length > 0,
+        hasPaymentRecord:        payments.length > 0,
       }
     })
   }
 
-  const rows         = normalizeRows(schedulesHoy)
-  const rowsRecientes = normalizeRows(schedulesRecientes)
+  const rows         = normalizeRows(schedulesHoy, true)
+  const rowsRecientes = normalizeRows(schedulesRecientes, false)
   // Recent rows that are NOT in today's list (to avoid duplication)
   const todayIds     = new Set(rows.map((r) => r.id))
   const soloRecientes = rowsRecientes.filter((r) => !todayIds.has(r.id))

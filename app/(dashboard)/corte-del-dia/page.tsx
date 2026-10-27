@@ -9,6 +9,7 @@ import {
   receptoresValidosPara,
   snapshotParcialIncremental,
   parcialesParaConsolidar,
+  efectivoPropioResiduoSemana,
 } from '@/lib/cortes'
 import { CorteDelDiaView } from '@/components/cortes/CorteDelDiaView'
 
@@ -135,6 +136,12 @@ export default async function CorteDelDiaPage() {
     ? await parcialesParaConsolidar(prisma, userId, fecha)
     : []
 
+  // ── Si soy concentradora: efectivo propio no registrado esta semana
+  //    (se registra automáticamente al Iniciar Consolidado el viernes).
+  const efectivoPropioSemana = (esConcentradora || sinConcentradora) && hacesCorte
+    ? await efectivoPropioResiduoSemana(prisma, userId, fecha)
+    : { efectivo: 0, tarjeta: 0, transferencia: 0, desde: fecha }
+
   // ── Parciales ENTREGADOS que me dirigieron (acepto como concentradora) ─
   const parcialesEntregadosRecibidos = hacesCorte
     ? await prisma.corte.findMany({
@@ -230,6 +237,7 @@ export default async function CorteDelDiaPage() {
       cortesTimeline={JSON.parse(JSON.stringify(cortesTimeline))}
       cortesHistoricos={JSON.parse(JSON.stringify(cortesHistoricos))}
       esViernes={esViernesMk(fecha)}
+      efectivoPropioSemana={JSON.parse(JSON.stringify(efectivoPropioSemana))}
     />
   )
 }

@@ -221,17 +221,27 @@ export function CorteCongeladoForm({
                 <p className="text-sm text-gray-300">
                   Sube la foto del ticket con la firma del receptor
                 </p>
-                <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="w-full">
+                {/* iOS Safari no abre el picker al hacer .click() programatico
+                    sobre un <input type=file> escondido. La forma nativa que
+                    SI funciona en iOS es un <label htmlFor> que envuelva o
+                    apunte al input — el tap del label abre el picker
+                    directamente, sin pasar por JS. */}
+                <label
+                  htmlFor="corte-congelado-foto"
+                  className={`inline-flex items-center justify-center gap-2 w-full h-10 px-4 py-2 rounded-xl text-sm font-medium bg-primary-500 text-white hover:bg-primary-400 shadow-glow transition-all duration-150 cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+                >
                   {uploading
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> Subiendo y entregando...</>
                     : <><Upload className="h-4 w-4" /> Seleccionar foto y entregar</>}
-                </Button>
+                </label>
                 <input
+                  id="corte-congelado-foto"
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
                   className="sr-only"
                   onChange={onFileSelected}
+                  disabled={uploading}
                 />
               </div>
             </>

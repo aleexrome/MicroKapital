@@ -308,6 +308,7 @@ model User {
   loanDocuments               LoanDocument[]
   scoreEvents                 ScoreEvent[]
   transfersVerified           Payment[]                   @relation("VerifiedTransfers")
+  clarificationsRequested     Payment[]                   @relation("ClarificationsRequested")
   // Solicitudes de cancelación por limbo (anti-fraude)
   solicitudesCancelacionLimbo SolicitudCancelacionLimbo[] @relation("SolicitanteCancelacion")
   decisionesCancelacionLimbo  SolicitudCancelacionLimbo[] @relation("AprobadorCancelacion")
@@ -698,6 +699,16 @@ model Payment {
   verificadoPorId     String?
   verificadoPor       User?               @relation("VerifiedTransfers", fields: [verificadoPorId], references: [id])
   verificadoAt        DateTime?
+  // Aclaración solicitada: el verificador (GZ/DG) no encontró el depósito
+  // en la cuenta y pide al coord que revise. El Payment sigue en
+  // statusTransferencia='PENDIENTE' pero no vuelve a aparecer como
+  // listo-para-verificar hasta que el coord responde con nueva evidencia.
+  aclaracionSolicitadaAt     DateTime?
+  aclaracionSolicitadaPorId  String?
+  aclaracionSolicitadaPor    User?    @relation("ClarificationsRequested", fields: [aclaracionSolicitadaPorId], references: [id])
+  aclaracionNota             String?  // Mensaje del verificador al coord
+  aclaracionRespuesta        String?  // Mensaje del coord al reenviar
+  aclaracionRespondidaAt     DateTime?
   // Foto del comprobante que sube el coord con la transferencia (Fase 1
   // verificación — ya no se depende solo del número de referencia; además
   // se persiste el código único generado por el sistema vía TransferCode).

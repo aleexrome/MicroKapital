@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { formatMoney, formatDateTime } from '@/lib/utils'
-import { CheckCircle, Loader2, Building2, Clock, ShieldCheck, Search, Filter, X } from 'lucide-react'
+import { CheckCircle, Loader2, Building2, Clock, ShieldCheck, Search, Filter, X, AlertCircle, MessageSquare } from 'lucide-react'
 import type { UserRole } from '@prisma/client'
 
 export interface TransferRow {
@@ -21,6 +21,7 @@ export interface TransferRow {
   verificadoAt: string | null
   cuentaDestino: { banco: string; titular: string; clabe: string } | null
   cobrador: { nombre: string }
+  cobradorId: string
   verificadoPor: { nombre: string } | null
   client: { nombreCompleto: string }
   loan: { tipo: string }
@@ -35,18 +36,31 @@ export interface TransferRow {
   /** Número / ID del banco (autorización SPEI) que capturó el coord
    *  opcionalmente. Pista extra para auditoría. */
   referenciaBanco?: string | null
+  // Aclaración solicitada por el verificador (ver endpoint
+  // /api/payments/[id]/request-clarification). Mientras hay aclaración
+  // abierta sin responder, la fila NO aparece en "Pendientes" sino en
+  // la tab "Aclaración".
+  aclaracionSolicitadaAt: string | null
+  aclaracionNota: string | null
+  aclaracionRespuesta: string | null
+  aclaracionRespondidaAt: string | null
+  aclaracionSolicitadaPor: { nombre: string } | null
 }
 
 interface Props {
   rows: TransferRow[]
   puedeVerificar: boolean
   rol: UserRole
+  userId: string
 }
 
-export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
+export function TransferenciasView({ rows, puedeVerificar, rol, userId }: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [processing, setProcessing] = useState<string | null>(null)
+  // Diálogos de aclaración — guardan la row target. Null = cerrado.
+  const [solicitarAclaracionDe, setSolicitarAclaracionDe] = useState<TransferRow | null>(null)
+  const [responderAclaracionDe, setResponderAclaracionDe] = useState<TransferRow | null>(null)
 
   // Para MC y GZ mostramos solo las transferencias (pendientes y
   // verificadas) que caen en las sucursales que ellos deben atender —
@@ -69,7 +83,7 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
   // Tab activa: reemplaza el select de "Estado" que estaba en el panel
   // de filtros — es mas obvio visualmente cambiar entre pendientes /
   // verificadas / todas.
-  const [activeTab, setActiveTab] = useState<'PENDIENTE' | 'VERIFICADO' | 'TODAS'>('PENDIENTE')
+  const [activeTab, setActiveTab] = useState<'PENDIENTE' | 'ACLARACION' | 'VERIFICADO' | 'TODAS'>('PENDIENTE')
 
   // Opciones para los dropdowns — solo lo que aparece en las filas del scope.
   const sucursales = useMemo(() => {
@@ -134,10 +148,25 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, q, branchFilter, cobradorFilter, fechaDesde, fechaHasta, orden, esAdmin])
 
-  const pendientes = filtradasOrdenadas.filter((r) => r.statusTransferencia === 'PENDIENTE')
+  // Clasificación:
+  //   - aclaracionPendienteRespuesta: PENDIENTE con aclaración abierta
+  //     (el coord debe responder). No vuelven a "Pendientes" hasta responder.
+  //   - pendientes: PENDIENTE normal (listo para verificar) + aclaraciones
+  //     ya respondidas (vuelven al verificador).
+  //   - verificadas: ya VERIFICADO.
+  const enAclaracion = filtradasOrdenadas.filter(
+    (r) => r.statusTransferencia === 'PENDIENTE'
+        && r.aclaracionSolicitadaAt
+        && !r.aclaracionRespondidaAt
+  )
+  const pendientes = filtradasOrdenadas.filter(
+    (r) => r.statusTransferencia === 'PENDIENTE'
+        && (!r.aclaracionSolicitadaAt || r.aclaracionRespondidaAt)
+  )
   const verificadas = filtradasOrdenadas.filter((r) => r.statusTransferencia === 'VERIFICADO')
-  const visibles = activeTab === 'PENDIENTE' ? pendientes
-    : activeTab === 'VERIFICADO' ? verificadas
+  const visibles = activeTab === 'PENDIENTE'  ? pendientes
+    : activeTab === 'ACLARACION'              ? enAclaracion
+    : activeTab === 'VERIFICADO'              ? verificadas
     : filtradasOrdenadas
 
   async function handleVerify(paymentId: string) {
@@ -163,6 +192,42 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
     } finally {
       setProcessing(null)
     }
+  }
+
+  async function enviarSolicitudAclaracion(paymentId: string, nota: string) {
+    setProcessing(paymentId)
+    try {
+      const res = await fetch(`/api/payments/${paymentId}/request-clarification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nota }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Error al solicitar aclaración')
+      toast({ title: '✅ Aclaración solicitada', description: 'El coordinador fue notificado' })
+      setSolicitarAclaracionDe(null)
+      router.refresh()
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' })
+    } finally { setProcessing(null) }
+  }
+
+  async function enviarRespuestaAclaracion(paymentId: string, body: { respuesta: string; idTransferencia?: string; referenciaBanco?: string }) {
+    setProcessing(paymentId)
+    try {
+      const res = await fetch(`/api/payments/${paymentId}/resolve-clarification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Error al responder')
+      toast({ title: '✅ Respuesta enviada', description: 'El verificador fue notificado' })
+      setResponderAclaracionDe(null)
+      router.refresh()
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' })
+    } finally { setProcessing(null) }
   }
 
   const esDirector = rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL'
@@ -281,6 +346,7 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
       <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
         {([
           { key: 'PENDIENTE',  label: 'Pendientes',  count: pendientes.length,          icon: <Clock className="h-4 w-4" />,       color: 'text-yellow-500'  },
+          { key: 'ACLARACION', label: 'Aclaración',  count: enAclaracion.length,        icon: <AlertCircle className="h-4 w-4" />, color: 'text-amber-500'   },
           { key: 'VERIFICADO', label: 'Verificadas', count: verificadas.length,         icon: <ShieldCheck className="h-4 w-4" />, color: 'text-emerald-500' },
           { key: 'TODAS',      label: 'Todas',       count: filtradasOrdenadas.length,  icon: null,                                color: 'text-gray-600'   },
         ] as const).map((tab) => {
@@ -328,19 +394,36 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
         <div className="space-y-3">
           {visibles.map((p) => {
             const esPendiente = p.statusTransferencia === 'PENDIENTE'
+            const enAclaracionAbierta = !!p.aclaracionSolicitadaAt && !p.aclaracionRespondidaAt
+            const puedoResponderAclaracion = enAclaracionAbierta && (
+              p.cobradorId === userId
+              || rol === 'DIRECTOR_GENERAL' || rol === 'DIRECTOR_COMERCIAL' || rol === 'SUPER_ADMIN'
+            )
             return (
               <Card
                 key={p.id}
-                className={esPendiente ? 'border-yellow-500/20 bg-yellow-500/5' : ''}
+                className={
+                  enAclaracionAbierta ? 'border-amber-500/40 bg-amber-500/5'
+                  : esPendiente       ? 'border-yellow-500/20 bg-yellow-500/5'
+                  : ''
+                }
               >
                 <CardContent className="p-4">
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        {esPendiente ? (
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        {enAclaracionAbierta ? (
+                          <>
+                            <AlertCircle className="h-4 w-4 text-amber-500" />
+                            <Badge variant="secondary" className="bg-amber-500/15 text-amber-200 border-amber-500/40">Requiere aclaración</Badge>
+                          </>
+                        ) : esPendiente ? (
                           <>
                             <Clock className="h-4 w-4 text-yellow-500" />
                             <Badge variant="secondary">Pendiente</Badge>
+                            {p.aclaracionRespondidaAt && (
+                              <Badge variant="secondary" className="bg-sky-500/15 text-sky-200 border-sky-500/40">Respondido</Badge>
+                            )}
                           </>
                         ) : (
                           <>
@@ -407,28 +490,73 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
                             )}
                           </p>
                         )}
+                        {/* Historial de aclaración si existe */}
+                        {p.aclaracionNota && (
+                          <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs space-y-1">
+                            <p className="flex items-center gap-1 text-amber-200 font-medium">
+                              <AlertCircle className="h-3 w-3" />
+                              Aclaración solicitada
+                              {p.aclaracionSolicitadaPor && (
+                                <span className="text-muted-foreground font-normal">
+                                  por {p.aclaracionSolicitadaPor.nombre}
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-amber-100">{p.aclaracionNota}</p>
+                            {p.aclaracionRespuesta && (
+                              <div className="pt-1 mt-1 border-t border-amber-500/20">
+                                <p className="flex items-center gap-1 text-sky-200 font-medium">
+                                  <MessageSquare className="h-3 w-3" />
+                                  Respuesta del coord
+                                </p>
+                                <p className="text-sky-100">{p.aclaracionRespuesta}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
-                    {esPendiente && (
-                      p.puedeVerificar ? (
-                        <Button
-                          size="sm"
-                          variant="success"
-                          disabled={!!processing}
-                          onClick={() => handleVerify(p.id)}
-                        >
-                          {processing === p.id
-                            ? <Loader2 className="h-4 w-4 animate-spin" />
-                            : <><CheckCircle className="h-4 w-4" /> Verificar</>}
-                        </Button>
-                      ) : puedeVerificar ? (
-                        // El usuario puede verificar en general, pero no ESTA
-                        // (sucursal centralizada fuera de su alcance).
-                        <span className="text-xs italic text-muted-foreground shrink-0">
+                    <div className="flex flex-col gap-2 shrink-0">
+                      {esPendiente && !enAclaracionAbierta && p.puedeVerificar && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="success"
+                            disabled={!!processing}
+                            onClick={() => handleVerify(p.id)}
+                          >
+                            {processing === p.id
+                              ? <Loader2 className="h-4 w-4 animate-spin" />
+                              : <><CheckCircle className="h-4 w-4" /> Verificar</>}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-amber-500/40 text-amber-200 hover:bg-amber-500/10"
+                            disabled={!!processing}
+                            onClick={() => setSolicitarAclaracionDe(p)}
+                          >
+                            <AlertCircle className="h-4 w-4" /> Solicitar aclaración
+                          </Button>
+                        </>
+                      )}
+                      {esPendiente && !p.puedeVerificar && puedeVerificar && (
+                        <span className="text-xs italic text-muted-foreground">
                           Verifica Dirección / Mesa de Control
                         </span>
-                      ) : null
-                    )}
+                      )}
+                      {enAclaracionAbierta && puedoResponderAclaracion && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-sky-500/40 text-sky-200 hover:bg-sky-500/10"
+                          disabled={!!processing}
+                          onClick={() => setResponderAclaracionDe(p)}
+                        >
+                          <MessageSquare className="h-4 w-4" /> Responder y re-enviar
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -436,6 +564,152 @@ export function TransferenciasView({ rows, puedeVerificar, rol }: Props) {
           })}
         </div>
       )}
+
+      {/* Dialog: solicitar aclaración (verificador) */}
+      {solicitarAclaracionDe && (
+        <SolicitarAclaracionDialog
+          row={solicitarAclaracionDe}
+          busy={processing === solicitarAclaracionDe.id}
+          onCancel={() => setSolicitarAclaracionDe(null)}
+          onSubmit={(nota) => enviarSolicitudAclaracion(solicitarAclaracionDe.id, nota)}
+        />
+      )}
+
+      {/* Dialog: responder aclaración (coord/admin) */}
+      {responderAclaracionDe && (
+        <ResponderAclaracionDialog
+          row={responderAclaracionDe}
+          busy={processing === responderAclaracionDe.id}
+          onCancel={() => setResponderAclaracionDe(null)}
+          onSubmit={(body) => enviarRespuestaAclaracion(responderAclaracionDe.id, body)}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ────────────────────────────── Dialogs ────────────────────────────── */
+
+function SolicitarAclaracionDialog({
+  row, busy, onCancel, onSubmit,
+}: {
+  row: TransferRow
+  busy: boolean
+  onCancel: () => void
+  onSubmit: (nota: string) => void
+}) {
+  const [nota, setNota] = useState('')
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !busy && onCancel()}>
+      <div className="w-full max-w-md rounded-2xl bg-card border border-border/60 shadow-xl p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between">
+          <h3 className="text-base font-semibold flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-400" /> Solicitar aclaración
+          </h3>
+          <button onClick={() => !busy && onCancel()} className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          <strong className="text-foreground">{row.client.nombreCompleto}</strong> — {formatMoney(Number(row.monto))} · {row.cobrador.nombre}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Describe qué no cuadra para que el coordinador lo revise. Al enviar, el pago se saca de "Pendientes" y pasa a "Aclaración" hasta que el coord responda.
+        </p>
+        <div className="space-y-1">
+          <Label className="text-xs">Motivo</Label>
+          <textarea
+            value={nota}
+            onChange={(e) => setNota(e.target.value)}
+            placeholder='Ej. "No veo el depósito en la cuenta", "El código MK- no aparece en el concepto", "La foto no se lee bien"'
+            rows={4}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
+            disabled={busy}
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onCancel} disabled={busy}>Cancelar</Button>
+          <Button
+            variant="default"
+            onClick={() => onSubmit(nota.trim())}
+            disabled={busy || nota.trim().length < 5}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertCircle className="h-4 w-4" />}
+            Enviar solicitud
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ResponderAclaracionDialog({
+  row, busy, onCancel, onSubmit,
+}: {
+  row: TransferRow
+  busy: boolean
+  onCancel: () => void
+  onSubmit: (body: { respuesta: string; idTransferencia?: string; referenciaBanco?: string }) => void
+}) {
+  const [respuesta, setRespuesta] = useState('')
+  const [nuevaRef, setNuevaRef] = useState(row.idTransferencia ?? '')
+  const [nuevaRefBanco, setNuevaRefBanco] = useState(row.referenciaBanco ?? '')
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !busy && onCancel()}>
+      <div className="w-full max-w-md rounded-2xl bg-card border border-border/60 shadow-xl p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between">
+          <h3 className="text-base font-semibold flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-sky-400" /> Responder aclaración
+          </h3>
+          <button onClick={() => !busy && onCancel()} className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+          <p className="font-medium text-amber-200 mb-1">Lo que pidió el verificador:</p>
+          <p>{row.aclaracionNota}</p>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          <strong className="text-foreground">{row.client.nombreCompleto}</strong> — {formatMoney(Number(row.monto))}
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Tu respuesta</Label>
+          <textarea
+            value={respuesta}
+            onChange={(e) => setRespuesta(e.target.value)}
+            placeholder='Ej. "Revisé el extracto, el depósito está en el siguiente movimiento con otra fecha-hora"'
+            rows={3}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
+            disabled={busy}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Referencia / código (opcional, corrige si hace falta)</Label>
+          <Input value={nuevaRef} onChange={(e) => setNuevaRef(e.target.value)} disabled={busy} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Ref. banco / autorización SPEI (opcional)</Label>
+          <Input value={nuevaRefBanco} onChange={(e) => setNuevaRefBanco(e.target.value)} disabled={busy} />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Al enviar, el pago vuelve a "Pendientes" para que el verificador revise con tu respuesta.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onCancel} disabled={busy}>Cancelar</Button>
+          <Button
+            variant="default"
+            onClick={() => onSubmit({
+              respuesta:       respuesta.trim(),
+              idTransferencia: nuevaRef.trim() && nuevaRef.trim() !== (row.idTransferencia ?? '') ? nuevaRef.trim() : undefined,
+              referenciaBanco: nuevaRefBanco.trim() && nuevaRefBanco.trim() !== (row.referenciaBanco ?? '') ? nuevaRefBanco.trim() : undefined,
+            })}
+            disabled={busy || respuesta.trim().length < 5}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+            Enviar respuesta
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

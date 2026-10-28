@@ -448,6 +448,118 @@ export async function getMoraSnapshot(
   }
 }
 
+// ─── Transferencias pendientes de verificar ────────────────────────
+//
+// El Payment TRANSFER queda en statusTransferencia='PENDIENTE' hasta
+// que el GZ (o quien tenga permiso) confirma que el dinero llego a la
+// cuenta. Mientras tanto el schedule queda PENDING y aparece en mora —
+// correctamente, porque la plata no esta confirmada. Esta vista le
+// muestra a Direccion que transferencias llevan tiempo colgadas para
+// presionar al verificador.
+
+export interface TransferPendienteRow {
+  paymentId:    string
+  clienteNombre: string
+  branchId:     string
+  branchNombre: string
+  cobradorNombre: string
+  monto:        number
+  fechaHora:    string   // ISO
+  antiguedadHoras: number
+  idTransferencia: string | null
+}
+
+export interface TransferenciasPendientesSnapshot {
+  total:         number
+  numPagos:      number
+  buckets: {
+    hoy:        { count: number; monto: number }  // < 24h
+    unoATres:   { count: number; monto: number }  // 24h – 72h
+    masDeTres:  { count: number; monto: number }  // > 72h — accion urgente
+  }
+  porSucursal: Array<{ branchId: string; nombre: string; count: number; monto: number; masViejoHoras: number }>
+  masViejas:   TransferPendienteRow[]   // top 20
+}
+
+export async function getTransferenciasPendientesSnapshot(
+  user: AccessUser,
+  companyId: string,
+): Promise<TransferenciasPendientesSnapshot> {
+  const now = Date.now()
+  const loanWhere = buildLoanWhere(user, companyId, {})
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      metodoPago:          'TRANSFER',
+      statusTransferencia: 'PENDIENTE',
+      canceledAt:          null,
+      loan:                loanWhere,
+    },
+    select: {
+      id:              true,
+      monto:           true,
+      fechaHora:       true,
+      idTransferencia: true,
+      cobrador:        { select: { nombre: true } },
+      client:          { select: { nombreCompleto: true } },
+      loan:            {
+        select: {
+          branchId: true,
+          branch:   { select: { nombre: true } },
+        },
+      },
+    },
+    orderBy: { fechaHora: 'asc' },
+  })
+
+  const buckets = {
+    hoy:       { count: 0, monto: 0 },
+    unoATres:  { count: 0, monto: 0 },
+    masDeTres: { count: 0, monto: 0 },
+  }
+  const sucursalAcc = new Map<string, { nombre: string; count: number; monto: number; masViejoHoras: number }>()
+  let total    = 0
+  const rows: TransferPendienteRow[] = []
+
+  for (const p of payments) {
+    const monto = Number(p.monto)
+    const horas = Math.floor((now - p.fechaHora.getTime()) / 3_600_000)
+    total += monto
+
+    if      (horas < 24) { buckets.hoy.count       += 1; buckets.hoy.monto       += monto }
+    else if (horas < 72) { buckets.unoATres.count  += 1; buckets.unoATres.monto  += monto }
+    else                 { buckets.masDeTres.count += 1; buckets.masDeTres.monto += monto }
+
+    const bAcc = sucursalAcc.get(p.loan.branchId) ?? { nombre: p.loan.branch.nombre, count: 0, monto: 0, masViejoHoras: 0 }
+    bAcc.count         += 1
+    bAcc.monto         += monto
+    if (horas > bAcc.masViejoHoras) bAcc.masViejoHoras = horas
+    sucursalAcc.set(p.loan.branchId, bAcc)
+
+    rows.push({
+      paymentId:       p.id,
+      clienteNombre:   p.client.nombreCompleto,
+      branchId:        p.loan.branchId,
+      branchNombre:    p.loan.branch.nombre,
+      cobradorNombre:  p.cobrador.nombre,
+      monto,
+      fechaHora:       p.fechaHora.toISOString(),
+      antiguedadHoras: horas,
+      idTransferencia: p.idTransferencia,
+    })
+  }
+
+  return {
+    total,
+    numPagos:    payments.length,
+    buckets,
+    porSucursal: Array.from(sucursalAcc.entries())
+      .map(([branchId, acc]) => ({ branchId, ...acc }))
+      .sort((a, b) => b.masViejoHoras - a.masViejoHoras),
+    masViejas:   rows.slice(0, 20),  // ya ordenado por fechaHora asc
+  }
+}
+
 // ─── Colocación (créditos desembolsados en periodo) ─────────────────
 
 export interface ColocacionSnapshot {

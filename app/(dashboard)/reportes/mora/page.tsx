@@ -12,7 +12,8 @@ import { FiltrosBar } from '@/components/reportes/FiltrosBar'
 import { parseFiltrosFromSearchParams } from '@/lib/reportes/filterParse'
 import { ReportBarChart, ReportPieChart } from '@/components/reportes/Charts'
 import { ImprimirReporteButton, type SeccionReporte } from '@/components/reportes/ImprimirReporteButton'
-import { getMoraSnapshot, getFiltrosOpciones } from '@/lib/reportes/queries'
+import { getMoraSnapshot, getFiltrosOpciones, getTransferenciasPendientesSnapshot } from '@/lib/reportes/queries'
+import { Clock } from 'lucide-react'
 
 const ALLOWED_ROLES = [
   'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'GERENTE_ZONAL', 'GERENTE',
@@ -81,8 +82,9 @@ export default async function MoraReportePage({
   }
 
   const { filtros } = parseFiltrosFromSearchParams(searchParams)
-  const [snapshot, opciones, empresa] = await Promise.all([
+  const [snapshot, transferPend, opciones, empresa] = await Promise.all([
     getMoraSnapshot(accessUser, companyId!, filtros),
+    getTransferenciasPendientesSnapshot(accessUser, companyId!),
     getFiltrosOpciones(accessUser, companyId!),
     prisma.company.findUnique({ where: { id: companyId! }, select: { nombre: true } }),
   ])
@@ -217,6 +219,85 @@ export default async function MoraReportePage({
       </div>
 
       <FiltrosBar branches={opciones.branches} cobradores={opciones.cobradores} hidePeriodo />
+
+      {/* Transferencias pendientes de verificar: parte de los schedules
+          en mora pueden tener una transferencia esperando verificacion.
+          Es "mora correcta contablemente" (plata no confirmada) pero no
+          la del cobrador — es del GZ que no verifica. Lista aqui para
+          que Direccion vea cuanto esta colgado. */}
+      {transferPend.numPagos > 0 && (
+        <Card className="glass-hover-card border-amber-500/40">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-400" />
+              Transferencias pendientes de verificar
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                ({transferPend.numPagos} · {formatMoney(transferPend.total)})
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg border border-border/60 bg-background/30 p-3">
+                <div className="text-xs text-muted-foreground">Menos de 24h</div>
+                <div className="text-lg font-semibold tabular-nums">
+                  {transferPend.buckets.hoy.count} · {formatMoney(transferPend.buckets.hoy.monto)}
+                </div>
+              </div>
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+                <div className="text-xs text-amber-200">1 a 3 días</div>
+                <div className="text-lg font-semibold tabular-nums text-amber-100">
+                  {transferPend.buckets.unoATres.count} · {formatMoney(transferPend.buckets.unoATres.monto)}
+                </div>
+              </div>
+              <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-3">
+                <div className="text-xs text-rose-200">Más de 3 días · acción urgente</div>
+                <div className="text-lg font-semibold tabular-nums text-rose-100">
+                  {transferPend.buckets.masDeTres.count} · {formatMoney(transferPend.buckets.masDeTres.monto)}
+                </div>
+              </div>
+            </div>
+
+            {transferPend.porSucursal.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-secondary/40 text-muted-foreground text-xs uppercase tracking-wide">
+                    <tr>
+                      <th className="text-left px-3 py-2">Sucursal</th>
+                      <th className="text-right px-3 py-2">Pagos</th>
+                      <th className="text-right px-3 py-2">Monto</th>
+                      <th className="text-right px-3 py-2">Más vieja</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {transferPend.porSucursal.map((s) => (
+                      <tr key={s.branchId} className="hover:bg-secondary/30">
+                        <td className="px-3 py-2 font-medium">{s.nombre}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{s.count}</td>
+                        <td className="px-3 py-2 text-right tabular-nums money">{formatMoney(s.monto)}</td>
+                        <td className={`px-3 py-2 text-right tabular-nums ${
+                          s.masViejoHoras >= 72 ? 'text-rose-400 font-semibold'
+                          : s.masViejoHoras >= 24 ? 'text-amber-400'
+                          : 'text-muted-foreground'
+                        }`}>
+                          {s.masViejoHoras < 24
+                            ? `${s.masViejoHoras}h`
+                            : `${Math.floor(s.masViejoHoras / 24)}d ${s.masViejoHoras % 24}h`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="text-xs text-muted-foreground">
+              Verificalas en <Link href="/transferencias" className="text-primary-400 underline">/transferencias</Link>.
+              Una vez verificadas, los schedules asociados pasan a PAID y salen del reporte de mora.
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <MetricCard

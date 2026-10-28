@@ -323,10 +323,17 @@ export async function getMoraSnapshot(
   const today = todayMx()
   const loanWhere = buildLoanWhere(user, companyId, filtros)
 
+  // Solo cuenta la mora de préstamos ACTIVOS o en DEFAULT. Los
+  // LIQUIDATED (ya cerrados), RESTRUCTURED (reemplazados), REJECTED,
+  // DECLINED y los estados pre-activación nunca cobran, así que un
+  // schedule PENDING/PARTIAL colgado de ellos NO es mora.
   const overdues = await prisma.paymentSchedule.findMany({
     where: {
       ...overdueWhere(today),
-      loan: loanWhere,
+      loan: {
+        ...loanWhere,
+        estado: { in: ['ACTIVE', 'DEFAULTED'] },
+      },
     },
     select: {
       fechaVencimiento: true,

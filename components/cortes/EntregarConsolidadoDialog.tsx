@@ -151,7 +151,7 @@ export function EntregarConsolidadoDialog({ corte, receptores, onClose }: Props)
           <label className="text-xs font-medium text-muted-foreground">
             {metodo === 'TRANSFERENCIA' ? 'Foto del comprobante de transferencia' : 'Foto del ticket firmado por DG/DC'}
           </label>
-          <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={elegirFoto} disabled={subiendo} className="sr-only" />
+          <input ref={inputRef} type="file" accept="image/*" onChange={elegirFoto} disabled={subiendo} className="sr-only" />
           {!preview ? (
             <Button type="button" variant="outline" className="w-full py-6 border-dashed" onClick={() => inputRef.current?.click()} disabled={subiendo}>
               <ImageIcon className="h-4 w-4 mr-2" /> Tomar/seleccionar foto

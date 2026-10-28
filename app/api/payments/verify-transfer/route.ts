@@ -141,7 +141,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Actualizar estado del schedule (PAID/PARTIAL)
-    const nuevoEstado = monto >= Number(schedule.montoEsperado) ? 'PAID' : 'PARTIAL'
+    // Comparamos el TOTAL abonado (previo + este) contra lo esperado —
+    // si este pago cierra una cuota que ya tenía abono parcial, debe
+    // marcarse PAID.
+    const totalDespuesDelPago = Number(schedule.montoPagado) + monto
+    const nuevoEstado = totalDespuesDelPago >= Number(schedule.montoEsperado) ? 'PAID' : 'PARTIAL'
     await tx.paymentSchedule.update({
       where: { id: schedule.id },
       data: {

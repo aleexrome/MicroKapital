@@ -319,8 +319,12 @@ export async function POST(req: NextRequest) {
       return { payment, pending: true as const }
     }
 
-    // 3. Actualizar estado del schedule
-    const nuevoEstado = data.monto >= Number(schedule.montoEsperado) ? 'PAID' : 'PARTIAL'
+    // 3. Actualizar estado del schedule.
+    // Comparamos el TOTAL que quedará abonado (previo + este pago) contra
+    // lo esperado — no solo el monto del pago actual. Si el schedule ya
+    // tenía un abono parcial, el pago que lo cierra debe marcarlo PAID.
+    const totalDespuesDelPago = Number(schedule.montoPagado) + data.monto
+    const nuevoEstado = totalDespuesDelPago >= Number(schedule.montoEsperado) ? 'PAID' : 'PARTIAL'
     await tx.paymentSchedule.update({
       where: { id: schedule.id },
       data: {
@@ -473,7 +477,7 @@ export async function POST(req: NextRequest) {
       })
     } else {
       // Pago CASH/CARD aplicado. ¿Quedó liquidado el préstamo?
-      const fuePagoCompleto = Number(data.monto) >= Number(schedule.montoEsperado)
+      const fuePagoCompleto = (Number(schedule.montoPagado) + Number(data.monto)) >= Number(schedule.montoEsperado)
       const quedoLiquidado = fuePagoCompleto && loan.schedule.filter((s) => s.id !== schedule.id).length === 0
       if (quedoLiquidado) {
         const directores = await getDirectoresIds(prisma, companyId!)

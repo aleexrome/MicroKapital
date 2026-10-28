@@ -31,6 +31,12 @@ export default async function TransferenciasPage() {
       verificadoAt: true,
       comprobanteFotoUrl: true,
       referenciaBanco: true,
+      cobradorId: true,
+      aclaracionSolicitadaAt: true,
+      aclaracionNota: true,
+      aclaracionRespuesta: true,
+      aclaracionRespondidaAt: true,
+      aclaracionSolicitadaPor: { select: { nombre: true } },
       cuentaDestino: { select: { banco: true, titular: true, clabe: true } },
       cobrador: { select: { nombre: true } },
       verificadoPor: { select: { nombre: true } },
@@ -65,6 +71,7 @@ export default async function TransferenciasPage() {
     referenciaBanco: p.referenciaBanco,
     cuentaDestino: p.cuentaDestino,
     cobrador: p.cobrador,
+    cobradorId: p.cobradorId,
     verificadoPor: p.verificadoPor,
     client: p.client,
     loan: { tipo: p.loan.tipo },
@@ -72,11 +79,16 @@ export default async function TransferenciasPage() {
     // sucursales de su zona que NO son centralizadas.
     puedeVerificar: canVerifyTransfer(accessUser, p.loan.branch),
     sucursalNombre: p.loan.branch.nombre,
+    aclaracionSolicitadaAt: p.aclaracionSolicitadaAt ? p.aclaracionSolicitadaAt.toISOString() : null,
+    aclaracionNota: p.aclaracionNota,
+    aclaracionRespuesta: p.aclaracionRespuesta,
+    aclaracionRespondidaAt: p.aclaracionRespondidaAt ? p.aclaracionRespondidaAt.toISOString() : null,
+    aclaracionSolicitadaPor: p.aclaracionSolicitadaPor,
   }))
 
   // Header "puedes verificar algo" — para el subtítulo. Alguien que ve
   // pero no puede verificar nada tiene un mensaje distinto.
   const puedeVerificarAlgo = rows.some((r) => r.puedeVerificar)
 
-  return <TransferenciasView rows={rows} puedeVerificar={puedeVerificarAlgo} rol={rol} />
+  return <TransferenciasView rows={rows} puedeVerificar={puedeVerificarAlgo} rol={rol} userId={session.user.id} />
 }

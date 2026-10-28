@@ -74,6 +74,35 @@ export function CorteCongeladoForm({
   const esRechazado = estado === 'RECHAZADO'
   const esAbierto   = estado === 'ABIERTO'
 
+  /**
+   * Comprime la foto en el browser antes de subir. Las fotos de iPhone
+   * salen fácilmente a 4-8MB y el server rechaza >10MB, provocando
+   * fallos silenciosos. Esta función resuelve lo mismo que ya hace
+   * EntregarParcialDialog: redimensiona a max 1600px y re-codifica a
+   * JPEG calidad 82%. HEIC/HEIF se dejan como vienen porque
+   * createImageBitmap puede no soportarlos en todos los browsers.
+   */
+  async function comprimirFoto(f: File): Promise<File> {
+    if (/heic|heif/i.test(f.type) || /\.(heic|heif)$/i.test(f.name)) return f
+    try {
+      const bmp = await createImageBitmap(f)
+      const MAX = 1600
+      const scale = Math.min(1, MAX / Math.max(bmp.width, bmp.height))
+      const w = Math.round(bmp.width * scale)
+      const h = Math.round(bmp.height * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return f
+      ctx.drawImage(bmp, 0, 0, w, h)
+      bmp.close?.()
+      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.82))
+      if (!blob || blob.size >= f.size) return f
+      return new File([blob], f.name.replace(/\.(jpe?g|png|webp)$/i, '.jpg') || 'ticket.jpg', { type: 'image/jpeg' })
+    } catch { return f }
+  }
+
   async function onFileSelected(ev: React.ChangeEvent<HTMLInputElement>) {
     const file = ev.target.files?.[0]
     ev.target.value = ''
@@ -82,15 +111,16 @@ export function CorteCongeladoForm({
       toast({ title: 'Elige un receptor antes de subir la foto', variant: 'destructive' })
       return
     }
-    if (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith('image/') && !/\.(heic|heif)$/i.test(file.name)) {
       toast({ title: 'Solo imágenes', variant: 'destructive' })
       return
     }
     setUploading(true)
     try {
+      const comprimido = await comprimirFoto(file)
       const fd = new FormData()
       fd.append('receptorId', selectedReceptor)
-      fd.append('foto', file)
+      fd.append('foto', comprimido)
       const res = await fetch(`/api/cortes/${corteId}/entregar`, {
         method: 'POST',
         body:   fd,

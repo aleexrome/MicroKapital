@@ -230,7 +230,7 @@ export function CorteCongeladoForm({
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
-                  className="hidden"
+                  className="sr-only"
                   onChange={onFileSelected}
                 />
               </div>

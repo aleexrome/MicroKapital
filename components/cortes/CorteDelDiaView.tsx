@@ -10,6 +10,7 @@ import { EntregarParcialDialog } from './EntregarParcialDialog'
 import { EntregarConsolidadoDialog } from './EntregarConsolidadoDialog'
 import { ConfirmarConsolidadoDialog } from './ConfirmarConsolidadoDialog'
 import { AceptarParcialButton } from './AceptarParcialButton'
+import { RechazarParcialButton } from './RechazarParcialButton'
 import { TimelineDia } from './TimelineDia'
 import { ParcialPrintButton } from './ParcialPrintButton'
 import { ConsolidadoPrintButton } from './ConsolidadoPrintButton'
@@ -230,6 +231,7 @@ export function CorteDelDiaView(props: Props) {
                         Ver ticket
                       </a>
                     )}
+                    <RechazarParcialButton corteId={c.id} montoEsperado={Number(c.totalAEntregar)} />
                     <AceptarParcialButton corteId={c.id} montoEsperado={Number(c.totalAEntregar)} />
                   </div>
                 </div>

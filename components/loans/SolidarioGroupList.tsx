@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { DeleteEntityButton } from '@/components/admin/DeleteEntityButton'
 import { EditGroupNameButton } from '@/components/loans/EditGroupNameButton'
+import { GrupoRenovacionButton } from '@/components/loans/GrupoRenovacionButton'
 
 export interface SolidarioLoan {
   id: string
@@ -147,7 +148,8 @@ export function SolidarioGroupList({
             {/* ── Expanded: client list + botón por rol ── */}
             {isOpen && (
               <div className="border-t border-border/60">
-                <div className="px-4 py-2 flex items-center justify-end bg-muted/20">
+                <div className="px-4 py-2 flex items-center justify-end gap-2 bg-muted/20">
+                  <GrupoRenovacionButton groupId={grupo.id} />
                   {mode === 'aplicar' ? (
                     <Button asChild size="sm" variant="outline" className="h-7 text-xs px-2">
                       <Link href={`/grupos/${grupo.id}`} onClick={(e) => e.stopPropagation()}>

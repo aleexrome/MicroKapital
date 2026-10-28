@@ -143,11 +143,15 @@ export default async function CorteDelDiaPage() {
     : { efectivo: 0, tarjeta: 0, transferencia: 0, desde: fecha }
 
   // ── Parciales ENTREGADOS que me dirigieron (acepto como concentradora) ─
+  // No filtramos por fecha: un coord puede entregar hoy un corte de un
+  // día de operación anterior (por ejemplo, el cron le abrió ayer un
+  // parcial a las 18:00 pero recién hoy pudo entregarlo). Lo que importa
+  // para la concentradora es el estado ENTREGADO, no la fecha del día
+  // de operación.
   const parcialesEntregadosRecibidos = hacesCorte
     ? await prisma.corte.findMany({
         where: {
           receptorId: userId,
-          fecha,
           tipo:       'PARCIAL',
           estado:     'ENTREGADO',
         },

@@ -63,7 +63,7 @@ export function ReporteEjecutivoView({ data, empresa }: { data: ReporteEjecutivo
         cacheBust: true,
       })
 
-      const semanaTag = `${data.semanaInicio.toISOString().slice(0, 10)}_${data.semanaFin.toISOString().slice(0, 10)}`
+      const semanaTag = `${new Date(data.semanaInicio).toISOString().slice(0, 10)}_${new Date(data.semanaFin).toISOString().slice(0, 10)}`
       const link = document.createElement('a')
       link.download = `reporte-ejecutivo_${semanaTag}.png`
       link.href = dataUrl
@@ -79,7 +79,11 @@ export function ReporteEjecutivoView({ data, empresa }: { data: ReporteEjecutivo
     }
   }
 
-  const semanaRange = `${data.semanaInicio.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} – ${data.semanaFin.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}`
+  // El page.tsx serializa con JSON — las fechas llegan como string ISO,
+  // no como Date. Convertimos antes de formatear.
+  const semanaInicioDate = new Date(data.semanaInicio)
+  const semanaFinDate    = new Date(data.semanaFin)
+  const semanaRange = `${semanaInicioDate.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} – ${semanaFinDate.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}`
 
   return (
     <div className="p-6 space-y-5">

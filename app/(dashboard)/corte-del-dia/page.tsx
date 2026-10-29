@@ -188,12 +188,16 @@ export default async function CorteDelDiaPage() {
     : []
 
   // ── Histórico: cortes de los últimos 14 días (sin incluir hoy) ───
+  // Para DG/DC/SA (receptores finales con alcance empresa) mostramos
+  // los cortes de TODA la empresa — no solo donde él es dueño/receptor.
+  // Esto permite al Director de Sistemas ver los montos de ayer/antier
+  // aunque no haya participado en la cadena.
   const haceDosSemanas = new Date(fecha.getTime() - 14 * 24 * 60 * 60 * 1000)
   const cortesHistoricos = await prisma.corte.findMany({
     where: {
       companyId: companyId!,
       fecha: { gte: haceDosSemanas, lt: fecha },
-      OR: [{ userId }, { receptorId: userId }],
+      ...(esReceptor ? {} : { OR: [{ userId }, { receptorId: userId }] }),
     },
     orderBy: [{ fecha: 'desc' }, { numeroCorte: 'asc' }],
     take: 300,

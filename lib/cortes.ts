@@ -140,6 +140,10 @@ export async function cortePendienteDe(
   const hoyBloquea = ahora.getTime() >= corteObligatorioAt.getTime()
 
   // Buscar el corte PROPIO más viejo que no esté ACEPTADO (PARCIAL o CONSOLIDADO).
+  // Excepción: cortes vacíos (totalAEntregar = 0) en estado ABIERTO no
+  // bloquean — si el user no cobró nada, no hay dinero físico que entregar
+  // ni foto de ticket que exigir. Dejamos esos cortes como "muertos" en
+  // la DB para auditoría pero no congelamos al user.
   const row = await prisma.corte.findFirst({
     where: {
       userId: user.id,
@@ -147,6 +151,14 @@ export async function cortePendienteDe(
       OR: hoyBloquea
         ? [{ fecha: { lte: hoy } }]
         : [{ fecha: { lt: hoy } }],
+      // Si está ABIERTO y vacío (sin cobros + sin recibidos), no bloquea.
+      // Entregado/rechazado sí siempre bloquea (ya hubo intento de entrega).
+      NOT: {
+        AND: [
+          { estado: 'ABIERTO' },
+          { totalAEntregar: 0 },
+        ],
+      },
     },
     orderBy: { fecha: 'asc' },
     select:  { id: true },
@@ -268,6 +280,14 @@ export async function cortesPendientesPorSucursal(
       companyId,
       fecha: { lt: hoy },
       estado: { in: ['ABIERTO', 'ENTREGADO', 'RECHAZADO'] },
+      // Mismos criterios que cortePendienteDe: no mostrar como pendientes
+      // los cortes vacíos ABIERTOS (sin cobros = sin dinero que entregar).
+      NOT: {
+        AND: [
+          { estado: 'ABIERTO' },
+          { totalAEntregar: 0 },
+        ],
+      },
     },
     orderBy: [{ fecha: 'asc' }, { numeroCorte: 'asc' }],
     include: {

@@ -57,12 +57,25 @@ export async function GET(req: NextRequest) {
   const errores: string[] = []
 
   // Candidatos: cada user activo con rol que hace corte Y con CashRegister
-  // del día (= cobró algo). Si no cobró, no se le abre nada.
+  // del día con AL MENOS un peso cobrado (efectivo, tarjeta o transferencia).
+  // Antes bastaba con `cashRegisters: { some: { fecha } }`, pero un
+  // CashRegister puede existir con todos los montos en 0 (p. ej. coord
+  // capturó un pago y lo canceló) — el cron creaba un corte vacío que
+  // bloqueaba al user al día siguiente sin dinero real que entregar.
   const candidatos = await prisma.user.findMany({
     where: {
       activo: true,
       rol:    { in: [...ROLES_HACEN_CORTE] },
-      cashRegisters: { some: { fecha } },
+      cashRegisters: {
+        some: {
+          fecha,
+          OR: [
+            { cobradoEfectivo:      { gt: 0 } },
+            { cobradoTarjeta:       { gt: 0 } },
+            { cobradoTransferencia: { gt: 0 } },
+          ],
+        },
+      },
     },
     select: { id: true, companyId: true, branchId: true, nombre: true },
   })

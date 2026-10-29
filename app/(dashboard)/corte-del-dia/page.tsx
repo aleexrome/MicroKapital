@@ -178,12 +178,18 @@ export default async function CorteDelDiaPage() {
     : []
 
   // ── Consolidados ENTREGADOS dirigidos a mí (confirmo como DG/DC/SA) ─
+  // Para DG/DC/SA: incluye los CONSOLIDADOS entregados a ellos (flujo
+  // normal del concentrador) Y los PARCIALES entregados directo
+  // (sucursales sin concentradorUserId, donde el coord entrega al
+  // receptor final sin pasar por un consolidado intermedio). Antes solo
+  // tipo=CONSOLIDADO, por eso los parciales directos como el de Diana
+  // Elizabeth Ayala a Ixmel quedaban en limbo sin forma de aceptarse.
   const consolidadosPendientesConfirmar = esReceptor
     ? await prisma.corte.findMany({
         where: {
           receptorId: userId,
           companyId:  companyId!,
-          tipo:       'CONSOLIDADO',
+          tipo:       { in: ['CONSOLIDADO', 'PARCIAL'] },
           estado:     'ENTREGADO',
         },
         orderBy: { entregadoAt: 'asc' },

@@ -223,10 +223,11 @@ export default async function CorteDelDiaPage() {
       })
     : []
 
-  // Radar "Pendientes de corte" — solo roles con visibilidad empresa.
-  // DG/DC/SA ya ven el timeline de todas las sucursales; MESA_CONTROL
-  // también tiene alcance empresa en estos reportes.
-  const puedeVerPendientesEmpresa = esReceptor || rol === 'MESA_CONTROL'
+  // Radar "Pendientes de corte" — solo roles del último eslabón de la
+  // cadena de cortes (DG/DC/SA). MESA_CONTROL NO lo ve: en operación
+  // no es su rol vigilar el cierre de corte, aunque tenga alcance
+  // empresa en otros reportes.
+  const puedeVerPendientesEmpresa = esReceptor
   const pendientesCortes = puedeVerPendientesEmpresa
     ? await cortesPendientesPorSucursal(prisma, companyId!)
     : []

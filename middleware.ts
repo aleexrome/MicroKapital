@@ -6,6 +6,13 @@ const PUBLIC_PATHS = [
   '/login',
   '/api/auth',
   '/api/internal',
+  // Endpoints de cron: Vercel Cron nativo bypassea middleware vía
+  // configuración de vercel.json, pero servicios externos (cron-job.org,
+  // UptimeRobot, EasyCron) no — y el middleware los redirigía a /login
+  // con 307. Cada endpoint bajo /api/cron valida INTERNAMENTE la
+  // autenticación por x-vercel-cron o Authorization: Bearer CRON_SECRET,
+  // así que es seguro saltar el middleware aquí.
+  '/api/cron',
   '/licencia-suspendida',
   '/verificar',
   // Rutas públicas de preview + PWA — crawlers (WhatsApp/Facebook) y el

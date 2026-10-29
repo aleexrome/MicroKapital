@@ -1,20 +1,25 @@
 import type { LoanType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { weekRange } from './dateRanges'
-import { todayMx } from '@/lib/timezone'
+import { getSaturday, getFriday } from '@/lib/week-utils'
+import { loanNotDeletedWhere } from '@/lib/access'
 
 /**
- * Snapshot ejecutivo semanal — pensado para el "radar" por sucursal
- * que ve Dirección de Sistemas al cerrar la semana. Agrupa por
- * sucursal → coordinadores con:
- *   - Meta de colocación (de Goal) + alcance real + %
- *   - Pactado a recuperar (schedules de la semana) + recuperado + %
- *   - Pagos pendientes al momento (schedules sin PAID de la semana)
- *   - Score compuesto para ordenar y colorear (verde/amarillo/rojo)
+ * Snapshot ejecutivo semanal — radar por sucursal que Dirección usa
+ * para ver colocación y cobranza en la semana en curso.
  *
- * No se expone por filtro de usuario / sucursal — devuelve TODAS las
- * sucursales activas de la empresa. El permiso se controla en la
- * página (solo Alejandro Romero).
+ * MISMA FUENTE DE VERDAD que /rutas (DG lo pidió explícitamente):
+ *   - Semana sábado 00:00 UTC → viernes 23:59 UTC (del día calendario CDMX).
+ *   - Pactado = schedules cuyo `fechaVencimiento` cae en esa semana,
+ *     excluyendo FINANCIADO, de loans ACTIVE/LIQUIDATED/DEFAULTED no
+ *     eliminados.
+ *   - Recuperado = suma de `Payment.monto` ligados a esos schedules,
+ *     CAPADA por `montoEsperado`. Un pago anticipado o tardío cuenta
+ *     en la semana del schedule, no del pago (así se mide cumplimiento
+ *     del ciclo semanal, no ingresos del día).
+ *   - Colocación = loans con `fechaDesembolso` en la semana (ACTIVE/
+ *     LIQUIDATED, no eliminados).
+ *   - Pagos pendientes al momento = schedules de la semana cuyo
+ *     vencimiento ya pasó y aún no se liquidaron.
  */
 
 export interface PagoPendienteSemana {
@@ -33,21 +38,15 @@ export interface CoordinadorEjecutivo {
   cobradorId:          string
   nombre:              string
   rol:                 string
-  // Colocación
-  metaColocacion:      number       // 0 si no hay Goal definido
+  metaColocacion:      number
   colocacionReal:      number
-  colocacionPct:       number       // 0..100+ ; 0 si meta=0
-  // Cobranza
+  colocacionPct:       number
   pactado:             number
   recuperado:          number
-  cobranzaPct:         number       // 0..100+ ; 0 si pactado=0
-  // Pagos sueltos pendientes
+  cobranzaPct:         number
   pagosPendientes:     PagoPendienteSemana[]
   pagosPendientesTotal: number
-  // Score compuesto (0..100). Promedio de colocacionPct y cobranzaPct
-  // (capeados a 100). Si una métrica no tiene meta, se usa solo la otra.
   score:               number
-  // Clasificación por color
   color:               'verde' | 'amarillo' | 'rojo'
 }
 
@@ -56,7 +55,6 @@ export interface SucursalEjecutivo {
   nombre:              string
   concentradoraNombre: string | null
   gerenteZonalNombre:  string | null
-  // Agregados de la sucursal (suma de coordinadores)
   metaColocacionTotal: number
   colocacionTotal:     number
   colocacionPct:       number
@@ -79,14 +77,12 @@ function clasificar(score: number): 'verde' | 'amarillo' | 'rojo' {
   return 'rojo'
 }
 
-/**
- * Carga la info ejecutiva de la semana actual (lun-dom CDMX).
- */
 export async function getReporteEjecutivoSemanal(companyId: string): Promise<ReporteEjecutivo> {
-  const range = weekRange(todayMx())
-  const ahora = new Date()
+  // Semana Rutas: sábado 00:00 UTC → viernes 23:59 UTC CDMX
+  const saturday = getSaturday(new Date())
+  const friday   = getFriday(saturday)
+  const ahora    = new Date()
 
-  // Sucursales activas con su concentradora y GZ (si hay).
   const branches = await prisma.branch.findMany({
     where:  { companyId, activa: true },
     select: {
@@ -97,7 +93,6 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
     orderBy: { nombre: 'asc' },
   })
 
-  // GZ de cada sucursal: User con rol GERENTE_ZONAL que tenga esta sucursal en su zonaBranchIds o branchId.
   const gerentes = await prisma.user.findMany({
     where: { companyId, rol: 'GERENTE_ZONAL', activo: true },
     select: { id: true, nombre: true, branchId: true, zonaBranchIds: true },
@@ -111,19 +106,17 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
     return null
   }
 
-  // Metas semanales activas (lun-dom actual). Sólo las que apuntan a un cobrador o a una sucursal.
-  // Si una Goal es por sucursal, se aplica como "meta de la sucursal" (no se reparte).
+  // Metas semanales (si Dirección las definió en Goal)
   const goals = await prisma.goal.findMany({
     where: {
       companyId,
-      semanaInicio: { lte: range.fin },
-      semanaFin:    { gte: range.inicio },
+      semanaInicio: { lte: friday },
+      semanaFin:    { gte: saturday },
     },
     select: {
       cobradorId:          true,
       branchId:            true,
       metaCapitalColocado: true,
-      metaCobranzaEsperada: true,
     },
   })
   const metaColocPorCobrador = new Map<string, number>()
@@ -138,28 +131,16 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
     }
   }
 
-  // Colocación real de la semana (nuevos desembolsos lun-dom).
-  const loansDesembolsados = await prisma.loan.findMany({
-    where: {
-      companyId,
-      fechaDesembolso: { gte: range.inicio, lte: range.fin },
-      estado: { in: ['ACTIVE', 'LIQUIDATED', 'RESTRUCTURED', 'DEFAULTED'] },
-    },
-    select: { capital: true, cobradorId: true, branchId: true },
-  })
-  const colocPorCobrador = new Map<string, number>()
-  for (const l of loansDesembolsados) {
-    colocPorCobrador.set(l.cobradorId, (colocPorCobrador.get(l.cobradorId) ?? 0) + Number(l.capital))
-  }
-
-  // Pactado a recuperar: suma de montoEsperado de schedules que vencen en la semana (loan ACTIVE/DEFAULTED).
+  // Pactado + Recuperado — MISMA query/lógica que /rutas
   const schedulesSemana = await prisma.paymentSchedule.findMany({
     where: {
-      fechaVencimiento: { gte: range.inicio, lte: range.fin },
-      estado: { not: 'FINANCIADO' },
+      fechaVencimiento: { gte: saturday, lte: friday },
+      // FINANCIADO se filtra en código (ver loop), para hacer explícito
+      // qué se descarta — igual que /rutas.
       loan: {
         companyId,
-        estado: { in: ['ACTIVE', 'DEFAULTED'] },
+        estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
+        AND: [loanNotDeletedWhere],
       },
     },
     select: {
@@ -169,6 +150,10 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
       montoEsperado:    true,
       montoPagado:      true,
       estado:           true,
+      payments: {
+        where:  { canceledAt: null },
+        select: { monto: true, fechaHora: true },
+      },
       loan: {
         select: {
           id:         true,
@@ -182,26 +167,34 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
     orderBy: { fechaVencimiento: 'asc' },
   })
 
-  // Pactado y pendientes por cobrador.
-  const pactadoPorCobrador = new Map<string, number>()
+  const pactadoPorCobrador    = new Map<string, number>()
+  const recuperadoPorCobrador = new Map<string, number>()
   const pendientesPorCobrador = new Map<string, PagoPendienteSemana[]>()
+
   for (const s of schedulesSemana) {
+    if (s.estado === 'FINANCIADO') continue
+
     const monto = Number(s.montoEsperado)
     pactadoPorCobrador.set(s.loan.cobradorId, (pactadoPorCobrador.get(s.loan.cobradorId) ?? 0) + monto)
 
-    const pendiente = monto - Number(s.montoPagado)
-    // Solo pagos que aún no están liquidados Y que ya vencieron o vencen hoy
-    // (los que vencen más adelante en la semana se cuentan en "pactado" pero
-    // no estorban en "pendientes al momento" — todavía no es tarde).
+    // Cobranza efectiva ESTRICTA (igual que la semana actual/anterior en /rutas):
+    // suma Payments del schedule, capada por montoEsperado. Pagos
+    // anticipados o tardíos cuentan en la semana del schedule.
+    const paidTotal = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
+    const cobrado   = Math.min(paidTotal, monto)
+    recuperadoPorCobrador.set(s.loan.cobradorId, (recuperadoPorCobrador.get(s.loan.cobradorId) ?? 0) + cobrado)
+
+    // Pendiente al momento: schedule vencido no completo (para el detalle)
     const yaVencio = s.fechaVencimiento.getTime() <= ahora.getTime()
-    if (yaVencio && s.estado !== 'PAID' && pendiente > 0) {
+    const pendiente = monto - cobrado
+    if (yaVencio && pendiente > 0 && s.estado !== 'PAID' && s.estado !== 'ADVANCE') {
       const arr = pendientesPorCobrador.get(s.loan.cobradorId) ?? []
       arr.push({
         scheduleId:       s.id,
         numeroPago:       s.numeroPago,
         fechaVencimiento: s.fechaVencimiento.toISOString(),
         montoEsperado:    monto,
-        montoPagado:      Number(s.montoPagado),
+        montoPagado:      cobrado,
         pendiente,
         clienteNombre:    s.loan.client.nombreCompleto,
         loanId:           s.loan.id,
@@ -211,27 +204,21 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
     }
   }
 
-  // Recuperado efectivo (pagos del rango, CASH/CARD/TRANSFER verificada).
-  const pagos = await prisma.payment.findMany({
+  // Colocación — MISMO filtro que /rutas
+  const loansDesembolsados = await prisma.loan.findMany({
     where: {
-      fechaHora: { gte: range.inicio, lte: range.fin },
-      canceledAt: null,
-      loan: { companyId },
-      OR: [
-        { metodoPago: { in: ['CASH', 'CARD'] } },
-        { AND: [{ metodoPago: 'TRANSFER' }, { statusTransferencia: 'VERIFICADO' }] },
-      ],
+      companyId,
+      estado: { in: ['ACTIVE', 'LIQUIDATED'] },
+      fechaDesembolso: { gte: saturday, lte: friday },
+      AND: [loanNotDeletedWhere],
     },
-    select: { monto: true, cobradorId: true },
+    select: { capital: true, cobradorId: true, branchId: true },
   })
-  const recuperadoPorCobrador = new Map<string, number>()
-  for (const p of pagos) {
-    recuperadoPorCobrador.set(p.cobradorId, (recuperadoPorCobrador.get(p.cobradorId) ?? 0) + Number(p.monto))
+  const colocPorCobrador = new Map<string, number>()
+  for (const l of loansDesembolsados) {
+    colocPorCobrador.set(l.cobradorId, (colocPorCobrador.get(l.cobradorId) ?? 0) + Number(l.capital))
   }
 
-  // Cobradores por sucursal. Son los Users con rol COBRADOR o COORDINADOR
-  // asignados a esa sucursal (filtramos los que de hecho hicieron algo o
-  // tienen meta — para que la fila no esté vacía).
   const users = await prisma.user.findMany({
     where: {
       companyId,
@@ -245,18 +232,16 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
   const sucursales: SucursalEjecutivo[] = branches.map((b) => {
     const coordRaw = users.filter((u) => u.branchId === b.id)
     const coordinadores: CoordinadorEjecutivo[] = coordRaw.map((u) => {
-      const metaColoc    = metaColocPorCobrador.get(u.id) ?? 0
-      const colocReal    = colocPorCobrador.get(u.id)    ?? 0
-      const pactado      = pactadoPorCobrador.get(u.id)  ?? 0
-      const recuperado   = recuperadoPorCobrador.get(u.id) ?? 0
-      const pagosPend    = pendientesPorCobrador.get(u.id) ?? []
+      const metaColoc  = metaColocPorCobrador.get(u.id) ?? 0
+      const colocReal  = colocPorCobrador.get(u.id)    ?? 0
+      const pactado    = pactadoPorCobrador.get(u.id)  ?? 0
+      const recuperado = recuperadoPorCobrador.get(u.id) ?? 0
+      const pagosPend  = pendientesPorCobrador.get(u.id) ?? []
       const pagosPendTot = pagosPend.reduce((s, p) => s + p.pendiente, 0)
 
       const colocacionPct = metaColoc > 0 ? Math.round((colocReal / metaColoc) * 100) : 0
       const cobranzaPct   = pactado   > 0 ? Math.round((recuperado / pactado) * 100) : 0
 
-      // Score: promedio ponderado. La cobranza pesa más (es la operación
-      // día-a-día); colocación es más oportunista.
       let score: number
       if (pactado > 0 && metaColoc > 0) {
         score = Math.min(100, cobranzaPct) * 0.7 + Math.min(100, colocacionPct) * 0.3
@@ -265,7 +250,7 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
       } else if (metaColoc > 0) {
         score = Math.min(100, colocacionPct)
       } else {
-        score = 0  // sin pactado ni meta — queda al final en rojo (sin actividad)
+        score = 0
       }
 
       return {
@@ -284,7 +269,6 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
         color:               clasificar(score),
       }
     })
-      // Mostrar solo coordinadores con alguna actividad o meta
       .filter((c) => c.pactado > 0 || c.recuperado > 0 || c.metaColocacion > 0 || c.colocacionReal > 0)
       .sort((a, b) => b.score - a.score)
 
@@ -314,8 +298,8 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
   })
 
   return {
-    semanaInicio: range.inicio,
-    semanaFin:    range.fin,
+    semanaInicio: saturday,
+    semanaFin:    friday,
     sucursales,
   }
 }

@@ -93,7 +93,8 @@ export function PendientesCortesSection({ sucursales }: { sucursales: SucursalPe
                         <th className="text-left px-2 py-1">#</th>
                         <th className="text-left px-2 py-1">Estado</th>
                         <th className="text-left px-2 py-1">Receptor</th>
-                        <th className="text-right px-2 py-1">Monto</th>
+                        <th className="text-right px-2 py-1">Efectivo a entregar</th>
+                        <th className="text-right px-2 py-1">Transf. validadas</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -118,11 +119,45 @@ export function PendientesCortesSection({ sucursales }: { sucursales: SucursalPe
                             </td>
                             <td className="px-2 py-1 text-muted-foreground">{c.receptorNombre ?? '—'}</td>
                             <td className="px-2 py-1 text-right tabular-nums font-medium">{formatMoney(c.totalAEntregar)}</td>
+                            <td className="px-2 py-1 text-right tabular-nums text-sky-300">
+                              {c.totalTransferValidada > 0 ? formatMoney(c.totalTransferValidada) : '—'}
+                            </td>
                           </tr>
                         )
                       })}
                     </tbody>
                   </table>
+                  {/* Desglose extra del día más reciente (informativo).
+                      Transferencias no validadas no suman al 'a entregar'
+                      — están en limbo hasta que el GZ las verifica. Las
+                      comisiones y seguros ya están incluidos en el
+                      efectivo del corte; se listan aparte para auditar. */}
+                  {(cob.transferPendiente > 0 || cob.comisionApertura > 0 || cob.seguroApertura > 0) && (
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                      {cob.transferPendiente > 0 && (
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
+                          Transf. no validadas:
+                          <strong className="text-amber-300 tabular-nums">{formatMoney(cob.transferPendiente)}</strong>
+                          <span className="text-muted-foreground/70">({cob.transferPendienteCount})</span>
+                        </span>
+                      )}
+                      {cob.comisionApertura > 0 && (
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-violet-400" />
+                          Comisión apertura:
+                          <strong className="text-violet-300 tabular-nums">{formatMoney(cob.comisionApertura)}</strong>
+                        </span>
+                      )}
+                      {cob.seguroApertura > 0 && (
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-fuchsia-400" />
+                          Seguro apertura:
+                          <strong className="text-fuchsia-300 tabular-nums">{formatMoney(cob.seguroApertura)}</strong>
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -239,23 +239,32 @@ export async function snapshotCashRegisterDelDia(
  * aparecer con más de un corte en estados distintos.
  */
 export interface CortePendienteItem {
-  corteId:        string
-  tipo:           'PARCIAL' | 'CONSOLIDADO'
-  numeroCorte:    number
-  fecha:          Date
-  diasAtraso:     number
-  estado:         'ABIERTO' | 'ENTREGADO' | 'RECHAZADO'
-  totalAEntregar: number
-  rechazoRazon:   string | null
-  receptorNombre: string | null
+  corteId:               string
+  tipo:                  'PARCIAL' | 'CONSOLIDADO'
+  numeroCorte:           number
+  fecha:                 Date
+  diasAtraso:            number
+  estado:                'ABIERTO' | 'ENTREGADO' | 'RECHAZADO'
+  totalAEntregar:        number
+  totalTransferValidada: number    // Payments TRANSFER verificados (ya en banca)
+  rechazoRazon:          string | null
+  receptorNombre:        string | null
 }
 
 export interface CobradorPendienteCorte {
-  userId:         string
-  nombre:         string
-  rol:            string
-  cortes:         CortePendienteItem[]
-  diasMaxAtraso:  number
+  userId:                 string
+  nombre:                 string
+  rol:                    string
+  cortes:                 CortePendienteItem[]
+  diasMaxAtraso:          number
+  // Desglose extra que NO vive en el modelo Corte (se calcula desde
+  // Payments al momento de la vista). Sumado por el día más reciente
+  // con corte pendiente del cobrador — vale como alerta operativa, no
+  // como contabilidad precisa por parcial.
+  transferPendiente:      number
+  transferPendienteCount: number
+  comisionApertura:       number
+  seguroApertura:         number
 }
 
 export interface SucursalPendientesCortes {
@@ -315,22 +324,44 @@ export async function cortesPendientesPorSucursal(
         rol:    c.user.rol,
         cortes: [],
         diasMaxAtraso: 0,
+        transferPendiente:      0,
+        transferPendienteCount: 0,
+        comisionApertura:       0,
+        seguroApertura:         0,
       }
       branchMap.set(c.user.id, cob)
     }
 
     cob.cortes.push({
-      corteId:        c.id,
-      tipo:           c.tipo as 'PARCIAL' | 'CONSOLIDADO',
-      numeroCorte:    c.numeroCorte,
-      fecha:          c.fecha,
+      corteId:               c.id,
+      tipo:                  c.tipo as 'PARCIAL' | 'CONSOLIDADO',
+      numeroCorte:           c.numeroCorte,
+      fecha:                 c.fecha,
       diasAtraso,
-      estado:         c.estado as 'ABIERTO' | 'ENTREGADO' | 'RECHAZADO',
-      totalAEntregar: Number(c.totalAEntregar),
-      rechazoRazon:   c.rechazoRazon,
-      receptorNombre: c.receptor?.nombre ?? null,
+      estado:                c.estado as 'ABIERTO' | 'ENTREGADO' | 'RECHAZADO',
+      totalAEntregar:        Number(c.totalAEntregar),
+      totalTransferValidada: Number(c.totalTransferenciaCobrado ?? 0),
+      rechazoRazon:          c.rechazoRazon,
+      receptorNombre:        c.receptor?.nombre ?? null,
     })
     if (diasAtraso > cob.diasMaxAtraso) cob.diasMaxAtraso = diasAtraso
+  }
+
+  // Para cada cobrador con pendientes, calcular desglose extra del día
+  // más reciente del corte (típicamente ayer). El dato es informativo
+  // para el radar — no se contabiliza al nivel de parcial individual.
+  const allCobs: CobradorPendienteCorte[] = Array.from(byBranch.values())
+    .flatMap((branchMap) => Array.from(branchMap.values()))
+  for (const cob of allCobs) {
+    const fechaMasReciente = cob.cortes
+      .map((c: CortePendienteItem) => c.fecha)
+      .sort((a: Date, b: Date) => b.getTime() - a.getTime())[0]
+    if (!fechaMasReciente) continue
+    const extra = await desgloseExtraDelDia(prisma, cob.userId, fechaMasReciente)
+    cob.transferPendiente      = extra.transferPendiente
+    cob.transferPendienteCount = extra.transferPendienteCount
+    cob.comisionApertura       = extra.comisionApertura
+    cob.seguroApertura         = extra.seguroApertura
   }
 
   return branches
@@ -342,6 +373,81 @@ export async function cortesPendientesPorSucursal(
       return { branchId: b.id, branchNombre: b.nombre, cobradores }
     })
     .filter((s) => s.cobradores.length > 0)
+}
+
+/**
+ * Desglose extra que vive en la vista pero no en el modelo Corte:
+ *   - transferenciasPendientes: TRANSFER capturadas por el user con
+ *     statusTransferencia=PENDIENTE. No cuentan en totalAEntregar (no
+ *     hay dinero físico que entregar) ni como transferencia validada
+ *     (todavía no las confirma el GZ). Solo informativas.
+ *   - comisiones / seguros: Payments con scheduleId=null que registran
+ *     la tarifa de apertura. Se identifican por Payment.notas que
+ *     contiene "Comisión de apertura" o "Seguro de apertura" (como lo
+ *     escribe /api/loans/[id]/register-payment). SÍ cuentan en el
+ *     totalEfectivoCobrado del corte, pero se desglosan aparte para
+ *     que Dirección vea qué parte del efectivo fue cobros de cuota y
+ *     qué parte fue apertura.
+ *
+ * Rango de fecha: todo el día CDMX (00:00 → 23:59). Para desglose por
+ * parcial individual, filtrar en el caller usando el createdAt de los
+ * parciales.
+ */
+export interface DesgloseExtraCorte {
+  transferPendiente:       number
+  transferPendienteCount:  number
+  comisionApertura:        number
+  comisionAperturaCount:   number
+  seguroApertura:          number
+  seguroAperturaCount:     number
+}
+
+export async function desgloseExtraDelDia(
+  prisma: PrismaClient,
+  userId: string,
+  fecha: Date,
+): Promise<DesgloseExtraCorte> {
+  const inicioDia = fecha
+  const finDia    = new Date(fecha.getTime() + 24 * 60 * 60 * 1000)
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      cobradorId: userId,
+      canceledAt: null,
+      fechaHora:  { gte: inicioDia, lt: finDia },
+    },
+    select: {
+      monto:               true,
+      metodoPago:          true,
+      statusTransferencia: true,
+      scheduleId:          true,
+      notas:               true,
+    },
+  })
+
+  let transferPendiente = 0, transferPendienteCount = 0
+  let comisionApertura  = 0, comisionAperturaCount  = 0
+  let seguroApertura    = 0, seguroAperturaCount    = 0
+
+  for (const p of payments) {
+    const monto = Number(p.monto)
+    if (p.metodoPago === 'TRANSFER' && p.statusTransferencia === 'PENDIENTE') {
+      transferPendiente += monto
+      transferPendienteCount += 1
+    }
+    if (p.scheduleId === null) {
+      const notas = (p.notas ?? '').toLowerCase()
+      if (notas.includes('seguro'))         { seguroApertura   += monto; seguroAperturaCount   += 1 }
+      else if (notas.includes('comisión'))  { comisionApertura += monto; comisionAperturaCount += 1 }
+      else if (notas.includes('comision'))  { comisionApertura += monto; comisionAperturaCount += 1 }
+    }
+  }
+
+  return {
+    transferPendiente, transferPendienteCount,
+    comisionApertura,  comisionAperturaCount,
+    seguroApertura,    seguroAperturaCount,
+  }
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   parcialesParaConsolidar,
   efectivoPropioResiduoSemana,
   cortesPendientesPorSucursal,
+  desgloseExtraDelDia,
 } from '@/lib/cortes'
 import { CorteDelDiaView } from '@/components/cortes/CorteDelDiaView'
 import { PendientesCortesSection } from '@/components/cortes/PendientesCortesSection'
@@ -239,6 +240,15 @@ export default async function CorteDelDiaPage() {
       })
     : []
 
+  // Desglose extra del día del user actual (transferencias no verificadas
+  // + comisiones y seguros de apertura cobrados). Se muestra en el
+  // resumen del día del propio coord/concentradora como vista detallada
+  // de "qué más entró a mi caja aparte de las cuotas". No cambia la
+  // contabilidad del corte — solo visibilidad.
+  const desgloseDelDia = hacesCorte
+    ? await desgloseExtraDelDia(prisma, userId, fecha)
+    : { transferPendiente: 0, transferPendienteCount: 0, comisionApertura: 0, comisionAperturaCount: 0, seguroApertura: 0, seguroAperturaCount: 0 }
+
   // Radar "Pendientes de corte" — solo roles del último eslabón de la
   // cadena de cortes (DG/DC/SA). MESA_CONTROL NO lo ve: en operación
   // no es su rol vigilar el cierre de corte, aunque tenga alcance
@@ -270,6 +280,7 @@ export default async function CorteDelDiaPage() {
         cortesHistoricos={JSON.parse(JSON.stringify(cortesHistoricos))}
         esViernes={esViernesMk(fecha)}
         efectivoPropioSemana={JSON.parse(JSON.stringify(efectivoPropioSemana))}
+        desgloseDelDia={JSON.parse(JSON.stringify(desgloseDelDia))}
       />
       {puedeVerPendientesEmpresa && (
         <div className="px-6 pb-6">

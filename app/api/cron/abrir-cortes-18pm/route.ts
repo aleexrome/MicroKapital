@@ -98,8 +98,27 @@ export async function GET(req: NextRequest) {
   })
 
   const ahora = new Date()
+  // Pre-cargamos la relación "¿cada branch tiene concentrador asignado?"
+  // para no consultar la DB por cada candidato.
+  const branchesConcentrador = await prisma.branch.findMany({
+    where:  { concentradorUserId: { not: null } },
+    select: { id: true, concentradorUserId: true },
+  })
+  const concentradorPorBranch = new Map(
+    branchesConcentrador.map((b) => [b.id, b.concentradorUserId!]),
+  )
+
   for (const u of candidatos) {
     if (!u.branchId || !u.companyId) {
+      saltados++
+      continue
+    }
+    // Si el user ES el concentrador local de su sucursal, NO le abrimos
+    // parcial — su efectivo propio semanal se acumula en
+    // efectivoPropioResiduoSemana y se entrega junto con el consolidado
+    // los viernes. Si le abriéramos un parcial diario, lo obligaríamos
+    // a entregarlo como coord normal, duplicando el flujo de corte.
+    if (concentradorPorBranch.get(u.branchId) === u.id) {
       saltados++
       continue
     }

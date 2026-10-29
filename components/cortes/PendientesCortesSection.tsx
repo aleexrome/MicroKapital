@@ -85,6 +85,13 @@ export function PendientesCortesSection({ sucursales }: { sucursales: SucursalPe
                       {cob.diasMaxAtraso === 1 ? '1 día de atraso' : `${cob.diasMaxAtraso} días de atraso`}
                     </span>
                   </div>
+                  {cob.cortes.length === 0 && cob.transferPendiente > 0 && (
+                    <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs text-amber-200">
+                      Sin corte abierto — el sistema solo abre corte cuando entra efectivo. Esta persona tiene transferencias esperando verificación del Gerente Zonal.
+                      Una vez verificadas, el cron de las 18:00 le abre su corte automáticamente.
+                    </div>
+                  )}
+                  {cob.cortes.length > 0 && (
                   <table className="w-full text-xs">
                     <thead className="text-[10px] uppercase text-muted-foreground">
                       <tr>
@@ -127,6 +134,7 @@ export function PendientesCortesSection({ sucursales }: { sucursales: SucursalPe
                       })}
                     </tbody>
                   </table>
+                  )}
                   {/* Desglose extra del día más reciente (informativo).
                       Transferencias no validadas no suman al 'a entregar'
                       — están en limbo hasta que el GZ las verifica. Las

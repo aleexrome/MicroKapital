@@ -50,16 +50,18 @@ export async function POST(
   const corte = await prisma.corte.findFirst({
     where: { id: params.id, companyId: companyId! },
   })
-  if (!corte) return NextResponse.json({ error: 'Consolidado no encontrado' }, { status: 404 })
-  if (corte.tipo !== 'CONSOLIDADO') {
-    return NextResponse.json({ error: 'No es un consolidado' }, { status: 400 })
+  if (!corte) return NextResponse.json({ error: 'Corte no encontrado' }, { status: 404 })
+  // Aceptamos CONSOLIDADO (flujo normal) y PARCIAL (sucursales sin
+  // concentrador, el coord entrega directo al receptor final).
+  if (corte.tipo !== 'CONSOLIDADO' && corte.tipo !== 'PARCIAL') {
+    return NextResponse.json({ error: 'Tipo de corte no soportado' }, { status: 400 })
   }
   if (corte.receptorId !== userId) {
-    return NextResponse.json({ error: 'No eres el receptor de este consolidado' }, { status: 403 })
+    return NextResponse.json({ error: 'No eres el receptor de este corte' }, { status: 403 })
   }
   if (corte.estado !== 'ENTREGADO') {
     return NextResponse.json({
-      error: `No se puede confirmar un consolidado en estado ${corte.estado}`,
+      error: `No se puede confirmar un corte en estado ${corte.estado}`,
     }, { status: 400 })
   }
 

@@ -297,6 +297,10 @@ export async function cortesPendientesPorSucursal(
           { totalAEntregar: 0 },
         ],
       },
+      // Ocultar cortes de usuarios desactivados (ex-empleados). Si queda
+      // un corte huérfano suyo, es un problema contable que requiere
+      // intervención manual, no un pendiente operativo.
+      user: { activo: true },
     },
     orderBy: [{ fecha: 'asc' }, { numeroCorte: 'asc' }],
     include: {
@@ -368,13 +372,21 @@ export async function cortesPendientesPorSucursal(
   // de días anteriores que no tienen ningún corte abierto (porque el cron
   // no les crea CashRegister hasta que el GZ verifica). Para que
   // Dirección los vea en el radar y presione al GZ a verificar.
+  // Ventana: hasta 30 días atrás. Más viejas se consideran abandonadas
+  // (nunca se van a verificar) y solo ensucian el radar. Si en algún
+  // momento Dirección necesita verlas, puede filtrar directo en /transferencias.
+  const hace30Dias = new Date(hoy.getTime() - 30 * 24 * 60 * 60 * 1000)
   const transferPendientesViejas = await prisma.payment.findMany({
     where: {
       metodoPago:          'TRANSFER',
       statusTransferencia: 'PENDIENTE',
       canceledAt:          null,
-      fechaHora:           { lt: hoy },
+      fechaHora:           { gte: hace30Dias, lt: hoy },
       loan:                { companyId },
+      // Solo cobradores que siguen activos — ya no mostramos pendientes
+      // de ex-empleados (Valentina et al). Si siguen pendientes en DB es
+      // un problema contable aparte, no operativo.
+      cobrador:            { activo: true },
     },
     select: {
       monto:     true,

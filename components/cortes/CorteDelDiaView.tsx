@@ -80,6 +80,14 @@ interface Props {
   cortesHistoricos: Corte[]
   esViernes: boolean
   efectivoPropioSemana: { efectivo: number; tarjeta: number; transferencia: number; desde: string }
+  desgloseDelDia: {
+    transferPendiente:       number
+    transferPendienteCount:  number
+    comisionApertura:        number
+    comisionAperturaCount:   number
+    seguroApertura:          number
+    seguroAperturaCount:     number
+  }
 }
 
 function money(n: string | number) {
@@ -108,7 +116,7 @@ export function CorteDelDiaView(props: Props) {
     parcialesPropios, parcialesDetalle, consolidadosPropios, parcialesEntregadosRecibidos,
     parcialesParaConsolidar, consolidadosPendientesConfirmar,
     receptoresValidos, snapIncremental, cortesTimeline, cortesHistoricos,
-    esViernes, efectivoPropioSemana,
+    esViernes, efectivoPropioSemana, desgloseDelDia,
   } = props
   const detalleMap = new Map(parcialesDetalle.map((d) => [d.corteId, d]))
   const [parcialExpandido, setParcialExpandido] = useState<string | null>(null)
@@ -256,6 +264,71 @@ export function CorteDelDiaView(props: Props) {
                   No necesitas abrir parciales. Al Iniciar consolidado el viernes el sistema registra este efectivo automáticamente y lo entrega junto con lo recibido de otros coords.
                 </div>
               </div>
+            </div>
+          </Card>
+        </section>
+      )}
+
+      {/* ─── Movimientos del día (todos los conceptos) ─────────────────
+          Resumen informativo del día: efectivo nuevo, transferencias
+          validadas y pendientes, comisiones y seguros cobrados en
+          apertura. 'A entregar' solo cuenta efectivo físico — las
+          transferencias pendientes NO se contabilizan hasta que el GZ
+          las verifica. Los seguros/comisiones ya están incluidos en el
+          efectivo cobrado; se listan aparte para auditar. */}
+      {hacesCorte && (snapIncremental.efectivo + snapIncremental.tarjeta + snapIncremental.transferencia + desgloseDelDia.transferPendiente + desgloseDelDia.comisionApertura + desgloseDelDia.seguroApertura > 0) && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Movimientos del día
+          </h2>
+          <Card className="p-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs">
+              <div>
+                <p className="text-muted-foreground">Efectivo nuevo</p>
+                <p className="font-semibold tabular-nums text-emerald-400">{money(snapIncremental.efectivo)}</p>
+              </div>
+              {snapIncremental.transferencia > 0 && (
+                <div>
+                  <p className="text-muted-foreground">Transf. validadas</p>
+                  <p className="font-semibold tabular-nums text-sky-400">{money(snapIncremental.transferencia)}</p>
+                </div>
+              )}
+              {desgloseDelDia.transferPendiente > 0 && (
+                <div>
+                  <p className="text-muted-foreground">
+                    Transf. no validadas
+                    <span className="ml-1 text-muted-foreground/70">({desgloseDelDia.transferPendienteCount})</span>
+                  </p>
+                  <p className="font-semibold tabular-nums text-amber-400">{money(desgloseDelDia.transferPendiente)}</p>
+                  <p className="text-[10px] text-muted-foreground/80">Pendiente de verificar por GZ</p>
+                </div>
+              )}
+              {snapIncremental.tarjeta > 0 && (
+                <div>
+                  <p className="text-muted-foreground">Tarjeta</p>
+                  <p className="font-semibold tabular-nums">{money(snapIncremental.tarjeta)}</p>
+                </div>
+              )}
+              {desgloseDelDia.comisionApertura > 0 && (
+                <div>
+                  <p className="text-muted-foreground">
+                    Comisión apertura
+                    <span className="ml-1 text-muted-foreground/70">({desgloseDelDia.comisionAperturaCount})</span>
+                  </p>
+                  <p className="font-semibold tabular-nums text-violet-400">{money(desgloseDelDia.comisionApertura)}</p>
+                  <p className="text-[10px] text-muted-foreground/80">Incluido en efectivo</p>
+                </div>
+              )}
+              {desgloseDelDia.seguroApertura > 0 && (
+                <div>
+                  <p className="text-muted-foreground">
+                    Seguro apertura
+                    <span className="ml-1 text-muted-foreground/70">({desgloseDelDia.seguroAperturaCount})</span>
+                  </p>
+                  <p className="font-semibold tabular-nums text-fuchsia-400">{money(desgloseDelDia.seguroApertura)}</p>
+                  <p className="text-[10px] text-muted-foreground/80">Incluido en efectivo</p>
+                </div>
+              )}
             </div>
           </Card>
         </section>

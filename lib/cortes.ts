@@ -219,6 +219,112 @@ export async function snapshotCashRegisterDelDia(
 }
 
 /**
+ * Lista los cortes de días anteriores a hoy que NO están ACEPTADOS
+ * — abiertos, entregados sin aceptar o rechazados sin re-entregar. Es
+ * el radar de "quién no cerró ayer" para Dirección.
+ *
+ * Agrupa por sucursal → coordinadores → cortes. Un mismo user puede
+ * aparecer con más de un corte en estados distintos.
+ */
+export interface CortePendienteItem {
+  corteId:        string
+  tipo:           'PARCIAL' | 'CONSOLIDADO'
+  numeroCorte:    number
+  fecha:          Date
+  diasAtraso:     number
+  estado:         'ABIERTO' | 'ENTREGADO' | 'RECHAZADO'
+  totalAEntregar: number
+  rechazoRazon:   string | null
+  receptorNombre: string | null
+}
+
+export interface CobradorPendienteCorte {
+  userId:         string
+  nombre:         string
+  rol:            string
+  cortes:         CortePendienteItem[]
+  diasMaxAtraso:  number
+}
+
+export interface SucursalPendientesCortes {
+  branchId:       string
+  branchNombre:   string
+  cobradores:     CobradorPendienteCorte[]
+}
+
+export async function cortesPendientesPorSucursal(
+  prisma: PrismaClient,
+  companyId: string,
+): Promise<SucursalPendientesCortes[]> {
+  const hoy = todayMx()
+  const branches = await prisma.branch.findMany({
+    where:  { companyId, activa: true },
+    select: { id: true, nombre: true },
+    orderBy:{ nombre: 'asc' },
+  })
+
+  const cortes = await prisma.corte.findMany({
+    where: {
+      companyId,
+      fecha: { lt: hoy },
+      estado: { in: ['ABIERTO', 'ENTREGADO', 'RECHAZADO'] },
+    },
+    orderBy: [{ fecha: 'asc' }, { numeroCorte: 'asc' }],
+    include: {
+      user:     { select: { id: true, nombre: true, rol: true, branchId: true } },
+      receptor: { select: { nombre: true } },
+    },
+  })
+
+  const byBranch = new Map<string, Map<string, CobradorPendienteCorte>>()
+
+  for (const c of cortes) {
+    if (!c.user) continue
+    const bId = c.user.branchId ?? c.branchId
+    if (!bId) continue
+    const diasAtraso = Math.floor((hoy.getTime() - c.fecha.getTime()) / 86_400_000)
+
+    let branchMap = byBranch.get(bId)
+    if (!branchMap) { branchMap = new Map(); byBranch.set(bId, branchMap) }
+
+    let cob = branchMap.get(c.user.id)
+    if (!cob) {
+      cob = {
+        userId: c.user.id,
+        nombre: c.user.nombre,
+        rol:    c.user.rol,
+        cortes: [],
+        diasMaxAtraso: 0,
+      }
+      branchMap.set(c.user.id, cob)
+    }
+
+    cob.cortes.push({
+      corteId:        c.id,
+      tipo:           c.tipo as 'PARCIAL' | 'CONSOLIDADO',
+      numeroCorte:    c.numeroCorte,
+      fecha:          c.fecha,
+      diasAtraso,
+      estado:         c.estado as 'ABIERTO' | 'ENTREGADO' | 'RECHAZADO',
+      totalAEntregar: Number(c.totalAEntregar),
+      rechazoRazon:   c.rechazoRazon,
+      receptorNombre: c.receptor?.nombre ?? null,
+    })
+    if (diasAtraso > cob.diasMaxAtraso) cob.diasMaxAtraso = diasAtraso
+  }
+
+  return branches
+    .map((b): SucursalPendientesCortes => {
+      const map = byBranch.get(b.id)
+      const cobradores = map
+        ? Array.from(map.values()).sort((a, b) => b.diasMaxAtraso - a.diasMaxAtraso)
+        : []
+      return { branchId: b.id, branchNombre: b.nombre, cobradores }
+    })
+    .filter((s) => s.cobradores.length > 0)
+}
+
+/**
  * Suma de cortes PARCIALES ACEPTADOS donde el receptor fue este user,
  * para la fecha dada. Es lo que un concentrador "recibió" de otros ese
  * día (excluye CONSOLIDADOS para no doble-contar).

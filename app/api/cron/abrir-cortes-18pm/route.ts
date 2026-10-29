@@ -31,6 +31,13 @@ import { purgeDeletedTask } from '@/lib/cron-tasks'
 export async function GET(req: NextRequest) {
   const fechaParam = req.nextUrl.searchParams.get('fecha')
   const esCron = req.headers.get('x-vercel-cron') === '1'
+  // Autenticación opcional por Bearer token — permite que un servicio
+  // externo (cron-job.org, EasyCron, UptimeRobot) dispare el endpoint
+  // sin sesión. Útil como respaldo cuando Vercel Hobby salta el cron
+  // nativo sin aviso. Requiere env var CRON_SECRET.
+  const auth = req.headers.get('authorization')
+  const esTokenValido = !!process.env.CRON_SECRET
+    && auth === `Bearer ${process.env.CRON_SECRET}`
 
   let fecha = todayMx()
   if (fechaParam) {
@@ -39,7 +46,7 @@ export async function GET(req: NextRequest) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaParam)) {
       return NextResponse.json({ error: 'fecha debe ser YYYY-MM-DD' }, { status: 400 })
     }
-    if (!esCron) {
+    if (!esCron && !esTokenValido) {
       // Autenticación por sesión para que no cualquiera pueda disparar.
       const { getSession } = await import('@/lib/session')
       const session = await getSession()
@@ -49,6 +56,16 @@ export async function GET(req: NextRequest) {
       }
     }
     fecha = parseMxYMD(fechaParam)
+  } else if (!esCron && !esTokenValido) {
+    // Invocación sin fecha, sin ser cron de Vercel ni token válido: cae
+    // a sesión. Antes era implícito (cualquiera podía invocar sin fecha
+    // porque el único check de auth estaba dentro del branch fechaParam).
+    const { getSession } = await import('@/lib/session')
+    const session = await getSession()
+    const rol = session?.user?.rol
+    if (!session?.user || !['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'].includes(rol ?? '')) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    }
   }
 
   const dia = fecha.toISOString().slice(0, 10)

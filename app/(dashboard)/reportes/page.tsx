@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import {
   Target, DollarSign, Wallet, AlertTriangle, TrendingUp,
-  CheckCircle2, BadgeCheck, ChevronRight, ClipboardCheck,
+  CheckCircle2, BadgeCheck, ChevronRight, ClipboardCheck, LayoutDashboard,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -32,7 +32,12 @@ interface ReporteCard {
   /** Si se define, solo los roles listados ven la tarjeta. Sin este
    *  campo, la tarjeta es visible para todos los ALLOWED_ROLES. */
   soloRoles?: readonly string[]
+  /** Si se define, solo los emails listados ven la tarjeta. Se usa
+   *  para reportes privados por usuario (ej. jefe de sistemas). */
+  soloEmails?: readonly string[]
 }
+
+const EMAIL_DIRECTOR_SISTEMAS = 'alejandro.romero@microkapital.com'
 
 const REPORTES: ReporteCard[] = [
   {
@@ -108,6 +113,16 @@ const REPORTES: ReporteCard[] = [
     iconText: 'text-primary-300',
     soloRoles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
   },
+  {
+    href: '/reportes/ejecutivo',
+    titulo: 'Ejecutivo semanal',
+    descripcion: 'Radar por sucursal: colocación, cobranza y pagos pendientes con coordinadores ordenados por desempeño. Descargable como imagen.',
+    icon: LayoutDashboard,
+    color: 'border-fuchsia-500/40',
+    iconBg: 'bg-fuchsia-500/15',
+    iconText: 'text-fuchsia-300',
+    soloEmails: [EMAIL_DIRECTOR_SISTEMAS],
+  },
 ]
 
 // Roles operativos: MC solo debe ver "Mesa de Control" en el índice
@@ -127,7 +142,7 @@ const ADMIN_ROLES = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL']
 export default async function ReportesPage() {
   const session = await getSession()
   if (!session?.user) redirect('/login')
-  const { rol } = session.user
+  const { rol, email } = session.user
   if (!ALLOWED_ROLES.includes(rol as typeof ALLOWED_ROLES[number])) redirect('/dashboard')
 
   const puedeDefinirMetas = ADMIN_ROLES.includes(rol)
@@ -156,6 +171,7 @@ export default async function ReportesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {REPORTES
           .filter((r) => {
+            if (r.soloEmails && (!email || !r.soloEmails.includes(email))) return false
             if (r.soloRoles && !r.soloRoles.includes(rol)) return false
             if (rol === 'MESA_CONTROL' && OPERATIVOS_QUE_MC_NO_VE.has(r.href)) return false
             return true

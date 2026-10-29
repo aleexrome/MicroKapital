@@ -1,14 +1,13 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
-import { Download, Image as ImageIcon, Loader2, Building2, User, Users, TrendingUp, Wallet, AlertCircle } from 'lucide-react'
+import { FileDown, Loader2, Building2, User, Users, TrendingUp, Wallet, AlertCircle } from 'lucide-react'
 import { formatMoney } from '@/lib/utils'
 import type { ReporteEjecutivo, SucursalEjecutivo, CoordinadorEjecutivo } from '@/lib/reportes/ejecutivo'
-import { toPng } from 'html-to-image'
 
 const COLOR_STYLES: Record<CoordinadorEjecutivo['color'], { badge: string; row: string; label: string }> = {
   verde:    { badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40', row: 'bg-emerald-500/5 border-l-4 border-l-emerald-500', label: 'Bueno' },
@@ -30,9 +29,6 @@ function pctColor(pct: number): string {
 }
 
 export function ReporteEjecutivoView({ data, empresa }: { data: ReporteEjecutivo; empresa: string }) {
-  const { toast } = useToast()
-  const canvasRef = useRef<HTMLDivElement>(null)
-  const [descargando, setDescargando] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   function toggleExpand(cobradorId: string) {
@@ -42,41 +38,6 @@ export function ReporteEjecutivoView({ data, empresa }: { data: ReporteEjecutivo
       else next.add(cobradorId)
       return next
     })
-  }
-
-  async function descargarImagen() {
-    if (!canvasRef.current) return
-    setDescargando(true)
-    try {
-      // Forzamos expandir TODOS los pendientes para que la imagen tenga todo.
-      const expandidosPrev = new Set(expanded)
-      const todos = new Set<string>()
-      for (const s of data.sucursales) for (const c of s.coordinadores) todos.add(c.cobradorId)
-      setExpanded(todos)
-      // Esperamos un frame para que el DOM se re-renderice
-      await new Promise((r) => requestAnimationFrame(() => r(null)))
-      await new Promise((r) => setTimeout(r, 100))
-
-      const dataUrl = await toPng(canvasRef.current, {
-        backgroundColor: '#0b0912',
-        pixelRatio: 2,
-        cacheBust: true,
-      })
-
-      const semanaTag = `${new Date(data.semanaInicio).toISOString().slice(0, 10)}_${new Date(data.semanaFin).toISOString().slice(0, 10)}`
-      const link = document.createElement('a')
-      link.download = `reporte-ejecutivo_${semanaTag}.png`
-      link.href = dataUrl
-      link.click()
-
-      // Restaurar estado de expansión
-      setExpanded(expandidosPrev)
-      toast({ title: '✅ Imagen descargada' })
-    } catch (e) {
-      toast({ title: 'Error al generar la imagen', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
-    } finally {
-      setDescargando(false)
-    }
   }
 
   // El page.tsx serializa con JSON — las fechas llegan como string ISO,
@@ -91,36 +52,25 @@ export function ReporteEjecutivoView({ data, empresa }: { data: ReporteEjecutivo
         <div>
           <h1 className="text-2xl font-bold">Reporte ejecutivo semanal</h1>
           <p className="text-muted-foreground text-sm">
-            Avance de colocación y cobranza por sucursal · {semanaRange}
+            Avance de colocación y cobranza por sucursal · {semanaRange} · {empresa}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-3">
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" /> Bueno (≥85%)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-500" /> Medio (60-84%)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-rose-500" /> Bajo (&lt;60%)
+            </span>
           </p>
         </div>
-        <Button onClick={descargarImagen} disabled={descargando}>
-          {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          Descargar imagen
-        </Button>
       </div>
 
-      {/* Zona que se captura para la imagen */}
-      <div ref={canvasRef} className="space-y-4 p-4 rounded-xl" style={{ backgroundColor: '#0b0912' }}>
-        {/* Header dentro de la imagen */}
-        <div className="flex items-center justify-between gap-4 pb-3 border-b border-border/50">
-          <div>
-            <p className="text-xs uppercase tracking-widest text-primary-300">{empresa}</p>
-            <h2 className="text-xl font-semibold text-foreground">Reporte ejecutivo semanal</h2>
-            <p className="text-xs text-muted-foreground">{semanaRange}</p>
-          </div>
-          <div className="text-xs text-right text-muted-foreground">
-            <p>Generado: {new Date().toLocaleString('es-MX')}</p>
-            <p className="flex items-center gap-1 justify-end mt-1">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" /> Bueno (≥85%)
-              <span className="inline-block w-2 h-2 rounded-full bg-amber-500 ml-2" /> Medio (60-84%)
-              <span className="inline-block w-2 h-2 rounded-full bg-rose-500 ml-2" /> Bajo (&lt;60%)
-            </p>
-          </div>
-        </div>
-
+      <div className="space-y-4">
         {data.sucursales.length === 0 && (
-          <div className="text-center py-10 text-muted-foreground text-sm">
+          <div className="text-center py-10 text-muted-foreground text-sm rounded-xl border border-border/40">
             No hay sucursales activas con datos esta semana.
           </div>
         )}
@@ -135,6 +85,40 @@ export function ReporteEjecutivoView({ data, empresa }: { data: ReporteEjecutivo
         ))}
       </div>
     </div>
+  )
+}
+
+function DescargarPdfSucursalButton({ branchId, nombre }: { branchId: string; nombre: string }) {
+  const { toast } = useToast()
+  const [descargando, setDescargando] = useState(false)
+
+  async function descargar() {
+    setDescargando(true)
+    try {
+      const res = await fetch(`/api/reportes/ejecutivo/pdf?branchId=${encodeURIComponent(branchId)}`)
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error ?? `Error ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const safe = nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-')
+      link.download = `reporte-ejecutivo_${safe}.pdf`
+      link.href = url
+      link.click()
+      URL.revokeObjectURL(url)
+      toast({ title: '✅ PDF descargado' })
+    } catch (e) {
+      toast({ title: 'Error al generar el PDF', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+    } finally { setDescargando(false) }
+  }
+
+  return (
+    <Button size="sm" variant="outline" onClick={descargar} disabled={descargando}>
+      {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+      Descargar PDF
+    </Button>
   )
 }
 
@@ -168,6 +152,7 @@ function SucursalCard({
             <CardTitle className="text-base flex items-center gap-2">
               <Building2 className="h-4 w-4 text-primary-300" />
               {sucursal.nombre}
+              <DescargarPdfSucursalButton branchId={sucursal.branchId} nombre={sucursal.nombre} />
             </CardTitle>
             <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
               {sucursal.concentradoraNombre && (

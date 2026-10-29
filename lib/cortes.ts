@@ -364,6 +364,53 @@ export async function cortesPendientesPorSucursal(
     cob.seguroApertura         = extra.seguroApertura
   }
 
+  // Caso especial: cobradores con transferencias PENDIENTES de verificar
+  // de días anteriores que no tienen ningún corte abierto (porque el cron
+  // no les crea CashRegister hasta que el GZ verifica). Para que
+  // Dirección los vea en el radar y presione al GZ a verificar.
+  const transferPendientesViejas = await prisma.payment.findMany({
+    where: {
+      metodoPago:          'TRANSFER',
+      statusTransferencia: 'PENDIENTE',
+      canceledAt:          null,
+      fechaHora:           { lt: hoy },
+      loan:                { companyId },
+    },
+    select: {
+      monto:     true,
+      fechaHora: true,
+      cobradorId: true,
+      cobrador:  { select: { id: true, nombre: true, rol: true, branchId: true } },
+      loan:      { select: { branchId: true } },
+    },
+  })
+  for (const p of transferPendientesViejas) {
+    const bId = p.cobrador.branchId ?? p.loan.branchId
+    if (!bId) continue
+    let branchMap = byBranch.get(bId)
+    if (!branchMap) { branchMap = new Map(); byBranch.set(bId, branchMap) }
+    let cob = branchMap.get(p.cobrador.id)
+    if (!cob) {
+      cob = {
+        userId: p.cobrador.id,
+        nombre: p.cobrador.nombre,
+        rol:    p.cobrador.rol,
+        cortes: [],
+        diasMaxAtraso: 0,
+        transferPendiente:      0,
+        transferPendienteCount: 0,
+        comisionApertura:       0,
+        seguroApertura:         0,
+      }
+      branchMap.set(p.cobrador.id, cob)
+    }
+    cob.transferPendiente      += Number(p.monto)
+    cob.transferPendienteCount += 1
+    // Actualizar diasMaxAtraso usando la fecha del pago pendiente
+    const dias = Math.floor((hoy.getTime() - p.fechaHora.getTime()) / 86_400_000)
+    if (dias > cob.diasMaxAtraso) cob.diasMaxAtraso = dias
+  }
+
   return branches
     .map((b): SucursalPendientesCortes => {
       const map = byBranch.get(b.id)

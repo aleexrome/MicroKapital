@@ -70,8 +70,20 @@ export default async function CorteDelDiaPage() {
     hacesCorte && branchId ? snapshotParcialIncremental(prisma, userId, fecha) : Promise.resolve({ efectivo: 0, tarjeta: 0, transferencia: 0, recibidoDeOtros: 0 }),
   ])
 
-  const esConcentradora = concentradora?.id === userId
-  const sinConcentradora = !concentradora
+  // esConcentradora respeta DOS formas: ser concentrador de la sucursal
+  // propia (coord/gerente de la rama) o estar marcada como concentradora
+  // en Branch.concentradorUserId de CUALQUIER sucursal (típico de
+  // MESA_CONTROL como Carol en Tenancingo II, que no tiene branchId
+  // propio porque es rol empresa). Sin este fallback, el panel no le
+  // mostraba 'Parciales por aceptar' aunque los cortes le llegaban.
+  const esConcentradoraDeOtraSucursal = concentradora?.id !== userId
+    ? await prisma.branch.findFirst({
+        where:  { companyId: companyId!, concentradorUserId: userId, activa: true },
+        select: { id: true },
+      })
+    : null
+  const esConcentradora = concentradora?.id === userId || !!esConcentradoraDeOtraSucursal
+  const sinConcentradora = !concentradora && !esConcentradoraDeOtraSucursal
 
   // ── Detalle de cada parcial propio: qué Payments (cliente+monto+método)
   //    cayeron dentro de la ventana de ese parcial, y qué parciales de

@@ -139,20 +139,24 @@ export async function cortePendienteDe(
   const corteObligatorioAt = new Date(hoy.getTime() + 18 * 60 * 60 * 1000)
   const hoyBloquea = ahora.getTime() >= corteObligatorioAt.getTime()
 
-  // Buscar el corte PROPIO más viejo que no esté ACEPTADO (PARCIAL o CONSOLIDADO).
-  // Excepción: cortes vacíos (totalAEntregar = 0) en estado ABIERTO no
-  // bloquean — si el user no cobró nada, no hay dinero físico que entregar
-  // ni foto de ticket que exigir. Dejamos esos cortes como "muertos" en
-  // la DB para auditoría pero no congelamos al user.
+  // Buscar el corte PROPIO más viejo que todavía requiera acción del user.
+  // Estados que bloquean:
+  //   - ABIERTO: no ha subido foto/entregado — tiene que hacerlo.
+  //   - RECHAZADO: el receptor lo rechazó — tiene que corregir y re-entregar.
+  // Estados que NO bloquean:
+  //   - ENTREGADO: ya hizo su parte (foto + envío). La aceptación es
+  //     responsabilidad del receptor y puede tardar; el user puede seguir
+  //     cobrando/trabajando sin esperar la confirmación.
+  //   - ACEPTADO: cerrado, obviamente ok.
+  // Excepción: cortes vacíos (totalAEntregar = 0) en estado ABIERTO
+  // tampoco bloquean — no hay dinero físico que entregar.
   const row = await prisma.corte.findFirst({
     where: {
       userId: user.id,
-      estado: { in: ['ABIERTO', 'ENTREGADO', 'RECHAZADO'] },
+      estado: { in: ['ABIERTO', 'RECHAZADO'] },
       OR: hoyBloquea
         ? [{ fecha: { lte: hoy } }]
         : [{ fecha: { lt: hoy } }],
-      // Si está ABIERTO y vacío (sin cobros + sin recibidos), no bloquea.
-      // Entregado/rechazado sí siempre bloquea (ya hubo intento de entrega).
       NOT: {
         AND: [
           { estado: 'ABIERTO' },

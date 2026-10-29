@@ -47,7 +47,11 @@ export default async function CortePendientePage({
   })
 
   if (!corte) redirect('/dashboard')
-  if (corte.estado === 'ACEPTADO') redirect('/dashboard')
+  // ACEPTADO ya está cerrado.
+  // ENTREGADO: el coord ya hizo su parte — no debe quedarse bloqueado
+  // esperando aceptación. Si navega a este URL por accidente, lo
+  // mandamos al dashboard igual.
+  if (corte.estado === 'ACEPTADO' || corte.estado === 'ENTREGADO') redirect('/dashboard')
 
   const receptoresDisponibles = await receptoresValidosPara(prisma, {
     id:        session.user.id,
@@ -87,18 +91,14 @@ export default async function CortePendientePage({
               Corte del día
             </div>
             <h1 className="text-2xl font-bold text-white mt-3">
-              {corte.estado === 'ENTREGADO'
-                ? 'Esperando aceptación'
-                : corte.estado === 'RECHAZADO'
-                  ? 'Tu corte fue rechazado'
-                  : 'Entrega tu corte para continuar'}
+              {corte.estado === 'RECHAZADO'
+                ? 'Tu corte fue rechazado'
+                : 'Entrega tu corte para continuar'}
             </h1>
             <p className="text-sm text-gray-300 mt-1">
-              {corte.estado === 'ENTREGADO'
-                ? 'El receptor debe confirmar que recibió el monto para que puedas seguir usando el sistema.'
-                : corte.estado === 'RECHAZADO'
-                  ? 'Lee la razón, ajusta y vuelve a entregar con nueva foto.'
-                  : 'Revisa los totales, elige a quién le vas a entregar, imprime el ticket, obtén la firma y sube la foto.'}
+              {corte.estado === 'RECHAZADO'
+                ? 'Lee la razón, ajusta y vuelve a entregar con nueva foto.'
+                : 'Revisa los totales, elige a quién le vas a entregar, imprime el ticket, obtén la firma y sube la foto.'}
             </p>
           </div>
 

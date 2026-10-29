@@ -10,8 +10,10 @@ import {
   snapshotParcialIncremental,
   parcialesParaConsolidar,
   efectivoPropioResiduoSemana,
+  cortesPendientesPorSucursal,
 } from '@/lib/cortes'
 import { CorteDelDiaView } from '@/components/cortes/CorteDelDiaView'
+import { PendientesCortesSection } from '@/components/cortes/PendientesCortesSection'
 
 /**
  * /corte-del-dia — pantalla única por rol.
@@ -221,27 +223,42 @@ export default async function CorteDelDiaPage() {
       })
     : []
 
+  // Radar "Pendientes de corte" — solo roles con visibilidad empresa.
+  // DG/DC/SA ya ven el timeline de todas las sucursales; MESA_CONTROL
+  // también tiene alcance empresa en estos reportes.
+  const puedeVerPendientesEmpresa = esReceptor || rol === 'MESA_CONTROL'
+  const pendientesCortes = puedeVerPendientesEmpresa
+    ? await cortesPendientesPorSucursal(prisma, companyId!)
+    : []
+
   return (
-    <CorteDelDiaView
-      userId={userId}
-      userNombre={userNombre}
-      userRol={rol}
-      branchNombre={branchNombre}
-      esConcentradora={esConcentradora}
-      sinConcentradora={sinConcentradora}
-      concentradora={concentradora}
-      parcialesPropios={JSON.parse(JSON.stringify(parcialesPropios))}
-      parcialesDetalle={parcialesDetalle}
-      consolidadosPropios={JSON.parse(JSON.stringify(consolidadosPropios))}
-      parcialesEntregadosRecibidos={JSON.parse(JSON.stringify(parcialesEntregadosRecibidos))}
-      parcialesParaConsolidar={parcialesParaMiConsolidado}
-      consolidadosPendientesConfirmar={JSON.parse(JSON.stringify(consolidadosPendientesConfirmar))}
-      receptoresValidos={receptoresValidos}
-      snapIncremental={snapIncremental}
-      cortesTimeline={JSON.parse(JSON.stringify(cortesTimeline))}
-      cortesHistoricos={JSON.parse(JSON.stringify(cortesHistoricos))}
-      esViernes={esViernesMk(fecha)}
-      efectivoPropioSemana={JSON.parse(JSON.stringify(efectivoPropioSemana))}
-    />
+    <>
+      <CorteDelDiaView
+        userId={userId}
+        userNombre={userNombre}
+        userRol={rol}
+        branchNombre={branchNombre}
+        esConcentradora={esConcentradora}
+        sinConcentradora={sinConcentradora}
+        concentradora={concentradora}
+        parcialesPropios={JSON.parse(JSON.stringify(parcialesPropios))}
+        parcialesDetalle={parcialesDetalle}
+        consolidadosPropios={JSON.parse(JSON.stringify(consolidadosPropios))}
+        parcialesEntregadosRecibidos={JSON.parse(JSON.stringify(parcialesEntregadosRecibidos))}
+        parcialesParaConsolidar={parcialesParaMiConsolidado}
+        consolidadosPendientesConfirmar={JSON.parse(JSON.stringify(consolidadosPendientesConfirmar))}
+        receptoresValidos={receptoresValidos}
+        snapIncremental={snapIncremental}
+        cortesTimeline={JSON.parse(JSON.stringify(cortesTimeline))}
+        cortesHistoricos={JSON.parse(JSON.stringify(cortesHistoricos))}
+        esViernes={esViernesMk(fecha)}
+        efectivoPropioSemana={JSON.parse(JSON.stringify(efectivoPropioSemana))}
+      />
+      {puedeVerPendientesEmpresa && (
+        <div className="px-6 pb-6">
+          <PendientesCortesSection sucursales={JSON.parse(JSON.stringify(pendientesCortes))} />
+        </div>
+      )}
+    </>
   )
 }

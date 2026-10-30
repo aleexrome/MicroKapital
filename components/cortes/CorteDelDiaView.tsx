@@ -406,6 +406,12 @@ export function CorteDelDiaView(props: Props) {
                           cobradorNombre={userNombre}
                           sucursalNombre={branchNombre}
                           receptorNombre={concentradora?.nombre ?? p.receptor?.nombre}
+                          pagos={detalle?.pagosClientes.map((pc) => ({
+                            clienteNombre: pc.clienteNombre,
+                            monto:         pc.monto,
+                            metodoPago:    pc.metodoPago,
+                            numeroPago:    pc.numeroPago,
+                          }))}
                         />
                       )}
                       {p.estado === 'ABIERTO' && (

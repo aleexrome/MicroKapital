@@ -2,10 +2,10 @@
 
 import { useState } from 'react'
 import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronUp, History } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { DesgloseCorteDialog } from './DesgloseCorteDialog'
 
 type Corte = {
   id: string
@@ -34,8 +34,9 @@ function money(n: string | number) {
  * agrupando parciales y consolidados que pertenecen al usuario (propios
  * y los dirigidos a él como receptor).
  */
-export function HistoricoCortes({ cortes }: { cortes: Corte[] }) {
+export function HistoricoCortes({ cortes, canAudit = false }: { cortes: Corte[]; canAudit?: boolean }) {
   const [abierto, setAbierto] = useState(false)
+  const [desgloseId, setDesgloseId] = useState<string | null>(null)
 
   // Agrupar por fecha (día civil)
   const porFecha = new Map<string, Corte[]>()
@@ -92,16 +93,31 @@ export function HistoricoCortes({ cortes }: { cortes: Corte[] }) {
                   <div>
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-2 mb-1">Parciales</div>
                     <div className="flex items-center gap-1 flex-wrap">
-                      {parciales.map((p) => (
-                        <div
-                          key={p.id}
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white ${COLOR[p.estado]}`}
-                          title={`${p.user?.nombre ?? ''} #${p.numeroCorte} · ${p.estado}`}
-                        >
-                          <span>{p.user?.nombre ?? 'yo'} #{p.numeroCorte}</span>
-                          <span className="opacity-80 tabular-nums">{money(p.totalAEntregar)}</span>
-                        </div>
-                      ))}
+                      {parciales.map((p) => {
+                        const common = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white ${COLOR[p.estado]}`
+                        const title = `${p.user?.nombre ?? ''} #${p.numeroCorte} · ${p.estado}${canAudit ? ' · Click para ver desglose' : ''}`
+                        const content = (
+                          <>
+                            <span>{p.user?.nombre ?? 'yo'} #{p.numeroCorte}</span>
+                            <span className="opacity-80 tabular-nums">{money(p.totalAEntregar)}</span>
+                          </>
+                        )
+                        return canAudit ? (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setDesgloseId(p.id)}
+                            className={`${common} cursor-pointer hover:opacity-90 hover:ring-2 hover:ring-white/40 transition`}
+                            title={title}
+                          >
+                            {content}
+                          </button>
+                        ) : (
+                          <div key={p.id} className={common} title={title}>
+                            {content}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -110,17 +126,32 @@ export function HistoricoCortes({ cortes }: { cortes: Corte[] }) {
                   <div>
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-2 mb-1">Consolidados</div>
                     <div className="flex items-center gap-1 flex-wrap">
-                      {consolidados.map((c) => (
-                        <div
-                          key={c.id}
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white ${COLOR[c.estado]} border-2 border-white/30`}
-                          title={`CON#${c.numeroCorte} · ${c.estado} · → ${c.receptor?.nombre ?? '—'}`}
-                        >
-                          <span>CON#{c.numeroCorte}</span>
-                          <span className="opacity-80 tabular-nums">{money(c.totalAEntregar)}</span>
-                          {c.receptor && <span className="opacity-70">→ {c.receptor.nombre.split(' ')[0]}</span>}
-                        </div>
-                      ))}
+                      {consolidados.map((c) => {
+                        const common = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white ${COLOR[c.estado]} border-2 border-white/30`
+                        const title = `CON#${c.numeroCorte} · ${c.estado} · → ${c.receptor?.nombre ?? '—'}${canAudit ? ' · Click para ver desglose' : ''}`
+                        const content = (
+                          <>
+                            <span>CON#{c.numeroCorte}</span>
+                            <span className="opacity-80 tabular-nums">{money(c.totalAEntregar)}</span>
+                            {c.receptor && <span className="opacity-70">→ {c.receptor.nombre.split(' ')[0]}</span>}
+                          </>
+                        )
+                        return canAudit ? (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => setDesgloseId(c.id)}
+                            className={`${common} cursor-pointer hover:opacity-90 hover:ring-2 hover:ring-white/40 transition`}
+                            title={title}
+                          >
+                            {content}
+                          </button>
+                        ) : (
+                          <div key={c.id} className={common} title={title}>
+                            {content}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -128,6 +159,13 @@ export function HistoricoCortes({ cortes }: { cortes: Corte[] }) {
             )
           })}
         </div>
+      )}
+
+      {canAudit && (
+        <DesgloseCorteDialog
+          corteId={desgloseId}
+          onClose={() => setDesgloseId(null)}
+        />
       )}
     </section>
   )

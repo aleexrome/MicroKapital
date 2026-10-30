@@ -131,6 +131,8 @@ export function CorteDelDiaView(props: Props) {
   const esReceptor = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'].includes(userRol)
   const hacesCorte = !esReceptor
   const puedeConsolidar = (esConcentradora || sinConcentradora) && hacesCorte
+  // Auditoría de desglose: DG/DC/SA + MC. Resto solo ve chips de color.
+  const canAudit = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL'].includes(userRol)
 
   async function iniciarParcial() {
     setLoading('iniciarParcial')
@@ -582,11 +584,11 @@ export function CorteDelDiaView(props: Props) {
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Línea del día {esReceptor ? '(todas las sucursales)' : ''}
         </h2>
-        <TimelineDia cortes={cortesTimeline} userId={userId} />
+        <TimelineDia cortes={cortesTimeline} userId={userId} canAudit={canAudit} />
       </section>
 
       {/* ─── Histórico de días pasados ───────────────────────────────── */}
-      <HistoricoCortes cortes={cortesHistoricos} />
+      <HistoricoCortes cortes={cortesHistoricos} canAudit={canAudit} />
 
       {/* Dialogs */}
       {entregarParcial && (

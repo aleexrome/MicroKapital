@@ -17,6 +17,14 @@ interface Props {
   cobradorNombre: string
   sucursalNombre: string
   receptorNombre?: string | null
+  // Cobros aplicados en la ventana del parcial (desde el parcial N-1
+  // hasta este). Lista detallada que va al ticket como "COBROS DEL DIA".
+  pagos?: Array<{
+    clienteNombre: string
+    monto: number
+    metodoPago: string
+    numeroPago?: number | null
+  }>
 }
 
 /**
@@ -24,7 +32,7 @@ interface Props {
  * ticket firmado se sube al entregarlo. Es el único comprobante físico
  * del flujo coord → concentradora.
  */
-export function ParcialPrintButton({ parcial, cobradorNombre, sucursalNombre, receptorNombre }: Props) {
+export function ParcialPrintButton({ parcial, cobradorNombre, sucursalNombre, receptorNombre, pagos }: Props) {
   const [printing, setPrinting] = useState(false)
 
   function imprimir() {
@@ -42,6 +50,27 @@ export function ParcialPrintButton({ parcial, cobradorNombre, sucursalNombre, re
     const efectivo = Number(parcial.totalEfectivoCobrado)
     const recibido = Number(parcial.totalRecibidoDeOtros)
 
+    function escHtml(s: string) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    }
+    function metodoMark(m: string) {
+      return m === 'CASH' ? '$' : m === 'CARD' ? 'T' : m === 'TRANSFER' ? 'B' : ' '
+    }
+    function money(n: number) {
+      return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    }
+    const detalleHtml = pagos && pagos.length > 0
+      ? `
+  <div class="line"></div>
+  <div class="section">COBROS DEL DIA (${pagos.length})</div>
+  ${pagos.map((p, i) => {
+    const nombre = escHtml(p.clienteNombre)
+    const numPagoTag = p.numeroPago != null ? ` #${p.numeroPago}` : ''
+    return `<div class="row cobro"><span>${i + 1}. ${metodoMark(p.metodoPago)} ${nombre}${numPagoTag}</span><span class="val">${money(p.monto)}</span></div>`
+  }).join('')}
+  <div class="line"></div>`
+      : ''
+
     const html = `
 <!DOCTYPE html>
 <html>
@@ -58,6 +87,9 @@ export function ParcialPrintButton({ parcial, cobradorNombre, sucursalNombre, re
   .row { display: flex; justify-content: space-between; align-items: baseline; margin: 1px 0 }
   .val { font-weight: bold; font-variant-numeric: tabular-nums }
   .total { font-size: 14px; font-weight: bold; margin: 3mm 0 2mm; text-align: center; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 2mm 0 }
+  .section { font-weight: bold; text-align: left; margin: 2mm 0 1mm; font-size: 11px }
+  .cobro { font-size: 10px; line-height: 1.35; gap: 4px }
+  .cobro span:first-child { word-break: break-word }
   .firma { margin-top: 10mm; text-align: center }
   .firma .linea { border-top: 1px solid #000; margin: 10mm 4mm 1mm }
   .firma .quien { font-size: 10px }
@@ -77,6 +109,7 @@ export function ParcialPrintButton({ parcial, cobradorNombre, sucursalNombre, re
   <div class="row"><span>Efectivo cobrado:</span><span class="val">$${efectivo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span></div>
   ${recibido > 0 ? `<div class="row"><span>Recibido de otros:</span><span class="val">$${recibido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span></div>` : ''}
   <div class="total">A ENTREGAR $${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+  ${detalleHtml}
   <div class="firma">
     <div class="linea"></div>
     <div class="quien">Firma recibí (${receptorNombre ? receptorNombre.toUpperCase() : 'CONCENTRADORA'})</div>

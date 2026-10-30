@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Clock, Package, CheckCircle2, AlertCircle, Building2, User as UserIcon, ArrowRight } from 'lucide-react'
+import { DesgloseCorteDialog } from './DesgloseCorteDialog'
 
 type Corte = {
   id: string
@@ -17,6 +19,7 @@ type Corte = {
 interface Props {
   cortes: Corte[]
   userId: string
+  canAudit?: boolean
 }
 
 const ESTADO_COLOR: Record<Corte['estado'], string> = {
@@ -44,7 +47,9 @@ function money(n: string | number) {
  *     en puntos coloreados por estado
  *   • Resalta el user actual
  */
-export function TimelineDia({ cortes, userId }: Props) {
+export function TimelineDia({ cortes, userId, canAudit = false }: Props) {
+  const [desgloseId, setDesgloseId] = useState<string | null>(null)
+
   if (cortes.length === 0) {
     return (
       <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -105,15 +110,28 @@ export function TimelineDia({ cortes, userId }: Props) {
                       ) : (
                         u.parciales.map((p) => {
                           const Icon = ESTADO_ICON[p.estado]
-                          return (
-                            <div
-                              key={p.id}
-                              className={`relative inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white ${ESTADO_COLOR[p.estado]}`}
-                              title={`Parcial #${p.numeroCorte} · ${p.estado} · ${money(p.totalAEntregar)}`}
-                            >
+                          const common = `relative inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white ${ESTADO_COLOR[p.estado]}`
+                          const title = `Parcial #${p.numeroCorte} · ${p.estado} · ${money(p.totalAEntregar)}${canAudit ? ' · Click para ver desglose' : ''}`
+                          const content = (
+                            <>
                               <Icon className="h-2.5 w-2.5" />
                               <span className="tabular-nums">#{p.numeroCorte}</span>
                               <span className="opacity-80">{money(p.totalAEntregar)}</span>
+                            </>
+                          )
+                          return canAudit ? (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => setDesgloseId(p.id)}
+                              className={`${common} cursor-pointer hover:opacity-90 hover:ring-2 hover:ring-white/40 transition`}
+                              title={title}
+                            >
+                              {content}
+                            </button>
+                          ) : (
+                            <div key={p.id} className={common} title={title}>
+                              {content}
                             </div>
                           )
                         })
@@ -127,15 +145,28 @@ export function TimelineDia({ cortes, userId }: Props) {
                         <div className="flex items-center gap-1 flex-wrap">
                           {u.consolidados.map((c) => {
                             const Icon = ESTADO_ICON[c.estado]
-                            return (
-                              <div
-                                key={c.id}
-                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white ${ESTADO_COLOR[c.estado]} border-2 border-white/30`}
-                                title={`Consolidado #${c.numeroCorte} · ${c.estado} · ${money(c.totalAEntregar)} → ${c.receptor?.nombre ?? '?'}`}
-                              >
+                            const common = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white ${ESTADO_COLOR[c.estado]} border-2 border-white/30`
+                            const title = `Consolidado #${c.numeroCorte} · ${c.estado} · ${money(c.totalAEntregar)} → ${c.receptor?.nombre ?? '?'}${canAudit ? ' · Click para ver desglose' : ''}`
+                            const content = (
+                              <>
                                 <Icon className="h-2.5 w-2.5" />
                                 <span>CON#{c.numeroCorte}</span>
                                 <span className="opacity-80">{money(c.totalAEntregar)}</span>
+                              </>
+                            )
+                            return canAudit ? (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => setDesgloseId(c.id)}
+                                className={`${common} cursor-pointer hover:opacity-90 hover:ring-2 hover:ring-white/40 transition`}
+                                title={title}
+                              >
+                                {content}
+                              </button>
+                            ) : (
+                              <div key={c.id} className={common} title={title}>
+                                {content}
                               </div>
                             )
                           })}
@@ -162,7 +193,17 @@ export function TimelineDia({ cortes, userId }: Props) {
         <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-emerald-500" /> Aceptado</div>
         <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-red-500" /> Rechazado</div>
         <div className="flex items-center gap-1 ml-3"><div className="h-2 w-2 rounded-full bg-slate-500 border-2 border-white/30" /> Consolidado</div>
+        {canAudit && (
+          <div className="ml-3 italic">Click en cualquier corte para ver el desglose</div>
+        )}
       </div>
+
+      {canAudit && (
+        <DesgloseCorteDialog
+          corteId={desgloseId}
+          onClose={() => setDesgloseId(null)}
+        />
+      )}
     </div>
   )
 }

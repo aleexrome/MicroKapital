@@ -671,3 +671,358 @@ export async function parcialesParaConsolidar(
     montoAceptado: Number(r.montoAceptado ?? 0),
   }))
 }
+
+// ═════════════════════════════════════════════════════════════════════
+//  DESGLOSE DE UN CORTE — "de dónde salen las cifras"
+// ═════════════════════════════════════════════════════════════════════
+
+export interface DesglosePagoCuota {
+  paymentId:          string
+  clienteNombre:      string
+  numeroPago:         number | null
+  monto:              number
+  metodoPago:         string
+  statusTransferencia: string | null
+  fechaHora:          string
+  cobradorNombre:     string
+}
+
+export interface DesglosePagoApertura {
+  paymentId:     string
+  clienteNombre: string
+  tipo:          'SEGURO' | 'COMISION'
+  monto:         number
+  metodoPago:    string
+  fechaHora:     string
+  cobradorNombre: string
+}
+
+export interface DesgloseMora {
+  moraCobroId:   string
+  clienteNombre: string
+  tipo:          string   // 'MULTA' | 'MORA'
+  monto:         number
+  cobrada:       boolean
+  fechaHora:     string | null
+  cobradorNombre: string
+}
+
+export interface DesgloseTransferPendiente {
+  paymentId:       string
+  clienteNombre:   string
+  monto:           number
+  fechaHora:       string
+  idTransferencia: string | null
+  cobradorNombre:  string
+}
+
+export interface DesgloseVentanaInfo {
+  userId:          string
+  cobradorNombre:  string
+  desde:           string | null  // ISO; null si es parcial #1 (todo el día)
+  hasta:           string         // ISO
+  parcialNumero?:  number
+  parcialId?:      string
+}
+
+export interface DesgloseCorte {
+  corteId:       string
+  tipo:          'PARCIAL' | 'CONSOLIDADO'
+  numeroCorte:   number
+  fecha:         string
+  estado:        string
+  totalAEntregar:            number
+  totalEfectivoCobrado:      number
+  totalTarjetaCobrado:       number
+  totalTransferenciaCobrado: number
+  totalRecibidoDeOtros:      number
+  userNombre:    string
+  branchNombre:  string | null
+  ventanas:      DesgloseVentanaInfo[]
+  pagosCuotas:          DesglosePagoCuota[]
+  segurosYComisiones:   DesglosePagoApertura[]
+  moras:                DesgloseMora[]
+  transferPendientes:   DesgloseTransferPendiente[]
+  parcialesHijos?: Array<{
+    id:              string
+    numeroCorte:     number
+    userNombre:      string
+    totalAEntregar:  number
+    estado:          string
+  }>
+  totales: {
+    pagosCuotasMonto:        number
+    pagosCuotasCount:        number
+    segurosMonto:            number
+    segurosCount:            number
+    comisionesMonto:         number
+    comisionesCount:         number
+    morasMonto:              number
+    morasCount:              number
+    transferPendientesMonto: number
+    transferPendientesCount: number
+  }
+}
+
+/**
+ * Devuelve el desglose completo de un corte para auditoría.
+ *
+ *   PARCIAL:     ventana = (createdAt del parcial N-1 del mismo user en
+ *                la misma fecha; createdAt de este]. Si es el #1 del día,
+ *                desde 00:00 CDMX de la fecha.
+ *   CONSOLIDADO: unión de las ventanas de cada parcial hijo (el consolidado
+ *                NO abre ventana propia — todo pasa por sus parciales).
+ *
+ * Incluye:
+ *   - pagosCuotas:         pagos a schedule (cliente, # pago, monto, método)
+ *   - segurosYComisiones:  payments con scheduleId=null (apertura)
+ *   - moras:               MoraCobro cuyo paymentCobro cae en la ventana
+ *   - transferPendientes:  payments TRANSFER PENDIENTE en la ventana
+ */
+export async function desgloseCorte(
+  prisma: PrismaClient,
+  corteId: string,
+): Promise<DesgloseCorte | null> {
+  const corte = await prisma.corte.findUnique({
+    where:  { id: corteId },
+    include: {
+      user:   { select: { id: true, nombre: true } },
+      branch: { select: { nombre: true } },
+      consolidadoHijos: {
+        select: {
+          id: true, numeroCorte: true, totalAEntregar: true, estado: true, createdAt: true,
+          userId: true, fecha: true,
+          user: { select: { id: true, nombre: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+  })
+  if (!corte) return null
+
+  type Vent = { userId: string; cobradorNombre: string; desde: Date | null; hasta: Date; parcialNumero?: number; parcialId?: string }
+  const ventanas: Vent[] = []
+  if (corte.tipo === 'PARCIAL') {
+    const anterior = await prisma.corte.findFirst({
+      where: {
+        userId:      corte.userId,
+        fecha:       corte.fecha,
+        tipo:        'PARCIAL',
+        numeroCorte: { lt: corte.numeroCorte },
+      },
+      orderBy: { numeroCorte: 'desc' },
+      select:  { createdAt: true },
+    })
+    ventanas.push({
+      userId:         corte.userId,
+      cobradorNombre: corte.user?.nombre ?? '—',
+      desde:          anterior?.createdAt ?? null,
+      hasta:          corte.createdAt,
+      parcialNumero:  corte.numeroCorte,
+      parcialId:      corte.id,
+    })
+  } else {
+    for (const h of corte.consolidadoHijos) {
+      const anterior = await prisma.corte.findFirst({
+        where: {
+          userId:      h.userId,
+          fecha:       h.fecha,
+          tipo:        'PARCIAL',
+          numeroCorte: { lt: h.numeroCorte },
+        },
+        orderBy: { numeroCorte: 'desc' },
+        select:  { createdAt: true },
+      })
+      ventanas.push({
+        userId:         h.userId,
+        cobradorNombre: h.user?.nombre ?? '—',
+        desde:          anterior?.createdAt ?? null,
+        hasta:          h.createdAt,
+        parcialNumero:  h.numeroCorte,
+        parcialId:      h.id,
+      })
+    }
+  }
+
+  // Para cada ventana con desde=null, usamos la fecha del corte como piso.
+  const inicioDia = new Date(corte.fecha)
+  const paymentWhereOr = ventanas.map((v) => ({
+    cobradorId: v.userId,
+    fechaHora:  { gt: v.desde ?? inicioDia, lte: v.hasta },
+  }))
+
+  if (paymentWhereOr.length === 0) {
+    return baseDesglose(corte, [], [], [], [], [])
+  }
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      canceledAt: null,
+      OR:         paymentWhereOr,
+    },
+    select: {
+      id:                  true,
+      monto:               true,
+      metodoPago:          true,
+      statusTransferencia: true,
+      scheduleId:          true,
+      notas:               true,
+      fechaHora:           true,
+      idTransferencia:     true,
+      cobradorId:          true,
+      cobrador:  { select: { nombre: true } },
+      client:    { select: { nombreCompleto: true } },
+      schedule:  { select: { numeroPago: true } },
+    },
+    orderBy: { fechaHora: 'asc' },
+  })
+
+  const pagosCuotas: DesglosePagoCuota[] = []
+  const segurosYComisiones: DesglosePagoApertura[] = []
+  const transferPendientes: DesgloseTransferPendiente[] = []
+  for (const p of payments) {
+    const monto = Number(p.monto)
+    const notas = (p.notas ?? '').toLowerCase()
+    const esApertura = p.scheduleId === null && (notas.includes('seguro') || notas.includes('comisión') || notas.includes('comision'))
+    if (esApertura) {
+      segurosYComisiones.push({
+        paymentId:      p.id,
+        clienteNombre:  p.client.nombreCompleto,
+        tipo:           notas.includes('seguro') ? 'SEGURO' : 'COMISION',
+        monto,
+        metodoPago:     p.metodoPago,
+        fechaHora:      p.fechaHora.toISOString(),
+        cobradorNombre: p.cobrador?.nombre ?? '—',
+      })
+    } else {
+      pagosCuotas.push({
+        paymentId:           p.id,
+        clienteNombre:       p.client.nombreCompleto,
+        numeroPago:          p.schedule?.numeroPago ?? null,
+        monto,
+        metodoPago:          p.metodoPago,
+        statusTransferencia: p.statusTransferencia,
+        fechaHora:           p.fechaHora.toISOString(),
+        cobradorNombre:      p.cobrador?.nombre ?? '—',
+      })
+      if (p.metodoPago === 'TRANSFER' && p.statusTransferencia === 'PENDIENTE') {
+        transferPendientes.push({
+          paymentId:       p.id,
+          clienteNombre:   p.client.nombreCompleto,
+          monto,
+          fechaHora:       p.fechaHora.toISOString(),
+          idTransferencia: p.idTransferencia,
+          cobradorNombre:  p.cobrador?.nombre ?? '—',
+        })
+      }
+    }
+  }
+
+  const paymentIds = payments.map((p) => p.id)
+  const morasRows = paymentIds.length > 0
+    ? await prisma.moraCobro.findMany({
+        where:  { paymentCobroId: { in: paymentIds } },
+        select: {
+          id:        true,
+          tipo:      true,
+          monto:     true,
+          cobrada:   true,
+          cobradaAt: true,
+          cobrador:  { select: { nombre: true } },
+          client:    { select: { nombreCompleto: true } },
+        },
+        orderBy: { cobradaAt: 'asc' },
+      })
+    : []
+  const moras: DesgloseMora[] = morasRows.map((m) => ({
+    moraCobroId:    m.id,
+    clienteNombre:  m.client.nombreCompleto,
+    tipo:           m.tipo,
+    monto:          Number(m.monto),
+    cobrada:        m.cobrada,
+    fechaHora:      m.cobradaAt?.toISOString() ?? null,
+    cobradorNombre: m.cobrador?.nombre ?? '—',
+  }))
+
+  return baseDesglose(corte, ventanas, pagosCuotas, segurosYComisiones, moras, transferPendientes)
+}
+
+function baseDesglose(
+  corte: {
+    id: string
+    tipo: string
+    numeroCorte: number
+    fecha: Date
+    estado: string
+    totalAEntregar: unknown
+    totalEfectivoCobrado: unknown
+    totalTarjetaCobrado: unknown
+    totalTransferenciaCobrado: unknown
+    totalRecibidoDeOtros: unknown
+    createdAt: Date
+    user: { nombre: string } | null
+    branch: { nombre: string } | null
+    consolidadoHijos: Array<{
+      id: string
+      numeroCorte: number
+      totalAEntregar: unknown
+      estado: string
+      user: { nombre: string } | null
+    }>
+  },
+  ventanas: Array<{ userId: string; cobradorNombre: string; desde: Date | null; hasta: Date; parcialNumero?: number; parcialId?: string }>,
+  pagosCuotas: DesglosePagoCuota[],
+  segurosYComisiones: DesglosePagoApertura[],
+  moras: DesgloseMora[],
+  transferPendientes: DesgloseTransferPendiente[],
+): DesgloseCorte {
+  const seguros    = segurosYComisiones.filter((x) => x.tipo === 'SEGURO')
+  const comisiones = segurosYComisiones.filter((x) => x.tipo === 'COMISION')
+  return {
+    corteId:      corte.id,
+    tipo:         corte.tipo as 'PARCIAL' | 'CONSOLIDADO',
+    numeroCorte:  corte.numeroCorte,
+    fecha:        corte.fecha.toISOString().slice(0, 10),
+    estado:       corte.estado,
+    totalAEntregar:            Number(corte.totalAEntregar),
+    totalEfectivoCobrado:      Number(corte.totalEfectivoCobrado),
+    totalTarjetaCobrado:       Number(corte.totalTarjetaCobrado),
+    totalTransferenciaCobrado: Number(corte.totalTransferenciaCobrado),
+    totalRecibidoDeOtros:      Number(corte.totalRecibidoDeOtros),
+    userNombre:   corte.user?.nombre ?? '—',
+    branchNombre: corte.branch?.nombre ?? null,
+    ventanas: ventanas.map((v) => ({
+      userId:         v.userId,
+      cobradorNombre: v.cobradorNombre,
+      desde:          v.desde?.toISOString() ?? null,
+      hasta:          v.hasta.toISOString(),
+      parcialNumero:  v.parcialNumero,
+      parcialId:      v.parcialId,
+    })),
+    pagosCuotas,
+    segurosYComisiones,
+    moras,
+    transferPendientes,
+    parcialesHijos: corte.consolidadoHijos.length > 0
+      ? corte.consolidadoHijos.map((h) => ({
+          id:             h.id,
+          numeroCorte:    h.numeroCorte,
+          userNombre:     h.user?.nombre ?? '—',
+          totalAEntregar: Number(h.totalAEntregar),
+          estado:         h.estado,
+        }))
+      : undefined,
+    totales: {
+      pagosCuotasMonto:        pagosCuotas.reduce((s, p) => s + p.monto, 0),
+      pagosCuotasCount:        pagosCuotas.length,
+      segurosMonto:            seguros.reduce((s, x) => s + x.monto, 0),
+      segurosCount:            seguros.length,
+      comisionesMonto:         comisiones.reduce((s, x) => s + x.monto, 0),
+      comisionesCount:         comisiones.length,
+      morasMonto:              moras.reduce((s, m) => s + m.monto, 0),
+      morasCount:              moras.length,
+      transferPendientesMonto: transferPendientes.reduce((s, t) => s + t.monto, 0),
+      transferPendientesCount: transferPendientes.length,
+    },
+  }
+}

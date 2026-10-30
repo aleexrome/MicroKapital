@@ -9,7 +9,7 @@ interface MetricCardProps {
   description?: string
   icon: LucideIcon
   trend?: { value: number; label: string }
-  color?: 'blue' | 'green' | 'yellow' | 'red' | 'purple'
+  color?: 'blue' | 'green' | 'yellow' | 'red' | 'purple' | 'orange'
   className?: string
   href?: string
 }
@@ -20,6 +20,7 @@ const colorMap = {
   yellow: { iconBg: 'bg-amber-500/15',  iconText: 'text-amber-400',  valueText: 'text-amber-300' },
   red:    { iconBg: 'bg-rose-500/15',   iconText: 'text-rose-400',   valueText: 'text-rose-300' },
   purple: { iconBg: 'bg-violet-500/15', iconText: 'text-violet-400', valueText: 'text-violet-300' },
+  orange: { iconBg: 'bg-orange-500/15', iconText: 'text-orange-400', valueText: 'text-orange-300' },
 }
 
 export function MetricCard({

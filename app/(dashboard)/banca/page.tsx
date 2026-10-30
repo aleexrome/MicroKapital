@@ -87,6 +87,15 @@ interface MoraRow {
   idTransferencia: string | null
 }
 
+interface MoraPendienteRow {
+  id: string
+  fechaGenerada: Date  // createdAt — cuándo se gatilló la multa/mora
+  cobrador: string     // coord responsable
+  cliente: string
+  tipo: string         // 'MULTA' | 'MORA'
+  monto: number
+}
+
 interface BranchAgg {
   branchId: string
   branchName: string
@@ -95,12 +104,15 @@ interface BranchAgg {
   adicionales: AdicionalRow[]
   retiros: RetiroRow[]
   moras: MoraRow[]
+  morasPendientes: MoraPendienteRow[]
   totalCortes: number          // efectivo + tarjeta (dinero físico que entra a sucursal)
   totalTransferencia: number   // transferencias — ya están en banca, NO entran al neto físico
   totalDesembolsos: number
   totalAdicional: number
   totalRetiro: number
-  totalMoras: number           // total cobrado por multas/moras (ya incluido en totalCortes / totalTransferencia)
+  totalMoras: number              // total cobrado por multas/moras (ya incluido en totalCortes / totalTransferencia)
+  totalMorasGeneradas: number     // multas/moras generadas en la semana (todas, cobradas o no)
+  totalMorasPendientes: number    // generadas - cobradas (lo que la sucursal todavía debería recuperar)
 }
 
 interface WeekAgg {
@@ -242,15 +254,23 @@ export default async function BancaPage({
       orderBy: { fecha: 'asc' },
     }),
 
-    // Multas/moras cobradas en el periodo. El dinero YA entró vía Payment
-    // (paymentCobro) y por tanto está sumado en los totales de "Cortes
-    // físicos" / "Transferencia". Esta tabla desglosa cuánto de eso fue
-    // multa/mora y cómo se cobró, para que Banca lo audite por separado.
+    // Multas/moras — todas las creadas o cobradas en el periodo.
+    // - Las cobradas (cobrada=true, cobradaAt en rango) ya aportaron
+    //   dinero vía el paymentCobro (Payment ligado) y por tanto están
+    //   sumadas en los totales de "Cortes físicos" / "Transferencia".
+    //   Se desglosan aparte para auditar cómo se cobraron.
+    // - Las pendientes (cobrada=false, createdAt en rango) son dinero
+    //   que la sucursal TODAVÍA debería recuperar — el coord no ha
+    //   presionado "Cobrar multa / Cobrar mora" en el calendario.
+    //   OR { cobradaAt in range } OR { createdAt in range AND cobrada=false }
+    //   captura las dos sin duplicar.
     prisma.moraCobro.findMany({
       where: {
         companyId,
-        cobrada:   true,
-        cobradaAt: { gte: periodoStart, lte: periodoEnd },
+        OR: [
+          { cobrada: true,  cobradaAt: { gte: periodoStart, lte: periodoEnd } },
+          { cobrada: false, createdAt: { gte: periodoStart, lte: periodoEnd } },
+        ],
         ...branchWhere,
         loan: {
           AND: [scopedLoanWhere(accessUser), loanNotDeletedWhere],
@@ -260,7 +280,9 @@ export default async function BancaPage({
         id:        true,
         tipo:      true,
         monto:     true,
+        cobrada:   true,
         cobradaAt: true,
+        createdAt: true,
         branch:    { select: { id: true, nombre: true } },
         cobrador:  { select: { nombre: true } },
         client:    { select: { nombreCompleto: true } },
@@ -272,7 +294,7 @@ export default async function BancaPage({
           },
         },
       },
-      orderBy: { cobradaAt: 'asc' },
+      orderBy: { createdAt: 'asc' },
     }),
   ])
 
@@ -311,12 +333,15 @@ export default async function BancaPage({
         adicionales: [],
         retiros: [],
         moras: [],
+        morasPendientes: [],
         totalCortes: 0,
         totalTransferencia: 0,
         totalDesembolsos: 0,
         totalAdicional: 0,
         totalRetiro: 0,
         totalMoras: 0,
+        totalMorasGeneradas: 0,
+        totalMorasPendientes: 0,
       }
       week.branches.set(branchId, branch)
     }
@@ -446,30 +471,52 @@ export default async function BancaPage({
     b.totalRetiro += monto
   }
 
-  // Multas y moras cobradas — informativo. El dinero YA entró en los
-  // cortes vía el Payment (paymentCobro) que lo respalda, así que NO
-  // se re-suma al neto físico — solo se desglosa cuánto de ese dinero
-  // vino de multas/moras y por qué método.
+  // Multas y moras — se parten en dos listas:
+  //
+  //   Cobradas (ya aportaron dinero al corte físico):
+  //     Se asignan a la semana por cobradaAt. Informativo — el dinero
+  //     YA está sumado en Cortes/Transferencia, no se re-suma al neto.
+  //
+  //   Pendientes (siguen abiertas, dinero por cobrar):
+  //     Se asignan a la semana por createdAt (cuándo se gatilló la
+  //     multa/mora). Representan dinero que la sucursal todavía debería
+  //     recuperar — los coord no han presionado "Cobrar multa/mora".
   for (const m of moraCobros) {
-    if (!m.cobradaAt) continue
-    const fecha = new Date(m.cobradaAt)
-    const w = findWeek(fecha)
-    if (!w) continue
-
-    const b = getBranchAgg(w.key, w.sat, m.branch.id, m.branch.nombre)
     const monto = Number(m.monto)
-    b.moras.push({
-      id:                  m.id,
-      fecha,
-      cobrador:            m.cobrador?.nombre ?? '—',
-      cliente:             m.client.nombreCompleto,
-      tipo:                m.tipo,
-      monto,
-      metodoPago:          m.paymentCobro?.metodoPago ?? null,
-      statusTransferencia: m.paymentCobro?.statusTransferencia ?? null,
-      idTransferencia:     m.paymentCobro?.idTransferencia ?? null,
-    })
-    b.totalMoras += monto
+    if (m.cobrada && m.cobradaAt) {
+      const fecha = new Date(m.cobradaAt)
+      const w = findWeek(fecha)
+      if (!w) continue
+      const b = getBranchAgg(w.key, w.sat, m.branch.id, m.branch.nombre)
+      b.moras.push({
+        id:                  m.id,
+        fecha,
+        cobrador:            m.cobrador?.nombre ?? '—',
+        cliente:             m.client.nombreCompleto,
+        tipo:                m.tipo,
+        monto,
+        metodoPago:          m.paymentCobro?.metodoPago ?? null,
+        statusTransferencia: m.paymentCobro?.statusTransferencia ?? null,
+        idTransferencia:     m.paymentCobro?.idTransferencia ?? null,
+      })
+      b.totalMoras += monto
+      b.totalMorasGeneradas += monto
+    } else if (!m.cobrada) {
+      const fecha = new Date(m.createdAt)
+      const w = findWeek(fecha)
+      if (!w) continue
+      const b = getBranchAgg(w.key, w.sat, m.branch.id, m.branch.nombre)
+      b.morasPendientes.push({
+        id:            m.id,
+        fechaGenerada: fecha,
+        cobrador:      m.cobrador?.nombre ?? '—',
+        cliente:       m.client.nombreCompleto,
+        tipo:          m.tipo,
+        monto,
+      })
+      b.totalMorasPendientes += monto
+      b.totalMorasGeneradas += monto
+    }
   }
 
   const weeksSorted = Array.from(weeks.values()).sort(
@@ -483,6 +530,8 @@ export default async function BancaPage({
   let grandAdicional = 0
   let grandRetiro = 0
   let grandMoras = 0
+  let grandMorasGeneradas = 0
+  let grandMorasPendientes = 0
   for (const w of weeksSorted) {
     for (const b of Array.from(w.branches.values())) {
       grandCortes += b.totalCortes
@@ -491,6 +540,8 @@ export default async function BancaPage({
       grandAdicional += b.totalAdicional
       grandRetiro += b.totalRetiro
       grandMoras += b.totalMoras
+      grandMorasGeneradas += b.totalMorasGeneradas
+      grandMorasPendientes += b.totalMorasPendientes
     }
   }
   // Neto para banca = SOLO dinero físico (cortes = efectivo + tarjeta)
@@ -554,6 +605,9 @@ export default async function BancaPage({
         <MetricCard
           title="Multas / Moras"
           value={formatMoney(grandMoras)}
+          description={grandMorasPendientes > 0
+            ? `${formatMoney(grandMorasPendientes)} pendiente de cobrar`
+            : 'Al día — nada pendiente'}
           icon={AlertTriangle}
           color="orange"
         />
@@ -635,6 +689,9 @@ export default async function BancaPage({
                   const moraRows = [...b.moras].sort(
                     (x, y) => x.fecha.getTime() - y.fecha.getTime()
                   )
+                  const moraPendRows = [...b.morasPendientes].sort(
+                    (x, y) => x.fechaGenerada.getTime() - y.fechaGenerada.getTime()
+                  )
                   return (
                     <div key={b.branchId} className="rounded-lg border border-border">
                       {/* Resumen de la sucursal */}
@@ -657,10 +714,18 @@ export default async function BancaPage({
                           <p className="text-xs text-muted-foreground">Multas/Moras</p>
                           <p
                             className="font-semibold text-orange-300 money"
-                            title="Parte de los cortes/transferencias que corresponde a multas y moras. Ya está incluido en esos totales — no se re-suma al neto."
+                            title="Multas/moras cobradas en la semana. Ya están sumadas en Cortes/Transferencia — no se re-suman al neto."
                           >
                             {b.totalMoras > 0 ? formatMoney(b.totalMoras) : formatMoney(0)}
                           </p>
+                          {b.totalMorasPendientes > 0 && (
+                            <p
+                              className="text-[11px] text-rose-400 money"
+                              title="Multas/moras generadas en la semana por atrasos y que el coord todavía NO ha cobrado (botón 'Cobrar' en el calendario)."
+                            >
+                              + {formatMoney(b.totalMorasPendientes)} pend.
+                            </p>
+                          )}
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Adicional</p>
@@ -689,7 +754,7 @@ export default async function BancaPage({
                       {/* Detalle: cortes del día, adicionales, retiros y desembolsos */}
                       <details className="group">
                         <summary className="cursor-pointer select-none px-4 py-2 text-sm font-medium text-white hover:bg-white/5">
-                          Ver detalle ({cortesRows.length} cortes · {adicionalRows.length} adicionales · {retiroRows.length} retiros · {moraRows.length} moras · {desembolsosRows.length} desembolsos)
+                          Ver detalle ({cortesRows.length} cortes · {adicionalRows.length} adicionales · {retiroRows.length} retiros · {moraRows.length} moras cobradas · {moraPendRows.length} pendientes · {desembolsosRows.length} desembolsos)
                         </summary>
                         <div className="space-y-4 px-4 py-3">
                           {/* Cortes del día */}
@@ -875,6 +940,63 @@ export default async function BancaPage({
                                         </tr>
                                       )
                                     })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Multas y moras PENDIENTES de cobro (dinero que la sucursal todavía debe recuperar) */}
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Multas y moras pendientes de cobro
+                              <span className="ml-2 font-normal normal-case text-[11px] text-rose-400/80">
+                                (generadas por atraso en la semana — el coord aún NO presionó "Cobrar" en el calendario)
+                              </span>
+                            </p>
+                            {moraPendRows.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">Sin multas ni moras pendientes de la semana.</p>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="text-left text-xs text-muted-foreground">
+                                      <th className="py-1 pr-3 font-medium">Fecha generada</th>
+                                      <th className="py-1 pr-3 font-medium">Cobrador</th>
+                                      <th className="py-1 pr-3 font-medium">Cliente</th>
+                                      <th className="py-1 pr-3 font-medium">Tipo</th>
+                                      <th className="py-1 text-right font-medium">Monto</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border/50">
+                                    {moraPendRows.map((m) => {
+                                      const tipoColor = m.tipo === 'MULTA'
+                                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                        : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                      return (
+                                        <tr key={m.id}>
+                                          <td className="py-1.5 pr-3">{diaMx(m.fechaGenerada)}</td>
+                                          <td className="py-1.5 pr-3">{m.cobrador}</td>
+                                          <td className="py-1.5 pr-3">{m.cliente}</td>
+                                          <td className="py-1.5 pr-3">
+                                            <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${tipoColor}`}>
+                                              {m.tipo}
+                                            </span>
+                                          </td>
+                                          <td className="py-1.5 text-right font-medium text-rose-400 money">
+                                            {formatMoney(m.monto)}
+                                          </td>
+                                        </tr>
+                                      )
+                                    })}
+                                    <tr className="border-t-2 border-border/70">
+                                      <td colSpan={4} className="py-1.5 pr-3 text-xs font-semibold text-muted-foreground text-right">
+                                        Total pendiente de cobrar en la semana
+                                      </td>
+                                      <td className="py-1.5 text-right font-bold text-rose-400 money">
+                                        {formatMoney(b.totalMorasPendientes)}
+                                      </td>
+                                    </tr>
                                   </tbody>
                                 </table>
                               </div>

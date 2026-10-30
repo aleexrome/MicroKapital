@@ -102,13 +102,27 @@ function DescargarPdfSucursalButton({ branchId, nombre }: { branchId: string; no
       }
       const blob = await res.blob()
       const url  = URL.createObjectURL(blob)
-      const link = document.createElement('a')
       const safe = nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-')
-      link.download = `reporte-ejecutivo_${safe}.pdf`
-      link.href = url
+      const filename = `reporte-ejecutivo_${safe}.pdf`
+
+      // El browser necesita el <a> dentro del DOM y necesita tiempo para
+      // iniciar la descarga antes de que revoquemos el blob URL. En algunos
+      // browsers (Chrome Windows, Safari móvil), hacer click + revoke
+      // sincrónico resulta en 'descarga silenciosa' que nunca llega al disco.
+      const link = document.createElement('a')
+      link.href        = url
+      link.download    = filename
+      link.rel         = 'noopener'
+      link.target      = '_blank'
+      document.body.appendChild(link)
       link.click()
-      URL.revokeObjectURL(url)
-      toast({ title: '✅ PDF descargado' })
+      // Pequeño delay antes de limpiar: le damos tiempo al browser a procesar.
+      setTimeout(() => {
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+      }, 1000)
+
+      toast({ title: '✅ PDF descargado', description: filename })
     } catch (e) {
       toast({ title: 'Error al generar el PDF', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
     } finally { setDescargando(false) }

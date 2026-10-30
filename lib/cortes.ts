@@ -12,7 +12,7 @@
  */
 
 import type { PrismaClient, UserRole } from '@prisma/client'
-import { todayMx, inicioSemanaMk, esViernesMk } from '@/lib/timezone'
+import { todayMx, inicioSemanaMk } from '@/lib/timezone'
 
 /** Roles que deben hacer corte del día (cobran en campo o concentran). */
 export const ROLES_HACEN_CORTE: readonly UserRole[] = [
@@ -169,43 +169,12 @@ export async function cortePendienteDe(
   })
   if (row) return { id: row.id, tipo: 'PROPIO' }
 
-  // Bloqueo adicional (semana MK): concentradora con parciales ACEPTADOS
-  // sin consolidar. Regla simple:
-  //
-  //   • Lun-jue: NUNCA se bloquea aunque haya parciales recibidos — es
-  //     normal, se consolidan hasta el viernes.
-  //   • Viernes: SE bloquea si hay parciales ACEPTADOS sin consolidar
-  //     (de esta semana o de semanas anteriores). Es el día de corte con
-  //     Dirección y le recuerda consolidar.
-  //
-  // Si una concentradora olvida consolidar un viernes, el próximo viernes
-  // le vuelve a aparecer el recordatorio — no la acosamos lun-jue.
-  //
-  // IMPORTANTE: el id devuelto es el del parcial ACEPTADO. La layout
-  // detecta tipo COLGANDO_CONSOLIDAR y manda a /corte-del-dia (NO a
-  // /corte/pendiente que haría loop).
-  if (esViernesMk(hoy)) {
-    const parcialViernes = await prisma.corte.findFirst({
-      where: {
-        receptorId: user.id,
-        tipo:       'PARCIAL',
-        estado:     'ACEPTADO',
-        OR: [
-          { consolidadoPadreId: null },
-          {
-            consolidadoPadre: {
-              estado: { in: ['ABIERTO', 'ENTREGADO', 'RECHAZADO'] },
-            },
-          },
-        ],
-      },
-      orderBy: { fecha: 'asc' },
-      select:  { id: true },
-    })
-    if (parcialViernes) {
-      return { id: parcialViernes.id, tipo: 'COLGANDO_CONSOLIDAR' }
-    }
-  }
+  // La concentradora NO se bloquea nunca durante la semana por tener
+  // parciales sin consolidar. El consolidado lo activa ella cuando
+  // quiera durante el viernes; si no lo hace, un cron auto-consolida a
+  // las 00:01 CDMX del sábado. El bloqueo COLGANDO_CONSOLIDAR del viernes
+  // generaba fricción innecesaria (la congelaba desde las 00:00 del
+  // viernes aunque todavía estaba cobrando y acumulando parciales).
 
   return null
 }

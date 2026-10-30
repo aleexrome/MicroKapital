@@ -20,7 +20,7 @@ import {
 } from '@/lib/week-utils'
 import { scopedLoanWhere, loanNotDeletedWhere } from '@/lib/access'
 import { calcTarifaApertura } from '@/lib/financial-formulas'
-import { Landmark, Banknote, TrendingDown, Wallet, PlusCircle, MinusCircle, ArrowRightLeft } from 'lucide-react'
+import { Landmark, Banknote, TrendingDown, Wallet, PlusCircle, MinusCircle, ArrowRightLeft, AlertTriangle } from 'lucide-react'
 
 // Semanas laborales (sábado→viernes) hacia atrás que se muestran (incluye la actual).
 const WEEKS_BACK = 8
@@ -75,6 +75,18 @@ interface RetiroRow {
   creadoPor: string
 }
 
+interface MoraRow {
+  id: string
+  fecha: Date
+  cobrador: string
+  cliente: string
+  tipo: string                // 'MULTA' | 'MORA'
+  monto: number
+  metodoPago: string | null   // CASH | CARD | TRANSFER (del paymentCobro)
+  statusTransferencia: string | null  // PENDIENTE | VERIFICADO | null
+  idTransferencia: string | null
+}
+
 interface BranchAgg {
   branchId: string
   branchName: string
@@ -82,11 +94,13 @@ interface BranchAgg {
   desembolsos: DesembolsoRow[]
   adicionales: AdicionalRow[]
   retiros: RetiroRow[]
+  moras: MoraRow[]
   totalCortes: number          // efectivo + tarjeta (dinero físico que entra a sucursal)
   totalTransferencia: number   // transferencias — ya están en banca, NO entran al neto físico
   totalDesembolsos: number
   totalAdicional: number
   totalRetiro: number
+  totalMoras: number           // total cobrado por multas/moras (ya incluido en totalCortes / totalTransferencia)
 }
 
 interface WeekAgg {
@@ -141,7 +155,7 @@ export default async function BancaPage({
 
   const branchWhere = sucursalFilter ? { branchId: sucursalFilter } : {}
 
-  const [branches, pagos, desembolsos, adicionales, retiros] = await Promise.all([
+  const [branches, pagos, desembolsos, adicionales, retiros, moraCobros] = await Promise.all([
     // Sucursales de la empresa (para el filtro)
     prisma.branch.findMany({
       where: { companyId },
@@ -227,6 +241,39 @@ export default async function BancaPage({
       },
       orderBy: { fecha: 'asc' },
     }),
+
+    // Multas/moras cobradas en el periodo. El dinero YA entró vía Payment
+    // (paymentCobro) y por tanto está sumado en los totales de "Cortes
+    // físicos" / "Transferencia". Esta tabla desglosa cuánto de eso fue
+    // multa/mora y cómo se cobró, para que Banca lo audite por separado.
+    prisma.moraCobro.findMany({
+      where: {
+        companyId,
+        cobrada:   true,
+        cobradaAt: { gte: periodoStart, lte: periodoEnd },
+        ...branchWhere,
+        loan: {
+          AND: [scopedLoanWhere(accessUser), loanNotDeletedWhere],
+        },
+      },
+      select: {
+        id:        true,
+        tipo:      true,
+        monto:     true,
+        cobradaAt: true,
+        branch:    { select: { id: true, nombre: true } },
+        cobrador:  { select: { nombre: true } },
+        client:    { select: { nombreCompleto: true } },
+        paymentCobro: {
+          select: {
+            metodoPago:          true,
+            statusTransferencia: true,
+            idTransferencia:     true,
+          },
+        },
+      },
+      orderBy: { cobradaAt: 'asc' },
+    }),
   ])
 
   // ── Rangos de cada semana (sáb→vie) para asignar cada registro ──
@@ -263,11 +310,13 @@ export default async function BancaPage({
         desembolsos: [],
         adicionales: [],
         retiros: [],
+        moras: [],
         totalCortes: 0,
         totalTransferencia: 0,
         totalDesembolsos: 0,
         totalAdicional: 0,
         totalRetiro: 0,
+        totalMoras: 0,
       }
       week.branches.set(branchId, branch)
     }
@@ -397,6 +446,32 @@ export default async function BancaPage({
     b.totalRetiro += monto
   }
 
+  // Multas y moras cobradas — informativo. El dinero YA entró en los
+  // cortes vía el Payment (paymentCobro) que lo respalda, así que NO
+  // se re-suma al neto físico — solo se desglosa cuánto de ese dinero
+  // vino de multas/moras y por qué método.
+  for (const m of moraCobros) {
+    if (!m.cobradaAt) continue
+    const fecha = new Date(m.cobradaAt)
+    const w = findWeek(fecha)
+    if (!w) continue
+
+    const b = getBranchAgg(w.key, w.sat, m.branch.id, m.branch.nombre)
+    const monto = Number(m.monto)
+    b.moras.push({
+      id:                  m.id,
+      fecha,
+      cobrador:            m.cobrador?.nombre ?? '—',
+      cliente:             m.client.nombreCompleto,
+      tipo:                m.tipo,
+      monto,
+      metodoPago:          m.paymentCobro?.metodoPago ?? null,
+      statusTransferencia: m.paymentCobro?.statusTransferencia ?? null,
+      idTransferencia:     m.paymentCobro?.idTransferencia ?? null,
+    })
+    b.totalMoras += monto
+  }
+
   const weeksSorted = Array.from(weeks.values()).sort(
     (a, b) => b.saturday.getTime() - a.saturday.getTime()
   )
@@ -407,6 +482,7 @@ export default async function BancaPage({
   let grandDesembolsos = 0
   let grandAdicional = 0
   let grandRetiro = 0
+  let grandMoras = 0
   for (const w of weeksSorted) {
     for (const b of Array.from(w.branches.values())) {
       grandCortes += b.totalCortes
@@ -414,6 +490,7 @@ export default async function BancaPage({
       grandDesembolsos += b.totalDesembolsos
       grandAdicional += b.totalAdicional
       grandRetiro += b.totalRetiro
+      grandMoras += b.totalMoras
     }
   }
   // Neto para banca = SOLO dinero físico (cortes = efectivo + tarjeta)
@@ -461,7 +538,7 @@ export default async function BancaPage({
       </div>
 
       {/* Resumen del periodo */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
         <MetricCard
           title={`Cortes físicos (${WEEKS_BACK} sem.)`}
           value={formatMoney(grandCortes)}
@@ -473,6 +550,12 @@ export default async function BancaPage({
           value={formatMoney(grandTransferencia)}
           icon={ArrowRightLeft}
           color="blue"
+        />
+        <MetricCard
+          title="Multas / Moras"
+          value={formatMoney(grandMoras)}
+          icon={AlertTriangle}
+          color="orange"
         />
         <MetricCard
           title="Monto adicional"
@@ -549,10 +632,13 @@ export default async function BancaPage({
                   const retiroRows = [...b.retiros].sort(
                     (x, y) => x.fecha.getTime() - y.fecha.getTime()
                   )
+                  const moraRows = [...b.moras].sort(
+                    (x, y) => x.fecha.getTime() - y.fecha.getTime()
+                  )
                   return (
                     <div key={b.branchId} className="rounded-lg border border-border">
                       {/* Resumen de la sucursal */}
-                      <div className="grid grid-cols-2 sm:grid-cols-7 gap-2 border-b border-border bg-secondary/40 px-4 py-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-8 gap-2 border-b border-border bg-secondary/40 px-4 py-3">
                         <div className="col-span-2 sm:col-span-1">
                           <p className="text-xs text-muted-foreground">Sucursal</p>
                           <p className="font-semibold text-foreground">🏢 {b.branchName}</p>
@@ -565,6 +651,15 @@ export default async function BancaPage({
                           <p className="text-xs text-muted-foreground">Transferencia</p>
                           <p className="font-semibold text-blue-300 money" title="Ya está en banca — no se cuenta en el neto físico de sucursal">
                             {b.totalTransferencia > 0 ? formatMoney(b.totalTransferencia) : formatMoney(0)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Multas/Moras</p>
+                          <p
+                            className="font-semibold text-orange-300 money"
+                            title="Parte de los cortes/transferencias que corresponde a multas y moras. Ya está incluido en esos totales — no se re-suma al neto."
+                          >
+                            {b.totalMoras > 0 ? formatMoney(b.totalMoras) : formatMoney(0)}
                           </p>
                         </div>
                         <div>
@@ -594,7 +689,7 @@ export default async function BancaPage({
                       {/* Detalle: cortes del día, adicionales, retiros y desembolsos */}
                       <details className="group">
                         <summary className="cursor-pointer select-none px-4 py-2 text-sm font-medium text-white hover:bg-white/5">
-                          Ver detalle ({cortesRows.length} cortes · {adicionalRows.length} adicionales · {retiroRows.length} retiros · {desembolsosRows.length} desembolsos)
+                          Ver detalle ({cortesRows.length} cortes · {adicionalRows.length} adicionales · {retiroRows.length} retiros · {moraRows.length} moras · {desembolsosRows.length} desembolsos)
                         </summary>
                         <div className="space-y-4 px-4 py-3">
                           {/* Cortes del día */}
@@ -716,6 +811,70 @@ export default async function BancaPage({
                                         </td>
                                       </tr>
                                     ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Multas y moras cobradas (informativo — ya sumado en Cortes/Transferencia) */}
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Multas y moras cobradas
+                              <span className="ml-2 font-normal normal-case text-[11px] text-muted-foreground/80">
+                                (ya incluidas en los cortes del día — se desglosan para auditoría)
+                              </span>
+                            </p>
+                            {moraRows.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">Sin multas ni moras cobradas en la semana.</p>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="text-left text-xs text-muted-foreground">
+                                      <th className="py-1 pr-3 font-medium">Fecha</th>
+                                      <th className="py-1 pr-3 font-medium">Cobrador</th>
+                                      <th className="py-1 pr-3 font-medium">Cliente</th>
+                                      <th className="py-1 pr-3 font-medium">Tipo</th>
+                                      <th className="py-1 pr-3 font-medium">Método</th>
+                                      <th className="py-1 pr-3 font-medium">Referencia</th>
+                                      <th className="py-1 text-right font-medium">Monto</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border/50">
+                                    {moraRows.map((m) => {
+                                      const metodo = m.metodoPago
+                                        ? m.metodoPago === 'CASH'
+                                          ? 'Efectivo'
+                                          : m.metodoPago === 'CARD'
+                                            ? 'Tarjeta'
+                                            : m.statusTransferencia === 'VERIFICADO'
+                                              ? 'Transfer ✓'
+                                              : m.statusTransferencia === 'PENDIENTE'
+                                                ? 'Transfer ⏳'
+                                                : 'Transfer'
+                                        : '—'
+                                      const tipoColor = m.tipo === 'MULTA'
+                                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                        : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                      return (
+                                        <tr key={m.id}>
+                                          <td className="py-1.5 pr-3">{diaMx(m.fecha)}</td>
+                                          <td className="py-1.5 pr-3">{m.cobrador}</td>
+                                          <td className="py-1.5 pr-3">{m.cliente}</td>
+                                          <td className="py-1.5 pr-3">
+                                            <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${tipoColor}`}>
+                                              {m.tipo}
+                                            </span>
+                                          </td>
+                                          <td className="py-1.5 pr-3">{metodo}</td>
+                                          <td className="py-1.5 pr-3 text-muted-foreground">{m.idTransferencia ?? '—'}</td>
+                                          <td className="py-1.5 text-right font-medium text-orange-300 money">
+                                            {formatMoney(m.monto)}
+                                          </td>
+                                        </tr>
+                                      )
+                                    })}
                                   </tbody>
                                 </table>
                               </div>

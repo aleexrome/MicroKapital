@@ -41,6 +41,10 @@ export async function GET(req: NextRequest) {
   if (fechaParam && !/^\d{4}-\d{2}-\d{2}$/.test(fechaParam)) {
     return NextResponse.json({ error: 'fecha debe ser YYYY-MM-DD' }, { status: 400 })
   }
+  // Modo dry-run: valida autenticación + listas concentradoras + parciales
+  // pendientes, SIN crear nada en DB. Útil para probar el cron en vivo
+  // sin riesgo de armar consolidados prematuros.
+  const dryRun = req.nextUrl.searchParams.get('dry-run') === '1'
 
   // Si no es Vercel ni Bearer, exigir sesión DG/DC/SA.
   if (!esCron && !esTokenValido) {
@@ -97,6 +101,24 @@ export async function GET(req: NextRequest) {
     const userId    = b.concentrador.id
     const companyId = b.concentrador.companyId
     try {
+      // En dry-run, saltamos la creación de residuo y solo listamos
+      // cuántos parciales habría. Nada se escribe en DB.
+      if (dryRun) {
+        const parciales = await parcialesParaConsolidar(prisma, userId, fechaViernes)
+        const residuo   = await efectivoPropioResiduoSemana(prisma, userId, fechaViernes)
+        resultados.push({
+          concentradora: b.concentrador.nombre,
+          sucursal:      b.nombre,
+          parciales:     parciales.length,
+        })
+        if (parciales.length > 0 || residuo.efectivo > 0 || residuo.tarjeta > 0 || residuo.transferencia > 0) {
+          creados++
+        } else {
+          saltados++
+        }
+        continue
+      }
+
       // 1. Residuo de efectivo propio de la semana → parcial auto-aceptado.
       const residuo = await efectivoPropioResiduoSemana(prisma, userId, fechaViernes)
       if (residuo.efectivo > 0 || residuo.tarjeta > 0 || residuo.transferencia > 0) {
@@ -190,9 +212,10 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
+    ...(dryRun ? { dryRun: true } : {}),
     fechaViernes: fechaViernes.toISOString().slice(0, 10),
     totalConcentradoras: branches.length,
-    creados,
+    ...(dryRun ? { conPendientes: creados } : { creados }),
     saltados,
     resultados,
   })

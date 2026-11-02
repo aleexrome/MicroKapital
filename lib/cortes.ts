@@ -170,6 +170,18 @@ export async function cortePendienteDe(
   // se evalúa aquí porque `inicioSemanaMk(hoy)` corta a sábado 00:00
   // de la semana donde cae `hoy`, así que `viernesAnterior` siempre
   // apunta al viernes pasado.
+  //
+  // AMNISTÍA DE TRANSICIÓN: el modelo semanal arranca formalmente el
+  // sábado 7-nov-2026. Antes de esa fecha los coord trabajaban con
+  // bloqueo DIARIO y no tenían obligación de cerrar un parcial cada
+  // viernes. Para no bloquearlos por semanas viejas que terminaron
+  // bajo el modelo anterior, sólo evaluamos esta rama cuando la
+  // semana a auditar inicia el 7-nov o después.
+  const INICIO_MODELO_SEMANAL = new Date('2026-11-07T06:00:00.000Z')  // sábado 7-nov 00:00 CDMX
+  if (inicioSemAnterior.getTime() < INICIO_MODELO_SEMANAL.getTime()) {
+    return null
+  }
+
   const cobranza = await prisma.cashRegister.aggregate({
     where: {
       cobradorId: user.id,
@@ -377,7 +389,15 @@ export async function cortesPendientesPorSucursal(
   // abrieron ningún parcial ACEPTADO para entregarla. No existen como
   // filas de Corte (nunca iniciaron uno), así que hay que detectarlos
   // vía CashRegister. Se agregan como "fantasmas" sin corteId concreto.
-  const cashSemAnterior = await prisma.cashRegister.findMany({
+  //
+  // AMNISTÍA DE TRANSICIÓN (igual que `cortePendienteDe`): el modelo
+  // semanal arranca formalmente el sábado 7-nov-2026. No se audita
+  // semana anterior a esa fecha para no listar coord fantasma de
+  // ciclos bajo el modelo diario viejo.
+  const INICIO_MODELO_SEMANAL_PANEL = new Date('2026-11-07T06:00:00.000Z')
+  const cashSemAnterior = inicioSemAnterior.getTime() < INICIO_MODELO_SEMANAL_PANEL.getTime()
+    ? []
+    : await prisma.cashRegister.findMany({
     where: {
       fecha:    { gte: inicioSemAnterior, lte: viernesAnterior },
       cobrador: { companyId, activo: true },

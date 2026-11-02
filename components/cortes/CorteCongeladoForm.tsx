@@ -174,20 +174,20 @@ export function CorteCongeladoForm({
         <p className="text-xs uppercase tracking-wider text-gray-300 mb-2">Resumen del día</p>
         <div className="grid grid-cols-2 gap-3">
           <StatRow icon={<Banknote className="h-4 w-4 text-emerald-400" />} label="Efectivo cobrado" value={totalEfectivoCobrado} />
-          <StatRow icon={<CreditCard className="h-4 w-4 text-sky-400" />}    label="Tarjeta cobrado"  value={totalTarjetaCobrado} />
+          <StatRow icon={<CreditCard className="h-4 w-4 text-sky-400" />}    label="Tarjeta cobrada"  value={totalTarjetaCobrado} />
           <StatRow icon={<Building2 className="h-4 w-4 text-amber-400" />}  label="Transferencia"    value={totalTransferenciaCobrado} />
           {totalRecibidoDeOtros > 0 && (
             <StatRow icon={<Banknote className="h-4 w-4 text-fuchsia-300" />} label="Recibido de otros" value={totalRecibidoDeOtros} />
           )}
         </div>
         <div className="border-t border-primary-500/40 mt-3 pt-3 flex justify-between items-center">
-          <span className="text-sm font-semibold text-fuchsia-200">A entregar en efectivo</span>
+          <span className="text-sm font-semibold text-fuchsia-200">Total a entregar</span>
           <span className="text-xl font-bold font-mono text-fuchsia-100">
             ${totalAEntregar.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
         <p className="text-[11px] text-gray-400">
-          (Tarjeta y transferencia no entran al efectivo físico que entregas — ya están en banca.)
+          Tu tarjeta y tu transferencia propias ya están en banca y no entran aquí. "Recibido de otros" sí entra: incluye todo lo que tus coords te entregaron (efectivo, tarjeta y transferencia validada).
         </p>
       </div>
 

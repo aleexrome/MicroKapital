@@ -6,6 +6,11 @@ import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
 import { receptoresValidosPara } from '@/lib/cortes'
 
+// Vercel Hobby default es 10s. El upload a Cloudinary + prisma update
+// puede tomar más desde celular con red lenta — subimos a 60s para
+// evitar 504 silenciosos que dejan al coord atascado.
+export const maxDuration = 60
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key:    process.env.CLOUDINARY_API_KEY,
@@ -93,27 +98,43 @@ export async function POST(
     )
   }
 
-  // Upload foto a Cloudinary
-  const buffer = Buffer.from(await file.arrayBuffer())
-  const upload = await new Promise<{ url: string }>((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'microkapital/cortes-ticket',
-        public_id: `${corte.id}-${Date.now()}`,
-        resource_type: 'image',
-        type: 'upload',
-        access_mode: 'public',
-        quality: 'auto',
-        fetch_format: 'auto',
-        transformation: [{ width: 1600, crop: 'limit' }],
-      },
-      (error, result) => {
-        if (error || !result) return reject(error ?? new Error('Upload falló'))
-        resolve({ url: result.secure_url })
-      },
-    )
-    stream.end(buffer)
-  })
+  // Upload foto a Cloudinary — con manejo explícito de errores para que
+  // si falla (credenciales mal, red caída, timeout) el coord vea un
+  // mensaje claro en vez de un 500 opaco que lo deja atascado.
+  if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+    return NextResponse.json({
+      error: 'Cloudinary no está configurado en el servidor. Avisa a sistemas.',
+    }, { status: 500 })
+  }
+  let upload: { url: string }
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer())
+    upload = await new Promise<{ url: string }>((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'microkapital/cortes-ticket',
+          public_id: `${corte.id}-${Date.now()}`,
+          resource_type: 'image',
+          type: 'upload',
+          access_mode: 'public',
+          quality: 'auto',
+          fetch_format: 'auto',
+          transformation: [{ width: 1600, crop: 'limit' }],
+        },
+        (error, result) => {
+          if (error || !result) return reject(error ?? new Error('Cloudinary respondió vacío'))
+          resolve({ url: result.secure_url })
+        },
+      )
+      stream.end(buffer)
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[cortes/entregar] cloudinary upload failed:', msg)
+    return NextResponse.json({
+      error: `No se pudo subir la foto: ${msg}. Reintenta en un momento o reduce el tamaño de la imagen.`,
+    }, { status: 502 })
+  }
 
   // Para PARCIAL: NO refrescamos totales en la entrega. El snapshot
   // incremental se congela al IniciarParcial — si el user cobró más

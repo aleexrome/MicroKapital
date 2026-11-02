@@ -52,6 +52,12 @@ export default async function CortePendientePage({
   // esperando aceptación. Si navega a este URL por accidente, lo
   // mandamos al dashboard igual.
   if (corte.estado === 'ACEPTADO' || corte.estado === 'ENTREGADO') redirect('/dashboard')
+  // CONSOLIDADO: esta pantalla congelada solo sabe entregar PARCIALES
+  // (CorteCongeladoForm → /api/cortes/[id]/entregar). Los consolidados
+  // van por otro flujo (EntregarConsolidadoDialog en /corte-del-dia
+  // → /api/cortes/consolidado/[id]/entregar) porque además de la foto
+  // necesitan método de entrega (EFECTIVO_FIRMADO / TRANSFERENCIA).
+  if (corte.tipo === 'CONSOLIDADO') redirect('/corte-del-dia')
 
   const receptoresDisponibles = await receptoresValidosPara(prisma, {
     id:        session.user.id,

@@ -57,8 +57,19 @@ export default async function CorteDelDiaPage() {
       : Promise.resolve([]),
     hacesCorte && branchId
       ? prisma.corte.findMany({
-          where: { userId, fecha, tipo: 'CONSOLIDADO' },
-          orderBy: { numeroCorte: 'asc' },
+          where: {
+            userId,
+            tipo: 'CONSOLIDADO',
+            // Hoy + consolidados colgados de días pasados en estado
+            // ABIERTO o RECHAZADO (necesarios para que la concentradora
+            // pueda entregar o re-entregar los que la bloquean, aunque
+            // sean del viernes pasado y no de hoy).
+            OR: [
+              { fecha },
+              { estado: { in: ['ABIERTO', 'RECHAZADO'] } },
+            ],
+          },
+          orderBy: [{ fecha: 'desc' }, { numeroCorte: 'asc' }],
           include: {
             receptor:         { select: { id: true, nombre: true, rol: true } },
             consolidadoHijos: { select: { id: true, numeroCorte: true, totalAEntregar: true, user: { select: { nombre: true } } } },

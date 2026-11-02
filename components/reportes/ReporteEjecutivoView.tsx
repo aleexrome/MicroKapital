@@ -195,12 +195,98 @@ function SucursalCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-2">
-        {sucursal.coordinadores.map((coord) => (
-          <CoordinadorRow key={coord.cobradorId} coord={coord} expanded={expanded.has(coord.cobradorId)} onToggle={onToggle} />
-        ))}
+      <CardContent className="space-y-4">
+        <MiniGraficaCobranza coordinadores={sucursal.coordinadores} />
+        <div className="space-y-2">
+          {sucursal.coordinadores.map((coord) => (
+            <CoordinadorRow key={coord.cobradorId} coord={coord} expanded={expanded.has(coord.cobradorId)} onToggle={onToggle} />
+          ))}
+        </div>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Mini gráfica de barras horizontales por coordinador — una barra por
+ * cada uno con su % de cobranza semanal, coloreada con el semáforo
+ * (verde ≥85, amarillo 60-84, rojo <60). Incluye dos líneas de
+ * referencia (60% y 85%) para ver visualmente qué coord cruzan el
+ * umbral y cuáles están lejos. Ordenado por pct descendente.
+ */
+function MiniGraficaCobranza({ coordinadores }: { coordinadores: CoordinadorEjecutivo[] }) {
+  if (coordinadores.length === 0) return null
+  const sorted = [...coordinadores].sort((a, b) => b.cobranzaPct - a.cobranzaPct)
+  const nombreCorto = (nombre: string) => {
+    const parts = nombre.trim().split(/\s+/)
+    return parts.length <= 2 ? nombre : `${parts[0]} ${parts[1][0]}. ${parts[parts.length - 1]}`
+  }
+  const COLOR: Record<CoordinadorEjecutivo['color'], string> = {
+    verde:    'bg-emerald-500',
+    amarillo: 'bg-amber-500',
+    rojo:     'bg-rose-500',
+  }
+  const conteo = {
+    verde:    sorted.filter((c) => c.color === 'verde').length,
+    amarillo: sorted.filter((c) => c.color === 'amarillo').length,
+    rojo:     sorted.filter((c) => c.color === 'rojo').length,
+  }
+  return (
+    <div className="rounded-lg border border-border/50 bg-background/40 p-3 space-y-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Avance de cobranza por coordinador
+        </h3>
+        <div className="flex items-center gap-3 text-[11px]">
+          <span className="flex items-center gap-1 text-emerald-300">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" /> {conteo.verde}
+          </span>
+          <span className="flex items-center gap-1 text-amber-300">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-500" /> {conteo.amarillo}
+          </span>
+          <span className="flex items-center gap-1 text-rose-300">
+            <span className="inline-block w-2 h-2 rounded-full bg-rose-500" /> {conteo.rojo}
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        {sorted.map((c) => {
+          const pct = c.pactado > 0 ? Math.min(100, c.cobranzaPct) : 0
+          const widthPct = c.pactado > 0 ? pct : 0
+          return (
+            <div key={c.cobradorId} className="grid grid-cols-[7rem_1fr_auto] items-center gap-2 text-[11px]">
+              <div className="truncate" title={c.nombre}>
+                {nombreCorto(c.nombre)}
+              </div>
+              <div className="relative h-3 rounded-sm bg-muted/40 overflow-hidden">
+                {/* Línea de referencia 60% */}
+                <div className="absolute top-0 bottom-0 border-l border-dashed border-amber-400/50" style={{ left: '60%' }} />
+                {/* Línea de referencia 85% */}
+                <div className="absolute top-0 bottom-0 border-l border-dashed border-emerald-400/60" style={{ left: '85%' }} />
+                {/* Barra */}
+                <div
+                  className={`h-full ${COLOR[c.color]} transition-all`}
+                  style={{ width: `${widthPct}%` }}
+                />
+              </div>
+              <div className="text-right tabular-nums min-w-[6.5rem]">
+                {c.pactado > 0 ? (
+                  <>
+                    <span className={`font-semibold ${pctColor(c.cobranzaPct)}`}>{c.cobranzaPct}%</span>
+                    <span className="text-muted-foreground text-[10px] ml-1">
+                      {formatMoney(c.recuperado)}/{formatMoney(c.pactado)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">sin pactado</span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 

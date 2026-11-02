@@ -12,6 +12,7 @@ import { ConfirmarConsolidadoDialog } from './ConfirmarConsolidadoDialog'
 import { AceptarParcialButton } from './AceptarParcialButton'
 import { RechazarParcialButton } from './RechazarParcialButton'
 import { TimelineDia } from './TimelineDia'
+import { CobranzaEnVivoSection } from './CobranzaEnVivoSection'
 import { ParcialPrintButton } from './ParcialPrintButton'
 import { ConsolidadoPrintButton } from './ConsolidadoPrintButton'
 import { HistoricoCortes } from './HistoricoCortes'
@@ -91,6 +92,19 @@ interface Props {
   // Flag server-side: la semana pasada el user cobró y nunca abrió un
   // parcial. Si viene true, mostramos banner llamativo arriba de todo.
   semanalSinCerrar?: boolean
+  // Snapshot del CashRegister del día agrupado por cobrador y sucursal
+  // (solo DG/DC/SA/MC). Se actualiza en vivo con cada pago capturado.
+  cobranzaEnVivo?: Array<{
+    cobradorId:     string
+    cobradorNombre: string
+    cobradorRol:    string
+    branchId:       string
+    branchNombre:   string
+    efectivo:       number
+    tarjeta:        number
+    transferencia:  number
+    total:          number
+  }>
 }
 
 function money(n: string | number) {
@@ -119,7 +133,7 @@ export function CorteDelDiaView(props: Props) {
     parcialesPropios, parcialesDetalle, consolidadosPropios, parcialesEntregadosRecibidos,
     parcialesParaConsolidar, consolidadosPendientesConfirmar,
     receptoresValidos, snapIncremental, cortesTimeline, cortesHistoricos,
-    esViernes, efectivoPropioSemana, desgloseDelDia, semanalSinCerrar,
+    esViernes, efectivoPropioSemana, desgloseDelDia, semanalSinCerrar, cobranzaEnVivo,
   } = props
   const detalleMap = new Map(parcialesDetalle.map((d) => [d.corteId, d]))
   const [parcialExpandido, setParcialExpandido] = useState<string | null>(null)
@@ -601,6 +615,21 @@ export function CorteDelDiaView(props: Props) {
               ))}
             </div>
           )}
+        </section>
+      )}
+
+      {/* ─── Cobranza en tiempo real (DG/DC/SA/MC) ──────────────────────── */}
+      {cobranzaEnVivo && cobranzaEnVivo.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Cobranza en tiempo real
+            </h2>
+            <span className="text-[11px] text-muted-foreground italic">
+              Snapshot del CashRegister · se actualiza con cada pago capturado
+            </span>
+          </div>
+          <CobranzaEnVivoSection rows={cobranzaEnVivo} />
         </section>
       )}
 

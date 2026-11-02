@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
@@ -283,6 +285,49 @@ export default async function CorteDelDiaPage() {
     : null
   const semanalSinCerrar = pend?.tipo === 'SEMANAL_SIN_CERRAR'
 
+  // ── Cobranza en tiempo real (DG/DC/SA + MC) ──────────────────────────
+  // Snapshot del CashRegister del día agrupado por cobrador y sucursal.
+  // Se actualiza con cada pago (upsert increment en el flujo de /api/payments
+  // y /mora/cobrar) — refleja lo cobrado AL MOMENTO, aunque todavía no se
+  // haya entregado el parcial. Útil para que Dirección vea el pulso del
+  // día sin esperar al cierre.
+  const puedeVerCobranzaVivo = esReceptor || rol === 'MESA_CONTROL'
+  const cobranzaEnVivo = puedeVerCobranzaVivo
+    ? await prisma.cashRegister.findMany({
+        where: {
+          fecha,
+          branch: { companyId: companyId! },
+        },
+        select: {
+          cobradoEfectivo:      true,
+          cobradoTarjeta:       true,
+          cobradoTransferencia: true,
+          cobrador: { select: { id: true, nombre: true, rol: true, activo: true } },
+          branch:   { select: { id: true, nombre: true } },
+        },
+        orderBy: [{ branch: { nombre: 'asc' } }, { cobrador: { nombre: 'asc' } }],
+      })
+    : []
+  const cobranzaEnVivoRows = cobranzaEnVivo
+    .filter((r) => r.cobrador?.activo)
+    .map((r) => {
+      const efectivo      = Number(r.cobradoEfectivo)
+      const tarjeta       = Number(r.cobradoTarjeta)
+      const transferencia = Number(r.cobradoTransferencia)
+      return {
+        cobradorId:     r.cobrador.id,
+        cobradorNombre: r.cobrador.nombre,
+        cobradorRol:    r.cobrador.rol,
+        branchId:       r.branch.id,
+        branchNombre:   r.branch.nombre,
+        efectivo,
+        tarjeta,
+        transferencia,
+        total:          efectivo + tarjeta + transferencia,
+      }
+    })
+    .filter((r) => r.total > 0)
+
   return (
     <>
       <CorteDelDiaView
@@ -307,6 +352,7 @@ export default async function CorteDelDiaPage() {
         efectivoPropioSemana={JSON.parse(JSON.stringify(efectivoPropioSemana))}
         desgloseDelDia={JSON.parse(JSON.stringify(desgloseDelDia))}
         semanalSinCerrar={semanalSinCerrar}
+        cobranzaEnVivo={cobranzaEnVivoRows}
       />
       {puedeVerPendientesEmpresa && (
         <div className="px-6 pb-6">

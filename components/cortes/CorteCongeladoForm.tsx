@@ -68,6 +68,7 @@ export function CorteCongeladoForm({
     receptorActual?.id ?? (receptoresDisponibles[0]?.id ?? ''),
   )
   const [uploading, setUploading] = useState(false)
+  const [lastError, setLastError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const esEntregado = estado === 'ENTREGADO'
@@ -116,6 +117,7 @@ export function CorteCongeladoForm({
       return
     }
     setUploading(true)
+    setLastError(null)
     try {
       const comprimido = await comprimirFoto(file)
       const fd = new FormData()
@@ -129,15 +131,17 @@ export function CorteCongeladoForm({
       let data: Record<string, unknown> = {}
       try { data = raw ? JSON.parse(raw) : {} } catch { /* no-json */ }
       if (!res.ok) {
-        const msg = (typeof data.error === 'string' && data.error) || `HTTP ${res.status}: ${raw.slice(0, 150)}`
+        const msg = (typeof data.error === 'string' && data.error) || `HTTP ${res.status}: ${raw.slice(0, 200)}`
         throw new Error(msg)
       }
       toast({ title: 'Corte entregado', description: 'Puedes seguir trabajando. El receptor confirmará cuando reciba.' })
       router.refresh()
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setLastError(msg)
       toast({
         title: 'Error al entregar',
-        description: e instanceof Error ? e.message : 'Error',
+        description: msg,
         variant: 'destructive',
       })
     } finally {
@@ -251,6 +255,17 @@ export function CorteCongeladoForm({
                 <p className="text-sm text-gray-300">
                   Sube la foto del ticket con la firma del receptor
                 </p>
+                {lastError && (
+                  <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-left space-y-1">
+                    <p className="text-xs font-semibold text-red-200">
+                      No se pudo entregar — intenta de nuevo.
+                    </p>
+                    <p className="text-[11px] text-red-200/80 break-words">{lastError}</p>
+                    <p className="text-[11px] text-red-200/70">
+                      Si el problema persiste, toma captura de este mensaje y mándaselo a sistemas.
+                    </p>
+                  </div>
+                )}
                 {/* iOS Safari no abre el picker al hacer .click() programatico
                     sobre un <input type=file> escondido. La forma nativa que
                     SI funciona en iOS es un <label htmlFor> que envuelva o

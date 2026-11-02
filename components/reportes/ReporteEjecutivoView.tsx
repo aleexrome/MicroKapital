@@ -328,6 +328,42 @@ function CoordinadorRow({
               <p className={`font-bold ${pctColor(coord.cobranzaPct)}`}>{coord.pactado > 0 ? `${coord.cobranzaPct}%` : '—'}</p>
             </div>
           </div>
+
+          {/* ─── Recuadro "Cómo va al día de hoy" ─────────────────────── */}
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="rounded-md border border-border/50 bg-background/60 p-2">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Al día (hasta hoy)</p>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <span className={`text-base font-bold ${pctColor(coord.cobranzaAlDiaPct)}`}>
+                  {coord.cobranzaAlDiaPct}%
+                </span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {formatMoney(coord.recuperadoAlDia)}/{formatMoney(coord.pactadoAlDia)}
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {coord.pactadoAlDia > 0
+                  ? 'Solo lo que ya debió haberse cobrado'
+                  : 'Aún no vence ningún pago esta semana'}
+              </p>
+            </div>
+            <div className="rounded-md border border-border/50 bg-background/60 p-2">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Mora de la semana</p>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <span className={`text-base font-bold ${coord.moraSemanaMonto > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  {formatMoney(coord.moraSemanaMonto)}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {coord.moraSemanaCount > 0 ? `${coord.moraSemanaCount} pago${coord.moraSemanaCount === 1 ? '' : 's'}` : '—'}
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {coord.moraSemanaMonto > 0
+                  ? 'Pagos vencidos de esta semana sin cobrar'
+                  : 'Sin mora esta semana'}
+              </p>
+            </div>
+          </div>
         </div>
         <div className="text-right text-xs min-w-[120px]">
           <p className="text-muted-foreground flex items-center justify-end gap-1"><AlertCircle className="h-3 w-3" /> Pendientes</p>

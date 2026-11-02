@@ -44,6 +44,18 @@ export interface CoordinadorEjecutivo {
   pactado:             number
   recuperado:          number
   cobranzaPct:         number
+  // "Al día": solo schedules de la semana cuyo vencimiento ya pasó
+  // (fechaVencimiento ≤ ahora). Mide "cómo voy HASTA HOY" contra lo
+  // que ya debí haber cobrado, sin castigar por pactados futuros aún
+  // no vencidos. Si pactadoAlDia = 0 (nada vence todavía esta semana),
+  // cobranzaAlDiaPct = 100.
+  pactadoAlDia:        number
+  recuperadoAlDia:     number
+  cobranzaAlDiaPct:    number
+  // Mora de la semana: schedules de la semana vencidos y no cobrados
+  // (lo que ya debería estar cobrado pero no lo está).
+  moraSemanaMonto:     number
+  moraSemanaCount:     number
   pagosPendientes:     PagoPendienteSemana[]
   pagosPendientesTotal: number
   score:               number
@@ -167,9 +179,11 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
     orderBy: { fechaVencimiento: 'asc' },
   })
 
-  const pactadoPorCobrador    = new Map<string, number>()
-  const recuperadoPorCobrador = new Map<string, number>()
-  const pendientesPorCobrador = new Map<string, PagoPendienteSemana[]>()
+  const pactadoPorCobrador        = new Map<string, number>()
+  const recuperadoPorCobrador     = new Map<string, number>()
+  const pactadoAlDiaPorCobrador   = new Map<string, number>()
+  const recuperadoAlDiaPorCobrador = new Map<string, number>()
+  const pendientesPorCobrador     = new Map<string, PagoPendienteSemana[]>()
 
   for (const s of schedulesSemana) {
     if (s.estado === 'FINANCIADO') continue
@@ -184,8 +198,16 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
     const cobrado   = Math.min(paidTotal, monto)
     recuperadoPorCobrador.set(s.loan.cobradorId, (recuperadoPorCobrador.get(s.loan.cobradorId) ?? 0) + cobrado)
 
-    // Pendiente al momento: schedule vencido no completo (para el detalle)
+    // "Al día" — contabilizar solo si el schedule ya venció. Permite
+    // separar "voy al 50% semanal pero 100% al día porque el resto
+    // vence miércoles/jueves/viernes".
     const yaVencio = s.fechaVencimiento.getTime() <= ahora.getTime()
+    if (yaVencio) {
+      pactadoAlDiaPorCobrador.set(s.loan.cobradorId, (pactadoAlDiaPorCobrador.get(s.loan.cobradorId) ?? 0) + monto)
+      recuperadoAlDiaPorCobrador.set(s.loan.cobradorId, (recuperadoAlDiaPorCobrador.get(s.loan.cobradorId) ?? 0) + cobrado)
+    }
+
+    // Pendiente al momento: schedule vencido no completo (para el detalle)
     const pendiente = monto - cobrado
     if (yaVencio && pendiente > 0 && s.estado !== 'PAID' && s.estado !== 'ADVANCE') {
       const arr = pendientesPorCobrador.get(s.loan.cobradorId) ?? []
@@ -232,15 +254,20 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
   const sucursales: SucursalEjecutivo[] = branches.map((b) => {
     const coordRaw = users.filter((u) => u.branchId === b.id)
     const coordinadores: CoordinadorEjecutivo[] = coordRaw.map((u) => {
-      const metaColoc  = metaColocPorCobrador.get(u.id) ?? 0
-      const colocReal  = colocPorCobrador.get(u.id)    ?? 0
-      const pactado    = pactadoPorCobrador.get(u.id)  ?? 0
-      const recuperado = recuperadoPorCobrador.get(u.id) ?? 0
-      const pagosPend  = pendientesPorCobrador.get(u.id) ?? []
-      const pagosPendTot = pagosPend.reduce((s, p) => s + p.pendiente, 0)
+      const metaColoc       = metaColocPorCobrador.get(u.id) ?? 0
+      const colocReal       = colocPorCobrador.get(u.id)    ?? 0
+      const pactado         = pactadoPorCobrador.get(u.id)  ?? 0
+      const recuperado      = recuperadoPorCobrador.get(u.id) ?? 0
+      const pactadoAlDia    = pactadoAlDiaPorCobrador.get(u.id)    ?? 0
+      const recuperadoAlDia = recuperadoAlDiaPorCobrador.get(u.id) ?? 0
+      const pagosPend       = pendientesPorCobrador.get(u.id) ?? []
+      const pagosPendTot    = pagosPend.reduce((s, p) => s + p.pendiente, 0)
 
-      const colocacionPct = metaColoc > 0 ? Math.round((colocReal / metaColoc) * 100) : 0
-      const cobranzaPct   = pactado   > 0 ? Math.round((recuperado / pactado) * 100) : 0
+      const colocacionPct    = metaColoc    > 0 ? Math.round((colocReal / metaColoc) * 100) : 0
+      const cobranzaPct      = pactado      > 0 ? Math.round((recuperado / pactado) * 100) : 0
+      // Si pactadoAlDia = 0 significa que todavía no vence nada esta
+      // semana — se considera 100% al día.
+      const cobranzaAlDiaPct = pactadoAlDia > 0 ? Math.round((recuperadoAlDia / pactadoAlDia) * 100) : 100
 
       let score: number
       if (pactado > 0 && metaColoc > 0) {
@@ -263,6 +290,11 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
         pactado,
         recuperado,
         cobranzaPct,
+        pactadoAlDia,
+        recuperadoAlDia,
+        cobranzaAlDiaPct,
+        moraSemanaMonto:     pagosPendTot,
+        moraSemanaCount:     pagosPend.length,
         pagosPendientes:     pagosPend.sort((a, b) => b.pendiente - a.pendiente),
         pagosPendientesTotal: pagosPendTot,
         score:               Math.round(score),

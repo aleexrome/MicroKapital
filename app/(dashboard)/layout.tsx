@@ -61,7 +61,7 @@ export default async function DashboardLayout({
   // otros). Sin estas excepciones el user NO podría cerrar su propio
   // corte porque necesita el ticket impreso de /caja.
   let cortePendienteId: string | null = null
-  let cortePendienteTipo: 'PROPIO' | 'COLGANDO_CONSOLIDAR' | null = null
+  let cortePendienteTipo: 'PROPIO' | 'SEMANAL_SIN_CERRAR' | null = null
   try {
     const c = await cortePendienteDe(prisma, { id: userId, rol })
     cortePendienteId = c?.id ?? null
@@ -71,12 +71,11 @@ export default async function DashboardLayout({
   }
   if (cortePendienteId) {
     const pathname = headers().get('x-pathname') ?? ''
-    // COLGANDO_CONSOLIDAR: la concentradora tiene parciales ACEPTADOS sin
-    // bajar a DG/DC. Debe ir a /corte-del-dia a crear el consolidado,
-    // NO a /corte/pendiente/[id] (ese parcial ya está ACEPTADO, la
-    // pantalla redirigiría a /dashboard y haría loop).
-    if (cortePendienteTipo === 'COLGANDO_CONSOLIDAR') {
-      const esExenta = pathname === '/corte-del-dia' || pathname.startsWith('/corte-del-dia/')
+    // SEMANAL_SIN_CERRAR: el user cobró la semana pasada pero nunca
+    // abrió un parcial. No hay corteId concreto — lo mandamos a
+    // /corte-del-dia para que inicie uno y lo entregue a su concentradora.
+    if (cortePendienteTipo === 'SEMANAL_SIN_CERRAR') {
+      const esExenta = pathname === '/corte-del-dia' || pathname.startsWith('/corte-del-dia/') || pathname === '/caja' || pathname.startsWith('/caja/')
       if (!esExenta) {
         redirect('/corte-del-dia')
       }
@@ -248,18 +247,18 @@ export default async function DashboardLayout({
         {cortePendienteId && (
           <div className="sticky top-0 z-40 bg-fuchsia-600 text-white px-4 py-2 flex items-center justify-between gap-3 shadow-md">
             <p className="text-sm font-medium">
-              ⚠️ {cortePendienteTipo === 'COLGANDO_CONSOLIDAR'
-                    ? 'Tienes dinero recibido de coords sin consolidar a DG/DC.'
-                    : 'Tienes un corte del día pendiente de entregar.'}
+              ⚠️ {cortePendienteTipo === 'SEMANAL_SIN_CERRAR'
+                    ? 'La semana pasada cobraste y no entregaste parcial. Ciérralo y entrégalo a tu concentradora.'
+                    : 'Tienes un corte pendiente de entregar.'}
             </p>
             <a
-              href={cortePendienteTipo === 'COLGANDO_CONSOLIDAR'
+              href={cortePendienteTipo === 'SEMANAL_SIN_CERRAR'
                 ? '/corte-del-dia'
                 : `/corte/pendiente/${cortePendienteId}`}
               className="rounded-md bg-white/20 hover:bg-white/30 px-3 py-1 text-xs font-semibold transition-colors whitespace-nowrap"
             >
-              {cortePendienteTipo === 'COLGANDO_CONSOLIDAR'
-                ? 'Ir a consolidar →'
+              {cortePendienteTipo === 'SEMANAL_SIN_CERRAR'
+                ? 'Ir a corte del día →'
                 : 'Ir a cerrar corte →'}
             </a>
           </div>

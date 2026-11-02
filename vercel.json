@@ -4,10 +4,6 @@
     {
       "path": "/api/cron/check-prestamos-limbo",
       "schedule": "0 14 * * *"
-    },
-    {
-      "path": "/api/cron/abrir-cortes-18pm",
-      "schedule": "0 0 * * *"
     }
   ]
 }

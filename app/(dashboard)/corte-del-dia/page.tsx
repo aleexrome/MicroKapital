@@ -12,6 +12,7 @@ import {
   efectivoPropioResiduoSemana,
   cortesPendientesPorSucursal,
   desgloseExtraDelDia,
+  cortePendienteDe,
 } from '@/lib/cortes'
 import { CorteDelDiaView } from '@/components/cortes/CorteDelDiaView'
 import { PendientesCortesSection } from '@/components/cortes/PendientesCortesSection'
@@ -264,6 +265,13 @@ export default async function CorteDelDiaPage() {
     ? await cortesPendientesPorSucursal(prisma, companyId!)
     : []
 
+  // Flag "la semana pasada no cerraste parcial" — el layout ya habrá
+  // redirigido al user aquí; mostramos banner llamativo en la vista.
+  const pend = hacesCorte
+    ? await cortePendienteDe(prisma, { id: userId, rol })
+    : null
+  const semanalSinCerrar = pend?.tipo === 'SEMANAL_SIN_CERRAR'
+
   return (
     <>
       <CorteDelDiaView
@@ -287,6 +295,7 @@ export default async function CorteDelDiaPage() {
         esViernes={esViernesMk(fecha)}
         efectivoPropioSemana={JSON.parse(JSON.stringify(efectivoPropioSemana))}
         desgloseDelDia={JSON.parse(JSON.stringify(desgloseDelDia))}
+        semanalSinCerrar={semanalSinCerrar}
       />
       {puedeVerPendientesEmpresa && (
         <div className="px-6 pb-6">

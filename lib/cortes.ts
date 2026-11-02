@@ -111,52 +111,47 @@ export async function receptoresValidosPara(
 
 /**
  * Encuentra cortes PENDIENTES del usuario que lo deberían tener bloqueado.
- * "Pendiente" = del día de hoy pasadas las 18:00 MX sin ACEPTADO, o de
- * cualquier día anterior sin ACEPTADO.
  *
- * Un corte ENTREGADO (esperando aceptación del receptor) también bloquea
- * — el user no puede trabajar hasta que su entrega sea aceptada o
- * rechazada (y si rechazan, debe re-entregar).
+ * Modelo semanal MK: el coord cobra toda la semana (sáb→vie) y entrega
+ * su parcial a la concentradora los VIERNES (puede adelantar entre
+ * semana si junta mucho efectivo, pero no es obligatorio). La
+ * concentradora consolida los viernes y entrega a DG/DC.
+ *
+ * Reglas de bloqueo (todas evaluadas contra la semana MK YA CERRADA):
+ *   - PROPIO: el user tiene un parcial ABIERTO o RECHAZADO cuya fecha
+ *     cae ≤ viernes anterior. Es un corte real sin cerrar — tiene que
+ *     entregarlo / corregirlo. Los parciales ABIERTO vacíos (sin dinero
+ *     que entregar) no cuentan.
+ *   - SEMANAL_SIN_CERRAR: la semana que acaba de cerrar tiene cobranza
+ *     del user (CashRegister sum > 0) y NO hay NINGÚN parcial ACEPTADO
+ *     con fecha dentro de esa semana. Es decir, el viernes pasó y nunca
+ *     entregó nada. No hay corteId concreto — el UI debe mandarlo a
+ *     /corte-del-dia para que inicie uno y lo entregue.
+ *
+ * Lo que ocurre dentro de la semana en curso (sáb → vie) NO bloquea.
+ * El coord guarda el efectivo y el viernes mismo entrega. DG/DC/SA
+ * nunca se bloquean.
  */
 export async function cortePendienteDe(
   prisma: PrismaClient,
   user: { id: string; rol: string },
-): Promise<{ id: string; tipo: 'PROPIO' | 'COLGANDO_CONSOLIDAR' } | null> {
-  // DG/DC/SA no se bloquean nunca.
+): Promise<{ id: string; tipo: 'PROPIO' | 'SEMANAL_SIN_CERRAR' } | null> {
   if (esReceptorFinal(user.rol)) return null
   if (!debeHacerCorte(user.rol)) return null
 
   const hoy = todayMx()
-  const ahora = new Date()
-  // "Hora de corte obligatorio" — 18:00 hora MX.
-  // Si todavía no son las 18:00 MX, los cortes del día actual no bloquean.
-  //
-  // OJO con el cálculo: todayMx() devuelve 06:00 UTC (= 00:00 CDMX).
-  // Si usáramos `new Date(hoy).setHours(18,…)` el método opera en la
-  // zona del servidor (UTC en Vercel) y resultaría en 18:00 UTC = 12:00
-  // CDMX — bloqueaba al usuario a mediodía. Lo correcto: sumar 18h a
-  // las 00:00 CDMX → 18:00 CDMX = 00:00 UTC del día siguiente.
-  const corteObligatorioAt = new Date(hoy.getTime() + 18 * 60 * 60 * 1000)
-  const hoyBloquea = ahora.getTime() >= corteObligatorioAt.getTime()
+  const inicioSemActual = inicioSemanaMk(hoy)                       // sábado 00:00 CDMX
+  const inicioSemAnterior = new Date(inicioSemActual.getTime() - 7 * 24 * 60 * 60 * 1000)
+  // Viernes anterior (último día de la semana cerrada). Lo tratamos como
+  // día civil para que `fecha <= viernesAnterior` incluya ese día entero.
+  const viernesAnterior = new Date(inicioSemActual.getTime() - 24 * 60 * 60 * 1000)
 
-  // Buscar el corte PROPIO más viejo que todavía requiera acción del user.
-  // Estados que bloquean:
-  //   - ABIERTO: no ha subido foto/entregado — tiene que hacerlo.
-  //   - RECHAZADO: el receptor lo rechazó — tiene que corregir y re-entregar.
-  // Estados que NO bloquean:
-  //   - ENTREGADO: ya hizo su parte (foto + envío). La aceptación es
-  //     responsabilidad del receptor y puede tardar; el user puede seguir
-  //     cobrando/trabajando sin esperar la confirmación.
-  //   - ACEPTADO: cerrado, obviamente ok.
-  // Excepción: cortes vacíos (totalAEntregar = 0) en estado ABIERTO
-  // tampoco bloquean — no hay dinero físico que entregar.
+  // 1. PROPIO — parcial ABIERTO/RECHAZADO de semana cerrada o anterior.
   const row = await prisma.corte.findFirst({
     where: {
       userId: user.id,
       estado: { in: ['ABIERTO', 'RECHAZADO'] },
-      OR: hoyBloquea
-        ? [{ fecha: { lte: hoy } }]
-        : [{ fecha: { lt: hoy } }],
+      fecha:  { lte: viernesAnterior },
       NOT: {
         AND: [
           { estado: 'ABIERTO' },
@@ -169,12 +164,41 @@ export async function cortePendienteDe(
   })
   if (row) return { id: row.id, tipo: 'PROPIO' }
 
-  // La concentradora NO se bloquea nunca durante la semana por tener
-  // parciales sin consolidar. El consolidado lo activa ella cuando
-  // quiera durante el viernes; si no lo hace, un cron auto-consolida a
-  // las 00:01 CDMX del sábado. El bloqueo COLGANDO_CONSOLIDAR del viernes
-  // generaba fricción innecesaria (la congelaba desde las 00:00 del
-  // viernes aunque todavía estaba cobrando y acumulando parciales).
+  // 2. SEMANAL_SIN_CERRAR — hubo cobranza en la semana que acaba de
+  // cerrar (sábado anterior → viernes anterior) pero el user no cerró
+  // ningún parcial ACEPTADO en esa ventana. La semana en curso NUNCA
+  // se evalúa aquí porque `inicioSemanaMk(hoy)` corta a sábado 00:00
+  // de la semana donde cae `hoy`, así que `viernesAnterior` siempre
+  // apunta al viernes pasado.
+  const cobranza = await prisma.cashRegister.aggregate({
+    where: {
+      cobradorId: user.id,
+      fecha:      { gte: inicioSemAnterior, lte: viernesAnterior },
+    },
+    _sum: {
+      cobradoEfectivo:      true,
+      cobradoTarjeta:       true,
+      cobradoTransferencia: true,
+    },
+  })
+  const totalCobrado =
+    Number(cobranza._sum.cobradoEfectivo      ?? 0) +
+    Number(cobranza._sum.cobradoTarjeta       ?? 0) +
+    Number(cobranza._sum.cobradoTransferencia ?? 0)
+  if (totalCobrado <= 0) return null
+
+  const algunoAceptado = await prisma.corte.findFirst({
+    where: {
+      userId: user.id,
+      tipo:   'PARCIAL',
+      estado: 'ACEPTADO',
+      fecha:  { gte: inicioSemAnterior, lte: viernesAnterior },
+    },
+    select: { id: true },
+  })
+  if (!algunoAceptado) {
+    return { id: 'SEMANAL_SIN_CERRAR', tipo: 'SEMANAL_SIN_CERRAR' }
+  }
 
   return null
 }
@@ -251,6 +275,14 @@ export async function cortesPendientesPorSucursal(
   companyId: string,
 ): Promise<SucursalPendientesCortes[]> {
   const hoy = todayMx()
+  // Semana MK que acaba de cerrar. En el modelo semanal el panel solo
+  // muestra lo que quedó colgando del viernes pasado — lo de la semana
+  // en curso NO es pendiente aún (el coord guarda su efectivo hasta el
+  // viernes).
+  const inicioSemActual   = inicioSemanaMk(hoy)
+  const viernesAnterior   = new Date(inicioSemActual.getTime() - 24 * 60 * 60 * 1000)
+  const inicioSemAnterior = new Date(inicioSemActual.getTime() - 7 * 24 * 60 * 60 * 1000)
+
   const branches = await prisma.branch.findMany({
     where:  { companyId, activa: true },
     select: { id: true, nombre: true },
@@ -260,7 +292,7 @@ export async function cortesPendientesPorSucursal(
   const cortes = await prisma.corte.findMany({
     where: {
       companyId,
-      fecha: { lt: hoy },
+      fecha:  { lte: viernesAnterior },
       estado: { in: ['ABIERTO', 'ENTREGADO', 'RECHAZADO'] },
       // Mismos criterios que cortePendienteDe: no mostrar como pendientes
       // los cortes vacíos ABIERTOS (sin cobros = sin dinero que entregar).
@@ -339,6 +371,88 @@ export async function cortesPendientesPorSucursal(
     cob.transferPendienteCount = extra.transferPendienteCount
     cob.comisionApertura       = extra.comisionApertura
     cob.seguroApertura         = extra.seguroApertura
+  }
+
+  // Semanal: cobradores con cobranza en la semana ya cerrada que NO
+  // abrieron ningún parcial ACEPTADO para entregarla. No existen como
+  // filas de Corte (nunca iniciaron uno), así que hay que detectarlos
+  // vía CashRegister. Se agregan como "fantasmas" sin corteId concreto.
+  const cashSemAnterior = await prisma.cashRegister.findMany({
+    where: {
+      fecha:    { gte: inicioSemAnterior, lte: viernesAnterior },
+      cobrador: { companyId, activo: true },
+    },
+    select: {
+      cobradorId:           true,
+      branchId:             true,
+      cobradoEfectivo:      true,
+      cobradoTarjeta:       true,
+      cobradoTransferencia: true,
+      cobrador:             { select: { id: true, nombre: true, rol: true, branchId: true } },
+      branch:               { select: { id: true, nombre: true } },
+    },
+  })
+  const semByUser = new Map<string, { totalCobrado: number; branchId: string; branchNombre: string; cobradorNombre: string; cobradorRol: string }>()
+  for (const r of cashSemAnterior) {
+    const prev = semByUser.get(r.cobradorId) ?? {
+      totalCobrado:    0,
+      branchId:        r.cobrador.branchId ?? r.branchId,
+      branchNombre:    r.branch?.nombre ?? '',
+      cobradorNombre:  r.cobrador.nombre,
+      cobradorRol:     r.cobrador.rol,
+    }
+    prev.totalCobrado += Number(r.cobradoEfectivo) + Number(r.cobradoTarjeta) + Number(r.cobradoTransferencia)
+    semByUser.set(r.cobradorId, prev)
+  }
+  const candidatos = Array.from(semByUser.entries()).filter(([, v]) => v.totalCobrado > 0)
+  if (candidatos.length > 0) {
+    const parcialesCerrados = await prisma.corte.findMany({
+      where: {
+        userId: { in: candidatos.map(([uid]) => uid) },
+        tipo:   'PARCIAL',
+        estado: 'ACEPTADO',
+        fecha:  { gte: inicioSemAnterior, lte: viernesAnterior },
+      },
+      select: { userId: true },
+    })
+    const cerradoSet = new Set(parcialesCerrados.map((p) => p.userId))
+    const semanalesViernes = Math.max(1, Math.floor((hoy.getTime() - viernesAnterior.getTime()) / 86_400_000))
+    for (const [uid, info] of candidatos) {
+      if (cerradoSet.has(uid)) continue
+      if (!info.branchId) continue
+      let branchMap = byBranch.get(info.branchId)
+      if (!branchMap) { branchMap = new Map(); byBranch.set(info.branchId, branchMap) }
+      let cob = branchMap.get(uid)
+      if (!cob) {
+        cob = {
+          userId: uid,
+          nombre: info.cobradorNombre,
+          rol:    info.cobradorRol,
+          cortes: [],
+          diasMaxAtraso: semanalesViernes,
+          transferPendiente:      0,
+          transferPendienteCount: 0,
+          comisionApertura:       0,
+          seguroApertura:         0,
+        }
+        branchMap.set(uid, cob)
+      }
+      // Marcador: parcial "fantasma" ABIERTO con fecha del viernes pasado
+      // y monto total cobrado. No existe en DB; es solo para el radar.
+      cob.cortes.push({
+        corteId:               `SEMANAL:${uid}`,
+        tipo:                  'PARCIAL',
+        numeroCorte:           0,
+        fecha:                 viernesAnterior,
+        diasAtraso:            semanalesViernes,
+        estado:                'ABIERTO',
+        totalAEntregar:        info.totalCobrado,
+        totalTransferValidada: 0,
+        rechazoRazon:          null,
+        receptorNombre:        null,
+      })
+      if (semanalesViernes > cob.diasMaxAtraso) cob.diasMaxAtraso = semanalesViernes
+    }
   }
 
   // Caso especial: cobradores con transferencias PENDIENTES de verificar

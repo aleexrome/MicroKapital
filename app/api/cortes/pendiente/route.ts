@@ -20,5 +20,5 @@ export async function GET() {
   })
   if (!pendiente) return NextResponse.json({ pendiente: null })
 
-  return NextResponse.json({ pendiente: { corteId: pendiente.id } })
+  return NextResponse.json({ pendiente: { corteId: pendiente.id, tipo: pendiente.tipo } })
 }

@@ -88,6 +88,9 @@ interface Props {
     seguroApertura:          number
     seguroAperturaCount:     number
   }
+  // Flag server-side: la semana pasada el user cobró y nunca abrió un
+  // parcial. Si viene true, mostramos banner llamativo arriba de todo.
+  semanalSinCerrar?: boolean
 }
 
 function money(n: string | number) {
@@ -116,7 +119,7 @@ export function CorteDelDiaView(props: Props) {
     parcialesPropios, parcialesDetalle, consolidadosPropios, parcialesEntregadosRecibidos,
     parcialesParaConsolidar, consolidadosPendientesConfirmar,
     receptoresValidos, snapIncremental, cortesTimeline, cortesHistoricos,
-    esViernes, efectivoPropioSemana, desgloseDelDia,
+    esViernes, efectivoPropioSemana, desgloseDelDia, semanalSinCerrar,
   } = props
   const detalleMap = new Map(parcialesDetalle.map((d) => [d.corteId, d]))
   const [parcialExpandido, setParcialExpandido] = useState<string | null>(null)
@@ -173,13 +176,29 @@ export function CorteDelDiaView(props: Props) {
 
   return (
     <div className="space-y-6 p-6">
+      {semanalSinCerrar && (
+        <Card className="p-4 border-red-500/40 bg-red-500/10">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-red-200">
+                La semana pasada cobraste y no entregaste parcial.
+              </p>
+              <p className="text-xs text-red-200/80">
+                Inicia tu parcial ahora, imprime el ticket y entrégalo a tu concentradora. Vas a quedar bloqueado del resto del sistema hasta que lo cierres.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Corte del día</h1>
         <p className="text-sm text-muted-foreground">
           {hacesCorte
             ? puedeConsolidar
               ? 'Como concentradora acumulas los parciales de los coords de tu sucursal durante la semana y los consolidas (junto con tu propio efectivo) los viernes para entregarlos a Dirección.'
-              : 'Abre cuantos parciales necesites durante el día. Cada parcial se entrega a tu concentradora.'
+              : 'Cobras toda la semana (sáb–vie) y entregas tu parcial a la concentradora el VIERNES. Puedes adelantar entre semana si juntaste mucho efectivo, pero no es obligatorio.'
             : 'Confirma recepción de los consolidados que te entregan.'}
         </p>
       </div>

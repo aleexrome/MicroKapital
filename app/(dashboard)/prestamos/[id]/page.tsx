@@ -591,8 +591,43 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
   // por DG). Sin este último los créditos virtuales quedaban con el
   // calendario bloqueado (opacity-40 pointer-events-none) sin poder
   // aplicar pagos ni editar fechas.
+  //
+  // SOLIDARIO: solo la coordinadora del grupo sube la evidencia (el
+  // video grupal que vale para todos los integrantes). Para que los
+  // demás integrantes puedan recibir pagos, miramos la evidencia del
+  // loan de la coordinadora del mismo grupo y ciclo. Sin esto, los
+  // integrantes se quedaban con "requiereFotoDesembolso = true" y
+  // no se podía aplicar ningún pago en su calendario.
+  let evidenciaCoordinadoraGrupal = false
+  if (loan.tipo === 'SOLIDARIO' && !loan.esCoordinadora && loan.loanGroupId) {
+    const esRenovacion = loan.loanOriginalId !== null
+    const cicloFilter = esRenovacion
+      ? { loanOriginalId: { not: null } }
+      : { loanOriginalId: null }
+    const coordLoan = await prisma.loan.findFirst({
+      where: {
+        loanGroupId:    loan.loanGroupId,
+        esCoordinadora: true,
+        companyId:      companyId!,
+        ...cicloFilter,
+      },
+      select: {
+        desembolsoVideoUrl:   true,
+        desembolsoFotoUrl:    true,
+        transferenciaFotoUrl: true,
+      },
+    })
+    evidenciaCoordinadoraGrupal = !!coordLoan && (
+      !!coordLoan.desembolsoVideoUrl ||
+      !!coordLoan.desembolsoFotoUrl  ||
+      !!coordLoan.transferenciaFotoUrl
+    )
+  }
   const tieneEvidenciaDesembolso =
-    !!loan.desembolsoVideoUrl || !!loan.desembolsoFotoUrl || !!loan.transferenciaFotoUrl
+    !!loan.desembolsoVideoUrl ||
+    !!loan.desembolsoFotoUrl  ||
+    !!loan.transferenciaFotoUrl ||
+    evidenciaCoordinadoraGrupal
   // Solo bloquear pagos si el crédito no tiene pagos aún (nuevo) y no tiene evidencia
   const requiereFotoDesembolso = !tieneEvidenciaDesembolso && pagados === 0
   const rolPuedeCapturar =

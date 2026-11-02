@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
-import { todayMx, esViernesMk } from '@/lib/timezone'
+import { todayMx, esViernesMk, inicioSemanaMk } from '@/lib/timezone'
 import {
   debeHacerCorte,
   esReceptorFinal,
@@ -285,6 +285,62 @@ export default async function CorteDelDiaPage() {
     : null
   const semanalSinCerrar = pend?.tipo === 'SEMANAL_SIN_CERRAR'
 
+  // ── Mi cobranza semanal (sáb → hoy) para quien hace corte ────────────
+  // Lee CashRegister del user propio desde el inicio de la semana MK
+  // hasta hoy, día por día. Muestra el acumulado "en vivo" sin esperar
+  // al cierre del viernes. Para una concentradora/coord-sin-concentradora
+  // se complementa con lo que llevan RECIBIDO de otros coord en la
+  // semana (parciales ACEPTADOS cuya receptorId = userId).
+  const inicioSem = inicioSemanaMk(fecha)
+  const cashSemana = hacesCorte
+    ? await prisma.cashRegister.findMany({
+        where: {
+          cobradorId: userId,
+          fecha:      { gte: inicioSem, lte: fecha },
+        },
+        select: {
+          fecha:                true,
+          cobradoEfectivo:      true,
+          cobradoTarjeta:       true,
+          cobradoTransferencia: true,
+        },
+        orderBy: { fecha: 'asc' },
+      })
+    : []
+  const parcialesRecibidosSemana = hacesCorte && (esConcentradora || sinConcentradora)
+    ? await prisma.corte.findMany({
+        where: {
+          receptorId: userId,
+          tipo:       'PARCIAL',
+          estado:     'ACEPTADO',
+          fecha:      { gte: inicioSem, lte: fecha },
+        },
+        select: { fecha: true, montoAceptado: true },
+      })
+    : []
+  const diasMap = new Map<string, { efectivo: number; tarjeta: number; transferencia: number; recibidoDeOtros: number }>()
+  for (const r of cashSemana) {
+    const key = r.fecha.toISOString().slice(0, 10)
+    const prev = diasMap.get(key) ?? { efectivo: 0, tarjeta: 0, transferencia: 0, recibidoDeOtros: 0 }
+    prev.efectivo      += Number(r.cobradoEfectivo)
+    prev.tarjeta       += Number(r.cobradoTarjeta)
+    prev.transferencia += Number(r.cobradoTransferencia)
+    diasMap.set(key, prev)
+  }
+  for (const p of parcialesRecibidosSemana) {
+    const key = p.fecha.toISOString().slice(0, 10)
+    const prev = diasMap.get(key) ?? { efectivo: 0, tarjeta: 0, transferencia: 0, recibidoDeOtros: 0 }
+    prev.recibidoDeOtros += Number(p.montoAceptado ?? 0)
+    diasMap.set(key, prev)
+  }
+  const cobranzaSemanalPropia = Array.from(diasMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fechaKey, v]) => ({
+      fecha: fechaKey,
+      ...v,
+      total: v.efectivo + v.tarjeta + v.transferencia + v.recibidoDeOtros,
+    }))
+
   // ── Cobranza en tiempo real (DG/DC/SA + MC) ──────────────────────────
   // Snapshot del CashRegister del día agrupado por cobrador y sucursal.
   // Se actualiza con cada pago (upsert increment en el flujo de /api/payments
@@ -353,6 +409,7 @@ export default async function CorteDelDiaPage() {
         desgloseDelDia={JSON.parse(JSON.stringify(desgloseDelDia))}
         semanalSinCerrar={semanalSinCerrar}
         cobranzaEnVivo={cobranzaEnVivoRows}
+        cobranzaSemanalPropia={cobranzaSemanalPropia}
       />
       {puedeVerPendientesEmpresa && (
         <div className="px-6 pb-6">

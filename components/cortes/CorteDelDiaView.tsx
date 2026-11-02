@@ -13,6 +13,7 @@ import { AceptarParcialButton } from './AceptarParcialButton'
 import { RechazarParcialButton } from './RechazarParcialButton'
 import { TimelineDia } from './TimelineDia'
 import { CobranzaEnVivoSection } from './CobranzaEnVivoSection'
+import { MiCobranzaSemanalSection } from './MiCobranzaSemanalSection'
 import { ParcialPrintButton } from './ParcialPrintButton'
 import { ConsolidadoPrintButton } from './ConsolidadoPrintButton'
 import { HistoricoCortes } from './HistoricoCortes'
@@ -105,6 +106,18 @@ interface Props {
     transferencia:  number
     total:          number
   }>
+  // Cobranza semanal del propio user, día por día (sáb → hoy). Para
+  // coord/gerente/concentradora: ver acumulado "en vivo" sin esperar
+  // al cierre del viernes. Para concentradoras se incluye lo recibido
+  // de otros coord.
+  cobranzaSemanalPropia?: Array<{
+    fecha:           string
+    efectivo:        number
+    tarjeta:         number
+    transferencia:   number
+    recibidoDeOtros: number
+    total:           number
+  }>
 }
 
 function money(n: string | number) {
@@ -133,7 +146,7 @@ export function CorteDelDiaView(props: Props) {
     parcialesPropios, parcialesDetalle, consolidadosPropios, parcialesEntregadosRecibidos,
     parcialesParaConsolidar, consolidadosPendientesConfirmar,
     receptoresValidos, snapIncremental, cortesTimeline, cortesHistoricos,
-    esViernes, efectivoPropioSemana, desgloseDelDia, semanalSinCerrar, cobranzaEnVivo,
+    esViernes, efectivoPropioSemana, desgloseDelDia, semanalSinCerrar, cobranzaEnVivo, cobranzaSemanalPropia,
   } = props
   const detalleMap = new Map(parcialesDetalle.map((d) => [d.corteId, d]))
   const [parcialExpandido, setParcialExpandido] = useState<string | null>(null)
@@ -616,6 +629,14 @@ export function CorteDelDiaView(props: Props) {
             </div>
           )}
         </section>
+      )}
+
+      {/* ─── Mi cobranza semanal (coord/gerente/concentradora) ─────────── */}
+      {hacesCorte && cobranzaSemanalPropia && cobranzaSemanalPropia.length > 0 && (
+        <MiCobranzaSemanalSection
+          rows={cobranzaSemanalPropia}
+          esConcentradora={esConcentradora || sinConcentradora}
+        />
       )}
 
       {/* ─── Cobranza en tiempo real (DG/DC/SA/MC) ──────────────────────── */}

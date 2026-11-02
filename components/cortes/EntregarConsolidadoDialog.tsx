@@ -72,7 +72,7 @@ export function EntregarConsolidadoDialog({ corte, receptores, onClose }: Props)
       const r = await fetch(`/api/cortes/consolidado/${corte.id}/entregar`, { method: 'POST', body: fd })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(d.error ?? `Error ${r.status}`)
-      toast({ title: '✅ Consolidado entregado', description: 'Esperando confirmación de DG/DC.' })
+      toast({ title: '✅ Consolidado entregado', description: 'Puedes seguir trabajando. DG/DC lo confirmará cuando reciba.' })
       onClose()
       router.refresh()
     } catch (e) {

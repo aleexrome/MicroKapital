@@ -119,8 +119,8 @@ export default async function CortePendientePage({
           />
 
           <p className="text-[11px] text-amber-300/80 border-t border-primary-700/50 pt-3 text-center">
-            No podrás usar el sistema hasta que el receptor acepte tu corte.
-            Si hubo discrepancia y rechazaron, re-entrega con el monto correcto.
+            Al subir la foto del ticket firmado quedas liberado del bloqueo — puedes seguir trabajando sin esperar a que el receptor acepte.
+            Si llegara a rechazar por discrepancia, vuelves a quedar bloqueado para re-entregar con el monto correcto.
           </p>
 
           {/* Nav mínimo — las ÚNICAS 2 rutas accesibles mientras el corte

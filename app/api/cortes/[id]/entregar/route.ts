@@ -65,11 +65,18 @@ export async function POST(
       error: 'Un CONSOLIDADO se entrega vía /api/cortes/consolidado/[id]/entregar',
     }, { status: 400 })
   }
-  if (corte.estado === 'ENTREGADO') {
-    return NextResponse.json({ error: 'Ya está entregado, esperando aceptación del receptor' }, { status: 409 })
-  }
-  if (corte.estado === 'ACEPTADO') {
-    return NextResponse.json({ error: 'Este corte ya fue aceptado y cerrado' }, { status: 409 })
+  // Idempotente: si el corte ya está entregado o aceptado, el usuario
+  // no está bloqueado — devolvemos OK para que el front simplemente
+  // refresque y lo saque de la pantalla congelada. Evita el 409 que
+  // aparece cuando una segunda pestaña o un doble submit intenta
+  // volver a entregarlo (y confunde al coord con "esperando aceptación
+  // del receptor" cuando en realidad el bloqueo ya se levantó).
+  if (corte.estado === 'ENTREGADO' || corte.estado === 'ACEPTADO') {
+    return NextResponse.json({
+      ok: true,
+      alreadyDelivered: true,
+      estado:           corte.estado,
+    })
   }
 
   // Validar que el receptor elegido está en la lista de receptores

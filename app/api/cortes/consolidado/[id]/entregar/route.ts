@@ -48,6 +48,16 @@ export async function POST(
   if (corte.tipo !== 'CONSOLIDADO') {
     return NextResponse.json({ error: 'No es un consolidado' }, { status: 400 })
   }
+  // Idempotente: si ya está ENTREGADO o ACEPTADO el usuario no está
+  // bloqueado — devolvemos OK para que el front refresque y lo saque
+  // de la pantalla congelada en vez de arrojar error 400.
+  if (corte.estado === 'ENTREGADO' || corte.estado === 'ACEPTADO') {
+    return NextResponse.json({
+      ok: true,
+      alreadyDelivered: true,
+      estado:           corte.estado,
+    })
+  }
   if (corte.estado !== 'ABIERTO' && corte.estado !== 'RECHAZADO') {
     return NextResponse.json({
       error: `No se puede entregar un consolidado en estado ${corte.estado}`,

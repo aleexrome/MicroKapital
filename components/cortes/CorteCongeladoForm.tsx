@@ -132,7 +132,7 @@ export function CorteCongeladoForm({
         const msg = (typeof data.error === 'string' && data.error) || `HTTP ${res.status}: ${raw.slice(0, 150)}`
         throw new Error(msg)
       }
-      toast({ title: 'Corte entregado', description: 'Esperando aceptación del receptor.' })
+      toast({ title: 'Corte entregado', description: 'Puedes seguir trabajando. El receptor confirmará cuando reciba.' })
       router.refresh()
     } catch (e) {
       toast({

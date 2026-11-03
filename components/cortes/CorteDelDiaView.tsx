@@ -382,8 +382,13 @@ export function CorteDelDiaView(props: Props) {
         </section>
       )}
 
-      {/* ─── Mis parciales del día (coord — NO concentradora) ─────────── */}
-      {hacesCorte && !puedeConsolidar && (
+      {/* ─── Mis parciales del día (coord Y concentradora) ────────────── */}
+      {/* La concentradora también lo necesita: puede abrir un parcial
+          propio intermedio para imprimir ticket de lo que lleva cobrado
+          al momento, aunque la consolidación oficial sea los viernes.
+          Al abrir un parcial propio, se auto-acepta (es su propia
+          concentradora) y queda listo para entrar al consolidado. */}
+      {hacesCorte && (
         <section className="space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -406,7 +411,10 @@ export function CorteDelDiaView(props: Props) {
 
           {parcialesPropios.length === 0 ? (
             <Card className="p-6 text-center text-sm text-muted-foreground">
-              No has abierto ningún parcial hoy. Cuando juntes efectivo cobrado, aprieta <strong>Iniciar parcial</strong>.
+              {puedeConsolidar
+                ? <>Aún no has abierto ningún parcial hoy. Puedes abrir uno optativo para imprimir ticket de lo que llevas; el consolidado oficial va los viernes.</>
+                : <>No has abierto ningún parcial hoy. Cuando juntes efectivo cobrado, aprieta <strong>Iniciar parcial</strong>.</>
+              }
             </Card>
           ) : (
             <div className="grid gap-2">

@@ -10,6 +10,8 @@ import { Zap, RefreshCcw, Sparkles, Users, Building2, User as UserIcon, ChevronD
 import { loanNotDeletedWhere } from '@/lib/access'
 import { inicioSemanaMk } from '@/lib/timezone'
 import { SucursalChips } from './SucursalChips'
+import { getScoreFromOverdue } from '@/lib/score-calculator'
+import { isOverdue } from '@/lib/schedule'
 
 const UMBRAL_POR_TIPO: Record<string, number> = {
   INDIVIDUAL: 10,
@@ -24,10 +26,17 @@ const LABEL_TIPO: Record<string, string> = {
   FIDUCIARIO: 'Fiduciario',
 }
 
-function scoreBadge(score: number): string {
-  if (score >= 700) return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-  if (score >= 500) return 'bg-amber-500/15 text-amber-300 border-amber-500/40'
-  return 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+// Badge basado en el score VISUAL del cliente (getScoreFromOverdue):
+//   500 "Al Corriente" verde (0 vencidos)
+//   350 "Con Atrasos"  amarillo (1-2 vencidos)
+//   150 "Atrasos Graves" rojo (3+ vencidos)
+function scoreBadgeByOverdue(overdueCount: number): { className: string; label: string; value: number } {
+  const info = getScoreFromOverdue(overdueCount)
+  const className =
+    info.nivel === 'BUEN_CLIENTE' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' :
+    info.nivel === 'REGULAR'      ? 'bg-amber-500/15 text-amber-300 border-amber-500/40' :
+                                    'bg-rose-500/15 text-rose-300 border-rose-500/40'
+  return { className, label: info.label, value: info.score }
 }
 
 function diasSinColor(dias: number): string {
@@ -110,7 +119,7 @@ export default async function RenovacionesPage() {
       branch:   { select: { id: true, nombre: true } },
       cobrador: { select: { id: true, nombre: true } },
       loanGroup:{ select: { nombre: true } },
-      schedule: { select: { numeroPago: true, estado: true, pagadoAt: true } },
+      schedule: { select: { numeroPago: true, estado: true, pagadoAt: true, fechaVencimiento: true } },
       loanRenovado: {
         where:  { estado: { in: ['PENDING_REVIEW', 'RETURNED_TO_COORDINATOR', 'PENDING_APPROVAL', 'APPROVED', 'IN_ACTIVATION', 'ACTIVE'] } },
         select: { id: true },
@@ -124,6 +133,7 @@ export default async function RenovacionesPage() {
     cliente:        string
     telefono:       string | null
     score:          number
+    overdueCount:   number
     clientId:       string
     branchId:       string
     branchNombre:   string
@@ -148,12 +158,14 @@ export default async function RenovacionesPage() {
     const schedulesPagados = l.schedule.filter((s) => s.estado === 'PAID' || s.estado === 'ADVANCE' || s.estado === 'FINANCIADO')
     const pagados = schedulesPagados.length
 
+    const overdueCount = l.schedule.filter((s) => isOverdue(s)).length
     const base = {
       loanId:         l.id,
       tipo:           l.tipo,
       cliente:        l.client.nombreCompleto,
       telefono:       l.client.telefono,
       score:          l.client.score,
+      overdueCount,
       clientId:       l.client.id,
       branchId:       l.branch.id,
       branchNombre:   l.branch.nombre,
@@ -232,6 +244,7 @@ export default async function RenovacionesPage() {
     cliente:        string
     telefono:       string | null
     score:          number
+    overdueCount:   number  // siempre 0 (no tienen loans activos)
     clientId:       string
     branchId:       string
     branchNombre:   string
@@ -253,6 +266,7 @@ export default async function RenovacionesPage() {
       cliente:        l.client.nombreCompleto,
       telefono:       l.client.telefono,
       score:          l.client.score,
+      overdueCount:   0,
       clientId:       l.client.id,
       branchId:       l.branch.id,
       branchNombre:   l.branch.nombre,
@@ -424,7 +438,7 @@ function SucursalShell({
   )
 }
 
-function SucursalesRenovacion({ grupos }: { grupos: GrupoSucursal<{ loanId: string; cliente: string; grupoNombre: string | null; score: number; tipo: string; capital: number; pagados: number; umbral: number; excedente: number; telefono: string | null; clientId: string; esNuevo: boolean; cobradorId: string; cobradorNombre: string; branchId: string; branchNombre: string }>[] }) {
+function SucursalesRenovacion({ grupos }: { grupos: GrupoSucursal<{ loanId: string; cliente: string; grupoNombre: string | null; score: number; overdueCount: number; tipo: string; capital: number; pagados: number; umbral: number; excedente: number; telefono: string | null; clientId: string; esNuevo: boolean; cobradorId: string; cobradorNombre: string; branchId: string; branchNombre: string }>[] }) {
   if (grupos.length === 0) {
     return (
       <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -479,7 +493,7 @@ function SucursalesRenovacion({ grupos }: { grupos: GrupoSucursal<{ loanId: stri
                             )}
                           </td>
                           <td className="px-3 py-1.5">
-                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${scoreBadge(r.score)}`}>{r.score}</span>
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${scoreBadgeByOverdue(r.overdueCount).className}`} title={scoreBadgeByOverdue(r.overdueCount).label}>{scoreBadgeByOverdue(r.overdueCount).value}</span>
                           </td>
                           <td className="px-3 py-1.5 text-xs">{LABEL_TIPO[r.tipo] ?? r.tipo}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(r.capital)}</td>
@@ -508,7 +522,7 @@ function SucursalesRenovacion({ grupos }: { grupos: GrupoSucursal<{ loanId: stri
   )
 }
 
-function SucursalesProximos({ grupos }: { grupos: GrupoSucursal<{ loanId: string; cliente: string; grupoNombre: string | null; score: number; tipo: string; capital: number; pagados: number; umbral: number; faltan: number; telefono: string | null; clientId: string; cobradorId: string; cobradorNombre: string; branchId: string; branchNombre: string }>[] }) {
+function SucursalesProximos({ grupos }: { grupos: GrupoSucursal<{ loanId: string; cliente: string; grupoNombre: string | null; score: number; overdueCount: number; tipo: string; capital: number; pagados: number; umbral: number; faltan: number; telefono: string | null; clientId: string; cobradorId: string; cobradorNombre: string; branchId: string; branchNombre: string }>[] }) {
   if (grupos.length === 0) {
     return (
       <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -555,7 +569,7 @@ function SucursalesProximos({ grupos }: { grupos: GrupoSucursal<{ loanId: string
                           )}
                         </td>
                         <td className="px-3 py-1.5">
-                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${scoreBadge(r.score)}`}>{r.score}</span>
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${scoreBadgeByOverdue(r.overdueCount).className}`} title={scoreBadgeByOverdue(r.overdueCount).label}>{scoreBadgeByOverdue(r.overdueCount).value}</span>
                         </td>
                         <td className="px-3 py-1.5 text-xs">{LABEL_TIPO[r.tipo] ?? r.tipo}</td>
                         <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(r.capital)}</td>
@@ -583,7 +597,7 @@ function SucursalesProximos({ grupos }: { grupos: GrupoSucursal<{ loanId: string
   )
 }
 
-function SucursalesReactivacion({ grupos }: { grupos: GrupoSucursal<{ loanId: string; cliente: string; score: number; tipo: string; capital: number; liquidadoAt: Date; diasSin: number; telefono: string | null; clientId: string; esNuevo: boolean; cobradorId: string; cobradorNombre: string; branchId: string; branchNombre: string }>[] }) {
+function SucursalesReactivacion({ grupos }: { grupos: GrupoSucursal<{ loanId: string; cliente: string; score: number; overdueCount: number; tipo: string; capital: number; liquidadoAt: Date; diasSin: number; telefono: string | null; clientId: string; esNuevo: boolean; cobradorId: string; cobradorNombre: string; branchId: string; branchNombre: string }>[] }) {
   if (grupos.length === 0) {
     return (
       <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -634,7 +648,7 @@ function SucursalesReactivacion({ grupos }: { grupos: GrupoSucursal<{ loanId: st
                             </div>
                           </td>
                           <td className="px-3 py-1.5">
-                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${scoreBadge(r.score)}`}>{r.score}</span>
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${scoreBadgeByOverdue(r.overdueCount).className}`} title={scoreBadgeByOverdue(r.overdueCount).label}>{scoreBadgeByOverdue(r.overdueCount).value}</span>
                           </td>
                           <td className="px-3 py-1.5 text-xs">{LABEL_TIPO[r.tipo] ?? r.tipo}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(r.capital)}</td>

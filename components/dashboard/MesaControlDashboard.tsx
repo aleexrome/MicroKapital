@@ -12,6 +12,10 @@ import { loanNotDeletedWhere } from '@/lib/access'
 import { getSaturday, getFriday } from '@/lib/week-utils'
 import { todayMx } from '@/lib/timezone'
 import { MesaControlBarChart, MesaControlDonut } from './MesaControlCharts'
+import { getLimboData, getSolicitudesCancelacionPendientes } from '@/lib/limbo-dashboard'
+import { PrestamosEnLimboWidget } from './PrestamosEnLimboWidget'
+import { CobradorasBloqueadasWidget } from './CobradorasBloqueadasWidget'
+import { SolicitudesCancelacionWidget, type SolicitudPendiente } from './SolicitudesCancelacionWidget'
 
 const TIPO_LABEL: Record<string, string> = {
   SOLIDARIO: 'Solidario',
@@ -46,7 +50,7 @@ export async function MesaControlDashboard({
   const friActual = getFriday(satActual)
   const hoy = todayMx()
 
-  const [me, pendientesCount, semanaAudit, hoyAudit, ultimasAudit] = await Promise.all([
+  const [me, pendientesCount, semanaAudit, hoyAudit, ultimasAudit, limboDashboard, solicitudesPendientes] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { nombre: true },
@@ -85,7 +89,27 @@ export async function MesaControlDashboard({
         id: true, accion: true, registroId: true, createdAt: true,
       },
     }),
+    // Widgets de supervisión iguales a los que ve DG/DC/SA — Mesa de
+    // Control también los necesita para ver el pulso de la empresa.
+    getLimboData(prisma, companyId),
+    getSolicitudesCancelacionPendientes(prisma, companyId),
   ])
+
+  const solicitudesParaWidget: SolicitudPendiente[] = solicitudesPendientes.map((s) => ({
+    id:        s.id,
+    loanId:    s.loanId,
+    motivo:    s.motivo,
+    createdAt: s.createdAt.toISOString(),
+    loan: {
+      estado:     s.loan.estado,
+      capital:    Number(s.loan.capital),
+      aprobadoAt: s.loan.aprobadoAt?.toISOString() ?? null,
+      cliente:    s.loan.client.nombreCompleto,
+      cobrador:   s.loan.cobrador.nombre,
+      branch:     s.loan.branch.nombre,
+    },
+    solicitanteNombre: s.solicitante.nombre,
+  }))
 
   const semAprobadas  = semanaAudit.filter((a) => a.accion === 'MESA_CONTROL_FORWARD').length
   const semRegresadas = semanaAudit.filter((a) => a.accion === 'MESA_CONTROL_RETURN').length
@@ -197,6 +221,16 @@ export async function MesaControlDashboard({
             </Link>
           </Button>
         </div>
+      </div>
+
+      {/* Widgets de supervisión empresa (iguales a los de DG/DC/SA) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <PrestamosEnLimboWidget
+          buckets={limboDashboard.buckets}
+          detalle={limboDashboard.detalle}
+        />
+        <CobradorasBloqueadasWidget cobradoras={limboDashboard.cobradorasBloqueadas} />
+        <SolicitudesCancelacionWidget solicitudes={solicitudesParaWidget} readOnly />
       </div>
 
       {/* KPI cards con gradientes/borders de color */}

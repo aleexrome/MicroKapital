@@ -26,6 +26,10 @@ export interface SolicitudPendiente {
 
 interface Props {
   solicitudes: SolicitudPendiente[]
+  // readOnly: oculta los botones Aprobar/Rechazar. Para roles como
+  // MESA_CONTROL que necesitan VER las solicitudes pendientes pero
+  // no tienen permiso backend para decidir (endpoint devuelve 403).
+  readOnly?: boolean
 }
 
 function tiempoRelativo(iso: string): string {
@@ -37,7 +41,7 @@ function tiempoRelativo(iso: string): string {
   return `hace ${Math.round(hr / 24)} d`
 }
 
-export function SolicitudesCancelacionWidget({ solicitudes: initialSolicitudes }: Props) {
+export function SolicitudesCancelacionWidget({ solicitudes: initialSolicitudes, readOnly = false }: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [solicitudes, setSolicitudes] = useState(initialSolicitudes)
@@ -133,7 +137,7 @@ export function SolicitudesCancelacionWidget({ solicitudes: initialSolicitudes }
                 {s.motivo}
               </p>
 
-              {!isActive ? (
+              {readOnly ? null : !isActive ? (
                 <div className="flex gap-2 pt-1">
                   <Button
                     size="sm"

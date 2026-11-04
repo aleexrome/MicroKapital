@@ -6,14 +6,18 @@ import { prisma } from '@/lib/prisma'
 import { getReporteEjecutivoSemanal } from '@/lib/reportes/ejecutivo'
 import { ReporteEjecutivoView } from '@/components/reportes/ReporteEjecutivoView'
 
-// Reporte privado — solo visible para el Director de Sistemas.
+// Reporte ejecutivo — visible para DG, DC, SUPER_ADMIN y el Director
+// de Sistemas (email histórico, se queda por retrocompatibilidad).
 const EMAIL_AUTORIZADO = 'alejandro.romero@microkapital.com'
+const ROLES_AUTORIZADOS = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN']
 
 export default async function ReporteEjecutivoPage() {
   const session = await getSession()
   if (!session?.user) redirect('/login')
 
-  if (session.user.email !== EMAIL_AUTORIZADO && session.user.rol !== 'SUPER_ADMIN') {
+  const esEmailAutorizado = session.user.email === EMAIL_AUTORIZADO
+  const esRolAutorizado   = ROLES_AUTORIZADOS.includes(session.user.rol)
+  if (!esEmailAutorizado && !esRolAutorizado) {
     notFound()
   }
 

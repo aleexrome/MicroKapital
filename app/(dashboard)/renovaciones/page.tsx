@@ -9,6 +9,7 @@ import { formatMoney, formatDate } from '@/lib/utils'
 import { Zap, RefreshCcw, Sparkles, Users, Building2, User as UserIcon, ChevronDown, Clock } from 'lucide-react'
 import { loanNotDeletedWhere } from '@/lib/access'
 import { inicioSemanaMk } from '@/lib/timezone'
+import { SucursalChips } from './SucursalChips'
 
 const UMBRAL_POR_TIPO: Record<string, number> = {
   INDIVIDUAL: 10,
@@ -302,21 +303,8 @@ export default async function RenovacionesPage() {
         </p>
       </div>
 
-      {/* Selector rápido de sucursal (anchor links) */}
-      {todasSucursales.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-border/40">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground mr-1">Ir a:</span>
-          {todasSucursales.map((s) => (
-            <a
-              key={s.branchId}
-              href={`#suc-${s.branchId}`}
-              className="text-xs rounded-full border border-border/60 bg-background/60 hover:bg-muted/40 px-2.5 py-1 transition-colors"
-            >
-              {s.branchNombre}
-            </a>
-          ))}
-        </div>
-      )}
+      {/* Selector rápido de sucursal — abre el <details> al hacer click */}
+      <SucursalChips sucursales={todasSucursales} />
 
       {/* Resumen tiles */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -414,7 +402,7 @@ function SucursalShell({
   children: React.ReactNode
 }) {
   return (
-    <details open className="rounded-xl border border-border/50 bg-background/40" id={`suc-${grupo.branchId}`}>
+    <details className="rounded-xl border border-border/50 bg-background/40" id={`suc-${grupo.branchId}`}>
       <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between flex-wrap gap-2 hover:bg-muted/20 rounded-xl">
         <div className="flex items-center gap-2">
           <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform details-arrow" />
@@ -451,7 +439,7 @@ function SucursalesRenovacion({ grupos }: { grupos: GrupoSucursal<{ loanId: stri
         return (
           <SucursalShell key={suc.branchId} grupo={suc} nuevosCount={nuevos} sectionKey="renovación">
             {suc.coords.map((cob) => (
-              <details key={cob.cobradorId} open className="rounded-md border border-border/40">
+              <details key={cob.cobradorId} className="rounded-md border border-border/40">
                 <summary className="cursor-pointer select-none px-3 py-2 text-xs flex items-center justify-between hover:bg-muted/20">
                   <span className="flex items-center gap-2">
                     <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
@@ -533,7 +521,7 @@ function SucursalesProximos({ grupos }: { grupos: GrupoSucursal<{ loanId: string
       {grupos.map((suc) => (
         <SucursalShell key={suc.branchId} grupo={suc} sectionKey="próximos">
           {suc.coords.map((cob) => (
-            <details key={cob.cobradorId} open className="rounded-md border border-border/40">
+            <details key={cob.cobradorId} className="rounded-md border border-border/40">
               <summary className="cursor-pointer select-none px-3 py-2 text-xs flex items-center justify-between hover:bg-muted/20">
                 <span className="flex items-center gap-2">
                   <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
@@ -610,7 +598,7 @@ function SucursalesReactivacion({ grupos }: { grupos: GrupoSucursal<{ loanId: st
         return (
           <SucursalShell key={suc.branchId} grupo={suc} nuevosCount={nuevos} sectionKey="reactivación">
             {suc.coords.map((cob) => (
-              <details key={cob.cobradorId} open className="rounded-md border border-border/40">
+              <details key={cob.cobradorId} className="rounded-md border border-border/40">
                 <summary className="cursor-pointer select-none px-3 py-2 text-xs flex items-center justify-between hover:bg-muted/20">
                   <span className="flex items-center gap-2">
                     <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />

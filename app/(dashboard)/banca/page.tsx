@@ -38,6 +38,16 @@ interface CorteRow {
   tarjeta: number
   transferencia: number
   total: number
+  // Detalle pago por pago de este corte (cobrador, día): para
+  // auditar quién y cuánto compone la cifra agregada. Se expande en
+  // el UI bajo la fila del corte.
+  pagos: Array<{
+    id:        string
+    cliente:   string
+    monto:     number
+    metodo:    string
+    fechaHora: Date
+  }>
 }
 
 interface DesembolsoRow {
@@ -192,6 +202,7 @@ export default async function BancaPage({
         metodoPago: true,
         fechaHora: true,
         cobrador: { select: { id: true, nombre: true } },
+        client:   { select: { id: true, nombreCompleto: true } },
         loan: { select: { branch: { select: { id: true, nombre: true } } } },
       },
     }),
@@ -380,23 +391,35 @@ export default async function BancaPage({
         tarjeta: 0,
         transferencia: 0,
         total: 0,
+        pagos: [],
       }
       b.cortes.set(ck, corte)
     }
     const m = Number(p.monto)
+    // `corte.total` = efectivo + transferencia (lo que el cobrador
+    // realmente cobró en la calle que acaba en banca). Tarjeta se
+    // muestra aparte pero no suma a `total` — queda como columna
+    // informativa. El `b.totalCortes` (físico que entrega la sucursal)
+    // sigue sumando efectivo + tarjeta como antes.
     if (p.metodoPago === 'CASH') {
       corte.efectivo += m
       corte.total += m
       b.totalCortes += m
     } else if (p.metodoPago === 'CARD') {
       corte.tarjeta += m
-      corte.total += m
       b.totalCortes += m
     } else {
-      // TRANSFER — se muestra pero NO entra al total físico ni al neto.
       corte.transferencia += m
+      corte.total += m
       b.totalTransferencia += m
     }
+    corte.pagos.push({
+      id:        p.id,
+      cliente:   p.client.nombreCompleto,
+      monto:     m,
+      metodo:    p.metodoPago,
+      fechaHora: new Date(p.fechaHora),
+    })
   }
 
   // Desembolsos netos — el fee "cargoApertura" se calcula con la fórmula
@@ -765,31 +788,66 @@ export default async function BancaPage({
                             {cortesRows.length === 0 ? (
                               <p className="text-sm text-muted-foreground">Sin cobros.</p>
                             ) : (
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                  <thead>
-                                    <tr className="text-left text-xs text-muted-foreground">
-                                      <th className="py-1 pr-3 font-medium">Fecha</th>
-                                      <th className="py-1 pr-3 font-medium">Cobrador</th>
-                                      <th className="py-1 pr-3 text-right font-medium">Efectivo</th>
-                                      <th className="py-1 pr-3 text-right font-medium">Tarjeta</th>
-                                      <th className="py-1 pr-3 text-right font-medium text-blue-300">Transferencia</th>
-                                      <th className="py-1 text-right font-medium">Total físico</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-border/50">
-                                    {cortesRows.map((c) => (
-                                      <tr key={c.key}>
-                                        <td className="py-1.5 pr-3">{formatDate(c.fecha)}</td>
-                                        <td className="py-1.5 pr-3">{c.cobrador}</td>
-                                        <td className="py-1.5 pr-3 text-right money">{formatMoney(c.efectivo)}</td>
-                                        <td className="py-1.5 pr-3 text-right money">{formatMoney(c.tarjeta)}</td>
-                                        <td className="py-1.5 pr-3 text-right money text-blue-300">{formatMoney(c.transferencia)}</td>
-                                        <td className="py-1.5 text-right font-medium money">{formatMoney(c.total)}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                              <div className="rounded-md border border-border/40 overflow-hidden">
+                                {/* Header fijo con los mismos anchos que las filas de abajo */}
+                                <div className="grid grid-cols-[1.5rem_minmax(5rem,0.9fr)_minmax(10rem,1.6fr)_repeat(4,minmax(5rem,1fr))] items-center gap-x-3 px-3 py-1.5 bg-muted/20 text-xs text-muted-foreground">
+                                  <div />
+                                  <div>Fecha</div>
+                                  <div>Cobrador</div>
+                                  <div className="text-right">Efectivo</div>
+                                  <div className="text-right">Tarjeta</div>
+                                  <div className="text-right text-blue-300">Transferencia</div>
+                                  <div className="text-right">Total cobrado</div>
+                                </div>
+                                <div className="divide-y divide-border/40">
+                                  {cortesRows.map((c) => (
+                                    <details key={c.key} className="group/corte">
+                                      <summary className="grid grid-cols-[1.5rem_minmax(5rem,0.9fr)_minmax(10rem,1.6fr)_repeat(4,minmax(5rem,1fr))] items-center gap-x-3 px-3 py-1.5 text-sm cursor-pointer hover:bg-muted/20 list-none">
+                                        <span className="text-muted-foreground group-open/corte:rotate-90 transition-transform inline-block w-3">▸</span>
+                                        <span>{formatDate(c.fecha)}</span>
+                                        <span>{c.cobrador}</span>
+                                        <span className="text-right money">{formatMoney(c.efectivo)}</span>
+                                        <span className="text-right money">{formatMoney(c.tarjeta)}</span>
+                                        <span className="text-right money text-blue-300">{formatMoney(c.transferencia)}</span>
+                                        <span className="text-right font-medium money">{formatMoney(c.total)}</span>
+                                      </summary>
+                                      <div className="bg-background/30 px-3 pb-3 pt-1 border-t border-border/40">
+                                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 pl-5">
+                                          Cobros que forman este total ({c.pagos.length})
+                                        </p>
+                                        <div className="pl-5 overflow-x-auto">
+                                          <table className="w-full text-xs">
+                                            <thead className="text-muted-foreground">
+                                              <tr>
+                                                <th className="text-left px-2 py-1 font-medium">Hora</th>
+                                                <th className="text-left px-2 py-1 font-medium">Cliente</th>
+                                                <th className="text-left px-2 py-1 font-medium">Método</th>
+                                                <th className="text-right px-2 py-1 font-medium">Monto</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-border/40">
+                                              {c.pagos
+                                                .slice()
+                                                .sort((a, b2) => a.fechaHora.getTime() - b2.fechaHora.getTime())
+                                                .map((pg) => (
+                                                  <tr key={pg.id}>
+                                                    <td className="px-2 py-1 text-muted-foreground tabular-nums whitespace-nowrap">
+                                                      {pg.fechaHora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Mexico_City' })}
+                                                    </td>
+                                                    <td className="px-2 py-1">{pg.cliente}</td>
+                                                    <td className="px-2 py-1 whitespace-nowrap">
+                                                      {pg.metodo === 'CASH' ? 'Efectivo' : pg.metodo === 'CARD' ? 'Tarjeta' : 'Transferencia'}
+                                                    </td>
+                                                    <td className="px-2 py-1 text-right tabular-nums money">{formatMoney(pg.monto)}</td>
+                                                  </tr>
+                                                ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+                                    </details>
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>

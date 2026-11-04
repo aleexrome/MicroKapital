@@ -121,6 +121,8 @@ const REPORTES: ReporteCard[] = [
     color: 'border-fuchsia-500/40',
     iconBg: 'bg-fuchsia-500/15',
     iconText: 'text-fuchsia-300',
+    // Visible para DG/DC/SA + el Director de Sistemas (email histórico).
+    soloRoles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
     soloEmails: [EMAIL_DIRECTOR_SISTEMAS],
   },
 ]
@@ -171,8 +173,14 @@ export default async function ReportesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {REPORTES
           .filter((r) => {
-            if (r.soloEmails && (!email || !r.soloEmails.includes(email))) return false
-            if (r.soloRoles && !r.soloRoles.includes(rol)) return false
+            // soloEmails + soloRoles se evalúan como OR cuando ambos
+            // están definidos: pasa si coincide por email O por rol.
+            // Si solo uno está, debe cumplirlo.
+            if (r.soloEmails || r.soloRoles) {
+              const matchEmail = !!r.soloEmails && !!email && r.soloEmails.includes(email)
+              const matchRol   = !!r.soloRoles  && r.soloRoles.includes(rol)
+              if (!matchEmail && !matchRol) return false
+            }
             if (rol === 'MESA_CONTROL' && OPERATIVOS_QUE_MC_NO_VE.has(r.href)) return false
             return true
           })

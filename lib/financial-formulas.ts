@@ -11,17 +11,26 @@ function roundTwo(n: number): number {
 //   Grupo REGULAR (Puntual): $175 por cada mil = 0.175 sobre el capital
 //   Grupo RESCATE:           $195 por cada mil = 0.195 sobre el capital
 // Seguro de apertura (cobrar al cliente por separado, no sobre el capital):
-//   Capital $2,000–$4,000  → $250
-//   Capital $5,000–$9,000  → $300
+//   Capital $2,000–$4,000   → $250
+//   Capital $5,000–$9,000   → $300
 //   Capital $10,000–$14,000 → $350
 //   Capital $15,000–$19,000 → $400
-// Validaciones: mín 4 integrantes, máx 5 · $2,000–$25,000 · edad 18–64 · solo mujeres
+//   Capital $20,000–$24,000 → $450
+//   Capital $25,000–$29,000 → $500
+//   Capital $30,000–$34,000 → $550
+//   Capital $35,000         → $600
+// Regla del patrón: cada +$5,000 de capital = +$50 de seguro.
+// Validaciones: mín 4 integrantes, máx 5 · $2,000–$35,000 · edad 18–64 · solo mujeres
 
 export function calcSeguroSolidario(capital: number): number {
-  if (capital >= 2000 && capital <= 4000) return 250
-  if (capital >= 5000 && capital <= 9000) return 300
+  if (capital >= 2000  && capital <= 4000)  return 250
+  if (capital >= 5000  && capital <= 9000)  return 300
   if (capital >= 10000 && capital <= 14000) return 350
   if (capital >= 15000 && capital <= 19000) return 400
+  if (capital >= 20000 && capital <= 24000) return 450
+  if (capital >= 25000 && capital <= 29000) return 500
+  if (capital >= 30000 && capital <= 34000) return 550
+  if (capital === 35000)                    return 600
   return 0
 }
 

@@ -78,6 +78,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: <Video className="h-5 w-5" />,
     roles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL'],
   },
+  {
+    href: '/renovaciones',
+    label: 'Renovaciones',
+    icon: <Zap className="h-5 w-5" />,
+    roles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
+  },
   // 'Préstamos en limbo', 'Coordinadores bloqueados' y 'Aprobaciones' se
   // sacaron del sidebar: cada uno tiene su widget en el Dashboard con conteo
   // y CTA a la lista completa (/limbo, /coordinadores-bloqueados, /prestamos/

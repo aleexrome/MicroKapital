@@ -240,6 +240,17 @@ export async function POST(
     .join('')
     .slice(0, 4)
 
+  // Generar número de ticket ANTES de abrir la transacción (solo si va a emitir
+  // ticket). generateTicketNumber usa el prisma global, no tx — invocarlo dentro
+  // de $transaction deadlockea con pgbouncer + connection_limit=1 (transacción
+  // tiene la única conexión, generador pide otra) → timeout → Vercel HTML 500 →
+  // Safari iOS tira "The string did not match the expected pattern".
+  const willEmitTicket = Boolean(data.metodoPago) && feeMonto > 0
+  const numeroTicketPre = willEmitTicket
+    ? await generateTicketNumber(branchPrefix, new Date().getFullYear())
+    : null
+  const qrCodePre = numeroTicketPre ? generateTicketQrData(numeroTicketPre) : null
+
   const result = await prisma.$transaction(async (tx) => {
     const now = new Date()
 
@@ -360,27 +371,24 @@ export async function POST(
         },
       })
 
-      // Generar ticket (siempre CASH ahora)
-      if (feeMonto > 0) {
-        const year = now.getFullYear()
-        const numeroTicket = await generateTicketNumber(branchPrefix, year)
-        const qrCode = generateTicketQrData(numeroTicket)
-
+      // Ticket (siempre CASH ahora) — número generado antes de la transacción
+      // para evitar deadlock con pgbouncer + connection_limit=1.
+      if (numeroTicketPre && qrCodePre) {
         ticket = await tx.ticket.create({
           data: {
             paymentId: payment.id,
             companyId: companyId!,
             branchId: targetBranchId!,
-            numeroTicket,
+            numeroTicket: numeroTicketPre,
             impresoPorId: userId,
-            qrCode,
+            qrCode: qrCodePre,
           },
         })
       }
     }
 
     return { payment, ticket }
-  })
+  }, { timeout: 20000, maxWait: 10000 })
 
   createAuditLog({
     userId,

@@ -114,16 +114,26 @@ export default function CapturarGrupoPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+      // Safari iOS tira "The string did not match the expected pattern" si
+      // res.json() se ejecuta sobre HTML (p. ej. 500 Vercel) — incluso con
+      // res.ok=true si el content-type / body viene mal. Leemos texto y
+      // parseamos en try/catch para que suba un error legible.
+      const raw = await res.text()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any = {}
+      try { data = raw ? JSON.parse(raw) : {} } catch {
+        throw new Error(
+          res.ok
+            ? 'El servidor devolvió una respuesta inválida.'
+            : `El servidor respondió ${res.status}. Intenta de nuevo.`
+        )
+      }
       if (!res.ok) {
         let msg = `Error ${res.status}`
-        try {
-          const b = await res.json()
-          if (typeof b?.error === 'string') msg = b.error
-          else if (b?.error) msg = JSON.stringify(b.error)
-        } catch { /* no-json */ }
+        if (typeof data.error === 'string') msg = data.error
+        else if (data.error) msg = JSON.stringify(data.error)
         throw new Error(msg)
       }
-      const data = await res.json()
       setTickets(data.tickets ?? [])
       if (data.groupTicketMeta) setGroupMeta(data.groupTicketMeta)
       setMetodoFinal(metodoPago)

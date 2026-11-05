@@ -101,12 +101,22 @@ export default function CapturarPagoPage({ params }: { params: { scheduleId: str
         body: JSON.stringify(body),
       })
 
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error ?? 'Error al registrar el pago')
+      // Safari iOS tira "The string did not match the expected pattern" si
+      // res.json() se ejecuta sobre HTML (p. ej. 500 Vercel). Leemos texto
+      // y parseamos en try/catch para que suba el error real al usuario.
+      const raw = await res.text()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let parsed: any = {}
+      try { parsed = raw ? JSON.parse(raw) : {} } catch {
+        throw new Error(
+          res.ok
+            ? 'El servidor devolvió una respuesta inválida.'
+            : `El servidor respondió ${res.status}. Intenta de nuevo.`
+        )
       }
+      if (!res.ok) throw new Error(parsed.error ?? 'Error al registrar el pago')
 
-      const { data } = await res.json()
+      const data = parsed.data
 
       // Transferencia: queda pendiente de verificación, no se emite ticket aún
       if (data.pending) {

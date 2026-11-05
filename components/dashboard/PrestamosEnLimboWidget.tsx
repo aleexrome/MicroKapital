@@ -67,44 +67,78 @@ export function PrestamosEnLimboWidget({ buckets, detalle }: Props) {
         })}
       </div>
 
-      {openBucket && buckets[openBucket].count > 0 && (
-        <div className="border-t border-border/50 pt-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-muted-foreground">
-              {BUCKET_META[openBucket].label} ({buckets[openBucket].count})
-            </p>
-            <button
-              onClick={() => setOpenBucket(null)}
-              className="text-xs text-muted-foreground hover:text-foreground"
-              aria-label="Cerrar detalle"
-            >
-              <ChevronUp className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <div className="space-y-1 max-h-64 overflow-y-auto">
-            {detalle
-              .filter((d) => d.bucket === openBucket)
-              .map((d) => (
-                <Link
-                  key={d.id}
-                  href={`/prestamos/${d.id}`}
-                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-accent text-xs transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{d.clienteNombre}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      {d.cobradorNombre} · {d.branchNombre}
+      {openBucket && buckets[openBucket].count > 0 && (() => {
+        // Agrupar el bucket activo por sucursal para que no se vea como
+        // un reguero. Dentro de cada sucursal se ordenan por horas desc
+        // (más viejos arriba). Los nombres de sucursal se muestran una
+        // sola vez como encabezado antes de sus préstamos.
+        const items = detalle.filter((d) => d.bucket === openBucket)
+        const porSucursal = new Map<string, typeof items>()
+        for (const it of items) {
+          const key = it.branchNombre || 'Sin sucursal'
+          if (!porSucursal.has(key)) porSucursal.set(key, [])
+          porSucursal.get(key)!.push(it)
+        }
+        const sucursales = Array.from(porSucursal.entries())
+          .sort(([a], [b]) => a.localeCompare(b, 'es'))
+          .map(([nombre, lista]) => ({
+            nombre,
+            lista: lista.slice().sort((a, b) => b.horas - a.horas),
+            totalCapital: lista.reduce((s, x) => s + x.capital, 0),
+          }))
+
+        return (
+          <div className="border-t border-border/50 pt-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                {BUCKET_META[openBucket].label} ({buckets[openBucket].count})
+              </p>
+              <button
+                onClick={() => setOpenBucket(null)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+                aria-label="Cerrar detalle"
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {sucursales.map((suc) => (
+                <div key={suc.nombre} className="space-y-1">
+                  <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-card/95 backdrop-blur-sm px-2 py-1 rounded border-b border-border/40">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground/90">
+                      {suc.nombre}
+                      <span className="ml-1.5 text-muted-foreground font-normal normal-case">
+                        · {suc.lista.length}
+                      </span>
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-medium">
+                      {formatMoney(suc.totalCapital)}
                     </p>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-semibold">{formatMoney(d.capital)}</p>
-                    <p className={`text-[10px] ${BUCKET_META[d.bucket].color}`}>{d.horas}h</p>
-                  </div>
-                </Link>
+                  {suc.lista.map((d) => (
+                    <Link
+                      key={d.id}
+                      href={`/prestamos/${d.id}`}
+                      className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-accent text-xs transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{d.clienteNombre}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {d.cobradorNombre}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-semibold">{formatMoney(d.capital)}</p>
+                        <p className={`text-[10px] ${BUCKET_META[d.bucket].color}`}>{d.horas}h</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
               ))}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

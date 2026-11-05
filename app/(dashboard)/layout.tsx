@@ -3,7 +3,6 @@ import { headers } from 'next/headers'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
-import { PlexusBackground } from '@/components/ui/PlexusBackground'
 import { Toaster } from '@/components/ui/toaster'
 import { checkLicense } from '@/lib/license-check'
 import { arqueoPendienteDe } from '@/lib/arqueos'
@@ -223,21 +222,22 @@ export default async function DashboardLayout({
 
   return (
     <>
-      {/* Capa 1: blobs de color grandes DETRÁS de todo. */}
+      {/* Fondo estático rosa → azul sin pasar por morado.
+          Antes había 5 blobs (pink + fuchsia + violet + sky + indigo) +
+          canvas animado PlexusBackground. El cóctel se veía morado donde
+          se mezclaban los colores y el canvas consumía GPU en cada
+          frame al navegar. Se reemplazó por:
+            • base lineal rosa-oscuro → slate neutro → azul-oscuro
+              (slate en el medio evita que rosa + azul generen morado),
+            • un solo blob rosa arriba-izquierda,
+            • un solo blob azul abajo-derecha,
+          suficientemente separados para no superponerse. 100% CSS,
+          cero animación. Si se quiere restaurar el canvas o los blobs
+          anteriores, revivir desde el histórico de git. */}
       <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden print:hidden" style={{ zIndex: -20 }}>
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-800 to-indigo-950" />
-        <div className="absolute -top-40 -left-40 w-[720px] h-[720px] rounded-full bg-pink-500/40 blur-[140px]" />
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[900px] h-[900px] rounded-full bg-sky-500/35 blur-[160px]" />
-        <div className="absolute -bottom-40 -right-40 w-[760px] h-[760px] rounded-full bg-violet-500/40 blur-[150px]" />
-        <div className="absolute top-20 right-1/4 w-[560px] h-[560px] rounded-full bg-fuchsia-500/30 blur-[130px]" />
-        <div className="absolute bottom-20 left-1/4 w-[600px] h-[600px] rounded-full bg-indigo-500/30 blur-[130px]" />
-      </div>
-
-      {/* Capa 2: constelaciones ENCIMA de los blobs (canvas transparente,
-          partículas más grandes para que el backdrop-blur las agrande sin
-          saturar). */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden print:hidden" style={{ zIndex: -10 }}>
-        <PlexusBackground transparentBg nodeScale={1.6} />
+        <div className="absolute inset-0 bg-gradient-to-br from-rose-950 via-slate-950 to-sky-950" />
+        <div className="absolute -top-40 -left-40 w-[720px] h-[720px] rounded-full bg-pink-500/35 blur-[140px]" />
+        <div className="absolute -bottom-40 -right-40 w-[760px] h-[760px] rounded-full bg-sky-500/35 blur-[150px]" />
       </div>
 
       <DashboardShell

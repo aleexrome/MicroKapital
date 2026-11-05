@@ -235,9 +235,13 @@ export default async function DashboardLayout({
           cero animación. Si se quiere restaurar el canvas o los blobs
           anteriores, revivir desde el histórico de git. */}
       <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden print:hidden" style={{ zIndex: -20 }}>
-        <div className="absolute inset-0 bg-gradient-to-br from-rose-950 via-slate-950 to-sky-950" />
-        <div className="absolute -top-40 -left-40 w-[720px] h-[720px] rounded-full bg-pink-500/35 blur-[140px]" />
-        <div className="absolute -bottom-40 -right-40 w-[760px] h-[760px] rounded-full bg-sky-500/35 blur-[150px]" />
+        {/* Base: rose-900 (más claro que -950) + slate-900 neutro + sky-900.
+            Blobs: pink-400 y sky-400 (más vivos que -500) al 70% de opacidad,
+            más grandes (1000px) y asomando bien en pantalla para que el color
+            se perciba sin ensuciar las glass-cards. */}
+        <div className="absolute inset-0 bg-gradient-to-br from-rose-900 via-slate-900 to-sky-900" />
+        <div className="absolute -top-60 -left-60 w-[1000px] h-[1000px] rounded-full bg-pink-400/70 blur-[160px]" />
+        <div className="absolute -bottom-60 -right-60 w-[1000px] h-[1000px] rounded-full bg-sky-400/70 blur-[160px]" />
       </div>
 
       <DashboardShell

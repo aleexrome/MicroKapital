@@ -108,6 +108,20 @@ export async function POST(req: NextRequest) {
     .join('')
     .slice(0, 4)
 
+  // yaContabilizado se calcula también aquí (ya lo tenemos en los datos
+  // pre-cargados del schedule) para decidir si pre-generar número de ticket.
+  // generateTicketNumber usa el prisma global, no tx — dentro de $transaction
+  // deadlockea con pgbouncer + connection_limit=1 (la transacción tiene la
+  // única conexión y el generador pide otra) → timeout → Vercel HTML 500 →
+  // Safari iOS tira "The string did not match the expected pattern".
+  const yaContabilizadoPre =
+    schedule.estado === 'PAID' &&
+    Number(schedule.montoPagado) >= Number(schedule.montoEsperado)
+  const numeroTicketPre = yaContabilizadoPre
+    ? null
+    : await generateTicketNumber(branchPrefix, new Date().getFullYear())
+  const qrCodePre = numeroTicketPre ? generateTicketQrData(numeroTicketPre) : null
+
   await prisma.$transaction(async (tx) => {
     const now = new Date()
 
@@ -208,22 +222,21 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // 6. Generar ticket
-    const year = now.getFullYear()
-    const numeroTicket = await generateTicketNumber(branchPrefix, year)
-    const qrCode = generateTicketQrData(numeroTicket)
-
-    await tx.ticket.create({
-      data: {
-        paymentId: payment.id,
-        companyId: companyId!,
-        branchId: loan.branchId,
-        numeroTicket,
-        impresoPorId: payment.cobradorId,
-        qrCode,
-      },
-    })
-  })
+    // 6. Ticket — número generado antes de la transacción (ver nota arriba)
+    //    para evitar deadlock con pgbouncer + connection_limit=1.
+    if (numeroTicketPre && qrCodePre) {
+      await tx.ticket.create({
+        data: {
+          paymentId: payment.id,
+          companyId: companyId!,
+          branchId: loan.branchId,
+          numeroTicket: numeroTicketPre,
+          impresoPorId: payment.cobradorId,
+          qrCode: qrCodePre,
+        },
+      })
+    }
+  }, { timeout: 20000, maxWait: 10000 })
 
   createAuditLog({
     userId,

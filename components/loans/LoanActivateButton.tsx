@@ -68,7 +68,19 @@ export function LoanActivateButton({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const data = await res.json()
+      // Safari iOS tira "The string did not match the expected pattern" si
+      // res.json() se ejecuta sobre HTML (p. ej. 500 Vercel). Parseamos
+      // defensivamente para mostrar el error real al usuario.
+      const raw = await res.text()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any = {}
+      try { data = raw ? JSON.parse(raw) : {} } catch {
+        throw new Error(
+          res.ok
+            ? 'El servidor devolvió una respuesta inválida.'
+            : `El servidor respondió ${res.status}. Intenta de nuevo.`
+        )
+      }
       if (!res.ok) throw new Error(data.error ?? 'Error al activar')
 
       if (data.seguroPendiente) {
@@ -111,7 +123,17 @@ export function LoanActivateButton({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       })
-      const data = await res.json()
+      // Safari iOS safe parse (ver nota arriba).
+      const raw = await res.text()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any = {}
+      try { data = raw ? JSON.parse(raw) : {} } catch {
+        throw new Error(
+          res.ok
+            ? 'El servidor devolvió una respuesta inválida.'
+            : `El servidor respondió ${res.status}. Intenta de nuevo.`
+        )
+      }
       if (!res.ok) throw new Error(data.error ?? 'Error al activar')
       toast({
         title: 'Credito activado',

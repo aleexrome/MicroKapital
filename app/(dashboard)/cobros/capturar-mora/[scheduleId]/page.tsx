@@ -92,11 +92,21 @@ export default function CapturarMoraPage({ params }: { params: { scheduleId: str
           body: JSON.stringify(body),
         },
       )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error ?? 'Error al cobrar la mora')
+      // Safari iOS tira "The string did not match the expected pattern" si
+      // res.json() se ejecuta sobre HTML (p. ej. 500 Vercel). Leemos texto
+      // y parseamos en try/catch para que suba el error real al usuario.
+      const raw = await res.text()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let parsed: any = {}
+      try { parsed = raw ? JSON.parse(raw) : {} } catch {
+        throw new Error(
+          res.ok
+            ? 'El servidor devolvió una respuesta inválida.'
+            : `El servidor respondió ${res.status}. Intenta de nuevo.`
+        )
       }
-      const { data } = await res.json()
+      if (!res.ok) throw new Error(parsed.error ?? 'Error al cobrar la mora')
+      const data = parsed.data
 
       // TRANSFER queda pendiente igual que en pagos normales.
       if (metodoPago === 'TRANSFER') {

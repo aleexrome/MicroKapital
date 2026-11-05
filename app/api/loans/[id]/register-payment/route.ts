@@ -238,6 +238,19 @@ export async function POST(
     .slice(0, 4)
   const targetBranchId = sessionBranchId ?? loan.branchId
 
+  // Generar número de ticket ANTES de abrir la transacción. Antes se
+  // llamaba desde dentro de prisma.$transaction, pero generateTicketNumber
+  // usa el prisma global (no tx) y hace 2+ queries. Con pgbouncer +
+  // connection_limit=1 eso dejaba a la transacción esperando una segunda
+  // conexión que nunca llegaba → timeout → Vercel devolvía HTML → Safari
+  // iOS tiraba "The string did not match the expected pattern".
+  const willEmitTicket = feeTotal > 0
+  const yearForTicket = now.getFullYear()
+  const numeroTicketPre = willEmitTicket
+    ? await generateTicketNumber(branchPrefix, yearForTicket)
+    : null
+  const qrCodePre = numeroTicketPre ? generateTicketQrData(numeroTicketPre) : null
+
   const result = await prisma.$transaction(async (tx) => {
     // 1. Un Payment por integrante con su tarifa individual.
     // El ticket grupal (CASH) se asocia al primer Payment (coordinadora).
@@ -300,26 +313,25 @@ export async function POST(
     })
 
     // 4. Ticket — un solo ticket por el total grupal, asociado al
-    //    primer Payment (coordinadora).
+    //    primer Payment (coordinadora). El número se generó antes de la
+    //    transacción (ver nota arriba) para evitar deadlock con
+    //    pgbouncer + connection_limit=1.
     let ticket = null
-    if (feeTotal > 0 && payments[0]) {
-      const year = now.getFullYear()
-      const numeroTicket = await generateTicketNumber(branchPrefix, year)
-      const qrCode = generateTicketQrData(numeroTicket)
+    if (numeroTicketPre && qrCodePre && payments[0]) {
       ticket = await tx.ticket.create({
         data: {
           paymentId: payments[0]!.id,
           companyId: companyId!,
           branchId: targetBranchId!,
-          numeroTicket,
+          numeroTicket: numeroTicketPre,
           impresoPorId: userId,
-          qrCode,
+          qrCode: qrCodePre,
         },
       })
     }
 
     return { payments, ticket }
-  })
+  }, { timeout: 20000, maxWait: 10000 })
 
   createAuditLog({
     userId,

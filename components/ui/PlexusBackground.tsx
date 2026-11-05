@@ -145,33 +145,61 @@ export function PlexusBackground({ transparentBg = false, nodeScale = 1 }: Plexu
       }
     }
 
-    function loop() {
-      update()
-      draw()
+    // Loop a ~30fps (en vez de 60). El movimiento del plexus es sutil,
+    // nadie percibe la diferencia pero la GPU hace la mitad del trabajo
+    // y deja de competir con el render de las cards glass del dashboard.
+    const FRAME_MS = 1000 / 30
+    let lastFrame = 0
+    function loop(ts: number) {
+      if (ts - lastFrame >= FRAME_MS) {
+        update()
+        draw()
+        lastFrame = ts
+      }
       animId = requestAnimationFrame(loop)
     }
 
-    // Pausa el canvas cuando la pestaña está oculta — evita quemar GPU
-    // mientras el usuario está en otra tab o minimizado. Al volver,
-    // reanuda. No hay cambio visual: solo deja de calcular frames que
-    // nadie ve. Las nuevas pantallas se sienten más fluidas porque el
-    // raf no compite con el render de Next en la navegación.
+    // Pausas agresivas: tab oculta, navegación (visibilitychange +
+    // beforeunload + pageshow). Evita que el canvas siga quemando GPU
+    // mientras Next está hidratando la nueva pantalla — el síntoma
+    // clásico de "aprieto el menú y tarda 5s" se arreglaba casi del todo
+    // con esto sumado al 30fps.
+    let paused = false
+    function pause() {
+      if (paused) return
+      paused = true
+      if (animId) cancelAnimationFrame(animId)
+    }
+    function resume() {
+      if (!paused) return
+      paused = false
+      lastFrame = 0
+      animId = requestAnimationFrame(loop)
+    }
     function onVisibility() {
-      if (document.visibilityState === 'hidden') {
-        if (animId) cancelAnimationFrame(animId)
-      } else {
-        animId = requestAnimationFrame(loop)
-      }
+      if (document.visibilityState === 'hidden') pause()
+      else resume()
+    }
+    // Mientras hace scroll, la GPU ya está ocupada moviendo cards —
+    // apagamos el canvas y lo retomamos 400ms después del último scroll.
+    let scrollTimer: ReturnType<typeof setTimeout> | null = null
+    function onScroll() {
+      pause()
+      if (scrollTimer) clearTimeout(scrollTimer)
+      scrollTimer = setTimeout(resume, 400)
     }
 
     resize()
-    loop()
+    animId = requestAnimationFrame(loop)
     document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('scroll', onScroll, { passive: true })
 
     window.addEventListener('resize', resize)
     return () => {
       cancelAnimationFrame(animId)
+      if (scrollTimer) clearTimeout(scrollTimer)
       window.removeEventListener('resize', resize)
+      window.removeEventListener('scroll', onScroll)
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [transparentBg, nodeScale])

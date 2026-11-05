@@ -162,35 +162,28 @@
      Al hover intensifica el borde + glow + se levanta. */
   .glass-hover-card {
     position: relative;
-    background-color: rgba(30, 27, 58, 0.22) !important;
-    /* contrast + brightness + saturate dan la sensación de "aumento"
-       del contenido detrás (el blur solo lo difumina). */
-    backdrop-filter: blur(20px) saturate(200%) contrast(115%) brightness(115%);
-    -webkit-backdrop-filter: blur(20px) saturate(200%) contrast(115%) brightness(115%);
-    /* translateZ(0) sube el elemento a su propia capa compositor
-       — el backdrop-filter se cachea en GPU en vez de recalcularse
-       en cada scroll o navegación. Sin esto, páginas con muchas
-       cards se sienten lentas al cambiar de pantalla.
-       NOTA: will-change va solo en :hover, no base, porque muchas
-       capas simultáneas con will-change consumen demasiada VRAM. */
-    transform: translateZ(0);
+    /* Bg más opaco compensa la pérdida del blur permanente: a simple
+       vista se sigue viendo oscuro/translúcido pero sin obligar a la
+       GPU a samplear el contenido de atrás por cada card. */
+    background-color: rgba(30, 27, 58, 0.72) !important;
     /* contain:paint le dice al browser que lo que se dibuja dentro
        de la card NO afecta elementos fuera. Permite saltar reflows
-       en cadena durante scroll/navegación. 100% invisible visualmente. */
+       en cadena durante scroll/navegación. */
     contain: paint;
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.22),
       0 8px 24px rgba(0, 0, 0, 0.25) !important;
-    /* Transición de backdrop-filter es costosa — la quitamos del
-       transition para que el :hover la cambie de golpe. Las sombras,
-       transform y colores sí transicionan suavemente. Imperceptible
-       porque el usuario no distingue 180ms de salto en el blur. */
     transition: box-shadow 180ms ease,
                 background-color 180ms ease,
                 border-color 180ms ease,
                 transform 180ms ease;
   }
+  /* El efecto GLASS solo vive en hover: cuando el user pasa el mouse
+     sobre UNA card, el blur se activa en ESA card y nada más. Antes
+     estaba en base (218 cards blurreando al mismo tiempo + canvas
+     animado = "composite thrashing" → navegación lenta). Ahora el
+     glass es una respuesta a interacción, no un estado permanente. */
   .glass-hover-card:hover {
     will-change: backdrop-filter, transform;
     background-color: rgba(30, 27, 58, 0.18) !important;

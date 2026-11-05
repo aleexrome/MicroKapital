@@ -77,7 +77,19 @@ export function RegistrarPagoDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const data = await res.json()
+      // Safari iOS tira "The string did not match the expected pattern" si
+      // hacemos res.json() y el server devolvió HTML (p. ej. 500 Vercel).
+      // Leemos el texto primero y parseamos en try/catch para mostrar el
+      // error real.
+      const raw = await res.text()
+      let data: { error?: string; message?: string } = {}
+      try { data = raw ? JSON.parse(raw) : {} } catch {
+        throw new Error(
+          res.ok
+            ? 'El servidor devolvió una respuesta inválida.'
+            : `El servidor respondió ${res.status}. Intenta de nuevo.`
+        )
+      }
       if (!res.ok) throw new Error(data.error ?? 'Error al registrar el pago')
       toast({ title: 'Pago de comisión registrado' })
       onClose()

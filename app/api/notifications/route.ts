@@ -52,10 +52,16 @@ export async function GET(req: NextRequest) {
     where.tipo = { startsWith: tipoPrefix }
   }
 
+  // Antes se hacían 4 queries en Promise.all (findMany + 3 counts). Con
+  // pgbouncer en transaction mode + connection_limit=1, Prisma envuelve
+  // Promise.all en una transacción interactiva (BEGIN...COMMIT). Ese
+  // BEGIN mismo agregaba 1-5s de latencia por round-trips.
+  // Ahora: 2 queries secuenciales (sin BEGIN implícito):
+  //   1. findMany para los items.
+  //   2. $queryRaw que devuelve los 3 counts en UNA sola pasada con
+  //      COUNT(*) FILTER. Postgres resuelve los 3 en un solo scan.
   const items = await prisma.notification.findMany({
     where,
-    // Críticas primero, luego importantes, luego por fecha. (orden de
-    // nivel se hace en cliente porque Prisma no ordena por string custom).
     orderBy: [{ esCritica: 'desc' }, { createdAt: 'desc' }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -78,14 +84,23 @@ export async function GET(req: NextRequest) {
   const hasMore = items.length > limit
   const data = hasMore ? items.slice(0, limit) : items
 
-  // Conteos rápidos para badges
-  const noExpiradas = { OR: [{ expiraAt: null }, { expiraAt: { gt: now } }] }
-  const [noLeidasCount, criticasCount, importantesNoLeidas] = await Promise.all([
-    prisma.notification.count({ where: { userId, companyId, leidaAt: null, ...noExpiradas } }),
-    // críticas siempre cuentan (no se pueden marcar leídas)
-    prisma.notification.count({ where: { userId, companyId, nivel: 'CRITICA', ...noExpiradas } }),
-    prisma.notification.count({ where: { userId, companyId, nivel: 'IMPORTANTE', leidaAt: null, ...noExpiradas } }),
-  ])
+  const countsRows = await prisma.$queryRaw<Array<{
+    no_leidas: bigint
+    criticas: bigint
+    importantes_no_leidas: bigint
+  }>>`
+    SELECT
+      COUNT(*) FILTER (WHERE "leidaAt" IS NULL)                                       AS no_leidas,
+      COUNT(*) FILTER (WHERE "nivel" = 'CRITICA')                                     AS criticas,
+      COUNT(*) FILTER (WHERE "nivel" = 'IMPORTANTE' AND "leidaAt" IS NULL)            AS importantes_no_leidas
+    FROM "Notification"
+    WHERE "userId" = ${userId}
+      AND "companyId" = ${companyId}
+      AND ("expiraAt" IS NULL OR "expiraAt" > ${now})
+  `
+  const noLeidasCount       = Number(countsRows[0]?.no_leidas ?? 0)
+  const criticasCount       = Number(countsRows[0]?.criticas ?? 0)
+  const importantesNoLeidas = Number(countsRows[0]?.importantes_no_leidas ?? 0)
 
   return NextResponse.json({
     items: data,

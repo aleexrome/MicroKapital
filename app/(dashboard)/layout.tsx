@@ -15,6 +15,13 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
+  // PERF_LOG=true loguea tiempo total de render por ruta del dashboard.
+  // Vemos en Vercel logs si una ruta particular es la lenta (vs. ser
+  // problema general de latencia red / pool).
+  const perfLog = process.env.PERF_LOG === 'true'
+  const startedAt = perfLog ? Date.now() : 0
+  const perfPath  = perfLog ? (headers().get('x-pathname') ?? '?') : ''
+
   const session = await getSession()
   if (!session?.user) redirect('/login')
 
@@ -208,6 +215,10 @@ export default async function DashboardLayout({
     userFotoUrl = u?.fotoPerfilUrl ?? null
   } catch (e) {
     console.error('[Layout] Error fetching user extras:', e)
+  }
+
+  if (perfLog) {
+    console.log(`[PERF] layout ${perfPath} ${Date.now() - startedAt}ms`)
   }
 
   return (

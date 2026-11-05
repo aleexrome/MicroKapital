@@ -567,13 +567,11 @@ export default async function BancaPage({
       grandMorasPendientes += b.totalMorasPendientes
     }
   }
-  // Neto para banca = TODO lo que entró en banca (sea físicamente por
-  // cortes = efectivo + tarjeta, O ya directo por transferencia) + los
-  // aportes de Dirección, menos desembolsos y retiros. Antes se dejaba
-  // fuera transferencia pensando que ya estaba en banca y por lo tanto
-  // "no cuenta al neto", pero eso dejaba al neto subestimando lo que
-  // la sucursal le representa a la empresa.
-  const grandNeto = grandCortes + grandTransferencia + grandAdicional - grandDesembolsos - grandRetiro
+  // Neto para banca = SOLO dinero físico (cortes = efectivo + tarjeta)
+  // + aportes - desembolsos - retiros. Las transferencias NO entran
+  // porque caen directamente en las cuentas de la empresa — no son
+  // dinero que la sucursal le entregue aparte.
+  const grandNeto = grandCortes + grandAdicional - grandDesembolsos - grandRetiro
 
   const sucursalNombre = sucursalFilter
     ? branches.find((b) => b.id === sucursalFilter)?.nombre ?? null
@@ -675,11 +673,10 @@ export default async function BancaPage({
             a.branchName.localeCompare(b.branchName)
           )
           const weekCortes = branchesSorted.reduce((s, b) => s + b.totalCortes, 0)
-          const weekTransfer = branchesSorted.reduce((s, b) => s + b.totalTransferencia, 0)
           const weekDesembolsos = branchesSorted.reduce((s, b) => s + b.totalDesembolsos, 0)
           const weekAdicional = branchesSorted.reduce((s, b) => s + b.totalAdicional, 0)
           const weekRetiro = branchesSorted.reduce((s, b) => s + b.totalRetiro, 0)
-          const weekNeto = weekCortes + weekTransfer + weekAdicional - weekDesembolsos - weekRetiro
+          const weekNeto = weekCortes + weekAdicional - weekDesembolsos - weekRetiro
 
           return (
             <Card key={week.key}>
@@ -700,7 +697,7 @@ export default async function BancaPage({
               </CardHeader>
               <CardContent className="space-y-4">
                 {branchesSorted.map((b) => {
-                  const neto = b.totalCortes + b.totalTransferencia + b.totalAdicional - b.totalDesembolsos - b.totalRetiro
+                  const neto = b.totalCortes + b.totalAdicional - b.totalDesembolsos - b.totalRetiro
                   const cortesRows = Array.from(b.cortes.values()).sort(
                     (x, y) => x.fecha.getTime() - y.fecha.getTime() || x.cobrador.localeCompare(y.cobrador)
                   )
@@ -733,7 +730,7 @@ export default async function BancaPage({
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Transferencia</p>
-                          <p className="font-semibold text-blue-300 money" title="Ya está en banca — sí suma al neto">
+                          <p className="font-semibold text-blue-300 money" title="Cae directo en cuentas de la empresa — no suma al neto físico de sucursal">
                             {b.totalTransferencia > 0 ? formatMoney(b.totalTransferencia) : formatMoney(0)}
                           </p>
                         </div>

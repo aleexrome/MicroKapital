@@ -725,7 +725,9 @@ export default async function RutaDetallePage({
       ? (session.user.zonaBranchIds as string[])
       : branchId ? [branchId] : []
 
-    // 1. Get users in the branch
+    // 1. Get users in the branch — traemos también branchId + nombre
+    //    de sucursal para agrupar en la UI (GZ con varias sucursales
+    //    quiere ver sus coord separados por sucursal, no en lista plana).
     const usuarios = await prisma.user.findMany({
       where: {
         companyId: companyId!,
@@ -733,7 +735,11 @@ export default async function RutaDetallePage({
         rol: { in: ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL'] },
         activo: true,
       },
-      select: { id: true, nombre: true, rol: true, fotoPerfilUrl: true },
+      select: {
+        id: true, nombre: true, rol: true, fotoPerfilUrl: true,
+        branchId: true,
+        branch:   { select: { nombre: true } },
+      },
       orderBy: { nombre: 'asc' },
     })
 
@@ -742,11 +748,22 @@ export default async function RutaDetallePage({
     if (!allUsers.find((u) => u.id === userId)) {
       const me = await prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, nombre: true, rol: true, fotoPerfilUrl: true },
+        select: {
+          id: true, nombre: true, rol: true, fotoPerfilUrl: true,
+          branchId: true,
+          branch:   { select: { nombre: true } },
+        },
       })
       if (me) allUsers.unshift(me)
     }
     const allIds = allUsers.map((u) => u.id)
+
+    // Catálogo de sucursales del GZ (para agrupar más abajo)
+    const branchCatalog = await prisma.branch.findMany({
+      where:  { id: { in: branchIds } },
+      select: { id: true, nombre: true },
+      orderBy:{ nombre: 'asc' },
+    })
 
     // 2. Fetch schedule and loan data for those users
     const [wSchedules, wLoans] = await Promise.all([
@@ -835,6 +852,8 @@ export default async function RutaDetallePage({
         nombre: u.nombre,
         rolLabel: ROL_LABEL_MAP[u.rol] ?? u.rol,
         fotoUrl: u.fotoPerfilUrl ?? null,
+        branchId:     u.branchId,
+        branchNombre: u.branch?.nombre ?? null,
         // Totales combinados para encabezado + agregado de sucursal.
         totalAPagar: propia.totalAPagar + hered.totalAPagar,
         totalCobrado: propia.totalCobrado + hered.totalCobrado,
@@ -848,6 +867,29 @@ export default async function RutaDetallePage({
         heredada: hayHered ? hered : null,
       }
     })
+
+    // Agrupar por sucursal — solo cuando el GZ cubre más de una.
+    type StatRow = (typeof stats)[number]
+    const porSucursal = new Map<string, { branchId: string; branchNombre: string; items: StatRow[] }>()
+    for (const s of stats) {
+      if (!s.branchId) continue
+      const prev = porSucursal.get(s.branchId) ?? {
+        branchId:     s.branchId,
+        branchNombre: s.branchNombre ?? branchCatalog.find((b) => b.id === s.branchId)?.nombre ?? '—',
+        items:        [],
+      }
+      prev.items.push(s)
+      porSucursal.set(s.branchId, prev)
+    }
+    // Sucursales que no tienen coord pero deben aparecer vacías igual
+    for (const b of branchCatalog) {
+      if (!porSucursal.has(b.id)) {
+        porSucursal.set(b.id, { branchId: b.id, branchNombre: b.nombre, items: [] })
+      }
+    }
+    const sucursalesOrdenadas = Array.from(porSucursal.values())
+      .sort((a, b) => a.branchNombre.localeCompare(b.branchNombre))
+    const mostrarAgrupado = sucursalesOrdenadas.length > 1
 
     // Total de la sucursal — calculado directamente sobre wSchedules/wLoans
     // (no sumando las tarjetas) porque la tarjeta del gerente sin cartera
@@ -902,21 +944,56 @@ export default async function RutaDetallePage({
         </div>
 
         <div>
-          <h2 className="text-base font-semibold text-gray-900 mb-3">Coordinadores ({stats.length})</h2>
           {/* Cards clickables — navegan al detalle del coordinador con
               ?u=<userId>. Desde ahí el Gerente puede imprimir la lista
               detallada por cliente (la misma que ve el coordinador). */}
-          <div className="space-y-3">
-            {stats.map((s) => (
-              <Link
-                key={s.id}
-                href={`/rutas/${params.semana}?u=${s.id}`}
-                className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
-              >
-                <CobradorCard {...s} />
-              </Link>
-            ))}
-          </div>
+          {!mostrarAgrupado ? (
+            <>
+              <h2 className="text-base font-semibold text-gray-900 mb-3">Coordinadores ({stats.length})</h2>
+              <div className="space-y-3">
+                {stats.map((s) => (
+                  <Link
+                    key={s.id}
+                    href={`/rutas/${params.semana}?u=${s.id}`}
+                    className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
+                  >
+                    <CobradorCard {...s} />
+                  </Link>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-6">
+              {sucursalesOrdenadas.map((suc) => (
+                <section key={suc.branchId} className="space-y-3">
+                  <div className="flex items-end justify-between flex-wrap gap-2 border-b border-border/40 pb-2">
+                    <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      {suc.branchNombre}
+                    </h2>
+                    <span className="text-xs text-muted-foreground">
+                      {suc.items.length} coord{suc.items.length === 1 ? '' : 'inadores'}
+                    </span>
+                  </div>
+                  {suc.items.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic py-2">Sin coordinadores activos esta semana.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {suc.items.map((s) => (
+                        <Link
+                          key={s.id}
+                          href={`/rutas/${params.semana}?u=${s.id}`}
+                          className="block rounded-xl hover:shadow-md hover:border-primary-300 transition-all"
+                        >
+                          <CobradorCard {...s} />
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* El imprimir agregado se removió a propósito: no servía de nada

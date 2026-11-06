@@ -97,8 +97,14 @@ function DescargarPdfSucursalButton({ branchId, nombre }: { branchId: string; no
     try {
       const res = await fetch(`/api/reportes/ejecutivo/pdf?branchId=${encodeURIComponent(branchId)}`)
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        throw new Error(d.error ?? `Error ${res.status}`)
+        // En vez de res.json() directo (que en Safari iOS tira
+        // "The string did not match the expected pattern" si la respuesta
+        // es HTML — típico 504 Gateway Timeout de Vercel), leemos texto
+        // y parseamos defensivamente.
+        const raw = await res.text().catch(() => '')
+        let d: { error?: string } = {}
+        try { d = raw ? JSON.parse(raw) : {} } catch { /* HTML/no-json */ }
+        throw new Error(d.error ?? `Error ${res.status}. Intenta de nuevo.`)
       }
       const blob = await res.blob()
       const url  = URL.createObjectURL(blob)

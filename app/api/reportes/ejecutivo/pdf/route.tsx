@@ -5,6 +5,13 @@ import { prisma } from '@/lib/prisma'
 import { getReporteEjecutivoSemanal } from '@/lib/reportes/ejecutivo'
 import { ReporteEjecutivoPDF } from '@/lib/reportes/pdf/ReporteEjecutivoPDF'
 
+// Subimos el límite de la lambda a 60s. Default de Vercel para serverless
+// functions es 10s — con getReporteEjecutivoSemanal + renderToBuffer PDF
+// la petición solía tronar con 504 "Gateway Timeout" y Safari mostraba
+// "The string did not match the expected pattern" al intentar leer como
+// JSON la página HTML de error de Vercel.
+export const maxDuration = 60
+
 const EMAIL_AUTORIZADO = 'alejandro.romero@microkapital.com'
 
 /**
@@ -30,8 +37,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Falta branchId' }, { status: 400 })
   }
 
+  // Pasar branchId filtra todas las queries pesadas a esa sucursal (antes
+  // calculaba TODAS las sucursales de la empresa aunque se pidiera solo una)
+  // — baja el tiempo de ~5-10s a ~1s.
   const [data, empresa] = await Promise.all([
-    getReporteEjecutivoSemanal(session.user.companyId!),
+    getReporteEjecutivoSemanal(session.user.companyId!, branchId),
     prisma.company.findUnique({
       where:  { id: session.user.companyId! },
       select: { nombre: true },

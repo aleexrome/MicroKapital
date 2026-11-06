@@ -89,14 +89,21 @@ function clasificar(score: number): 'verde' | 'amarillo' | 'rojo' {
   return 'rojo'
 }
 
-export async function getReporteEjecutivoSemanal(companyId: string): Promise<ReporteEjecutivo> {
+export async function getReporteEjecutivoSemanal(
+  companyId: string,
+  // Opcional: si se pasa, todas las queries pesadas se restringen a esa
+  // sucursal. Reduce drásticamente el tiempo del PDF por sucursal (antes
+  // calculaba TODAS las sucursales de la empresa aunque se pidiera una) y
+  // evita que la lambda de Vercel timee a los 10 s default.
+  branchId?: string
+): Promise<ReporteEjecutivo> {
   // Semana Rutas: sábado 00:00 UTC → viernes 23:59 UTC CDMX
   const saturday = getSaturday(new Date())
   const friday   = getFriday(saturday)
   const ahora    = new Date()
 
   const branches = await prisma.branch.findMany({
-    where:  { companyId, activa: true },
+    where:  { companyId, activa: true, ...(branchId ? { id: branchId } : {}) },
     select: {
       id: true,
       nombre: true,
@@ -153,6 +160,7 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
         companyId,
         estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
         AND: [loanNotDeletedWhere],
+        ...(branchId ? { branchId } : {}),
       },
     },
     select: {
@@ -233,6 +241,7 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
       estado: { in: ['ACTIVE', 'LIQUIDATED'] },
       fechaDesembolso: { gte: saturday, lte: friday },
       AND: [loanNotDeletedWhere],
+      ...(branchId ? { branchId } : {}),
     },
     select: { capital: true, cobradorId: true, branchId: true },
   })
@@ -246,6 +255,7 @@ export async function getReporteEjecutivoSemanal(companyId: string): Promise<Rep
       companyId,
       activo: true,
       rol: { in: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL'] },
+      ...(branchId ? { branchId } : {}),
     },
     select: { id: true, nombre: true, rol: true, branchId: true },
     orderBy: { nombre: 'asc' },

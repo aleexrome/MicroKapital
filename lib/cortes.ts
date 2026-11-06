@@ -13,6 +13,7 @@
 
 import type { PrismaClient, UserRole } from '@prisma/client'
 import { todayMx, inicioSemanaMk } from '@/lib/timezone'
+import { loanNotDeletedWhere } from '@/lib/access'
 
 /** Roles que deben hacer corte del día (cobran en campo o concentran). */
 export const ROLES_HACEN_CORTE: readonly UserRole[] = [
@@ -1273,5 +1274,119 @@ function baseDesglose(
       transferPendientesMonto: transferPendientes.reduce((s, t) => s + t.monto, 0),
       transferPendientesCount: transferPendientes.length,
     },
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════
+//  NETO BANCA — fuente de verdad del consolidado del viernes
+// ═════════════════════════════════════════════════════════════════════
+
+/**
+ * Qué debe entregar la concentradora al DG/DC este viernes, calculado
+ * EXACTAMENTE con la misma fórmula que la vista Banca:
+ *
+ *   Neto = Σ Payment(CASH+CARD)      // dinero físico que entró en semana
+ *        + Σ BranchExtraFund          // aportes de Dirección
+ *        − Σ Loan.montoReal           // desembolsos netos
+ *        − Σ BranchWithdrawal         // retiros de Dirección
+ *
+ * Suma TODAS las sucursales donde el user figura como concentrador.
+ * Para una concentradora con varias sucursales (ej. Carol ↔ Tenancingo II
+ * + Minatitlán) agrega el Neto de cada una.
+ *
+ * Transferencias se reportan aparte (son informativas — ya entraron al
+ * banco directo) y NO forman parte del Neto a entregar en físico.
+ *
+ * Decisión Dirección 2026-11: el consolidado deja de ser "suma de
+ * parciales aceptados" (no cuadraba con Banca porque los parciales
+ * agregaban efectivo + transferencias sin restar desembolsos ni sumar
+ * adicionales). El dinero que efectivamente debe llegar a Dirección es
+ * el Neto Banca de la semana, no la suma de parciales.
+ */
+export async function netoBancaConcentradoraSemana(
+  prisma: PrismaClient,
+  userId: string,
+  fecha: Date,
+): Promise<{
+  branchIds:            string[]
+  branchNombres:        string[]
+  desde:                Date
+  hasta:                Date
+  totalCortes:          number  // efectivo + tarjeta (físico)
+  totalTransferencia:   number  // informativo
+  totalDesembolsos:     number
+  totalAdicional:       number
+  totalRetiro:          number
+  neto:                 number
+}> {
+  const desde = inicioSemanaMk(fecha)
+  // Viernes 23:59:59 CDMX = sábado siguiente 05:59:59 UTC
+  const hasta = new Date(desde.getTime() + 7 * 24 * 60 * 60 * 1000 - 1)
+
+  const branches = await prisma.branch.findMany({
+    where:  { concentradorUserId: userId, activa: true },
+    select: { id: true, nombre: true },
+  })
+  const branchIds = branches.map((b) => b.id)
+  if (branchIds.length === 0) {
+    return {
+      branchIds: [], branchNombres: [], desde, hasta,
+      totalCortes: 0, totalTransferencia: 0,
+      totalDesembolsos: 0, totalAdicional: 0, totalRetiro: 0, neto: 0,
+    }
+  }
+
+  const [pagosCashCard, pagosTransfer, desembolsos, adicionales, retiros] = await Promise.all([
+    prisma.payment.aggregate({
+      where: {
+        canceledAt: null,
+        fechaHora: { gte: desde, lte: hasta },
+        metodoPago: { in: ['CASH', 'CARD'] },
+        loan: { branchId: { in: branchIds }, AND: [loanNotDeletedWhere] },
+      },
+      _sum: { monto: true },
+    }),
+    prisma.payment.aggregate({
+      where: {
+        canceledAt: null,
+        fechaHora: { gte: desde, lte: hasta },
+        metodoPago: 'TRANSFER',
+        loan: { branchId: { in: branchIds }, AND: [loanNotDeletedWhere] },
+      },
+      _sum: { monto: true },
+    }),
+    prisma.loan.aggregate({
+      where: {
+        branchId: { in: branchIds },
+        AND: [loanNotDeletedWhere],
+        fechaDesembolso: { gte: desde, lte: hasta },
+        estado: { in: ['ACTIVE', 'LIQUIDATED', 'RESTRUCTURED', 'DEFAULTED'] },
+      },
+      _sum: { montoReal: true },
+    }),
+    prisma.branchExtraFund.aggregate({
+      where: { branchId: { in: branchIds }, fecha: { gte: desde, lte: hasta } },
+      _sum:  { monto: true },
+    }),
+    prisma.branchWithdrawal.aggregate({
+      where: { branchId: { in: branchIds }, fecha: { gte: desde, lte: hasta } },
+      _sum:  { monto: true },
+    }),
+  ])
+
+  const totalCortes         = Number(pagosCashCard._sum.monto ?? 0)
+  const totalTransferencia  = Number(pagosTransfer._sum.monto ?? 0)
+  const totalDesembolsos    = Number(desembolsos._sum.montoReal ?? 0)
+  const totalAdicional      = Number(adicionales._sum.monto ?? 0)
+  const totalRetiro         = Number(retiros._sum.monto ?? 0)
+  const neto = totalCortes + totalAdicional - totalDesembolsos - totalRetiro
+
+  return {
+    branchIds,
+    branchNombres: branches.map((b) => b.nombre),
+    desde, hasta,
+    totalCortes, totalTransferencia,
+    totalDesembolsos, totalAdicional, totalRetiro,
+    neto,
   }
 }

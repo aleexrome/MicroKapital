@@ -41,6 +41,18 @@ export async function POST(
 
   const { rol, companyId, id: userId } = session.user
 
+  // Guard semana MK: si el user ya entregó su corte de hoy, queda
+  // bloqueado el resto del día (ver lib/cortes.ts#yaEntregoCorteHoy).
+  const { yaEntregoCorteHoy } = await import('@/lib/cortes')
+  const bloqueoCorte = await yaEntregoCorteHoy(prisma, { id: userId, rol, branchId: session.user.branchId })
+  if (bloqueoCorte.bloqueado) {
+    return NextResponse.json({
+      error: bloqueoCorte.tipo === 'CONSOLIDADO'
+        ? 'Ya entregaste tu consolidado de hoy. No puedes registrar más cobros hasta mañana.'
+        : 'Ya entregaste tu corte de hoy. No puedes registrar más cobros hasta mañana.',
+    }, { status: 409 })
+  }
+
   const rolesPermitidos = ['COORDINADOR', 'GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN']
   if (!rolesPermitidos.includes(rol)) {
     return NextResponse.json({ error: 'Sin permisos para activar créditos' }, { status: 403 })

@@ -705,6 +705,121 @@ export async function snapshotParcialIncremental(
 }
 
 /**
+ * Semanal MK: lo que un coord lleva cobrado en la semana (sáb→hoy)
+ * menos lo que ya metió en parciales previos no-rechazados de esa
+ * misma semana, menos lo ya "recibido de otros" que haya capturado en
+ * parciales previos. Es el reemplazo semanal de
+ * snapshotParcialIncremental (que solo veía el día actual).
+ *
+ * Fórmula:
+ *   SUM(CashRegister)        sáb..hoy   (cobradoEfectivo/Tarjeta/Transfer)
+ * − SUM(Corte propios)       sáb..hoy   (totalEfectivo/Tarjeta/Transfer, no-RECHAZADO)
+ *   = efectivo/tarjeta/transfer nuevo para este parcial
+ *
+ * Para "recibido de otros":
+ *   SUM(Corte recibidos ACEPTADO) sáb..hoy  (montoAceptado)
+ * − SUM(Corte propios no-RECHAZADO totalRecibidoDeOtros) sáb..hoy
+ */
+export async function snapshotParcialSemanalIncremental(
+  prisma: PrismaClient,
+  userId: string,
+  fecha: Date,
+): Promise<{ efectivo: number; tarjeta: number; transferencia: number; recibidoDeOtros: number; desde: Date }> {
+  const desde = inicioSemanaMk(fecha)
+  const [regs, previos, recibidosPrev] = await Promise.all([
+    prisma.cashRegister.aggregate({
+      where: {
+        cobradorId: userId,
+        fecha: { gte: desde, lte: fecha },
+      },
+      _sum: {
+        cobradoEfectivo:      true,
+        cobradoTarjeta:       true,
+        cobradoTransferencia: true,
+      },
+    }),
+    prisma.corte.aggregate({
+      where: {
+        userId,
+        tipo: 'PARCIAL',
+        fecha: { gte: desde, lte: fecha },
+        estado: { in: ['ABIERTO', 'ENTREGADO', 'ACEPTADO'] },
+      },
+      _sum: {
+        totalEfectivoCobrado:      true,
+        totalTarjetaCobrado:       true,
+        totalTransferenciaCobrado: true,
+        totalRecibidoDeOtros:      true,
+      },
+    }),
+    prisma.corte.aggregate({
+      where: {
+        receptorId: userId,
+        tipo: 'PARCIAL',
+        fecha: { gte: desde, lte: fecha },
+        estado: 'ACEPTADO',
+      },
+      _sum: { montoAceptado: true },
+    }),
+  ])
+  const totalEfectivoSem      = Number(regs._sum.cobradoEfectivo ?? 0)
+  const totalTarjetaSem       = Number(regs._sum.cobradoTarjeta ?? 0)
+  const totalTransferSem      = Number(regs._sum.cobradoTransferencia ?? 0)
+  const yaEfectivo    = Number(previos._sum.totalEfectivoCobrado ?? 0)
+  const yaTarjeta     = Number(previos._sum.totalTarjetaCobrado ?? 0)
+  const yaTransfer    = Number(previos._sum.totalTransferenciaCobrado ?? 0)
+  const yaRecibido    = Number(previos._sum.totalRecibidoDeOtros ?? 0)
+  const recibidoSem   = Number(recibidosPrev._sum.montoAceptado ?? 0)
+  return {
+    efectivo:        Math.max(0, totalEfectivoSem - yaEfectivo),
+    tarjeta:         Math.max(0, totalTarjetaSem  - yaTarjeta),
+    transferencia:   Math.max(0, totalTransferSem - yaTransfer),
+    recibidoDeOtros: Math.max(0, recibidoSem      - yaRecibido),
+    desde,
+  }
+}
+
+/**
+ * ¿El user ya entregó su corte del día y por lo tanto queda BLOQUEADO
+ * para registrar nuevos cobros el resto del día?
+ *
+ *  - Coord normal: tiene al menos un Corte PARCIAL con fecha=hoy en
+ *    estado ENTREGADO o ACEPTADO.
+ *  - Concentradora local: tiene un Corte CONSOLIDADO con fecha=hoy en
+ *    ENTREGADO o ACEPTADO. (Sus parciales propios se auto-aceptan al
+ *    iniciarlos; usarlos como guard la bloquearía apenas abriera el
+ *    primer parcial del día.)
+ *
+ * DG / DC / SUPER_ADMIN nunca se bloquean.
+ */
+export async function yaEntregoCorteHoy(
+  prisma: PrismaClient,
+  user: { id: string; rol: string; branchId: string | null },
+): Promise<{ bloqueado: boolean; corteId?: string; tipo?: 'PARCIAL' | 'CONSOLIDADO' }> {
+  if (esReceptorFinal(user.rol)) return { bloqueado: false }
+  if (!debeHacerCorte(user.rol)) return { bloqueado: false }
+  if (!user.branchId) return { bloqueado: false }
+
+  const hoy = todayMx()
+  const concentrador = await concentradorDeSucursal(prisma, user.branchId)
+  const esConcentrador = concentrador?.id === user.id
+
+  const tipo: 'PARCIAL' | 'CONSOLIDADO' = esConcentrador ? 'CONSOLIDADO' : 'PARCIAL'
+  const row = await prisma.corte.findFirst({
+    where: {
+      userId: user.id,
+      fecha:  hoy,
+      tipo,
+      estado: { in: ['ENTREGADO', 'ACEPTADO'] },
+    },
+    select: { id: true },
+    orderBy: { createdAt: 'desc' },
+  })
+  if (!row) return { bloqueado: false }
+  return { bloqueado: true, corteId: row.id, tipo }
+}
+
+/**
  * Para la CONCENTRADORA: cuánto efectivo propio llevan cobrado en
  * la semana MK (sábado → hoy) que todavía NO entró a un parcial.
  * Se usa el viernes al Iniciar Consolidado para crear automáticamente

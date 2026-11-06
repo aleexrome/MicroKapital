@@ -9,7 +9,7 @@ import {
   concentradorDeSucursal,
   efectivoPropioResiduoSemana,
 } from '@/lib/cortes'
-import { todayMx, esViernesMk } from '@/lib/timezone'
+import { todayMx, esViernesMk, inicioSemanaMk } from '@/lib/timezone'
 
 /**
  * POST /api/cortes/consolidado/iniciar
@@ -57,6 +57,38 @@ export async function POST(_req: NextRequest) {
     return NextResponse.json({
       error: 'Los consolidados se entregan los viernes (día de corte con Dirección). Hoy no es viernes.',
     }, { status: 400 })
+  }
+
+  // Guard: no permitir consolidar si hay parciales de coords de la
+  // semana MK que todavía no están ACEPTADOS (ABIERTO, ENTREGADO sin
+  // aceptar, o RECHAZADO sin corregir). Entregar un consolidado
+  // incompleto al DG se convierte en un problema muy costoso de
+  // rastrear a posteriori — mejor obligar a cerrar primero cada
+  // parcial.
+  const semanaDesde = inicioSemanaMk(fecha)
+  const parcialesPendientes = await prisma.corte.findMany({
+    where: {
+      receptorId: userId,
+      tipo:       'PARCIAL',
+      fecha:      { gte: semanaDesde, lte: fecha },
+      estado:     { in: ['ABIERTO', 'ENTREGADO', 'RECHAZADO'] },
+      consolidadoPadreId: null,
+    },
+    select: {
+      id: true,
+      estado: true,
+      user: { select: { nombre: true } },
+    },
+    orderBy: [{ user: { nombre: 'asc' } }, { createdAt: 'asc' }],
+  })
+  if (parcialesPendientes.length > 0) {
+    const detalle = parcialesPendientes
+      .map((p) => `${p.user.nombre} (${p.estado.toLowerCase()})`)
+      .join(', ')
+    return NextResponse.json({
+      error: `Faltan parciales por aceptar/corregir esta semana: ${detalle}. Acéptalos (o pídele a quien lo rechazó que lo corrija) antes de consolidar.`,
+      parcialesPendientesIds: parcialesPendientes.map((p) => p.id),
+    }, { status: 409 })
   }
 
   // Antes de agrupar: si el user es concentradora (o coord sin

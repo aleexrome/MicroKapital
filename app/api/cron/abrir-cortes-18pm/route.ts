@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import {
   ROLES_HACEN_CORTE,
-  snapshotCashRegisterDelDia,
-  totalRecibidoDeOtrosEnDia,
+  snapshotParcialSemanalIncremental,
+  siguienteNumeroCorte,
 } from '@/lib/cortes'
-import { todayMx, parseMxYMD } from '@/lib/timezone'
+import { inicioSemanaMk } from '@/lib/timezone'
+import { todayMx, parseMxYMD, esViernesMk } from '@/lib/timezone'
 import { purgeDeletedTask } from '@/lib/cron-tasks'
 
 /**
@@ -73,19 +74,37 @@ export async function GET(req: NextRequest) {
   let saltados = 0
   const errores: string[] = []
 
-  // Candidatos: cada user activo con rol que hace corte Y con CashRegister
-  // del día con AL MENOS un peso cobrado (efectivo, tarjeta o transferencia).
-  // Antes bastaba con `cashRegisters: { some: { fecha } }`, pero un
-  // CashRegister puede existir con todos los montos en 0 (p. ej. coord
-  // capturó un pago y lo canceló) — el cron creaba un corte vacío que
-  // bloqueaba al user al día siguiente sin dinero real que entregar.
+  // Modelo semanal MK: los parciales se entregan solo los VIERNES al
+  // final de la semana (sáb→vie). Antes este cron corría todos los
+  // días a las 18:00 CDMX creando un parcial diario por coord con
+  // cobros del día — eso contradice el modelo semanal: dejaba cobros
+  // de lun-jue atrapados en parciales diarios que nunca se entregaban.
+  // Ahora solo opera los viernes (o cuando se pasa ?fecha= explícita
+  // para backfillear un viernes específico).
+  if (!esViernesMk(fecha)) {
+    return NextResponse.json({
+      dia,
+      skipped: true,
+      razon:   'Modelo semanal MK: los parciales solo se abren los viernes.',
+      candidatos: 0,
+      abiertos: 0,
+      saltados: 0,
+      errores: [],
+    })
+  }
+
+  // Candidatos: user activo que haya cobrado algo en CUALQUIER día de
+  // la semana MK (sáb→vie). Antes se buscaba solo por el día actual,
+  // pero el parcial del viernes debe rescatar también lo cobrado
+  // lun-jue si el coord nunca abrió un parcial manual.
+  const semanaDesde = inicioSemanaMk(fecha)
   const candidatos = await prisma.user.findMany({
     where: {
       activo: true,
       rol:    { in: [...ROLES_HACEN_CORTE] },
       cashRegisters: {
         some: {
-          fecha,
+          fecha: { gte: semanaDesde, lte: fecha },
           OR: [
             { cobradoEfectivo:      { gt: 0 } },
             { cobradoTarjeta:       { gt: 0 } },
@@ -123,19 +142,17 @@ export async function GET(req: NextRequest) {
       continue
     }
     try {
-      // Si el user ya tiene AL MENOS un parcial del día (manual o auto),
-      // no abrimos otro — el cron solo cubre el caso de user con cobros
-      // que nunca abrió un parcial manual.
-      const existe = await prisma.corte.findFirst({
-        where: { userId: u.id, fecha, tipo: 'PARCIAL' },
-        select: { id: true },
-      })
-      if (existe) {
+      // Snapshot semanal incremental: resta lo que ya metió en
+      // parciales adelantados de esta misma semana (sáb→vie) y lo que
+      // ya "recibió de otros" en parciales previos. Si no queda nada
+      // por rescatar, saltamos — no crear parciales vacíos.
+      const snap = await snapshotParcialSemanalIncremental(prisma, u.id, fecha)
+      const totalAEntregar = snap.efectivo + snap.recibidoDeOtros
+      if (totalAEntregar === 0 && snap.tarjeta === 0 && snap.transferencia === 0) {
         saltados++
         continue
       }
-      const snap     = await snapshotCashRegisterDelDia(prisma, u.id, fecha)
-      const recibido = await totalRecibidoDeOtrosEnDia(prisma, u.id, fecha)
+      const numeroCorte = await siguienteNumeroCorte(prisma, u.id, fecha, 'PARCIAL')
       await prisma.corte.create({
         data: {
           companyId: u.companyId,
@@ -143,12 +160,12 @@ export async function GET(req: NextRequest) {
           fecha,
           branchId:  u.branchId,
           tipo: 'PARCIAL',
-          numeroCorte: 1,
+          numeroCorte,
           totalEfectivoCobrado:      snap.efectivo,
           totalTarjetaCobrado:       snap.tarjeta,
           totalTransferenciaCobrado: snap.transferencia,
-          totalRecibidoDeOtros:      recibido,
-          totalAEntregar:            snap.efectivo + recibido,
+          totalRecibidoDeOtros:      snap.recibidoDeOtros,
+          totalAEntregar,
           autoCreadoAt:              ahora,
         },
       })

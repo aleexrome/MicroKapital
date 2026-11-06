@@ -8,6 +8,7 @@ import {
   siguienteNumeroCorte,
   concentradorDeSucursal,
   efectivoPropioResiduoSemana,
+  netoBancaConcentradoraSemana,
 } from '@/lib/cortes'
 import { todayMx, esViernesMk, inicioSemanaMk } from '@/lib/timezone'
 
@@ -125,13 +126,22 @@ export async function POST(_req: NextRequest) {
 
   const parciales = await parcialesParaConsolidar(prisma, userId, fecha)
 
-  if (parciales.length === 0) {
+  // Fuente de verdad del monto: Neto de Banca de la semana MK para
+  // las sucursales que concentra el user. Antes se sumaba el
+  // montoAceptado de los parciales recibidos — eso NO cuadraba con
+  // Banca porque incluía transferencias (que ya están en banco) y no
+  // restaba desembolsos ni sumaba adicionales. Decisión Dirección
+  // 2026-11: "deben entregar lo que dice Banca". Los parciales siguen
+  // agrupándose como evidencia pero el total a entregar sale del Neto.
+  const neto = await netoBancaConcentradoraSemana(prisma, userId, fecha)
+  const totalAEntregar = Math.max(0, neto.neto)
+
+  if (totalAEntregar === 0 && parciales.length === 0) {
     return NextResponse.json({
-      error: 'No hay parciales aceptados pendientes para consolidar esta semana.',
+      error: 'No hay nada que consolidar esta semana (Neto Banca = $0 y sin parciales recibidos).',
     }, { status: 400 })
   }
 
-  const totalAEntregar = parciales.reduce((s, p) => s + p.montoAceptado, 0)
   const numeroCorte = await siguienteNumeroCorte(prisma, userId, fecha, 'CONSOLIDADO')
 
   // Transacción: crear el consolidado + ligar los parciales a él.

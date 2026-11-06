@@ -15,6 +15,7 @@ import {
   cortesPendientesPorSucursal,
   desgloseExtraDelDia,
   cortePendienteDe,
+  netoBancaConcentradoraSemana,
 } from '@/lib/cortes'
 import { CorteDelDiaView } from '@/components/cortes/CorteDelDiaView'
 import { PendientesCortesSection } from '@/components/cortes/PendientesCortesSection'
@@ -170,6 +171,14 @@ export default async function CorteDelDiaPage() {
   const efectivoPropioSemana = (esConcentradora || sinConcentradora) && hacesCorte
     ? await efectivoPropioResiduoSemana(prisma, userId, fecha)
     : { efectivo: 0, tarjeta: 0, transferencia: 0, desde: fecha }
+
+  // ── Neto Banca de la semana — fuente de verdad del consolidado.
+  //    Lo que efectivamente debe entregar a Dirección es:
+  //      Σ Cortes físico + Σ Adicional − Σ Desembolsos − Σ Retiros.
+  //    Mismo cálculo que la vista Banca.
+  const netoBanca = esConcentradora && hacesCorte
+    ? await netoBancaConcentradoraSemana(prisma, userId, fecha)
+    : null
 
   // ── Parciales ENTREGADOS que me dirigieron (acepto como concentradora) ─
   // No filtramos por fecha: un coord puede entregar hoy un corte de un
@@ -410,6 +419,7 @@ export default async function CorteDelDiaPage() {
         semanalSinCerrar={semanalSinCerrar}
         cobranzaEnVivo={cobranzaEnVivoRows}
         cobranzaSemanalPropia={cobranzaSemanalPropia}
+        netoBanca={netoBanca ? JSON.parse(JSON.stringify(netoBanca)) : null}
       />
       {puedeVerPendientesEmpresa && (
         <div className="px-6 pb-6">

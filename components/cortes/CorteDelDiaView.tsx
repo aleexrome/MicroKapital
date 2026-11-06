@@ -118,6 +118,22 @@ interface Props {
     recibidoDeOtros: number
     total:           number
   }>
+  // Neto Banca de la semana MK para las sucursales de esta concentradora.
+  // Es la fuente de verdad del monto que debe entregar a Dirección el
+  // viernes — reemplaza al cálculo viejo basado en SUM(montoAceptado)
+  // de los parciales (que incluía transferencias y no restaba desembolsos
+  // ni sumaba adicionales, por eso no cuadraba con Banca).
+  netoBanca?: {
+    branchNombres:      string[]
+    desde:              string
+    hasta:              string
+    totalCortes:        number
+    totalTransferencia: number
+    totalDesembolsos:   number
+    totalAdicional:     number
+    totalRetiro:        number
+    neto:               number
+  } | null
 }
 
 function money(n: string | number) {
@@ -147,6 +163,7 @@ export function CorteDelDiaView(props: Props) {
     parcialesParaConsolidar, consolidadosPendientesConfirmar,
     receptoresValidos, snapIncremental, cortesTimeline, cortesHistoricos,
     esViernes, efectivoPropioSemana, desgloseDelDia, semanalSinCerrar, cobranzaEnVivo, cobranzaSemanalPropia,
+    netoBanca,
   } = props
   const detalleMap = new Map(parcialesDetalle.map((d) => [d.corteId, d]))
   const [parcialExpandido, setParcialExpandido] = useState<string | null>(null)
@@ -553,23 +570,68 @@ export function CorteDelDiaView(props: Props) {
             </h2>
             <Button
               size="sm"
-              disabled={!esViernes || parcialesParaConsolidar.length === 0 || loading === 'iniciarConsolidado'}
+              disabled={!esViernes || !netoBanca || netoBanca.neto <= 0 || loading === 'iniciarConsolidado'}
               onClick={iniciarConsolidado}
               title={!esViernes ? 'Los consolidados se arman los viernes' : ''}
             >
               {loading === 'iniciarConsolidado' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
               {esViernes
-                ? `Iniciar consolidado (${parcialesParaConsolidar.length} disponibles)`
-                : `Disponible viernes (${parcialesParaConsolidar.length} parciales de la semana)`}
+                ? `Iniciar consolidado${netoBanca && netoBanca.neto > 0 ? ` · ${money(netoBanca.neto)}` : ''}`
+                : 'Disponible viernes'}
             </Button>
           </div>
+
+          {/* Neto Banca de la semana — fuente de verdad del monto a
+              entregar a Dirección. Se calcula con la misma fórmula que la
+              vista Banca (cortes físicos + adicional − desembolsos − retiros)
+              y reemplaza la suma de parciales como fuente de la cifra. */}
+          {netoBanca && (
+            <Card className="p-4 bg-card/60 border-primary-500/30">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    A entregar a Dirección esta semana (según Banca)
+                  </p>
+                  <p className="text-3xl font-bold tabular-nums text-primary-400">
+                    {money(netoBanca.neto)}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {netoBanca.branchNombres.join(' · ') || 'Sin sucursales a cargo'}
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="rounded-md border border-border/50 px-2.5 py-1.5 bg-background/40">
+                    <p className="text-[10px] uppercase text-muted-foreground">Cortes físicos</p>
+                    <p className="tabular-nums font-semibold text-emerald-400">{money(netoBanca.totalCortes)}</p>
+                  </div>
+                  <div className="rounded-md border border-border/50 px-2.5 py-1.5 bg-background/40">
+                    <p className="text-[10px] uppercase text-muted-foreground">+ Adicional</p>
+                    <p className="tabular-nums font-semibold text-sky-400">{money(netoBanca.totalAdicional)}</p>
+                  </div>
+                  <div className="rounded-md border border-border/50 px-2.5 py-1.5 bg-background/40">
+                    <p className="text-[10px] uppercase text-muted-foreground">− Desembolsos</p>
+                    <p className="tabular-nums font-semibold text-amber-400">{money(netoBanca.totalDesembolsos)}</p>
+                  </div>
+                  <div className="rounded-md border border-border/50 px-2.5 py-1.5 bg-background/40">
+                    <p className="text-[10px] uppercase text-muted-foreground">− Retiros</p>
+                    <p className="tabular-nums font-semibold text-rose-400">{money(netoBanca.totalRetiro)}</p>
+                  </div>
+                </div>
+              </div>
+              {netoBanca.totalTransferencia > 0 && (
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  Transferencias de la semana ({money(netoBanca.totalTransferencia)}) ya están en banco y no forman parte de lo que entregas físicamente.
+                </p>
+              )}
+            </Card>
+          )}
 
           {consolidadosPropios.length === 0 ? (
             <Card className="p-6 text-center text-sm text-muted-foreground">
               {esViernes
-                ? parcialesParaConsolidar.length > 0
-                  ? `Hoy es viernes — tienes ${parcialesParaConsolidar.length} parciales de la semana listos para consolidar y entregar a Dirección.`
-                  : 'Hoy es viernes pero no hay parciales acumulados esta semana.'
+                ? netoBanca && netoBanca.neto > 0
+                  ? `Hoy es viernes — debes entregar ${money(netoBanca.neto)} a Dirección (según Banca).`
+                  : 'Hoy es viernes pero no hay Neto de Banca por entregar esta semana.'
                 : parcialesParaConsolidar.length > 0
                   ? `Llevas ${parcialesParaConsolidar.length} parciales acumulados esta semana. Los consolidarás y entregarás a Dirección el viernes.`
                   : 'Cuando aceptes parciales de los coords podrás consolidarlos y entregarlos el viernes.'}

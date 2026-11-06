@@ -57,6 +57,18 @@ export async function POST(
 
   const { rol, companyId, id: userId, branchId: sessionBranchId, zonaBranchIds } = session.user
 
+  // Guard semana MK: si el user ya entregó su corte de hoy, queda
+  // bloqueado el resto del día (ver lib/cortes.ts#yaEntregoCorteHoy).
+  const { yaEntregoCorteHoy } = await import('@/lib/cortes')
+  const bloqueoCorte = await yaEntregoCorteHoy(prisma, { id: userId, rol, branchId: sessionBranchId })
+  if (bloqueoCorte.bloqueado) {
+    return NextResponse.json({
+      error: bloqueoCorte.tipo === 'CONSOLIDADO'
+        ? 'Ya entregaste tu consolidado de hoy. No puedes registrar más cobros hasta mañana.'
+        : 'Ya entregaste tu corte de hoy. No puedes registrar más cobros hasta mañana.',
+    }, { status: 409 })
+  }
+
   const loan = await prisma.loan.findFirst({
     where: { id: params.id, companyId: companyId! },
     include: { branch: { select: { nombre: true } } },

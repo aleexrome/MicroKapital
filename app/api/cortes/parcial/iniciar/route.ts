@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
 import {
   debeHacerCorte,
-  snapshotParcialIncremental,
+  snapshotParcialSemanalIncremental,
   siguienteNumeroCorte,
   concentradorDeSucursal,
 } from '@/lib/cortes'
@@ -38,7 +38,14 @@ export async function POST(_req: NextRequest) {
   }
 
   const fecha = todayMx()
-  const snap  = await snapshotParcialIncremental(prisma, userId, fecha)
+  // Modelo semanal MK: el coord cobra toda la semana (sáb→vie) y el
+  // viernes aprieta "Iniciar entrega". El snapshot debe acumular la
+  // semana completa — no solo el día — menos lo que ya metió en
+  // parciales adelantados de la misma semana (ej. coord con mucho
+  // efectivo que entregó a mitad de semana). Antes se usaba el
+  // snapshot diario y lo cobrado lun-jue quedaba en parciales huérfanos
+  // sin forma de ir al consolidado.
+  const snap  = await snapshotParcialSemanalIncremental(prisma, userId, fecha)
 
   // No permitir parciales con 0 efectivo + 0 recibido — no hay nada
   // que entregar. (Tarjeta/transferencia no entran al físico, así que

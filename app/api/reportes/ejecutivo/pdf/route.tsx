@@ -12,7 +12,12 @@ import { ReporteEjecutivoPDF } from '@/lib/reportes/pdf/ReporteEjecutivoPDF'
 // JSON la página HTML de error de Vercel.
 export const maxDuration = 60
 
+// Mismo gate que la vista en /reportes/ejecutivo: DG, DC, SUPER_ADMIN y el
+// email histórico del Director de Sistemas. Antes el endpoint solo aceptaba
+// email + SUPER_ADMIN y el botón de descarga rebotaba con 403 "No autorizado"
+// para DG/DC aunque sí pudieran ver la página.
 const EMAIL_AUTORIZADO = 'alejandro.romero@microkapital.com'
+const ROLES_AUTORIZADOS = ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN']
 
 /**
  * GET /api/reportes/ejecutivo/pdf?branchId=xxx
@@ -27,7 +32,9 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  if (session.user.email !== EMAIL_AUTORIZADO && session.user.rol !== 'SUPER_ADMIN') {
+  const esEmailAutorizado = session.user.email === EMAIL_AUTORIZADO
+  const esRolAutorizado   = ROLES_AUTORIZADOS.includes(session.user.rol)
+  if (!esEmailAutorizado && !esRolAutorizado) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 

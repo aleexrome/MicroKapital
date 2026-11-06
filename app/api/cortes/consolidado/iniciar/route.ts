@@ -10,7 +10,7 @@ import {
   efectivoPropioResiduoSemana,
   netoBancaConcentradoraSemana,
 } from '@/lib/cortes'
-import { todayMx, esViernesMk, inicioSemanaMk } from '@/lib/timezone'
+import { todayMx, esViernesMk } from '@/lib/timezone'
 
 /**
  * POST /api/cortes/consolidado/iniciar
@@ -28,6 +28,7 @@ import { todayMx, esViernesMk, inicioSemanaMk } from '@/lib/timezone'
  * para armar el consolidado del día.
  */
 export async function POST(_req: NextRequest) {
+  try {
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
@@ -60,37 +61,13 @@ export async function POST(_req: NextRequest) {
     }, { status: 400 })
   }
 
-  // Guard: no permitir consolidar si hay parciales de coords de la
-  // semana MK que todavía no están ACEPTADOS (ABIERTO, ENTREGADO sin
-  // aceptar, o RECHAZADO sin corregir). Entregar un consolidado
-  // incompleto al DG se convierte en un problema muy costoso de
-  // rastrear a posteriori — mejor obligar a cerrar primero cada
-  // parcial.
-  const semanaDesde = inicioSemanaMk(fecha)
-  const parcialesPendientes = await prisma.corte.findMany({
-    where: {
-      receptorId: userId,
-      tipo:       'PARCIAL',
-      fecha:      { gte: semanaDesde, lte: fecha },
-      estado:     { in: ['ABIERTO', 'ENTREGADO', 'RECHAZADO'] },
-      consolidadoPadreId: null,
-    },
-    select: {
-      id: true,
-      estado: true,
-      user: { select: { nombre: true } },
-    },
-    orderBy: [{ user: { nombre: 'asc' } }, { createdAt: 'asc' }],
-  })
-  if (parcialesPendientes.length > 0) {
-    const detalle = parcialesPendientes
-      .map((p) => `${p.user.nombre} (${p.estado.toLowerCase()})`)
-      .join(', ')
-    return NextResponse.json({
-      error: `Faltan parciales por aceptar/corregir esta semana: ${detalle}. Acéptalos (o pídele a quien lo rechazó que lo corrija) antes de consolidar.`,
-      parcialesPendientesIds: parcialesPendientes.map((p) => p.id),
-    }, { status: 409 })
-  }
+  // (Antes había un guard que bloqueaba si existían parciales de la
+  // semana en ABIERTO / ENTREGADO sin aceptar / RECHAZADO. Se eliminó
+  // en la 2026-11 por decisión de Dirección: ahora el monto del
+  // consolidado sale del Neto Banca — no de la suma de parciales — así
+  // que parciales no-aceptados son evidencia incompleta pero no
+  // alteran el monto. Se pueden procesar/auditar después sin bloquear
+  // la entrega del viernes.)
 
   // Antes de agrupar: si el user es concentradora (o coord sin
   // concentradora) tiene efectivo propio de la semana que no entró a
@@ -190,4 +167,11 @@ export async function POST(_req: NextRequest) {
     totalAEntregar,
     parcialesCount:  parciales.length,
   })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[cortes/consolidado/iniciar] fallo:', msg, e)
+    return NextResponse.json({
+      error: `No se pudo iniciar el consolidado: ${msg}`,
+    }, { status: 500 })
+  }
 }

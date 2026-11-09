@@ -148,7 +148,15 @@ export async function cortePendienteDe(
   const viernesAnterior = new Date(inicioSemActual.getTime() - 24 * 60 * 60 * 1000)
 
   // 1. PROPIO — parcial ABIERTO/RECHAZADO de semana cerrada o anterior.
-  const row = await prisma.corte.findFirst({
+  // Ignoramos los ABIERTO con totalAEntregar=0 (parciales vacíos) y
+  // también los ABIERTO que coexisten con otro parcial ENTREGADO o
+  // ACEPTADO del user en la MISMA semana MK (sáb→vie). Ese segundo
+  // caso cubre el parcial "fantasma" que crea el cron de los viernes
+  // a las 18:00 CDMX con el residuo acumulado cuando el user ya
+  // entregó manualmente antes: el cron agrega un parcial auto con el
+  // extra, el user no lo vio, y el lunes el sistema lo bloqueaba
+  // aunque ya hubiera entregado lo del ciclo.
+  const candidatos = await prisma.corte.findMany({
     where: {
       userId: user.id,
       estado: { in: ['ABIERTO', 'RECHAZADO'] },
@@ -161,9 +169,24 @@ export async function cortePendienteDe(
       },
     },
     orderBy: { fecha: 'asc' },
-    select:  { id: true },
+    select:  { id: true, estado: true, fecha: true },
   })
-  if (row) return { id: row.id, tipo: 'PROPIO' }
+  for (const cand of candidatos) {
+    const semanaSab = inicioSemanaMk(cand.fecha)
+    const semanaVie = new Date(semanaSab.getTime() + 7 * 24 * 60 * 60 * 1000 - 1)
+    const otro = await prisma.corte.findFirst({
+      where: {
+        userId: user.id,
+        tipo:   'PARCIAL',
+        estado: { in: ['ENTREGADO', 'ACEPTADO'] },
+        fecha:  { gte: semanaSab, lte: semanaVie },
+        id:     { not: cand.id },
+      },
+      select: { id: true },
+    })
+    if (otro) continue  // ya cerró la semana, este ABIERTO es residuo
+    return { id: cand.id, tipo: 'PROPIO' }
+  }
 
   // 2. SEMANAL_SIN_CERRAR — hubo cobranza en la semana que acaba de
   // cerrar (sábado anterior → viernes anterior) pero el user no cerró
@@ -200,16 +223,19 @@ export async function cortePendienteDe(
     Number(cobranza._sum.cobradoTransferencia ?? 0)
   if (totalCobrado <= 0) return null
 
-  const algunoAceptado = await prisma.corte.findFirst({
+  // Antes se exigía estado ACEPTADO. Pero si el coord entregó y la
+  // concentradora todavía no acepta, no es culpa del coord — ya hizo
+  // su parte. Contamos ENTREGADO también para no bloquearla.
+  const algunoEntregado = await prisma.corte.findFirst({
     where: {
       userId: user.id,
       tipo:   'PARCIAL',
-      estado: 'ACEPTADO',
+      estado: { in: ['ENTREGADO', 'ACEPTADO'] },
       fecha:  { gte: inicioSemAnterior, lte: viernesAnterior },
     },
     select: { id: true },
   })
-  if (!algunoAceptado) {
+  if (!algunoEntregado) {
     return { id: 'SEMANAL_SIN_CERRAR', tipo: 'SEMANAL_SIN_CERRAR' }
   }
 

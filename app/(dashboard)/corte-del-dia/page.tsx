@@ -49,7 +49,12 @@ export default async function CorteDelDiaPage() {
 
   // ── Datos del user (COORD/CONC/GERENTE) ─────────────────────────────
   const [parcialesPropios, consolidadosPropios, concentradora, receptoresValidos, snapIncremental] = await Promise.all([
-    hacesCorte && branchId
+    // Lectura solo por userId — no requiere branchId. Las concentradoras
+    // tipo MESA_CONTROL (Carol) no tienen branchId propio porque son
+    // rol empresa; antes el check "hacesCorte && branchId" bloqueaba
+    // esta lectura y dejaba a Carol sin ver sus consolidados fantasma
+    // colgados del viernes, imposibles de entregar desde la UI.
+    hacesCorte
       ? prisma.corte.findMany({
           where: { userId, fecha, tipo: 'PARCIAL' },
           orderBy: { numeroCorte: 'asc' },
@@ -58,7 +63,7 @@ export default async function CorteDelDiaPage() {
           },
         })
       : Promise.resolve([]),
-    hacesCorte && branchId
+    hacesCorte
       ? prisma.corte.findMany({
           where: {
             userId,
@@ -80,7 +85,9 @@ export default async function CorteDelDiaPage() {
         })
       : Promise.resolve([]),
     hacesCorte && branchId ? concentradorDeSucursal(prisma, branchId) : Promise.resolve(null),
-    hacesCorte && branchId
+    // receptoresValidosPara ya maneja el caso MESA_CONTROL sin branchId
+    // (busca si el user es concentrador de alguna sucursal activa).
+    hacesCorte
       ? receptoresValidosPara(prisma, { id: userId, branchId, companyId })
       : Promise.resolve([]),
     hacesCorte && branchId ? snapshotParcialIncremental(prisma, userId, fecha) : Promise.resolve({ efectivo: 0, tarjeta: 0, transferencia: 0, recibidoDeOtros: 0 }),

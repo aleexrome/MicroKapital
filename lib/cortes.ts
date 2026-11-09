@@ -172,21 +172,26 @@ export async function cortePendienteDe(
     select:  { id: true, estado: true, fecha: true },
   })
   for (const cand of candidatos) {
-    const semanaSab = inicioSemanaMk(cand.fecha)
-    const semanaVie = new Date(semanaSab.getTime() + 7 * 24 * 60 * 60 * 1000 - 1)
+    const semanaSab   = inicioSemanaMk(cand.fecha)
+    const siguienteSab = new Date(semanaSab.getTime() + 7 * 24 * 60 * 60 * 1000)
     // "Ya cerró la semana" = existe otro Corte del user, de cualquier
     // tipo (PARCIAL para coord normal, CONSOLIDADO para concentradora),
     // en ENTREGADO o ACEPTADO, dentro de la misma semana MK del
-    // candidato. Antes se restringía a tipo=PARCIAL y dejaba fuera a
-    // las concentradoras: Carol entregaba su CONSOLIDADO el viernes
-    // pero el lunes seguía bloqueada porque el check buscaba un
-    // PARCIAL cerrado y no lo encontraba.
+    // candidato.
+    //
+    // OJO: el `fecha` del Corte se guarda con todayMx() = inicio del
+    // día civil CDMX en UTC (06:00 UTC). El consolidado del viernes
+    // tiene fecha = viernes 06:00 UTC EXACTAMENTE. Antes se usaba
+    // `lte: semanaSab + 7d - 1ms` (= viernes 05:59:59.999 UTC) y el
+    // consolidado del viernes se quedaba fuera por 1 ms, dejando a la
+    // concentradora bloqueada el lunes. Ahora comparamos con
+    // `lt: siguienteSab` (exclusivo) que sí lo incluye.
     const otro = await prisma.corte.findFirst({
       where: {
         userId: user.id,
         tipo:   { in: ['PARCIAL', 'CONSOLIDADO'] },
         estado: { in: ['ENTREGADO', 'ACEPTADO'] },
-        fecha:  { gte: semanaSab, lte: semanaVie },
+        fecha:  { gte: semanaSab, lt: siguienteSab },
         id:     { not: cand.id },
       },
       select: { id: true },

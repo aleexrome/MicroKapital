@@ -142,6 +142,25 @@ export async function GET(req: NextRequest) {
       continue
     }
     try {
+      // Si el user YA tiene algún parcial de la semana MK en estado
+      // no-RECHAZADO (ABIERTO/ENTREGADO/ACEPTADO), NO le creamos otro:
+      // el cron es rescate para quien nunca inició nada. Si quedó
+      // residuo tras entregar, el user debe abrir un parcial manual.
+      // (Antes el cron creaba un parcial auto con el residuo cada
+      // viernes y bloqueaba a los coord el lunes.)
+      const existe = await prisma.corte.findFirst({
+        where: {
+          userId: u.id,
+          tipo:   'PARCIAL',
+          fecha:  { gte: semanaDesde, lte: fecha },
+          estado: { in: ['ABIERTO', 'ENTREGADO', 'ACEPTADO'] },
+        },
+        select: { id: true },
+      })
+      if (existe) {
+        saltados++
+        continue
+      }
       // Snapshot semanal incremental: resta lo que ya metió en
       // parciales adelantados de esta misma semana (sáb→vie) y lo que
       // ya "recibió de otros" en parciales previos. Si no queda nada

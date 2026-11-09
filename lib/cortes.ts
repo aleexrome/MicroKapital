@@ -174,10 +174,17 @@ export async function cortePendienteDe(
   for (const cand of candidatos) {
     const semanaSab = inicioSemanaMk(cand.fecha)
     const semanaVie = new Date(semanaSab.getTime() + 7 * 24 * 60 * 60 * 1000 - 1)
+    // "Ya cerró la semana" = existe otro Corte del user, de cualquier
+    // tipo (PARCIAL para coord normal, CONSOLIDADO para concentradora),
+    // en ENTREGADO o ACEPTADO, dentro de la misma semana MK del
+    // candidato. Antes se restringía a tipo=PARCIAL y dejaba fuera a
+    // las concentradoras: Carol entregaba su CONSOLIDADO el viernes
+    // pero el lunes seguía bloqueada porque el check buscaba un
+    // PARCIAL cerrado y no lo encontraba.
     const otro = await prisma.corte.findFirst({
       where: {
         userId: user.id,
-        tipo:   'PARCIAL',
+        tipo:   { in: ['PARCIAL', 'CONSOLIDADO'] },
         estado: { in: ['ENTREGADO', 'ACEPTADO'] },
         fecha:  { gte: semanaSab, lte: semanaVie },
         id:     { not: cand.id },
@@ -223,13 +230,15 @@ export async function cortePendienteDe(
     Number(cobranza._sum.cobradoTransferencia ?? 0)
   if (totalCobrado <= 0) return null
 
-  // Antes se exigía estado ACEPTADO. Pero si el coord entregó y la
-  // concentradora todavía no acepta, no es culpa del coord — ya hizo
-  // su parte. Contamos ENTREGADO también para no bloquearla.
+  // Antes se exigía PARCIAL ACEPTADO. Pero: (a) si el coord entregó y
+  // la concentradora todavía no acepta, no es culpa del coord — ya hizo
+  // su parte; y (b) una concentradora cierra su semana con un
+  // CONSOLIDADO, no con un PARCIAL. Contamos cualquier tipo en
+  // ENTREGADO o ACEPTADO.
   const algunoEntregado = await prisma.corte.findFirst({
     where: {
       userId: user.id,
-      tipo:   'PARCIAL',
+      tipo:   { in: ['PARCIAL', 'CONSOLIDADO'] },
       estado: { in: ['ENTREGADO', 'ACEPTADO'] },
       fecha:  { gte: inicioSemAnterior, lte: viernesAnterior },
     },

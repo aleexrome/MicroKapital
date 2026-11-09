@@ -82,7 +82,32 @@ export async function receptoresValidosPara(
   prisma: PrismaClient,
   user: { id: string; branchId: string | null; companyId: string | null },
 ): Promise<{ id: string; nombre: string; rol: UserRole }[]> {
-  if (!user.branchId || !user.companyId) return []
+  if (!user.companyId) return []
+
+  // Caso MESA_CONTROL sin branchId propio (Carol): si figura como
+  // concentradora de alguna sucursal activa de la empresa, su receptor
+  // es directo DG/DC/SA. Antes retornábamos [] al no tener branchId y
+  // ella no podía entregar su consolidado desde la UI.
+  if (!user.branchId) {
+    const esConcentradoraDeAlguna = await prisma.branch.findFirst({
+      where:  { companyId: user.companyId, activa: true, concentradorUserId: user.id },
+      select: { id: true },
+    })
+    if (!esConcentradoraDeAlguna) return []
+    const finales = await prisma.user.findMany({
+      where: {
+        companyId: user.companyId,
+        activo:    true,
+        rol:       { in: [...ROLES_RECEPTORES_FINALES] },
+        id:        { not: user.id },
+        email:     { notIn: [...EMAILS_EXCLUIR_RECEPTOR] },
+      },
+      select:  { id: true, nombre: true, rol: true },
+      orderBy: { nombre: 'asc' },
+    })
+    return finales
+  }
+
   const concentrador = await concentradorDeSucursal(prisma, user.branchId)
 
   // Si yo soy el concentrador local (o no hay concentrador), paso al nivel final.

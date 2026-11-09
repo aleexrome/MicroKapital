@@ -147,20 +147,27 @@ export async function cortePendienteDe(
   // día civil para que `fecha <= viernesAnterior` incluya ese día entero.
   const viernesAnterior = new Date(inicioSemActual.getTime() - 24 * 60 * 60 * 1000)
 
-  // 1. PROPIO — parcial ABIERTO/RECHAZADO de semana cerrada o anterior.
-  // Ignoramos los ABIERTO con totalAEntregar=0 (parciales vacíos) y
-  // también los ABIERTO que coexisten con otro parcial ENTREGADO o
-  // ACEPTADO del user en la MISMA semana MK (sáb→vie). Ese segundo
-  // caso cubre el parcial "fantasma" que crea el cron de los viernes
-  // a las 18:00 CDMX con el residuo acumulado cuando el user ya
-  // entregó manualmente antes: el cron agrega un parcial auto con el
-  // extra, el user no lo vio, y el lunes el sistema lo bloqueaba
-  // aunque ya hubiera entregado lo del ciclo.
+  // 1. PROPIO — parcial/consolidado ABIERTO/RECHAZADO de la SEMANA MK
+  // que acaba de cerrar (sábado anterior → viernes anterior).
+  //
+  // Antes el rango era `fecha <= viernesAnterior`, lo que arrastraba
+  // cortes de hace semanas (o de antes del modelo semanal arrancado el
+  // 7-nov-2026) y mantenía a algunos users bloqueados eternamente por
+  // residuos viejos imposibles de corregir desde la UI. Ahora solo
+  // evaluamos la semana recién cerrada (misma ventana que usa el check
+  // SEMANAL_SIN_CERRAR).
+  //
+  // Dentro de esa ventana, además, ignoramos:
+  //   - ABIERTO con totalAEntregar = 0 (parciales vacíos).
+  //   - ABIERTO/RECHAZADO que coexiste con otro Corte
+  //     ENTREGADO/ACEPTADO (PARCIAL o CONSOLIDADO) del user en la
+  //     misma semana. Esto cubre el parcial fantasma que el cron
+  //     del viernes crea con el residuo cuando el user ya entregó.
   const candidatos = await prisma.corte.findMany({
     where: {
       userId: user.id,
       estado: { in: ['ABIERTO', 'RECHAZADO'] },
-      fecha:  { lte: viernesAnterior },
+      fecha:  { gte: inicioSemAnterior, lte: viernesAnterior },
       NOT: {
         AND: [
           { estado: 'ABIERTO' },

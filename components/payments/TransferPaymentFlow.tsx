@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Camera, Check, Clock, Copy, Loader2, RefreshCw, Upload } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
+import { isImageFile } from '@/lib/is-image-file'
 import { Button } from '@/components/ui/button'
 import { BankAccountCard } from './BankAccountCard'
 
@@ -189,8 +190,11 @@ export function TransferPaymentFlow({
     const file = ev.target.files?.[0]
     ev.target.value = ''
     if (!file || !codeInfo) return
-    if (!file.type.startsWith('image/')) {
-      toast({ title: 'Solo imágenes', variant: 'destructive' })
+    // iOS Safari: fotos descargadas (WhatsApp, Mail, galería) a veces
+    // llegan con file.type = "". isImageFile acepta también por
+    // extensión del nombre para no rechazarlas.
+    if (!isImageFile(file)) {
+      toast({ title: 'Solo imágenes (JPG, PNG, WEBP, HEIC)', variant: 'destructive' })
       return
     }
     setUploading(true)

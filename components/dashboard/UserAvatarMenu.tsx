@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import Cropper from 'react-easy-crop'
 import type { Area } from 'react-easy-crop'
+import { isImageFile } from '@/lib/is-image-file'
 import { MoreVertical, Camera, Trash2, X, Loader2 } from 'lucide-react'
 import { UserAvatar } from '@/components/ui/UserAvatar'
 import { useToast } from '@/components/ui/use-toast'
@@ -76,8 +77,10 @@ export function UserAvatarMenu({ nombre, fotoUrl, size = 44 }: UserAvatarMenuPro
   function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      toast({ title: 'Solo imágenes permitidas', variant: 'destructive' })
+    // iOS Safari: fotos de WhatsApp / galería pueden venir con type="".
+    // isImageFile acepta también por extensión (JPG/PNG/WEBP/HEIC/...).
+    if (!isImageFile(file)) {
+      toast({ title: 'Solo imágenes permitidas (JPG, PNG, WEBP, HEIC)', variant: 'destructive' })
       return
     }
     const reader = new FileReader()

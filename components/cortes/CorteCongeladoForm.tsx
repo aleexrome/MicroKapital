@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Banknote, CreditCard, Building2, Camera, Loader2, Send, CheckCircle2, Clock, AlertTriangle, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
+import { isImageFile } from '@/lib/is-image-file'
 
 interface Receptor {
   id:     string
@@ -112,8 +113,10 @@ export function CorteCongeladoForm({
       toast({ title: 'Elige un receptor antes de subir la foto', variant: 'destructive' })
       return
     }
-    if (!file.type.startsWith('image/') && !/\.(heic|heif)$/i.test(file.name)) {
-      toast({ title: 'Solo imágenes', variant: 'destructive' })
+    // iOS Safari manda fotos de WhatsApp con file.type = ""; isImageFile
+    // acepta también por extensión del nombre.
+    if (!isImageFile(file)) {
+      toast({ title: 'Solo imágenes (JPG, PNG, WEBP, HEIC)', variant: 'destructive' })
       return
     }
     setUploading(true)

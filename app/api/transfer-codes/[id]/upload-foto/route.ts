@@ -3,6 +3,7 @@ import { v2 as cloudinary } from 'cloudinary'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { isCodeInactive } from '@/lib/transfer-codes'
+import { isImageFile } from '@/lib/is-image-file'
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -58,8 +59,10 @@ export async function POST(
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: 'Falta el archivo "foto"' }, { status: 400 })
   }
-  if (!file.type.startsWith('image/')) {
-    return NextResponse.json({ error: 'Solo se aceptan imágenes' }, { status: 400 })
+  // iOS Safari: fotos descargadas de WhatsApp / galería a veces vienen
+  // con file.type = "" — isImageFile acepta también por extensión.
+  if (!isImageFile(file)) {
+    return NextResponse.json({ error: 'Solo se aceptan imágenes (JPG, PNG, WEBP, HEIC)' }, { status: 400 })
   }
   if (file.size > 10 * 1024 * 1024) {
     return NextResponse.json({ error: 'La foto excede 10MB' }, { status: 400 })

@@ -5,6 +5,7 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
 import { receptoresValidosPara } from '@/lib/cortes'
+import { isImageFile } from '@/lib/is-image-file'
 
 // Vercel Hobby default es 10s. El upload a Cloudinary + prisma update
 // puede tomar más desde celular con red lenta — subimos a 60s para
@@ -50,8 +51,11 @@ export async function POST(
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: 'Falta la foto del ticket firmado' }, { status: 400 })
   }
-  if (!file.type.startsWith('image/')) {
-    return NextResponse.json({ error: 'Solo se aceptan imágenes' }, { status: 400 })
+  // iOS Safari manda a veces fotos de WhatsApp/galería con file.type = ""
+  // → isImageFile acepta también por extensión del nombre para no rechazar
+  // esas fotos. Mismos formatos: jpg/png/webp/heic/heif/gif/bmp/svg.
+  if (!isImageFile(file)) {
+    return NextResponse.json({ error: 'Solo se aceptan imágenes (JPG, PNG, WEBP, HEIC)' }, { status: 400 })
   }
   if (file.size > 10 * 1024 * 1024) {
     return NextResponse.json({ error: 'La foto excede 10MB' }, { status: 400 })

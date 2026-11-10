@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { createAuditLog } from '@/lib/audit'
 import { v2 as cloudinary } from 'cloudinary'
+import { isImageFile } from '@/lib/is-image-file'
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -35,8 +36,10 @@ export async function POST(req: NextRequest) {
   if (!file) {
     return NextResponse.json({ error: 'Archivo "foto" requerido' }, { status: 400 })
   }
-  if (!file.type.startsWith('image/')) {
-    return NextResponse.json({ error: 'El archivo debe ser una imagen' }, { status: 400 })
+  // iOS Safari: fotos de WhatsApp a veces llegan con file.type = ""
+  // → aceptamos también por extensión (ver lib/is-image-file.ts).
+  if (!isImageFile(file)) {
+    return NextResponse.json({ error: 'El archivo debe ser una imagen (JPG, PNG, WEBP, HEIC)' }, { status: 400 })
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ error: 'Imagen demasiado grande (máx 5MB)' }, { status: 400 })

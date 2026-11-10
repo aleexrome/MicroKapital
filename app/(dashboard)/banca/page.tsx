@@ -20,6 +20,14 @@ import {
   formatWeekLabelSatFri,
 } from '@/lib/week-utils'
 import { scopedLoanWhere, loanNotDeletedWhere } from '@/lib/access'
+import {
+  virtualBranchesFor,
+  isSplitBranch,
+  expandBranchesForBanca,
+  resolveVirtualBranchId,
+  resolveVirtualBranchIdFromTag,
+  virtualToRealBranchId,
+} from '@/lib/banca/virtual-branches'
 import { calcTarifaApertura } from '@/lib/financial-formulas'
 import { Landmark, Banknote, TrendingDown, Wallet, PlusCircle, MinusCircle, ArrowRightLeft, AlertTriangle } from 'lucide-react'
 
@@ -171,12 +179,17 @@ export default async function BancaPage({
     ? viewerBranchId
     : (searchParams.sucursal && searchParams.sucursal !== 'ALL' ? searchParams.sucursal : null)
 
+  // Si el filtro es una sub-sucursal virtual (ej. "vb:<toluca>:TOL_I"),
+  // convertimos a la branch real para la query a DB. El filtrado por
+  // virtual se aplica después en memoria durante la agregación.
+  const sucursalFilterReal = sucursalFilter ? virtualToRealBranchId(sucursalFilter) : null
+
   // Rango: desde el sábado más antiguo mostrado hasta el viernes de la semana actual.
   const semanas = semanasRecientesSatFri(WEEKS_BACK)
   const periodoStart = semanas[semanas.length - 1]
   const periodoEnd = getFriday(semanas[0])
 
-  const branchWhere = sucursalFilter ? { branchId: sucursalFilter } : {}
+  const branchWhere = sucursalFilterReal ? { branchId: sucursalFilterReal } : {}
 
   const [branches, pagos, desembolsos, adicionales, retiros, moraCobros] = await Promise.all([
     // Sucursales de la empresa (para el filtro)
@@ -203,8 +216,11 @@ export default async function BancaPage({
         metodoPago: true,
         fechaHora: true,
         cobrador: { select: { id: true, nombre: true } },
-        client:   { select: { id: true, nombreCompleto: true } },
-        loan: { select: { branch: { select: { id: true, nombre: true } } } },
+        client:   { select: { id: true, nombreCompleto: true, heredadoDeId: true } },
+        loan: { select: {
+          cobradorId: true,
+          branch: { select: { id: true, nombre: true } },
+        } },
       },
     }),
 
@@ -224,8 +240,9 @@ export default async function BancaPage({
         capital: true,
         comision: true,
         montoReal: true,
+        cobradorId: true,
         cobrador: { select: { id: true, nombre: true } },
-        client: { select: { nombreCompleto: true } },
+        client: { select: { nombreCompleto: true, heredadoDeId: true } },
         branch: { select: { id: true, nombre: true } },
       },
     }),
@@ -242,6 +259,7 @@ export default async function BancaPage({
         fecha: true,
         monto: true,
         concepto: true,
+        subBranchTag: true,
         branch: { select: { id: true, nombre: true } },
         createdBy: { select: { nombre: true } },
       },
@@ -260,6 +278,7 @@ export default async function BancaPage({
         fecha: true,
         monto: true,
         concepto: true,
+        subBranchTag: true,
         branch: { select: { id: true, nombre: true } },
         createdBy: { select: { nombre: true } },
       },
@@ -297,7 +316,8 @@ export default async function BancaPage({
         createdAt: true,
         branch:    { select: { id: true, nombre: true } },
         cobrador:  { select: { nombre: true } },
-        client:    { select: { nombreCompleto: true } },
+        client:    { select: { nombreCompleto: true, heredadoDeId: true } },
+        loan:      { select: { cobradorId: true } },
         paymentCobro: {
           select: {
             metodoPago:          true,
@@ -337,6 +357,20 @@ export default async function BancaPage({
     const ymd = toMxYMD(t)
     const dayAsUtc = new Date(`${ymd}T12:00:00.000Z`)
     return weekRanges.find((w) => dayAsUtc >= w.sat && dayAsUtc <= w.friday) ?? null
+  }
+
+  // Nombre que se muestra para cada sub-sucursal virtual. Si es una
+  // branch no partida, el nombre es el real.
+  const branchNameMap = new Map<string, string>()
+  for (const b of branches) {
+    const subs = virtualBranchesFor(b.id)
+    if (subs.length > 0) {
+      for (const s of subs) branchNameMap.set(s.id, s.nombre)
+    }
+    branchNameMap.set(b.id, b.nombre)
+  }
+  function nombreDeVirtual(_branches: unknown, realId: string, realNombre: string, virtualId: string): string {
+    return branchNameMap.get(virtualId) ?? (virtualId === realId ? realNombre : virtualId)
   }
 
   const weeks = new Map<string, WeekAgg>()
@@ -389,7 +423,12 @@ export default async function BancaPage({
     if (!w) continue
 
     const branch = p.loan.branch
-    const b = getBranchAgg(w.key, w.sat, branch.id, branch.nombre)
+    // División virtual: si la sucursal real está partida, el cobrador del
+    // LOAN (dueño del préstamo) + heredadoDeId del cliente definen la
+    // sub-sucursal. Si no está partida, se usa el id real.
+    const vbId     = resolveVirtualBranchId(branch.id, p.loan.cobradorId, p.client.heredadoDeId)
+    const vbNombre = nombreDeVirtual(branches, branch.id, branch.nombre, vbId)
+    const b = getBranchAgg(w.key, w.sat, vbId, vbNombre)
 
     const dayKey = toMxYMD(fecha)
     const ck = `${p.cobrador.id}|${dayKey}`
@@ -444,7 +483,9 @@ export default async function BancaPage({
     const w = findWeek(fecha)
     if (!w) continue
 
-    const b = getBranchAgg(w.key, w.sat, d.branch.id, d.branch.nombre)
+    const vbIdD     = resolveVirtualBranchId(d.branch.id, d.cobradorId, d.client.heredadoDeId)
+    const vbNombreD = nombreDeVirtual(branches, d.branch.id, d.branch.nombre, vbIdD)
+    const b = getBranchAgg(w.key, w.sat, vbIdD, vbNombreD)
     const capitalNum = Number(d.capital)
     const montoReal = Number(d.montoReal)
     const tarifa = calcTarifaApertura(
@@ -476,7 +517,11 @@ export default async function BancaPage({
     const w = findWeek(fecha)
     if (!w) continue
 
-    const b = getBranchAgg(w.key, w.sat, a.branch.id, a.branch.nombre)
+    // Adicional: usa el subBranchTag guardado (lo eligió el DG al crear).
+    // Si es null (histórico pre-división) cae al default de esa sucursal.
+    const vbIdA     = resolveVirtualBranchIdFromTag(a.branch.id, a.subBranchTag)
+    const vbNombreA = nombreDeVirtual(branches, a.branch.id, a.branch.nombre, vbIdA)
+    const b = getBranchAgg(w.key, w.sat, vbIdA, vbNombreA)
     const monto = Number(a.monto)
     b.adicionales.push({
       id: a.id,
@@ -494,7 +539,10 @@ export default async function BancaPage({
     const w = findWeek(fecha)
     if (!w) continue
 
-    const b = getBranchAgg(w.key, w.sat, r.branch.id, r.branch.nombre)
+    // Retiro: igual que adicional — usa subBranchTag o cae al default.
+    const vbIdR     = resolveVirtualBranchIdFromTag(r.branch.id, r.subBranchTag)
+    const vbNombreR = nombreDeVirtual(branches, r.branch.id, r.branch.nombre, vbIdR)
+    const b = getBranchAgg(w.key, w.sat, vbIdR, vbNombreR)
     const monto = Number(r.monto)
     b.retiros.push({
       id: r.id,
@@ -522,7 +570,9 @@ export default async function BancaPage({
       const fecha = new Date(m.cobradaAt)
       const w = findWeek(fecha)
       if (!w) continue
-      const b = getBranchAgg(w.key, w.sat, m.branch.id, m.branch.nombre)
+      const vbIdM     = resolveVirtualBranchId(m.branch.id, m.loan?.cobradorId, m.client.heredadoDeId)
+      const vbNombreM = nombreDeVirtual(branches, m.branch.id, m.branch.nombre, vbIdM)
+      const b = getBranchAgg(w.key, w.sat, vbIdM, vbNombreM)
       b.moras.push({
         id:                  m.id,
         fecha,
@@ -540,7 +590,9 @@ export default async function BancaPage({
       const fecha = new Date(m.createdAt)
       const w = findWeek(fecha)
       if (!w) continue
-      const b = getBranchAgg(w.key, w.sat, m.branch.id, m.branch.nombre)
+      const vbIdMP     = resolveVirtualBranchId(m.branch.id, m.loan?.cobradorId, m.client.heredadoDeId)
+      const vbNombreMP = nombreDeVirtual(branches, m.branch.id, m.branch.nombre, vbIdMP)
+      const b = getBranchAgg(w.key, w.sat, vbIdMP, vbNombreMP)
       b.morasPendientes.push({
         id:            m.id,
         fechaGenerada: fecha,
@@ -605,13 +657,19 @@ export default async function BancaPage({
         <div className="flex flex-wrap items-center gap-2">
           {!soloLectura && (
             <>
-              <BancaSucursalFilter branches={branches} selected={sucursalFilter ?? 'ALL'} />
+              {/* Lista expandida: cada sucursal dividida (Toluca) se
+                  reemplaza por sus sub-sucursales (Toluca I / Toluca II).
+                  Los endpoints resuelven el virtualId → branch real + tag. */}
+              <BancaSucursalFilter
+                branches={expandBranchesForBanca(branches)}
+                selected={sucursalFilter ?? 'ALL'}
+              />
               <BancaAddExtraFundButton
-                branches={branches}
+                branches={expandBranchesForBanca(branches)}
                 defaultBranchId={sucursalFilter ?? undefined}
               />
               <BancaAddWithdrawalButton
-                branches={branches}
+                branches={expandBranchesForBanca(branches)}
                 defaultBranchId={sucursalFilter ?? undefined}
               />
               <BancaAddMoraButton cuentasBanco={cuentasBanco} />

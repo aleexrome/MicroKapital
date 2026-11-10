@@ -27,11 +27,8 @@
  * considerada la "principal" nueva por Dirección).
  */
 
-/** IDs reales (BD) de los cobradores de Toluca. */
-const TOLUCA_BRANCH_ID       = '667fbc3f-dbce-4c78-ad5b-9003a5eb7764'  // mismo id que Tenancingo II? verifica — reemplazar por el real
-// NOTA: el id de TOLUCA real debe ponerse aquí. Si no está definido,
-// el helper no divide y /banca se ve como siempre (safe default).
-const TOLUCA_ID_REAL: string | null = null  // ← poner UUID real de Toluca cuando se despliegue
+/** UUIDs reales (BD) de la sucursal y de los cobradores involucrados. */
+const TOLUCA_ID_REAL: string | null = '44a79b25-08d0-4e47-be92-327c362d7efc'
 
 const USER_GUADALUPE = '9b4d7573-a187-4c22-bb14-1a7e9c9ea6b4'
 const USER_DIANA     = 'c9dd2f42-c317-42ff-9fc7-15431d804dbb'

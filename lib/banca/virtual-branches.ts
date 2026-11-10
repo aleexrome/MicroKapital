@@ -27,13 +27,20 @@
  * considerada la "principal" nueva por Dirección).
  */
 
-/** UUIDs reales (BD) de la sucursal y de los cobradores involucrados. */
+/** UUIDs reales (BD) de la sucursal y de los cobradores involucrados.
+ *  Guardados en lowercase: todas las comparaciones se hacen normalizando
+ *  con .toLowerCase() para evitar desacoples cuando Postgres o Prisma
+ *  devuelven uuids con casing distinto. */
 const TOLUCA_ID_REAL: string | null = '44a79b25-08d0-4e47-be92-327c362d7efc'
 
 const USER_GUADALUPE = '9b4d7573-a187-4c22-bb14-1a7e9c9ea6b4'
 const USER_DIANA     = 'c9dd2f42-c317-42ff-9fc7-15431d804dbb'
 const USER_ALMA      = '156dd716-d9b2-41fd-81ed-3675891a1b32'
 const USER_PAULINA   = 'f61ce1b7-89a5-4582-a677-a6f1ad8395ed'
+
+function norm(id: string | null | undefined): string {
+  return (id ?? '').toLowerCase()
+}
 
 export interface VirtualBranch {
   /** ID virtual único (no está en BD). Se usa en el agregador de /banca. */
@@ -61,7 +68,7 @@ const DEFAULT_TAG_PARA_PARENT: Record<string, string> = TOLUCA_ID_REAL
 
 /** Las sub-sucursales que corresponden a una branch real. Vacío si la branch no está dividida. */
 export function virtualBranchesFor(parentBranchId: string): VirtualBranch[] {
-  return DIVISIONES[parentBranchId] ?? []
+  return DIVISIONES[norm(parentBranchId)] ?? []
 }
 
 /** ¿Esta sucursal está dividida virtualmente? */
@@ -101,15 +108,17 @@ export function resolveVirtualBranchId(
   // Reglas específicas de TOLUCA (edita aquí si se agregan más
   // sucursales divididas). El fallback es siempre la sub-sucursal
   // default declarada en DEFAULT_TAG_PARA_PARENT (TOLUCA_II para Toluca).
-  if (TOLUCA_ID_REAL && branchId === TOLUCA_ID_REAL) {
-    if (cobradorId === USER_GUADALUPE) return virtualIdPorTag(branchId, 'TOL_I')
-    if (cobradorId === USER_DIANA) {
+  const bId  = norm(branchId)
+  const cId  = norm(cobradorId)
+  if (TOLUCA_ID_REAL && bId === norm(TOLUCA_ID_REAL)) {
+    if (cId === norm(USER_GUADALUPE)) return virtualIdPorTag(branchId, 'TOL_I')
+    if (cId === norm(USER_DIANA)) {
       return heredadoDeId
         ? virtualIdPorTag(branchId, 'TOL_I')   // heredado de otros (América/Valentina)
         : virtualIdPorTag(branchId, 'TOL_II')  // propio de Diana
     }
-    if (cobradorId === USER_ALMA)     return virtualIdPorTag(branchId, 'TOL_II')
-    if (cobradorId === USER_PAULINA)  return virtualIdPorTag(branchId, 'TOL_II')
+    if (cId === norm(USER_ALMA))     return virtualIdPorTag(branchId, 'TOL_II')
+    if (cId === norm(USER_PAULINA))  return virtualIdPorTag(branchId, 'TOL_II')
     return defaultVirtualId(branchId)
   }
 
@@ -154,7 +163,7 @@ function virtualIdPorTag(parentBranchId: string, tag: string): string {
 }
 
 function defaultVirtualId(parentBranchId: string): string {
-  const tag = DEFAULT_TAG_PARA_PARENT[parentBranchId]
+  const tag = DEFAULT_TAG_PARA_PARENT[norm(parentBranchId)]
   if (!tag) return parentBranchId
   return virtualIdPorTag(parentBranchId, tag)
 }

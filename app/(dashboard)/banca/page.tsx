@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { BancaSucursalFilter } from '@/components/dashboard/BancaSucursalFilter'
 import { BancaAddExtraFundButton } from '@/components/dashboard/BancaAddExtraFundButton'
+import { BancaAddMoraButton } from '@/components/dashboard/BancaAddMoraButton'
 import { BancaDeleteExtraFundButton } from '@/components/dashboard/BancaDeleteExtraFundButton'
 import { BancaAddWithdrawalButton } from '@/components/dashboard/BancaAddWithdrawalButton'
 import { BancaDeleteWithdrawalButton } from '@/components/dashboard/BancaDeleteWithdrawalButton'
@@ -309,6 +310,17 @@ export default async function BancaPage({
     }),
   ])
 
+  // Cuentas bancarias activas de la empresa — se pasan al botón
+  // "Agregar mora" para el caso de TRANSFER. Solo DG/DC/SA cargan,
+  // soloLectura (viewer por sucursal) no necesita.
+  const cuentasBanco = esDireccion
+    ? (await prisma.companyBankAccount.findMany({
+        where:  { companyId, activa: true },
+        select: { id: true, titular: true, banco: true },
+        orderBy: { createdAt: 'asc' },
+      })).map((c) => ({ id: c.id, nombre: c.titular, banco: c.banco }))
+    : []
+
   // ── Rangos de cada semana (sáb→vie) para asignar cada registro ──
   const weekRanges = semanas.map((sat) => ({
     sat,
@@ -602,6 +614,7 @@ export default async function BancaPage({
                 branches={branches}
                 defaultBranchId={sucursalFilter ?? undefined}
               />
+              <BancaAddMoraButton cuentasBanco={cuentasBanco} />
             </>
           )}
           {soloLectura && (

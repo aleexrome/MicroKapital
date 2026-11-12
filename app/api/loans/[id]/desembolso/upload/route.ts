@@ -771,16 +771,26 @@ export async function POST(
           ? generarFechasHabilesDesde(fechaPrimerPagoRef, plazo)
           : generarFechasHabiles(fechaDesembolso, plazo)
       } else if (t.tipo === 'FIDUCIARIO') {
-        fechas = generarFechasFiduciario(fechaDesembolso, plazo)
+        // DG eligió SEMANAL en contrapropuesta → 24 pagos cada 7 días
+        // (anclados en fechaPrimerPago si existe, si no en fechaDesembolso).
+        // En otro caso = QUINCENAL con la regla histórica 15/30 del mes.
+        if (t.frecuenciaFiduciario === 'SEMANAL') {
+          fechas = fechaPrimerPagoRef
+            ? generarFechasSemanalesDesde(fechaPrimerPagoRef, plazo)
+            : generarFechasSemanales(fechaDesembolso, plazo)
+        } else {
+          fechas = generarFechasFiduciario(fechaDesembolso, plazo)
+        }
       } else {
         fechas = fechaPrimerPagoRef
           ? generarFechasSemanalesDesde(fechaPrimerPagoRef, plazo)
           : generarFechasSemanales(fechaDesembolso, plazo)
       }
       const montoPorPago =
-        t.tipo === 'AGIL'       ? Number(t.pagoDiario) :
-        t.tipo === 'FIDUCIARIO' ? Number(t.pagoQuincenal) :
-                                  Number(t.pagoSemanal)
+        t.tipo === 'AGIL'                                                    ? Number(t.pagoDiario) :
+        t.tipo === 'FIDUCIARIO' && t.frecuenciaFiduciario === 'SEMANAL'      ? Number(t.pagoSemanal) :
+        t.tipo === 'FIDUCIARIO'                                              ? Number(t.pagoQuincenal) :
+                                                                               Number(t.pagoSemanal)
 
       // Solo el loan donde el coord subio el video guarda video/GPS;
       // los demas del grupo se activan pero conservan sus campos de

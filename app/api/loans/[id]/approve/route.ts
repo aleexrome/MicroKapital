@@ -19,6 +19,10 @@ const approveSchema = z.object({
     // ignora si el préstamo no es INDIVIDUAL. Sobrescribe la tasa por
     // ciclo del cálculo automático.
     comisionPct: z.number().min(0).max(20).optional(),
+    // Solo FIDUCIARIO: DG decide si el cliente paga cada 15 días (default)
+    // o cada semana. Si SEMANAL → 24 pagos de pagoQuincenal/2, mismo
+    // plazo total (6 meses) y mismo interés total.
+    frecuenciaFiduciario: z.enum(['QUINCENAL', 'SEMANAL']).optional(),
   }).optional(),
   // SOLIDARIO: si la UI marca a este integrante como coordinadora del
   // grupo, se setea Loan.esCoordinadora = true (los demás false). El
@@ -92,6 +96,16 @@ export async function POST(
       where: { branchId: loan.branchId },
       select: { comisionRenovacionFija: true },
     })
+    // FIDUCIARIO: si DG mandó frecuencia nueva la usamos; si no, respetamos
+    // la que ya tuviera el préstamo (para no cambiarla silenciosamente al
+    // re-proponer solo el capital). Default = QUINCENAL.
+    const frecuenciaFiduciarioFinal: 'QUINCENAL' | 'SEMANAL' | null =
+      loan.tipo === 'FIDUCIARIO'
+        ? (contrapropuesta.frecuenciaFiduciario
+            ?? (loan.frecuenciaFiduciario as 'QUINCENAL' | 'SEMANAL' | null | undefined)
+            ?? 'QUINCENAL')
+        : null
+
     const calc = calcLoan(
       loan.tipo as 'SOLIDARIO' | 'INDIVIDUAL' | 'AGIL' | 'FIDUCIARIO',
       contrapropuesta.capital,
@@ -103,6 +117,7 @@ export async function POST(
         comisionRenovacionFija: branchConfig?.comisionRenovacionFija
           ? Number(branchConfig.comisionRenovacionFija)
           : null,
+        frecuenciaFiduciario: frecuenciaFiduciarioFinal,
       }
     )
 
@@ -131,6 +146,11 @@ export async function POST(
       pagoDiario: calc.pagoDiario ?? null,
       pagoQuincenal: calc.pagoQuincenal ?? null,
       plazo: calc.plazo,
+      // Persistimos la frecuencia FIDUCIARIO usada en el cálculo para
+      // que el generador de schedule (al activar) sepa qué cadencia aplicar.
+      ...(loan.tipo === 'FIDUCIARIO'
+        ? { frecuenciaFiduciario: frecuenciaFiduciarioFinal ?? 'QUINCENAL' }
+        : {}),
       // parseMxYMD ancla la fecha a las 06:00 UTC (medianoche CDMX). Si se
       // usara new Date('YYYY-MM-DD') quedaría a medianoche UTC, que en CDMX
       // es el día ANTERIOR — y el calendario de cobros se recorría un día

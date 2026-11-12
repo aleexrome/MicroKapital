@@ -747,6 +747,11 @@ export default async function PrestamoDetallePage({ params }: { params: { id: st
               grupoMiembros={grupoMiembros}
               defaultDiaCobro={loan.diaCobro ?? branchConfigDefaults?.diaCobro ?? ''}
               defaultHoraLimite={loan.horaLimiteCobro ?? branchConfigDefaults?.horaLimiteCobro ?? ''}
+              defaultFrecuenciaFiduciario={
+                loan.tipo === 'FIDUCIARIO'
+                  ? ((loan.frecuenciaFiduciario as 'QUINCENAL' | 'SEMANAL' | null | undefined) ?? 'QUINCENAL')
+                  : undefined
+              }
             />
           )}
 

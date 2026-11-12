@@ -36,10 +36,11 @@ const DIAS_COBRO: { value: string; label: string }[] = [
   { value: 'DOMINGO',   label: 'Domingo' },
 ]
 
-export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0, grupoMiembros, defaultDiaCobro, defaultHoraLimite }: LoanApprovalActionsProps) {
+export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0, grupoMiembros, defaultDiaCobro, defaultHoraLimite, defaultFrecuenciaFiduciario }: LoanApprovalActionsProps & { defaultFrecuenciaFiduciario?: 'QUINCENAL' | 'SEMANAL' | null }) {
   const router = useRouter()
   const { toast } = useToast()
   const esIndividual = tipo === 'INDIVIDUAL'
+  const esFiduciario = tipo === 'FIDUCIARIO'
   const comisionPctActual = capital > 0
     ? Math.round((comisionActual / capital) * 10000) / 100
     : 0
@@ -66,6 +67,11 @@ export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0,
   })
   const [fechaDesembolsoCP, setFechaDesembolsoCP] = useState('')
   const [fechaPrimerPagoCP, setFechaPrimerPagoCP] = useState('')
+  // FIDUCIARIO: frecuencia de cobro. Default = la actual del préstamo o
+  // QUINCENAL (nunca forzamos a cambiar si DG solo retoca el capital).
+  const [frecuenciaFid, setFrecuenciaFid] = useState<'QUINCENAL' | 'SEMANAL'>(
+    defaultFrecuenciaFiduciario ?? 'QUINCENAL',
+  )
   // Día y hora límite de cobro que se plasman en el contrato. DG puede
   // ajustarlos en el modal de aprobación; defaults vienen del préstamo o
   // la sucursal (pasados como props).
@@ -171,6 +177,7 @@ export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0,
             ...(fechaDesembolsoCP ? { fechaDesembolso: fechaDesembolsoCP } : {}),
             ...(fechaPrimerPagoCP ? { fechaPrimerPago: fechaPrimerPagoCP } : {}),
             ...(hayComisionOverride ? { comisionPct: pctNum } : {}),
+            ...(esFiduciario ? { frecuenciaFiduciario: frecuenciaFid } : {}),
           }
         }
         if (notasDG) body.notas = notasDG
@@ -410,6 +417,36 @@ export function LoanApprovalActions({ loanId, tipo, capital, comisionActual = 0,
                   </p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* FIDUCIARIO: frecuencia de cobro */}
+          {esFiduciario && (
+            <div>
+              <label className="block text-xs text-amber-700 mb-1 font-semibold">
+                Frecuencia de cobro
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {(['QUINCENAL', 'SEMANAL'] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setFrecuenciaFid(f)}
+                    className={`rounded border-2 px-3 py-2 text-sm font-medium transition-colors ${
+                      frecuenciaFid === f
+                        ? 'border-amber-600 bg-amber-100 text-amber-900'
+                        : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-50'
+                    }`}
+                  >
+                    {f === 'QUINCENAL' ? 'Quincenal · 12 pagos' : 'Semanal · 24 pagos'}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-amber-700 mt-1">
+                {frecuenciaFid === 'SEMANAL'
+                  ? 'El pago quincenal se divide entre 2 y el cliente paga semana con semana. Mismo plazo total de 6 meses.'
+                  : 'Cliente paga cada 15 días (15 y 30 del mes).'}
+              </p>
             </div>
           )}
           {/* Fechas definidas por el DG — anclan el calendario al activar */}

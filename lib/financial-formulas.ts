@@ -164,14 +164,37 @@ export function calcAgil(capital: number, clienteIrregular = false): LoanCalcula
 const FIDUCIARIO_TASA_MENSUAL = 0.20
 const FIDUCIARIO_MESES = 6  // 12 quincenas = 6 meses
 
-export function calcFiduciario(capital: number): LoanCalculation {
-  const plazo = 12  // 12 quincenas
+export function calcFiduciario(
+  capital: number,
+  frecuencia: 'QUINCENAL' | 'SEMANAL' = 'QUINCENAL',
+): LoanCalculation {
   const comision = roundTwo(capital * 0.10)
   const montoReal = capital
   const interes = roundTwo(capital * FIDUCIARIO_TASA_MENSUAL * FIDUCIARIO_MESES)
   const totalPago = roundTwo(capital + interes)
-  const pagoQuincenal = roundTwo(totalPago / plazo)
 
+  if (frecuencia === 'SEMANAL') {
+    // Mismo plazo total de 6 meses (~24 semanas) y mismo interés total.
+    // Cada semana el cliente paga la mitad de lo que pagaría quincenal.
+    const plazo = 24
+    const pagoSemanal = roundTwo(totalPago / plazo)
+    return {
+      capital,
+      tasaInteres: FIDUCIARIO_TASA_MENSUAL,
+      comision,
+      montoReal,
+      interes,
+      totalPago,
+      pagoSemanal,
+      // Guardamos también el pagoQuincenal "informativo" para que la UI
+      // pueda mostrarlo (ej. "quincena $X dividida en 2 semanas de $X/2").
+      pagoQuincenal: roundTwo(totalPago / 12),
+      plazo,
+    }
+  }
+
+  const plazo = 12  // 12 quincenas
+  const pagoQuincenal = roundTwo(totalPago / plazo)
   return {
     capital,
     tasaInteres: FIDUCIARIO_TASA_MENSUAL,
@@ -213,6 +236,10 @@ interface CalcOpciones {
   /** Override de comisión INDIVIDUAL en renovaciones para sucursales con
    *  regla especial (BranchContractConfig.comisionRenovacionFija). */
   comisionRenovacionFija?: number | null
+  /** FIDUCIARIO: frecuencia de cobro definida por DG en contrapropuesta.
+   *  Default = 'QUINCENAL' (12 pagos). 'SEMANAL' = 24 pagos semanales de
+   *  pagoQuincenal/2, mismo plazo total de 6 meses. */
+  frecuenciaFiduciario?: 'QUINCENAL' | 'SEMANAL' | null
 }
 
 export function calcLoan(
@@ -233,6 +260,6 @@ export function calcLoan(
     case 'AGIL':
       return calcAgil(capital, opciones.clienteIrregular ?? false)
     case 'FIDUCIARIO':
-      return calcFiduciario(capital)
+      return calcFiduciario(capital, opciones.frecuenciaFiduciario ?? 'QUINCENAL')
   }
 }

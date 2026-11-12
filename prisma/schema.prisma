@@ -453,6 +453,12 @@ model Loan {
   pagoSemanal            Decimal?       @db.Decimal(12, 2)
   pagoDiario             Decimal?       @db.Decimal(12, 2)
   pagoQuincenal          Decimal?       @db.Decimal(12, 2) // FIDUCIARIO: 12 quincenas
+  // FIDUCIARIO: frecuencia de cobro definida por DG en contrapropuesta.
+  // 'QUINCENAL' (default/null) = 12 pagos cada 15 días (15 y 30 del mes).
+  // 'SEMANAL'  = 24 pagos semanales de pagoQuincenal/2 (mismo plazo total
+  // de 6 meses, mismo interés total). Solo aplica si tipo = FIDUCIARIO;
+  // los demás productos ignoran este campo.
+  frecuenciaFiduciario   String?
   // Plazos
   plazo                  Int
   fechaDesembolso        DateTime?

@@ -32,12 +32,28 @@ export async function POST(_req: NextRequest) {
   const session = await getSession()
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { id: userId, rol, companyId, branchId } = session.user
+  const { id: userId, rol, companyId } = session.user
+  let { branchId } = session.user
   if (!debeHacerCorte(rol)) {
     return NextResponse.json({ error: 'Tu rol no hace corte del día' }, { status: 403 })
   }
+
+  // MESA_CONTROL (ej. Carol) no tiene branchId propio porque es rol
+  // empresa, pero sí figura como concentradora de alguna sucursal
+  // (Branch.concentradorUserId). Si no tiene branchId, buscamos la
+  // sucursal que concentra y usamos su branchId para crear el
+  // consolidado (y el parcial residuo). Antes el endpoint rebotaba
+  // con "No tienes sucursal asignada" aunque sí fuera concentradora.
   if (!branchId) {
-    return NextResponse.json({ error: 'No tienes sucursal asignada' }, { status: 400 })
+    const branchConcentrada = await prisma.branch.findFirst({
+      where:  { companyId: companyId!, concentradorUserId: userId, activa: true },
+      select: { id: true },
+      orderBy: { nombre: 'asc' },
+    })
+    if (!branchConcentrada) {
+      return NextResponse.json({ error: 'No tienes sucursal asignada' }, { status: 400 })
+    }
+    branchId = branchConcentrada.id
   }
 
   // Solo la concentradora local (o un coord sin concentradora) puede

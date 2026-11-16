@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
-import { FileDown, Loader2, Building2, User, Users, TrendingUp, Wallet, AlertCircle } from 'lucide-react'
+import { FileDown, Loader2, Building2, User, Users, TrendingUp, Wallet, AlertCircle, Target, Landmark } from 'lucide-react'
 import { formatMoney } from '@/lib/utils'
-import type { ReporteEjecutivo, SucursalEjecutivo, CoordinadorEjecutivo } from '@/lib/reportes/ejecutivo'
+import type { ReporteEjecutivo, SucursalEjecutivo, CoordinadorEjecutivo, TotalesEmpresaEjecutivo } from '@/lib/reportes/ejecutivo'
 
 const COLOR_STYLES: Record<CoordinadorEjecutivo['color'], { badge: string; row: string; label: string }> = {
   verde:    { badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40', row: 'bg-emerald-500/5 border-l-4 border-l-emerald-500', label: 'Bueno' },
@@ -68,6 +68,8 @@ export function ReporteEjecutivoView({ data, empresa }: { data: ReporteEjecutivo
         </div>
       </div>
 
+      <TotalesEmpresaBanner totales={data.totales} />
+
       <div className="space-y-4">
         {data.sucursales.length === 0 && (
           <div className="text-center py-10 text-muted-foreground text-sm rounded-xl border border-border/40">
@@ -83,6 +85,135 @@ export function ReporteEjecutivoView({ data, empresa }: { data: ReporteEjecutivo
             onToggle={toggleExpand}
           />
         ))}
+      </div>
+    </div>
+  )
+}
+
+function TotalesEmpresaBanner({ totales }: { totales: TotalesEmpresaEjecutivo }) {
+  // Targets globales — lo que Dirección mira primero al abrir el reporte.
+  // Si no hay nada (empresa sin actividad esta semana), lo escondemos
+  // para no ocupar espacio con ceros.
+  if (totales.pactadoTotal === 0 && totales.colocacionTotal === 0 && totales.metaColocacionTotal === 0) return null
+  return (
+    <Card className="border-primary-500/40 bg-gradient-to-br from-primary-950/50 to-background">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Target className="h-4 w-4 text-primary-300" />
+          Totales de la empresa — semana en curso
+        </CardTitle>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          {totales.sucursalesConActividad} sucursal{totales.sucursalesConActividad === 1 ? '' : 'es'} activa{totales.sucursalesConActividad === 1 ? '' : 's'} · {totales.coordinadoresTotal} coordinador{totales.coordinadoresTotal === 1 ? '' : 'es'} con pactado o meta
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-md border border-border/50 bg-background/60 p-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <TrendingUp className="h-3 w-3" /> Colocación
+            </p>
+            <p className="text-lg font-bold tabular-nums mt-1">{formatMoney(totales.colocacionTotal)}</p>
+            <p className="text-[11px] text-muted-foreground tabular-nums">
+              meta {formatMoney(totales.metaColocacionTotal)}
+            </p>
+            <p className={`text-sm font-bold ${pctColor(totales.colocacionPct)}`}>
+              {totales.metaColocacionTotal > 0 ? `${totales.colocacionPct}%` : '—'}
+            </p>
+          </div>
+          <div className="rounded-md border border-border/50 bg-background/60 p-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <Wallet className="h-3 w-3" /> Cobranza
+            </p>
+            <p className="text-lg font-bold tabular-nums mt-1">{formatMoney(totales.recuperadoTotal)}</p>
+            <p className="text-[11px] text-muted-foreground tabular-nums">
+              pactado {formatMoney(totales.pactadoTotal)}
+            </p>
+            <p className={`text-sm font-bold ${pctColor(totales.cobranzaPct)}`}>
+              {totales.pactadoTotal > 0 ? `${totales.cobranzaPct}%` : '—'}
+            </p>
+          </div>
+          <div className="rounded-md border border-border/50 bg-background/60 p-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" /> Mora de la semana
+            </p>
+            <p className={`text-lg font-bold tabular-nums mt-1 ${totales.pagosPendientesTotal > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {formatMoney(totales.pagosPendientesTotal)}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Pagos vencidos sin cobrar
+            </p>
+          </div>
+          <div className="rounded-md border border-border/50 bg-background/60 p-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <Users className="h-3 w-3" /> Coordinadores por color
+            </p>
+            <div className="flex items-baseline gap-3 mt-1">
+              <span className="flex items-center gap-1 text-sm font-bold text-emerald-300">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" /> {totales.coordVerdes}
+              </span>
+              <span className="flex items-center gap-1 text-sm font-bold text-amber-300">
+                <span className="inline-block w-2 h-2 rounded-full bg-amber-500" /> {totales.coordAmarillos}
+              </span>
+              <span className="flex items-center gap-1 text-sm font-bold text-rose-300">
+                <span className="inline-block w-2 h-2 rounded-full bg-rose-500" /> {totales.coordRojos}
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              ≥85% / 60-84% / &lt;60%
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function SucursalTotalesStrip({ sucursal }: { sucursal: SucursalEjecutivo }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 rounded-lg border border-border/50 bg-background/40 p-2.5">
+      <div className="rounded-md border border-border/40 bg-background/60 p-2">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+          <TrendingUp className="h-3 w-3" /> Colocación sucursal
+        </p>
+        <p className="text-sm font-bold tabular-nums mt-0.5">{formatMoney(sucursal.colocacionTotal)}</p>
+        <p className="text-[11px] text-muted-foreground tabular-nums">
+          meta {formatMoney(sucursal.metaColocacionTotal)}
+        </p>
+        <p className={`text-xs font-bold ${pctColor(sucursal.colocacionPct)}`}>
+          {sucursal.metaColocacionTotal > 0 ? `${sucursal.colocacionPct}%` : '—'}
+        </p>
+      </div>
+      <div className="rounded-md border border-border/40 bg-background/60 p-2">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+          <Wallet className="h-3 w-3" /> Cobranza sucursal
+        </p>
+        <p className="text-sm font-bold tabular-nums mt-0.5">{formatMoney(sucursal.recuperadoTotal)}</p>
+        <p className="text-[11px] text-muted-foreground tabular-nums">
+          pactado {formatMoney(sucursal.pactadoTotal)}
+        </p>
+        <p className={`text-xs font-bold ${pctColor(sucursal.cobranzaPct)}`}>
+          {sucursal.pactadoTotal > 0 ? `${sucursal.cobranzaPct}%` : '—'}
+        </p>
+      </div>
+      <div className="rounded-md border border-border/40 bg-background/60 p-2">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+          <AlertCircle className="h-3 w-3" /> Mora sucursal
+        </p>
+        <p className={`text-sm font-bold tabular-nums mt-0.5 ${sucursal.pagosPendientesTotal > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+          {formatMoney(sucursal.pagosPendientesTotal)}
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          Pagos vencidos sin cobrar
+        </p>
+      </div>
+      <div className="rounded-md border border-border/40 bg-background/60 p-2">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+          <Landmark className="h-3 w-3" /> Equipo
+        </p>
+        <p className="text-sm font-bold mt-0.5">{sucursal.coordinadores.length} coord</p>
+        <p className="text-[11px] text-muted-foreground">
+          activos con pactado o meta
+        </p>
       </div>
     </div>
   )
@@ -167,41 +298,22 @@ function SucursalCard({
   return (
     <Card className="border-border/40 bg-background/40">
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-primary-300" />
-              {sucursal.nombre}
-              <DescargarPdfSucursalButton branchId={sucursal.branchId} nombre={sucursal.nombre} />
-            </CardTitle>
-            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-              {sucursal.concentradoraNombre && (
-                <p><strong className="text-foreground">Concentradora:</strong> {sucursal.concentradoraNombre}</p>
-              )}
-              {sucursal.gerenteZonalNombre && (
-                <p><strong className="text-foreground">GZ:</strong> {sucursal.gerenteZonalNombre}</p>
-              )}
-              <p><strong className="text-foreground">Coordinadores:</strong> {sucursal.coordinadores.length}</p>
-            </div>
-          </div>
-          {/* Totales de la sucursal */}
-          <div className="grid grid-cols-2 gap-2 text-xs min-w-[280px]">
-            <div className="rounded-md border border-border/50 bg-background/60 p-2">
-              <p className="text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Colocación</p>
-              <p className="font-semibold tabular-nums">{formatMoney(sucursal.colocacionTotal)}</p>
-              <p className="text-muted-foreground text-[11px]">de {formatMoney(sucursal.metaColocacionTotal)}</p>
-              <p className={`text-sm font-bold ${pctColor(sucursal.colocacionPct)}`}>{sucursal.metaColocacionTotal > 0 ? `${sucursal.colocacionPct}%` : '—'}</p>
-            </div>
-            <div className="rounded-md border border-border/50 bg-background/60 p-2">
-              <p className="text-muted-foreground flex items-center gap-1"><Wallet className="h-3 w-3" /> Cobranza</p>
-              <p className="font-semibold tabular-nums">{formatMoney(sucursal.recuperadoTotal)}</p>
-              <p className="text-muted-foreground text-[11px]">de {formatMoney(sucursal.pactadoTotal)} pactado</p>
-              <p className={`text-sm font-bold ${pctColor(sucursal.cobranzaPct)}`}>{sucursal.pactadoTotal > 0 ? `${sucursal.cobranzaPct}%` : '—'}</p>
-            </div>
-          </div>
+        <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+          <Building2 className="h-4 w-4 text-primary-300" />
+          {sucursal.nombre}
+          <DescargarPdfSucursalButton branchId={sucursal.branchId} nombre={sucursal.nombre} />
+        </CardTitle>
+        <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+          {sucursal.concentradoraNombre && (
+            <p><strong className="text-foreground">Concentradora:</strong> {sucursal.concentradoraNombre}</p>
+          )}
+          {sucursal.gerenteZonalNombre && (
+            <p><strong className="text-foreground">GZ:</strong> {sucursal.gerenteZonalNombre}</p>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        <SucursalTotalesStrip sucursal={sucursal} />
         <MiniGraficaCobranza coordinadores={sucursal.coordinadores} />
         <div className="space-y-2">
           {sucursal.coordinadores.map((coord) => (

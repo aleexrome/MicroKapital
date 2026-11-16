@@ -77,9 +77,29 @@ export interface SucursalEjecutivo {
   coordinadores:       CoordinadorEjecutivo[]
 }
 
+export interface TotalesEmpresaEjecutivo {
+  // Suma de todas las sucursales activas con actividad esta semana.
+  // Dirección usa este bloque como "resumen de página 1" del reporte
+  // para ver en una sola línea cómo va la empresa, antes de abrir
+  // sucursal por sucursal.
+  metaColocacionTotal:  number
+  colocacionTotal:      number
+  colocacionPct:        number
+  pactadoTotal:         number
+  recuperadoTotal:      number
+  cobranzaPct:          number
+  pagosPendientesTotal: number
+  sucursalesConActividad: number
+  coordinadoresTotal:     number
+  coordVerdes:            number
+  coordAmarillos:         number
+  coordRojos:             number
+}
+
 export interface ReporteEjecutivo {
   semanaInicio: Date
   semanaFin:    Date
+  totales:      TotalesEmpresaEjecutivo
   sucursales:   SucursalEjecutivo[]
 }
 
@@ -339,9 +359,37 @@ export async function getReporteEjecutivoSemanal(
     }
   })
 
+  // ─── Totales empresa ─────────────────────────────────────────────
+  // Suma sobre TODAS las sucursales activas (incluso las sin actividad
+  // aportan $0, no distorsionan). Los conteos por color consideran
+  // solo coords listados (ya filtrados por actividad en el map).
+  const sucursalesConActividad = sucursales.filter((s) => s.coordinadores.length > 0).length
+  const todosLosCoords = sucursales.flatMap((s) => s.coordinadores)
+  const metaColocacionTotal  = sucursales.reduce((s, b) => s + b.metaColocacionTotal, 0)
+  const colocacionTotal      = sucursales.reduce((s, b) => s + b.colocacionTotal,     0)
+  const pactadoTotal         = sucursales.reduce((s, b) => s + b.pactadoTotal,        0)
+  const recuperadoTotal      = sucursales.reduce((s, b) => s + b.recuperadoTotal,     0)
+  const pagosPendientesTotal = sucursales.reduce((s, b) => s + b.pagosPendientesTotal, 0)
+
+  const totales: TotalesEmpresaEjecutivo = {
+    metaColocacionTotal,
+    colocacionTotal,
+    colocacionPct: metaColocacionTotal > 0 ? Math.round((colocacionTotal / metaColocacionTotal) * 100) : 0,
+    pactadoTotal,
+    recuperadoTotal,
+    cobranzaPct:   pactadoTotal > 0 ? Math.round((recuperadoTotal / pactadoTotal) * 100) : 0,
+    pagosPendientesTotal,
+    sucursalesConActividad,
+    coordinadoresTotal: todosLosCoords.length,
+    coordVerdes:    todosLosCoords.filter((c) => c.color === 'verde').length,
+    coordAmarillos: todosLosCoords.filter((c) => c.color === 'amarillo').length,
+    coordRojos:     todosLosCoords.filter((c) => c.color === 'rojo').length,
+  }
+
   return {
     semanaInicio: saturday,
     semanaFin:    friday,
+    totales,
     sucursales,
   }
 }

@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney } from '@/lib/utils'
-import { TrendingDown, Activity, Zap, Clock, Target, RefreshCw, Wallet, TrendingUp, Percent, DollarSign } from 'lucide-react'
+import { TrendingDown, Activity, Zap, Clock, Target, RefreshCw, Wallet, TrendingUp, Percent, DollarSign, Sparkles, Calendar } from 'lucide-react'
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Area, AreaChart,
+  ResponsiveContainer, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Area, AreaChart, BarChart, Bar, Cell,
 } from 'recharts'
 import type { ReporteTiempoRealCobranza } from '@/lib/reportes/tiempoReal'
 
-const REFRESH_MS = 2 * 60 * 1000  // 2 min
+const REFRESH_MS = 2 * 60 * 1000
 
 function formatHora(iso: string) {
   return new Date(iso).toLocaleTimeString('es-MX', {
@@ -42,7 +42,7 @@ export function TiempoRealView({ initialData }: { initialData: ReporteTiempoReal
           setData(nuevo)
           setUltimoFetch(new Date())
         }
-      } catch { /* silencio — se reintenta al siguiente tick */ }
+      } catch { /* retry en el siguiente tick */ }
       finally { setRefreshing(false) }
     }, REFRESH_MS)
     return () => clearInterval(id)
@@ -54,13 +54,21 @@ export function TiempoRealView({ initialData }: { initialData: ReporteTiempoReal
       hora:      formatHora(s.capturadoEn),
       mora:      s.moraPendienteSemana,
       variacion: s.moraPendienteSemana - prev,
-      cobrado:   s.cobradoSemana,
     }
   })
   const ultimo = data.snapshots[data.snapshots.length - 1]
   const avancePct = ultimo && ultimo.pactadoSemana > 0
     ? Math.round((ultimo.cobradoSemana / ultimo.pactadoSemana) * 100)
     : 0
+
+  const semanaChartData = data.diasSemana.map((d) => ({
+    dia:  d.nombreCorto,
+    mora: d.esFuturo ? null : d.moraPendienteAlCierre,
+    cobrado: d.esFuturo ? null : d.cobradoAlCierre,
+    pactado: d.esFuturo ? null : d.pactadoAlCierre,
+    esHoy: d.esHoy,
+    esFuturo: d.esFuturo,
+  }))
 
   const tonoColor = data.interpretacion?.tono === 'positivo' ? 'text-emerald-400'
                   : data.interpretacion?.tono === 'neutro'   ? 'text-amber-400'
@@ -88,7 +96,6 @@ export function TiempoRealView({ initialData }: { initialData: ReporteTiempoReal
         </div>
       </div>
 
-      {/* Sin datos */}
       {data.snapshots.length === 0 && (
         <Card className="border-border/40">
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
@@ -98,8 +105,20 @@ export function TiempoRealView({ initialData }: { initialData: ReporteTiempoReal
         </Card>
       )}
 
-      {/* Resumen gerencial arriba (tipo ChatGPT) */}
-      {data.interpretacion && (
+      {/* Narrativa de Claude Haiku (lectura ejecutiva), prominente arriba */}
+      {data.narrativaIa && (
+        <Card className="border-primary-500/40 bg-gradient-to-br from-primary-950/30 to-background">
+          <CardContent className="py-5">
+            <p className="text-[11px] uppercase tracking-wider text-primary-300 font-semibold flex items-center gap-1 mb-2">
+              <Sparkles className="h-3 w-3" /> Lectura ejecutiva · generada por IA
+            </p>
+            <p className="text-base leading-relaxed">{data.narrativaIa}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Resumen por reglas (fallback si no hay narrativa IA) */}
+      {!data.narrativaIa && data.interpretacion && (
         <Card className={`border-border/40 bg-gradient-to-br ${tonoBg} to-background`}>
           <CardContent className="py-5">
             <p className={`text-base font-medium ${tonoColor}`}>{data.interpretacion.resumen}</p>
@@ -107,7 +126,7 @@ export function TiempoRealView({ initialData }: { initialData: ReporteTiempoReal
         </Card>
       )}
 
-      {/* Hero: mora + estado actual (siempre visible con 1+ snapshot) */}
+      {/* Hero: mora + estado actual */}
       {ultimo && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="lg:col-span-2 border-primary-500/40 bg-gradient-to-br from-primary-950/40 to-background">
@@ -148,15 +167,14 @@ export function TiempoRealView({ initialData }: { initialData: ReporteTiempoReal
         </div>
       )}
 
-      {/* 1. Evolución — tabla + gráfica */}
+      {/* 1. Evolución del día */}
       {chartData.length >= 1 && (
         <Card className="border-border/40">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">1. Evolución de la mora</CardTitle>
+            <CardTitle className="text-sm">1. Evolución de la mora (hoy)</CardTitle>
             <p className="text-[11px] text-muted-foreground">Saldo registrado en cada corte horario de hoy.</p>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Tabla tipo GPT */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
@@ -180,7 +198,6 @@ export function TiempoRealView({ initialData }: { initialData: ReporteTiempoReal
               </table>
             </div>
 
-            {/* Gráfica (requiere 2+ snapshots) */}
             {chartData.length >= 2 ? (
               <div style={{ width: '100%', height: 280 }}>
                 <ResponsiveContainer>
@@ -216,59 +233,104 @@ export function TiempoRealView({ initialData }: { initialData: ReporteTiempoReal
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-border/50 py-8 text-center text-sm text-muted-foreground">
-                Se necesita un segundo corte para graficar la evolución.<br />
-                <span className="text-xs">El siguiente snapshot se generará cuando vuelvas a abrir esta página pasados 25 min.</span>
+              <div className="rounded-lg border border-dashed border-border/50 py-6 text-center text-sm text-muted-foreground">
+                Se necesita un segundo corte para graficar la evolución.
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* 2. Indicadores (requiere 2+ snapshots) */}
+      {/* 2. Semana MK (sáb–vie) */}
+      {data.diasSemana.length > 0 && (
+        <Card className="border-border/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-primary-300" />
+              2. Semana MK en curso
+            </CardTitle>
+            <p className="text-[11px] text-muted-foreground">Mora pendiente al cierre de cada día (sáb–vie). El día en curso muestra el corte "ahora".</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
+                  <tr>
+                    <th className="text-left py-2 pr-4">Día</th>
+                    <th className="text-right py-2 px-4">Pactado</th>
+                    <th className="text-right py-2 px-4">Cobrado</th>
+                    <th className="text-right py-2 pl-4">Mora pendiente</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {data.diasSemana.map((d) => (
+                    <tr key={d.fechaIso} className={d.esHoy ? 'bg-primary-500/5' : ''}>
+                      <td className="py-2 pr-4 font-medium capitalize">
+                        {d.nombreCorto}
+                        {d.esHoy && <span className="ml-2 text-[10px] uppercase tracking-wider text-primary-300">hoy</span>}
+                      </td>
+                      <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
+                        {d.esFuturo ? '—' : formatMoney(d.pactadoAlCierre)}
+                      </td>
+                      <td className="py-2 px-4 text-right tabular-nums">
+                        {d.esFuturo ? '—' : formatMoney(d.cobradoAlCierre)}
+                      </td>
+                      <td className={`py-2 pl-4 text-right tabular-nums font-semibold ${d.esFuturo ? 'text-muted-foreground' : d.moraPendienteAlCierre > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        {d.esFuturo ? '—' : formatMoney(d.moraPendienteAlCierre)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ width: '100%', height: 220 }}>
+              <ResponsiveContainer>
+                <BarChart data={semanaChartData} margin={{ top: 10, right: 20, bottom: 0, left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                  <XAxis dataKey="dia" tick={{ fill: '#8f8f9a', fontSize: 11 }} />
+                  <YAxis
+                    tick={{ fill: '#8f8f9a', fontSize: 11 }}
+                    tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                    width={55}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#181727', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 12 }}
+                    labelStyle={{ color: '#A898FF', fontSize: 11, fontWeight: 600 }}
+                    formatter={(v) => v === null ? '—' : formatMoney(Number(v ?? 0))}
+                  />
+                  <Bar dataKey="mora" radius={[4, 4, 0, 0]}>
+                    {semanaChartData.map((d, i) => (
+                      <Cell key={i} fill={d.esFuturo ? '#333' : d.esHoy ? '#A78BFA' : '#F87171'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 3. KPIs */}
       {data.indicadores && (
         <div>
-          <h2 className="text-base font-semibold mb-2">2. Indicadores importantes</h2>
+          <h2 className="text-base font-semibold mb-2">3. Indicadores del día</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KpiCard
-              icon={<TrendingDown className="h-3 w-3" />}
-              label="Reducción acumulada"
-              value={`${data.indicadores.reduccionAcumuladaPct}%`}
-              sub="Desde el primer corte del día"
-              valueClass={data.indicadores.reduccionAcumuladaPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}
-            />
-            <KpiCard
-              icon={<DollarSign className="h-3 w-3" />}
-              label="Dinero reducido"
-              value={formatMoney(data.indicadores.dineroReducido)}
-              sub={`En ${data.indicadores.horasTranscurridas}h`}
-              valueClass={data.indicadores.dineroReducido > 0 ? 'text-emerald-400' : 'text-muted-foreground'}
-            />
-            <KpiCard
-              icon={<Zap className="h-3 w-3" />}
-              label="Reducción promedio"
-              value={formatMoney(data.indicadores.reduccionPromedioPorHora)}
-              sub="Por hora"
-            />
-            <KpiCard
-              icon={<Clock className="h-3 w-3" />}
-              label="Último corte"
-              value={`${data.indicadores.ultimoDeltaPct >= 0 ? '−' : '+'}${Math.abs(data.indicadores.ultimoDeltaPct)}%`}
-              sub={`Δ ${formatMoney(Math.abs(data.indicadores.ultimoDeltaMonto))}`}
-              valueClass={data.indicadores.ultimoDeltaPct > 0 ? 'text-emerald-400' : 'text-rose-400'}
-            />
+            <KpiCard icon={<TrendingDown className="h-3 w-3" />} label="Reducción acumulada" value={`${data.indicadores.reduccionAcumuladaPct}%`} sub="Desde el primer corte" valueClass={data.indicadores.reduccionAcumuladaPct >= 0 ? 'text-emerald-400' : 'text-rose-400'} />
+            <KpiCard icon={<DollarSign className="h-3 w-3" />} label="Dinero reducido" value={formatMoney(data.indicadores.dineroReducido)} sub={`En ${data.indicadores.horasTranscurridas}h`} valueClass={data.indicadores.dineroReducido > 0 ? 'text-emerald-400' : 'text-muted-foreground'} />
+            <KpiCard icon={<Zap className="h-3 w-3" />} label="Reducción promedio" value={formatMoney(data.indicadores.reduccionPromedioPorHora)} sub="Por hora" />
+            <KpiCard icon={<Clock className="h-3 w-3" />} label="Último corte" value={`${data.indicadores.ultimoDeltaPct >= 0 ? '−' : '+'}${Math.abs(data.indicadores.ultimoDeltaPct)}%`} sub={`Δ ${formatMoney(Math.abs(data.indicadores.ultimoDeltaMonto))}`} valueClass={data.indicadores.ultimoDeltaPct > 0 ? 'text-emerald-400' : 'text-rose-400'} />
           </div>
         </div>
       )}
 
-      {/* 3. Interpretación gerencial */}
+      {/* 4. Señales por reglas (complemento a la narrativa IA) */}
       {data.interpretacion && (
         <Card className="border-border/40">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">3. Mi interpretación gerencial</CardTitle>
+            <CardTitle className="text-sm">4. Señales detectadas</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">Hay señales interesantes:</p>
+          <CardContent>
             <ol className="space-y-2 text-sm list-decimal list-inside">
               {data.interpretacion.senales.map((s, i) => (
                 <li key={i} className="text-muted-foreground">
@@ -283,9 +345,7 @@ export function TiempoRealView({ initialData }: { initialData: ReporteTiempoReal
   )
 }
 
-function KpiRow({
-  icon, label, value, valueClass,
-}: { icon: React.ReactNode; label: string; value: string; valueClass?: string }) {
+function KpiRow({ icon, label, value, valueClass }: { icon: React.ReactNode; label: string; value: string; valueClass?: string }) {
   return (
     <div className="flex items-center justify-between gap-2 text-sm">
       <span className="text-muted-foreground flex items-center gap-1.5">{icon} {label}</span>
@@ -294,15 +354,7 @@ function KpiRow({
   )
 }
 
-function KpiCard({
-  icon, label, value, sub, valueClass,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  sub?: string
-  valueClass?: string
-}) {
+function KpiCard({ icon, label, value, sub, valueClass }: { icon: React.ReactNode; label: string; value: string; sub?: string; valueClass?: string }) {
   return (
     <Card className="border-border/40">
       <CardContent className="p-3">

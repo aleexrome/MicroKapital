@@ -94,15 +94,20 @@ async function calcularRankingNoCacheado(companyId: string, semanas: number): Pr
   const [company, users, branches] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { nombre: true } }),
     prisma.user.findMany({
-      // Filtra coords cuyo branch siga activo Y cuyo nombre no esté en la
-      // lista de sucursales cerradas por decisión operativa (Martínez de
-      // la Torre + Minatitlán). El filtro por nombre es defensivo: esas
-      // sucursales aún pueden estar marcadas activa=true en DB pero el
-      // negocio ya las dio por cerradas para reportes de performance.
+      // Incluimos todos los roles operativos que PUEDEN tener clientes y
+      // cobranza — no solo COBRADOR/COORDINADOR, también GERENTE y
+      // GERENTE_ZONAL, porque en MK algunos gerentes (ej. Adriana Nava,
+      // Cristina Berenice Esquivel) siguen cargando cartera propia
+      // además de supervisar. El filtro posterior `coordsConActividad`
+      // se encarga de descartar a los que solo supervisan y no cobran.
+      //
+      // Filtra además por sucursal activa Y excluye por nombre Martínez
+      // de la Torre + Minatitlán (sucursales cerradas por decisión
+      // operativa aunque sigan marcadas activa=true en DB).
       where: {
         companyId,
         activo: true,
-        rol:    { in: ['COBRADOR', 'COORDINADOR'] },
+        rol:    { in: ['COBRADOR', 'COORDINADOR', 'GERENTE', 'GERENTE_ZONAL'] },
         branch: {
           activa: true,
           NOT: [
@@ -316,7 +321,7 @@ async function calcularRankingNoCacheado(companyId: string, semanas: number): Pr
 export async function getRankingCoordinadores(companyId: string, semanas = 8): Promise<RankingCoordinadores> {
   const fn = unstable_cache(
     () => calcularRankingNoCacheado(companyId, semanas),
-    [`ranking-coords-${companyId}-${semanas}-v3`],
+    [`ranking-coords-${companyId}-${semanas}-v4`],
     { revalidate: 60 * 60, tags: [`ranking-coords-${companyId}`] },
   )
   return fn()

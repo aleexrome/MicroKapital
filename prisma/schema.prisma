@@ -142,6 +142,30 @@ model Company {
   withdrawals   BranchWithdrawal[]
   moraCobros    MoraCobro[]
   nominaEsquemaOverrides NominaEsquemaOverride[]
+  metricSnapshots        MetricSnapshot[]
+}
+
+/// Fotografía horaria del estado de cobranza de la empresa para el
+/// dashboard "Tiempo real" (/reportes/tiempo-real). Un cron escribe un
+/// registro cada 30 minutos durante horario laboral CDMX (8-20h).
+/// Todo se refiere a la semana MK en curso (sábado-viernes CDMX). La
+/// gráfica lee `moraPendienteSemana` y la curva cae a lo largo del día
+/// conforme los coords cobran. El resto alimenta KPIs derivados.
+model MetricSnapshot {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  capturadoEn DateTime
+
+  cobradoSemana        Decimal @db.Decimal(14, 2)
+  pactadoSemana        Decimal @db.Decimal(14, 2)
+  pactadoVencidoSemana Decimal @db.Decimal(14, 2)
+  moraPendienteSemana  Decimal @db.Decimal(14, 2)
+  colocacionSemana     Decimal @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, capturadoEn])
 }
 
 model License {

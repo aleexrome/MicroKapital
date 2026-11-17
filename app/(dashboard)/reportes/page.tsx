@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import {
   Target, DollarSign, Wallet, AlertTriangle, TrendingUp,
-  CheckCircle2, BadgeCheck, ChevronRight, ClipboardCheck, LayoutDashboard,
+  CheckCircle2, BadgeCheck, ChevronRight, ClipboardCheck, LayoutDashboard, Activity,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -112,6 +112,17 @@ const REPORTES: ReporteCard[] = [
     iconBg: 'bg-primary-500/15',
     iconText: 'text-primary-300',
     soloRoles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
+  },
+  {
+    href: '/reportes/tiempo-real',
+    titulo: 'Cobranza en tiempo real',
+    descripcion: 'Dashboard horario: evolución de la mora a lo largo del día, KPIs de velocidad e interpretación gerencial.',
+    icon: Activity,
+    color: 'border-cyan-500/40',
+    iconBg: 'bg-cyan-500/15',
+    iconText: 'text-cyan-300',
+    soloRoles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL', 'GERENTE_ZONAL'],
+    soloEmails: [EMAIL_DIRECTOR_SISTEMAS],
   },
   {
     href: '/reportes/ejecutivo',

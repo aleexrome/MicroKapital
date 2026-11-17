@@ -1,5 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import { getSaturday, getFriday } from '@/lib/week-utils'
+import { loanNotDeletedWhere } from '@/lib/access'
+
+// Antigüedad máxima de un snapshot antes de que la ruta de lectura
+// dispare uno nuevo. 25 min < intervalo nominal de 30 min, así se
+// garantiza al menos un corte por media hora cuando el dashboard
+// está en uso, sin generar snapshots en cada request.
+const MAX_STALE_MINUTES = 25
 
 export interface SnapshotPublico {
   capturadoEn:          string  // ISO
@@ -44,9 +51,78 @@ export interface ReporteTiempoRealCobranza {
 }
 
 /**
+ * Calcula un snapshot "a la fuerza" y lo escribe. Reutilizable desde
+ * el cron y desde la ruta on-demand.
+ */
+export async function escribirSnapshotCobranza(companyId: string): Promise<void> {
+  const ahora = new Date()
+  const saturday = getSaturday(ahora)
+  const friday   = getFriday(saturday)
+
+  const schedulesSemana = await prisma.paymentSchedule.findMany({
+    where: {
+      fechaVencimiento: { gte: saturday, lte: friday },
+      loan: {
+        companyId,
+        estado: { in: ['ACTIVE', 'LIQUIDATED', 'DEFAULTED'] },
+        AND: [loanNotDeletedWhere],
+      },
+    },
+    select: {
+      fechaVencimiento: true,
+      montoEsperado:    true,
+      estado:           true,
+      payments: {
+        where:  { canceledAt: null },
+        select: { monto: true },
+      },
+    },
+  })
+
+  let pactadoSemana        = 0
+  let cobradoSemana        = 0
+  let pactadoVencidoSemana = 0
+  for (const s of schedulesSemana) {
+    if (s.estado === 'FINANCIADO') continue
+    const esperado = Number(s.montoEsperado)
+    const pagado   = s.payments.reduce((acc, p) => acc + Number(p.monto), 0)
+    const cobrado  = Math.min(pagado, esperado)
+    pactadoSemana += esperado
+    cobradoSemana += cobrado
+    if (s.fechaVencimiento.getTime() <= ahora.getTime()) pactadoVencidoSemana += esperado
+  }
+  const moraPendienteSemana = Math.max(0, pactadoVencidoSemana - cobradoSemana)
+
+  const loansDesembolsados = await prisma.loan.findMany({
+    where: {
+      companyId,
+      estado: { in: ['ACTIVE', 'LIQUIDATED'] },
+      fechaDesembolso: { gte: saturday, lte: friday },
+      AND: [loanNotDeletedWhere],
+    },
+    select: { capital: true },
+  })
+  const colocacionSemana = loansDesembolsados.reduce((s, l) => s + Number(l.capital), 0)
+
+  await prisma.metricSnapshot.create({
+    data: {
+      companyId,
+      capturadoEn: ahora,
+      cobradoSemana,
+      pactadoSemana,
+      pactadoVencidoSemana,
+      moraPendienteSemana,
+      colocacionSemana,
+    },
+  })
+}
+
+/**
  * Lee los snapshots que caen en el día calendario CDMX de `ahora` para
- * armar el feed horario. El cron solo escribe entre 8 y 20h CDMX, así
- * que aquí tenemos entre 1 y ~25 puntos por día.
+ * armar el feed horario. Antes de leer, si el último snapshot tiene
+ * más de 25 min, dispara uno nuevo on-demand — así el dashboard tiene
+ * datos frescos aunque el cron sea diario (Vercel Hobby no admite
+ * frecuencias intra-día).
  */
 export async function getCobranzaTiempoReal(companyId: string): Promise<ReporteTiempoRealCobranza> {
   const ahora = new Date()
@@ -65,6 +141,28 @@ export async function getCobranzaTiempoReal(companyId: string): Promise<ReporteT
 
   const finDiaUtc = new Date(inicioDiaUtc)
   finDiaUtc.setUTCDate(finDiaUtc.getUTCDate() + 1)
+
+  // On-demand snapshot: solo durante horario laboral CDMX (8-20h) y si
+  // el último registrado es más viejo que MAX_STALE_MINUTES. Evita
+  // inundar la tabla cuando el dashboard está abierto en varios tabs.
+  const horaMx = Number(new Intl.DateTimeFormat('es-MX', {
+    timeZone: 'America/Mexico_City',
+    hour: '2-digit', hour12: false,
+  }).format(ahora))
+  if (horaMx >= 8 && horaMx < 20) {
+    const ultimo = await prisma.metricSnapshot.findFirst({
+      where:  { companyId },
+      orderBy: { capturadoEn: 'desc' },
+      select: { capturadoEn: true },
+    })
+    const minutosDesdeUltimo = ultimo
+      ? (ahora.getTime() - ultimo.capturadoEn.getTime()) / 60000
+      : Infinity
+    if (minutosDesdeUltimo > MAX_STALE_MINUTES) {
+      try { await escribirSnapshotCobranza(companyId) }
+      catch (e) { console.error('[tiempoReal] on-demand snapshot falló:', e) }
+    }
+  }
 
   const [company, rawSnaps] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { nombre: true } }),

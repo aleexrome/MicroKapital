@@ -7,7 +7,7 @@
     },
     {
       "path": "/api/cron/metrics-snapshot",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 14 * * *"
     }
   ]
 }

@@ -33,6 +33,8 @@ export interface CoordinadorRanking {
   nombre:        string
   sucursal:      string
   rol:           string
+  fotoUrl:       string | null
+  iniciales:     string
   serie:         PuntoSemana[]
   // Promedio de últimas 4 semanas para ordenar ranking.
   scorePromedio: number
@@ -50,6 +52,13 @@ export interface RankingCoordinadores {
   top3:          string[]   // cobradorIds
   bottom3:       string[]   // cobradorIds
   generadoEn:    string
+}
+
+function iniciales(nombre: string): string {
+  const parts = nombre.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 function labelSemana(sat: Date): string {
@@ -74,8 +83,16 @@ async function calcularRankingNoCacheado(companyId: string, semanas: number): Pr
   const [company, users, branches] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { nombre: true } }),
     prisma.user.findMany({
-      where: { companyId, activo: true, rol: { in: ['COBRADOR', 'COORDINADOR'] } },
-      select: { id: true, nombre: true, rol: true, branchId: true },
+      // Filtra coords cuyo branch siga activo (excluye Martínez de la Torre
+      // y Minatitlán — sucursales cerradas que no deben aparecer en el
+      // ranking aunque el coord siga activo en DB).
+      where: {
+        companyId,
+        activo: true,
+        rol:    { in: ['COBRADOR', 'COORDINADOR'] },
+        branch: { activa: true },
+      },
+      select: { id: true, nombre: true, rol: true, branchId: true, fotoPerfilUrl: true },
     }),
     prisma.branch.findMany({
       where: { companyId, activa: true },
@@ -195,6 +212,8 @@ async function calcularRankingNoCacheado(companyId: string, semanas: number): Pr
       nombre:        u.nombre,
       sucursal:      (u.branchId && branchNombre.get(u.branchId)) ?? 'Sin sucursal',
       rol:           u.rol,
+      fotoUrl:       u.fotoPerfilUrl,
+      iniciales:     iniciales(u.nombre),
       serie,
       scorePromedio,
       cobranzaPromedio,

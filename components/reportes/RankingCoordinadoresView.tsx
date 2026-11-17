@@ -4,9 +4,9 @@ import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney } from '@/lib/utils'
-import { Trophy, Medal, TrendingDown, Users, Calendar } from 'lucide-react'
+import { Trophy, TrendingDown, Users, Calendar } from 'lucide-react'
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea,
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
 import type { RankingCoordinadores, CoordinadorRanking } from '@/lib/reportes/rankingCoordinadores'
 
@@ -136,7 +136,7 @@ export function RankingCoordinadoresView({ data }: { data: RankingCoordinadores 
                   }}
                 />
                 {/* Líneas bottom primero (atrás), luego medio, luego top (al frente) */}
-                {['bottom', 'medio', 'top'].map((tier) =>
+                {(['bottom', 'medio', 'top'] as const).map((tier) =>
                   data.coordinadores
                     .filter((c) => c.tier === tier)
                     .map((c) => (
@@ -146,8 +146,25 @@ export function RankingCoordinadoresView({ data }: { data: RankingCoordinadores 
                         type="monotone"
                         stroke={COLORES_TIER[c.tier]}
                         strokeWidth={c.tier === 'medio' ? 1.2 : 2.2}
-                        strokeOpacity={c.tier === 'medio' ? 0.4 : 1}
-                        dot={{ r: c.tier === 'medio' ? 1.5 : 3 }}
+                        strokeOpacity={c.tier === 'medio' ? 0.35 : 1}
+                        dot={(props) => (
+                          <AvatarDot
+                            key={`dot-${c.cobradorId}-${props.index}`}
+                            cx={props.cx}
+                            cy={props.cy}
+                            coord={c}
+                            // Avatar grande SOLO en el último punto de la línea
+                            // top/bottom; resto quedan como puntos pequeños.
+                            variante={
+                              c.tier === 'medio'
+                                ? 'punto'
+                                : props.index === chartData.length - 1
+                                  ? 'avatar'
+                                  : 'punto'
+                            }
+                            tier={c.tier}
+                          />
+                        )}
                         activeDot={{ r: 5 }}
                         name={c.cobradorId}
                         connectNulls
@@ -197,7 +214,12 @@ export function RankingCoordinadoresView({ data }: { data: RankingCoordinadores 
                       {c.puesto === 3 && '🥉 '}
                       {c.puesto > 3 && c.puesto}
                     </td>
-                    <td className="py-2 pr-4 font-medium">{c.nombre}</td>
+                    <td className="py-2 pr-4 font-medium">
+                      <div className="flex items-center gap-2">
+                        <AvatarCircle coord={c} size={28} />
+                        <span>{c.nombre}</span>
+                      </div>
+                    </td>
                     <td className="py-2 pr-4 text-muted-foreground">{c.sucursal}</td>
                     <td className={`py-2 px-4 text-right tabular-nums ${pctColor(c.cobranzaPromedio)}`}>
                       {c.cobranzaPromedio}%
@@ -222,6 +244,101 @@ export function RankingCoordinadoresView({ data }: { data: RankingCoordinadores 
   )
 }
 
+/**
+ * Dot personalizado de Recharts que renderiza la foto circular del
+ * coord en el punto final de su línea (top/bottom), o un círculo
+ * pequeño en los puntos intermedios y en los coords del medio.
+ * Si no hay fotoUrl, cae a iniciales.
+ */
+function AvatarDot({
+  cx, cy, coord, variante, tier,
+}: {
+  cx?: number
+  cy?: number
+  coord: CoordinadorRanking
+  variante: 'punto' | 'avatar'
+  tier: 'top' | 'bottom' | 'medio'
+  indiceUltimo?: number
+}) {
+  if (cx === undefined || cy === undefined) return null
+  const color = COLORES_TIER[tier]
+
+  if (variante === 'punto') {
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={tier === 'medio' ? 1.5 : 3}
+        fill={color}
+        stroke="#0F0F14"
+        strokeWidth={0.5}
+      />
+    )
+  }
+
+  // Avatar grande para el último punto de top/bottom. Usamos foreignObject
+  // con <img> HTML en vez de SVG <image> porque la última no renderiza
+  // URLs cross-origin de Cloudinary de forma confiable en todos los
+  // browsers (Safari a veces las ignora silenciosamente).
+  const size = 28
+  return (
+    <g>
+      <foreignObject x={cx - size / 2} y={cy - size / 2} width={size} height={size}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <div
+          style={{
+            width:  size,
+            height: size,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            border: `2px solid ${color}`,
+            background: '#1C1C24',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.6)',
+            fontSize: 10,
+            fontWeight: 700,
+            color: '#E6E4F8',
+            boxSizing: 'border-box',
+          }}
+        >
+          {coord.fotoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={coord.fotoUrl}
+              alt={coord.nombre}
+              referrerPolicy="no-referrer"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : (
+            coord.iniciales
+          )}
+        </div>
+      </foreignObject>
+    </g>
+  )
+}
+
+function AvatarCircle({ coord, size = 32 }: { coord: CoordinadorRanking; size?: number }) {
+  return coord.fotoUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={coord.fotoUrl}
+      alt={coord.nombre}
+      className="rounded-full object-cover flex-shrink-0"
+      style={{ width: size, height: size }}
+    />
+  ) : (
+    <div
+      className="rounded-full bg-background/80 border border-border/50 flex items-center justify-center font-semibold text-foreground flex-shrink-0"
+      style={{ width: size, height: size, fontSize: size * 0.4 }}
+    >
+      {coord.iniciales}
+    </div>
+  )
+}
+
 function MetricaBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
@@ -235,11 +352,17 @@ function MetricaBtn({ active, onClick, children }: { active: boolean; onClick: (
 }
 
 function PodioRow({ c, tono }: { c: CoordinadorRanking; tono: 'emerald' | 'rose' }) {
-  const icon = c.puesto === 1 ? '🥇' : c.puesto === 2 ? '🥈' : c.puesto === 3 ? '🥉' : null
+  const medalla = c.puesto === 1 ? '🥇' : c.puesto === 2 ? '🥈' : c.puesto === 3 ? '🥉' : null
+  const ringColor = tono === 'emerald' ? 'ring-emerald-500/60' : 'ring-rose-500/60'
   return (
     <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-lg flex-shrink-0">{icon ?? <Medal className="h-4 w-4" />}</span>
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`relative flex-shrink-0 rounded-full ring-2 ${ringColor}`}>
+          <AvatarCircle coord={c} size={40} />
+          {medalla && (
+            <span className="absolute -bottom-1 -right-1 text-sm bg-background rounded-full px-0.5">{medalla}</span>
+          )}
+        </div>
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{c.nombre}</p>
           <p className="text-[11px] text-muted-foreground truncate">{c.sucursal}</p>

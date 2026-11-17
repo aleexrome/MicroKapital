@@ -281,11 +281,14 @@ function AvatarDot({
   // URLs cross-origin de Cloudinary de forma confiable en todos los
   // browsers (Safari a veces las ignora silenciosamente).
   const size = 28
+  const iniciales = getIniciales(coord)
   return (
     <g>
       <foreignObject x={cx - size / 2} y={cy - size / 2} width={size} height={size}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {/* xmlns requerido para que el HTML dentro del SVG renderice en
+            todos los browsers (Firefox lo tolera, Safari no). */}
         <div
+          {...{ xmlns: 'http://www.w3.org/1999/xhtml' }}
           style={{
             width:  size,
             height: size,
@@ -312,7 +315,7 @@ function AvatarDot({
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           ) : (
-            coord.iniciales
+            iniciales
           )}
         </div>
       </foreignObject>
@@ -320,13 +323,27 @@ function AvatarDot({
   )
 }
 
+function getIniciales(coord: CoordinadorRanking): string {
+  // Fallback defensivo: si el server no envió iniciales (cache viejo
+  // del PR anterior), las derivamos del nombre en el cliente.
+  if (coord.iniciales) return coord.iniciales
+  const parts = (coord.nombre ?? '').trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
 function AvatarCircle({ coord, size = 32 }: { coord: CoordinadorRanking; size?: number }) {
-  return coord.fotoUrl ? (
+  const [error, setError] = useState(false)
+  const url = coord.fotoUrl && !error ? coord.fotoUrl : null
+  return url ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={coord.fotoUrl}
+      src={url}
       alt={coord.nombre}
-      className="rounded-full object-cover flex-shrink-0"
+      referrerPolicy="no-referrer"
+      onError={() => setError(true)}
+      className="rounded-full object-cover flex-shrink-0 bg-background/80"
       style={{ width: size, height: size }}
     />
   ) : (
@@ -334,7 +351,7 @@ function AvatarCircle({ coord, size = 32 }: { coord: CoordinadorRanking; size?: 
       className="rounded-full bg-background/80 border border-border/50 flex items-center justify-center font-semibold text-foreground flex-shrink-0"
       style={{ width: size, height: size, fontSize: size * 0.4 }}
     >
-      {coord.iniciales}
+      {getIniciales(coord)}
     </div>
   )
 }

@@ -83,19 +83,38 @@ async function calcularRankingNoCacheado(companyId: string, semanas: number): Pr
   const [company, users, branches] = await Promise.all([
     prisma.company.findUnique({ where: { id: companyId }, select: { nombre: true } }),
     prisma.user.findMany({
-      // Filtra coords cuyo branch siga activo (excluye Martínez de la Torre
-      // y Minatitlán — sucursales cerradas que no deben aparecer en el
-      // ranking aunque el coord siga activo en DB).
+      // Filtra coords cuyo branch siga activo Y cuyo nombre no esté en la
+      // lista de sucursales cerradas por decisión operativa (Martínez de
+      // la Torre + Minatitlán). El filtro por nombre es defensivo: esas
+      // sucursales aún pueden estar marcadas activa=true en DB pero el
+      // negocio ya las dio por cerradas para reportes de performance.
       where: {
         companyId,
         activo: true,
         rol:    { in: ['COBRADOR', 'COORDINADOR'] },
-        branch: { activa: true },
+        branch: {
+          activa: true,
+          NOT: [
+            { nombre: { contains: 'Martínez', mode: 'insensitive' } },
+            { nombre: { contains: 'Martinez', mode: 'insensitive' } },
+            { nombre: { contains: 'Minatitlán', mode: 'insensitive' } },
+            { nombre: { contains: 'Minatitlan', mode: 'insensitive' } },
+          ],
+        },
       },
       select: { id: true, nombre: true, rol: true, branchId: true, fotoPerfilUrl: true },
     }),
     prisma.branch.findMany({
-      where: { companyId, activa: true },
+      where: {
+        companyId,
+        activa: true,
+        NOT: [
+          { nombre: { contains: 'Martínez', mode: 'insensitive' } },
+          { nombre: { contains: 'Martinez', mode: 'insensitive' } },
+          { nombre: { contains: 'Minatitlán', mode: 'insensitive' } },
+          { nombre: { contains: 'Minatitlan', mode: 'insensitive' } },
+        ],
+      },
       select: { id: true, nombre: true },
     }),
   ])
@@ -248,11 +267,15 @@ async function calcularRankingNoCacheado(companyId: string, semanas: number): Pr
  * Wrapper cacheado (24h). El tag incluye companyId para que empresas
  * distintas no se pisen en el cache.
  */
+// Bump "-v2" cuando cambie el shape del payload (p.e. se agreguen campos
+// como fotoUrl/iniciales) — invalida el cache viejo de usuarios que
+// pegarían al endpoint y recibirían el shape anterior sin los nuevos
+// campos. Revalidate 1h es más defensivo contra cambios de shape.
 export async function getRankingCoordinadores(companyId: string, semanas = 8): Promise<RankingCoordinadores> {
   const fn = unstable_cache(
     () => calcularRankingNoCacheado(companyId, semanas),
-    [`ranking-coords-${companyId}-${semanas}`],
-    { revalidate: 60 * 60 * 24, tags: [`ranking-coords-${companyId}`] },
+    [`ranking-coords-${companyId}-${semanas}-v2`],
+    { revalidate: 60 * 60, tags: [`ranking-coords-${companyId}`] },
   )
   return fn()
 }

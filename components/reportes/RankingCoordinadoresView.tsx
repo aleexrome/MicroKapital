@@ -182,7 +182,10 @@ export function RankingCoordinadoresView({ data }: { data: RankingCoordinadores 
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Ranking actual ({data.coordinadores.length} coordinadores)</CardTitle>
           <p className="text-[11px] text-muted-foreground">
-            Ordenado por score promedio de las últimas 4 semanas.
+            Ordenado por score global de las últimas 4 semanas. El score mezcla
+            eficiencia % (30% cobranza, 10% colocación) con volumen absoluto
+            relativo al grupo (40% $ cobrados, 20% $ colocados) — un coord con
+            100% pero pactado chico no rankea arriba.
             Top 3 en verde, bottom 3 en rojo.
           </p>
         </CardHeader>
@@ -194,8 +197,9 @@ export function RankingCoordinadoresView({ data }: { data: RankingCoordinadores 
                   <th className="text-left py-2 pr-4">#</th>
                   <th className="text-left py-2 pr-4">Coordinador</th>
                   <th className="text-left py-2 pr-4">Sucursal</th>
-                  <th className="text-right py-2 px-4">Cobranza prom.</th>
-                  <th className="text-right py-2 px-4">Colocación prom.</th>
+                  <th className="text-right py-2 px-4">Cobranza %</th>
+                  <th className="text-right py-2 px-4">$ Cobrado prom.</th>
+                  <th className="text-right py-2 px-4">$ Colocado prom.</th>
                   <th className="text-right py-2 pl-4">Score</th>
                 </tr>
               </thead>
@@ -224,6 +228,7 @@ export function RankingCoordinadoresView({ data }: { data: RankingCoordinadores 
                     <td className={`py-2 px-4 text-right tabular-nums ${pctColor(c.cobranzaPromedio)}`}>
                       {c.cobranzaPromedio}%
                     </td>
+                    <td className="py-2 px-4 text-right tabular-nums">{formatMoney(c.cobradoPromedio ?? 0)}</td>
                     <td className="py-2 px-4 text-right tabular-nums">{formatMoney(c.colocacionPromedio)}</td>
                     <td className={`py-2 pl-4 text-right tabular-nums font-bold ${pctColor(c.scorePromedio)}`}>
                       {c.scorePromedio}

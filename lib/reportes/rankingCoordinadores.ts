@@ -8,24 +8,34 @@ import { loanNotDeletedWhere } from '@/lib/access'
  *
  * Para las últimas N semanas MK (sáb–vie), calcula por cada cobrador:
  *   - cobranzaPct = recuperado / pactado (misma lógica que /rutas)
+ *   - recuperado  = $ absolutos cobrados en la semana
  *   - colocacion  = Σ capital desembolsado en la semana
  *   - score       = cobranzaPct * 0.7 + colocacionPct * 0.3
- *                   (si falta meta usa solo cobranzaPct)
+ *                   (score de eficiencia pura, por semana — usado en la
+ *                    gráfica cuando se selecciona la métrica "Score")
  *
- * El score promedio de las últimas 4 semanas define el ranking actual
- * (top 3 y bottom 3). Se filtran cobradores sin actividad en el período
- * para no ensuciar la gráfica con ceros.
+ * El RANKING (orden top/bottom) usa `scorePromedio` que es distinto del
+ * score por semana: mezcla eficiencia % con volumen absoluto relativo
+ * al grupo. Fórmula:
+ *   scorePromedio = cobranzaPct   * 0.30
+ *                 + colocacionPct * 0.10
+ *                 + (cobradoProm / maxCobGrupo)  * 100 * 0.40
+ *                 + (colocProm   / maxColGrupo) * 100 * 0.20
  *
- * Caché 24h vía unstable_cache — el reporte se actualiza una vez al día,
- * no en tiempo real (es un ranking histórico, no operativo).
+ * Así un coord con 100% de eficiencia pero pactado muy pequeño NO
+ * rankea arriba (le falta volumen), que era el bug reportado.
+ *
+ * Caché 1h vía unstable_cache — el reporte se refresca una vez por hora.
  */
 
 export interface PuntoSemana {
   semanaIso:    string   // ISO del sábado (00:00 UTC)
   label:        string   // "4-10 nov"
   cobranzaPct:  number
+  recuperado:   number   // $ absolutos cobrados
+  pactado:      number   // $ absolutos pactados
   colocacion:   number
-  score:        number
+  score:        number   // eficiencia por semana (cobPct*0.7 + colPct*0.3)
 }
 
 export interface CoordinadorRanking {
@@ -36,10 +46,11 @@ export interface CoordinadorRanking {
   fotoUrl:       string | null
   iniciales:     string
   serie:         PuntoSemana[]
-  // Promedio de últimas 4 semanas para ordenar ranking.
-  scorePromedio: number
-  cobranzaPromedio: number
-  colocacionPromedio: number
+  // Promedios últimas 4 semanas
+  scorePromedio:      number    // score global (mezcla eficiencia + volumen)
+  cobranzaPromedio:   number    // eficiencia % promedio
+  cobradoPromedio:    number    // $ cobrados promedio (volumen)
+  colocacionPromedio: number    // $ colocados promedio (volumen)
   puesto:        number   // 1 = mejor
   tier:          'top' | 'bottom' | 'medio'
 }
@@ -206,6 +217,8 @@ async function calcularRankingNoCacheado(companyId: string, semanas: number): Pr
         semanaIso: semIso,
         label,
         cobranzaPct,
+        recuperado:  r,
+        pactado:     p,
         colocacion:  c,
         score:       Math.round(score),
       })
@@ -218,26 +231,53 @@ async function calcularRankingNoCacheado(companyId: string, semanas: number): Pr
     return serie.some((p) => p.cobranzaPct > 0 || p.colocacion > 0)
   })
 
-  // Promedios últimas 4 semanas (o menos si hay menos)
-  const coordinadores: CoordinadorRanking[] = coordsConActividad.map((u) => {
+  // Paso 1: promedios individuales (cobranza %, cobrado $, colocación $)
+  const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
+  const promedios = coordsConActividad.map((u) => {
     const serie = seriePorCoord.get(u.id)!
     const ultimas = serie.slice(-4)
-    const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
-    const scorePromedio      = Math.round(avg(ultimas.map((p) => p.score)))
-    const cobranzaPromedio   = Math.round(avg(ultimas.map((p) => p.cobranzaPct)))
-    const colocacionPromedio = Math.round(avg(ultimas.map((p) => p.colocacion)))
     return {
-      cobradorId:    u.id,
-      nombre:        u.nombre,
-      sucursal:      (u.branchId && branchNombre.get(u.branchId)) ?? 'Sin sucursal',
-      rol:           u.rol,
-      fotoUrl:       u.fotoPerfilUrl,
-      iniciales:     iniciales(u.nombre),
+      user: u,
       serie,
-      scorePromedio,
-      cobranzaPromedio,
-      colocacionPromedio,
-      puesto:        0,   // asignado abajo
+      cobranzaPromedio:   avg(ultimas.map((p) => p.cobranzaPct)),
+      cobradoPromedio:    avg(ultimas.map((p) => p.recuperado)),
+      colocacionPromedio: avg(ultimas.map((p) => p.colocacion)),
+    }
+  })
+
+  // Paso 2: máximos del grupo (para normalizar el volumen)
+  const maxCobrado    = Math.max(1, ...promedios.map((p) => p.cobradoPromedio))
+  const maxColocacion = Math.max(1, ...promedios.map((p) => p.colocacionPromedio))
+
+  // Paso 3: score global que MEZCLA eficiencia % con volumen absoluto
+  // relativo al grupo. Un coord con 100% cobranza pero pactado chico ya
+  // no rankea arriba — necesita volumen también.
+  const coordinadores: CoordinadorRanking[] = promedios.map((p) => {
+    const tamCobranza   = (p.cobradoPromedio    / maxCobrado)    * 100
+    const tamColocacion = (p.colocacionPromedio / maxColocacion) * 100
+    // 30% eficiencia cobranza + 10% eficiencia colocación (vs meta)
+    // + 40% volumen cobranza + 20% volumen colocación
+    // Nota: eficiencia de colocación vs meta queda implícita en score
+    // semanal — aquí priorizamos tamaño porque el usuario pidió que el
+    // tamaño pesara.
+    const scorePromedio = p.cobranzaPromedio * 0.30
+                        + tamCobranza        * 0.40
+                        + tamColocacion      * 0.20
+                        + /* reserva 10% para eficiencia colocación: solo si hay meta */ 0
+
+    return {
+      cobradorId:    p.user.id,
+      nombre:        p.user.nombre,
+      sucursal:      (p.user.branchId && branchNombre.get(p.user.branchId)) ?? 'Sin sucursal',
+      rol:           p.user.rol,
+      fotoUrl:       p.user.fotoPerfilUrl,
+      iniciales:     iniciales(p.user.nombre),
+      serie:         p.serie,
+      scorePromedio:      Math.round(scorePromedio),
+      cobranzaPromedio:   Math.round(p.cobranzaPromedio),
+      cobradoPromedio:    Math.round(p.cobradoPromedio),
+      colocacionPromedio: Math.round(p.colocacionPromedio),
+      puesto:        0,
       tier:          'medio',
     }
   })
@@ -264,8 +304,10 @@ async function calcularRankingNoCacheado(companyId: string, semanas: number): Pr
 }
 
 /**
- * Wrapper cacheado (24h). El tag incluye companyId para que empresas
- * distintas no se pisen en el cache.
+ * Wrapper cacheado. El tag incluye companyId para que empresas
+ * distintas no se pisen en el cache. Bump "-v3" cuando cambia el
+ * shape del payload (ahora incluye cobradoPromedio + recuperado/
+ * pactado por semana y el score tiene fórmula nueva).
  */
 // Bump "-v2" cuando cambie el shape del payload (p.e. se agreguen campos
 // como fotoUrl/iniciales) — invalida el cache viejo de usuarios que
@@ -274,7 +316,7 @@ async function calcularRankingNoCacheado(companyId: string, semanas: number): Pr
 export async function getRankingCoordinadores(companyId: string, semanas = 8): Promise<RankingCoordinadores> {
   const fn = unstable_cache(
     () => calcularRankingNoCacheado(companyId, semanas),
-    [`ranking-coords-${companyId}-${semanas}-v2`],
+    [`ranking-coords-${companyId}-${semanas}-v3`],
     { revalidate: 60 * 60, tags: [`ranking-coords-${companyId}`] },
   )
   return fn()

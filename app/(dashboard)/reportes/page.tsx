@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import {
   Target, DollarSign, Wallet, AlertTriangle, TrendingUp,
-  CheckCircle2, BadgeCheck, ChevronRight, ClipboardCheck, LayoutDashboard, Activity,
+  CheckCircle2, BadgeCheck, ChevronRight, ClipboardCheck, LayoutDashboard, Activity, Users,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -112,6 +112,17 @@ const REPORTES: ReporteCard[] = [
     iconBg: 'bg-primary-500/15',
     iconText: 'text-primary-300',
     soloRoles: ['MESA_CONTROL', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN'],
+  },
+  {
+    href: '/reportes/ranking-coordinadores',
+    titulo: 'Ranking de coordinadores',
+    descripcion: 'Comparativa semana a semana entre todos los coords: top 3 en verde, bottom 3 en rojo. Para compartir al equipo y motivar.',
+    icon: Users,
+    color: 'border-teal-500/40',
+    iconBg: 'bg-teal-500/15',
+    iconText: 'text-teal-300',
+    soloRoles: ['DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'SUPER_ADMIN', 'MESA_CONTROL', 'GERENTE_ZONAL'],
+    soloEmails: [EMAIL_DIRECTOR_SISTEMAS],
   },
   {
     href: '/reportes/tiempo-real',

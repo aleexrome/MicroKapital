@@ -82,6 +82,7 @@ export async function escribirSnapshotCobranza(companyId: string): Promise<void>
   let pactadoSemana        = 0
   let cobradoSemana        = 0
   let pactadoVencidoSemana = 0
+  let moraPendienteSemana  = 0
   for (const s of schedulesSemana) {
     if (s.estado === 'FINANCIADO') continue
     const esperado = Number(s.montoEsperado)
@@ -89,9 +90,17 @@ export async function escribirSnapshotCobranza(companyId: string): Promise<void>
     const cobrado  = Math.min(pagado, esperado)
     pactadoSemana += esperado
     cobradoSemana += cobrado
-    if (s.fechaVencimiento.getTime() <= ahora.getTime()) pactadoVencidoSemana += esperado
+    const yaVencio = s.fechaVencimiento.getTime() <= ahora.getTime()
+    if (yaVencio) pactadoVencidoSemana += esperado
+    // Mora = pendiente SCHEDULE POR SCHEDULE (misma lógica que
+    // /reportes/ejecutivo). NO usar pactadoVencido - cobradoTotal:
+    // esa resta cuenta pagos anticipados de schedules NO vencidos y
+    // baja la mora artificialmente.
+    if (yaVencio && s.estado !== 'PAID' && s.estado !== 'ADVANCE') {
+      const pendiente = esperado - cobrado
+      if (pendiente > 0) moraPendienteSemana += pendiente
+    }
   }
-  const moraPendienteSemana = Math.max(0, pactadoVencidoSemana - cobradoSemana)
 
   const loansDesembolsados = await prisma.loan.findMany({
     where: {

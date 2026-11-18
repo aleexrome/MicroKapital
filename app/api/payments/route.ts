@@ -8,6 +8,7 @@ import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioSc
 import { todayMx, endOfDayMx } from '@/lib/timezone'
 import { getSaturday, getFriday } from '@/lib/week-utils'
 import { crearNotificacion, getDirectoresIds, getGerentesZonalesIds } from '@/lib/notifications'
+import { assertNoDoublePayment, DoublePaymentError } from '@/lib/paymentGuard'
 import { detectarMora } from '@/lib/moras'
 
 const cashBreakdownSchema = z.object({
@@ -291,8 +292,13 @@ export async function POST(req: NextRequest) {
     : await generateTicketNumber(branchPrefix, yearForTicket)
   const qrCodePre = numeroTicketPre ? generateTicketQrData(numeroTicketPre) : null
 
-  const result = await prisma.$transaction(async (tx) => {
+  const runPaymentTx = () => prisma.$transaction(async (tx) => {
     const now = new Date()
+
+    // Idempotencia: rechazar doble-click. Si ya existe un Payment no
+    // cancelado del mismo (scheduleId, cobradorId, monto) en los
+    // últimos 30 segundos, lanzamos DoublePaymentError → 409.
+    await assertNoDoublePayment(tx, schedule.id, cobrador.id, data.monto)
 
     // 1. Crear pago
     const payment = await tx.payment.create({
@@ -467,6 +473,16 @@ export async function POST(req: NextRequest) {
       pending: false as const,
     }
   }, { timeout: 20000, maxWait: 10000 })
+
+  let result: Awaited<ReturnType<typeof runPaymentTx>>
+  try {
+    result = await runPaymentTx()
+  } catch (e) {
+    if (e instanceof DoublePaymentError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: 409 })
+    }
+    throw e
+  }
 
   createAuditLog({
     userId,

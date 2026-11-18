@@ -8,6 +8,7 @@ import { calcScoreEventType, calcDiasDiferencia, getScoreChange, aplicarCambioSc
 import { todayMx } from '@/lib/timezone'
 import { getSaturday, getFriday } from '@/lib/week-utils'
 import { crearNotificacion, getDirectoresIds, getGerentesZonalesIds } from '@/lib/notifications'
+import { assertNoDoublePayment, DoublePaymentError } from '@/lib/paymentGuard'
 
 const cashBreakdownSchema = z.object({
   denominacion: z.number().int().positive(),
@@ -270,6 +271,10 @@ export async function POST(
       //    (schedule PAID, score, caja, ticket) se hace en verify-transfer
       //    cuando el gerente zonal confirme el ingreso al banco.
       //    CASH/CARD → flujo directo como antes.
+      // Idempotencia por integrante: rechazar doble-click. Si ya existe un
+      // Payment no cancelado del mismo (scheduleId, cobradorId, monto)
+      // en los últimos 30 segundos, lanza DoublePaymentError → 409.
+      await assertNoDoublePayment(tx, sched.id, userId, montoBase)
       const payment = await tx.payment.create({
         data: {
           loanId:     loan.id,
@@ -424,6 +429,9 @@ export async function POST(
     }
     }, { timeout: 20000 })
   } catch (e) {
+    if (e instanceof DoublePaymentError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: 409 })
+    }
     console.error('[group-pay] transacción falló', e)
     const msg = e instanceof Error ? e.message : 'Error al registrar el pago grupal'
     return NextResponse.json({ error: msg }, { status: 500 })

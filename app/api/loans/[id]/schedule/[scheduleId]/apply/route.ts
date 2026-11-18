@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { createAuditLogAsync } from '@/lib/audit'
 import { todayMx } from '@/lib/timezone'
 import { detectarMora } from '@/lib/moras'
+import { assertNoDoublePayment, DoublePaymentError } from '@/lib/paymentGuard'
 import { z } from 'zod'
 
 // El "aplicar pago" lo usa Dirección/Op. Admin para registrar cobros que
@@ -102,7 +103,13 @@ export async function POST(
     loanEstado: schedule.loan.estado,
   }
 
-  await prisma.$transaction(async (tx) => {
+  try {
+    await prisma.$transaction(async (tx) => {
+    // Idempotencia: rechazar doble-click. Si ya existe un Payment no
+    // cancelado del mismo (scheduleId, cobradorId, monto) en los
+    // últimos 30 segundos, lanzamos DoublePaymentError → 409.
+    await assertNoDoublePayment(tx, schedule.id, cobradorRegistroId, monto)
+
     const esTransferencia = metodoPago === 'TRANSFER'
 
     // 1. Crear el Payment de respaldo.
@@ -203,7 +210,13 @@ export async function POST(
         data:  { estado: 'LIQUIDATED' },
       })
     }
-  })
+    })
+  } catch (e) {
+    if (e instanceof DoublePaymentError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: 409 })
+    }
+    throw e
+  }
 
   // Awaited: en Vercel serverless un createAuditLog fire-and-forget
   // puede perderse si el request termina antes de que la promesa resuelva.

@@ -14,7 +14,7 @@ import { tienePrestamosEnLimbo72h } from '@/lib/limbo-status'
 
 const SOLIDARIO_UMBRAL             = 6
 const SOLIDARIO_PAGOS_FINANCIADOS  = 2
-const ROLES_PUEDEN_RENOVAR = ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN']
+const ROLES_PUEDEN_RENOVAR = ['COORDINADOR', 'COBRADOR', 'GERENTE', 'GERENTE_ZONAL', 'SUPER_ADMIN', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL']
 
 export default async function GrupoCalendarioPage({ params }: { params: { groupId: string } }) {
   const session = await getSession()

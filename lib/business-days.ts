@@ -1,64 +1,36 @@
-import { addDays, getDay, getMonth, getDate, isSameDay } from 'date-fns'
+import { addDays, getDay } from 'date-fns'
 
-// Festivos fijos de México (mes es 0-indexado)
-// Nota: 16 de septiembre (Independencia) y 2 de noviembre (Día de los
-// Fieles Difuntos) se quitaron de la lista — en la práctica MicroKapital
-// SÍ opera esos días, y dejarlos como festivos hacía que los créditos
-// Ágil recorrieran pagos al día siguiente hábil sin razón, dejando a
-// los cobradores sin pactados que ir a cobrar. Si en algún ejercicio a
-// futuro se decide descansar, se agrega aquí o se controla por año.
-const FESTIVOS_FIJOS: Array<{ mes: number; dia: number }> = [
-  { mes: 0, dia: 1 },   // 1 Enero — Año Nuevo
-  { mes: 1, dia: 5 },   // 5 Febrero — Constitución
-  { mes: 2, dia: 21 },  // 21 Marzo — Natalicio Benito Juárez
-  { mes: 4, dia: 1 },   // 1 Mayo — Día del Trabajo
-  { mes: 10, dia: 20 }, // 20 Noviembre — Revolución Mexicana
-  { mes: 11, dia: 25 }, // 25 Diciembre — Navidad
-]
-
-// Festivos móviles: Semana Santa (Jueves y Viernes Santo)
-// Se calculan a partir del algoritmo de Pascua para cada año
-function calcularPascua(año: number): Date {
-  const a = año % 19
-  const b = Math.floor(año / 100)
-  const c = año % 100
-  const d = Math.floor(b / 4)
-  const e = b % 4
-  const f = Math.floor((b + 8) / 25)
-  const g = Math.floor((b - f + 1) / 3)
-  const h = (19 * a + b - d - g + 15) % 30
-  const i = Math.floor(c / 4)
-  const k = c % 4
-  const l = (32 + 2 * e + 2 * i - h - k) % 7
-  const m = Math.floor((a + 11 * h + 22 * l) / 451)
-  const mes = Math.floor((h + l - 7 * m + 114) / 31) - 1 // 0-indexado
-  const dia = ((h + l - 7 * m + 114) % 31) + 1
-  return new Date(año, mes, dia)
-}
-
-function getFestivosMoviles(año: number): Date[] {
-  const pascua = calcularPascua(año)
-  const juevesSanto = addDays(pascua, -3)
-  const viernesSanto = addDays(pascua, -2)
-  return [juevesSanto, viernesSanto]
-}
+// ──────────────────────────────────────────────────────────────────────
+// DECISIÓN OPERATIVA DE MICROKAPITAL
+//
+// MicroKapital opera TODOS los días hábiles L-V del calendario, SIN
+// recorrer pagos por festivos oficiales. Los cobradores van a campo
+// aunque sea 20 de noviembre, 16 de septiembre, 2 de noviembre, etc.
+// Dejar festivos aquí hacía que:
+//   - Los créditos Ágil recorrieran pagos al siguiente día hábil.
+//   - Los cobradores se quedaran sin pactado que cobrar.
+//   - El pactado del viernes "desapareciera" y no cuadrara con rutas.
+//
+// Si ALGÚN DÍA se decide descansar una fecha específica (p.ej. "este
+// 25-dic-2027 sí descansamos"), se agrega aquí como { mes, dia, año? }
+// con año explícito. NO agregar festivos genéricos sin confirmar con
+// Dirección — este archivo se revisó múltiples veces y cada vez que
+// se agregó un festivo "obvio" (Navidad, 20-nov, Semana Santa) hubo que
+// quitarlo porque en la práctica MK opera.
+// ──────────────────────────────────────────────────────────────────────
+const FESTIVOS_FIJOS: Array<{ mes: number; dia: number }> = []
 
 /**
- * Verifica si una fecha es festivo oficial en México
+ * Verifica si una fecha es festivo para efectos de MicroKapital.
+ * Por diseño actual siempre retorna false (MK opera todos los días
+ * hábiles). Se mantiene la función y FESTIVOS_FIJOS para poder agregar
+ * descansos puntuales en el futuro sin tocar los callers.
  */
 export function esFestivo(fecha: Date): boolean {
-  const mes = getMonth(fecha)
-  const dia = getDate(fecha)
-  const año = fecha.getFullYear()
-
-  // Festivos fijos
-  if (FESTIVOS_FIJOS.some((f) => f.mes === mes && f.dia === dia)) {
-    return true
-  }
-
-  // Festivos móviles (Semana Santa)
-  const festivosMoviles = getFestivosMoviles(año)
-  return festivosMoviles.some((f) => isSameDay(f, fecha))
+  if (FESTIVOS_FIJOS.length === 0) return false
+  const mes = fecha.getMonth()
+  const dia = fecha.getDate()
+  return FESTIVOS_FIJOS.some((f) => f.mes === mes && f.dia === dia)
 }
 
 /**

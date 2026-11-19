@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { formatMoney } from '@/lib/utils'
 import { Trophy, TrendingDown, Users, Calendar } from 'lucide-react'
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, LineChart, Line, BarChart, Bar, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
 import type { RankingCoordinadores, CoordinadorRanking } from '@/lib/reportes/rankingCoordinadores'
 
@@ -131,78 +132,85 @@ export function RankingCoordinadoresView({
         </Card>
       </div>
 
-      {/* Gráfica lineal */}
+      {/* Gráfica: líneas si hay 2+ semanas, barras ordenadas si es solo una */}
       <Card className="border-border/40">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <Calendar className="h-4 w-4 text-primary-300" />
-            Evolución semana con semana · {metricaLabel}
+            {chartData.length >= 2 ? 'Evolución semana con semana' : 'Comparativa de la semana'} · {metricaLabel}
           </CardTitle>
           <p className="text-[11px] text-muted-foreground">
-            Verde = top 3, rojo = bottom 3, gris = resto. Pasa el mouse sobre una línea para ver nombre y sucursal.
+            {chartData.length >= 2
+              ? 'Verde = top 3, rojo = bottom 3, gris = resto. Pasa el mouse sobre una línea para ver nombre y sucursal.'
+              : 'Una barra por coord, ordenadas de mayor a menor. Verde = top 3, rojo = bottom 3.'}
           </p>
         </CardHeader>
         <CardContent>
-          <div style={{ width: '100%', height: 420 }}>
-            <ResponsiveContainer>
-              <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 0, left: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="label" tick={{ fill: '#8f8f9a', fontSize: 11 }} />
-                <YAxis
-                  tick={{ fill: '#8f8f9a', fontSize: 11 }}
-                  tickFormatter={formatY}
-                  width={60}
-                />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#181727', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 12, maxHeight: 400, overflow: 'auto' }}
-                  labelStyle={{ color: '#A898FF', fontSize: 11, fontWeight: 600 }}
-                  formatter={(v, nameId) => {
-                    const id = String(nameId ?? '')
-                    const coord = data.coordinadores.find((c) => c.cobradorId === id)
-                    if (!coord) return [String(v ?? ''), id]
-                    const valor = metrica === 'colocacion' ? formatMoney(Number(v ?? 0)) : `${v}${metrica === 'cobranza' || metrica === 'score' ? '%' : ''}`
-                    return [valor, `${coord.nombre} · ${coord.sucursal}`]
-                  }}
-                />
-                {/* Líneas bottom primero (atrás), luego medio, luego top (al frente) */}
-                {(['bottom', 'medio', 'top'] as const).map((tier) =>
-                  data.coordinadores
-                    .filter((c) => c.tier === tier)
-                    .map((c) => (
-                      <Line
-                        key={c.cobradorId}
-                        dataKey={c.cobradorId}
-                        type="monotone"
-                        stroke={COLORES_TIER[c.tier]}
-                        strokeWidth={c.tier === 'medio' ? 1.2 : 2.2}
-                        strokeOpacity={c.tier === 'medio' ? 0.35 : 1}
-                        dot={(props) => (
-                          <AvatarDot
-                            key={`dot-${c.cobradorId}-${props.index}`}
-                            cx={props.cx}
-                            cy={props.cy}
-                            coord={c}
-                            // Avatar grande SOLO en el último punto de la línea
-                            // top/bottom; resto quedan como puntos pequeños.
-                            variante={
-                              c.tier === 'medio'
-                                ? 'punto'
-                                : props.index === chartData.length - 1
-                                  ? 'avatar'
-                                  : 'punto'
-                            }
-                            tier={c.tier}
-                          />
-                        )}
-                        activeDot={{ r: 5 }}
-                        name={c.cobradorId}
-                        connectNulls
-                      />
-                    )),
-                )}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          {chartData.length >= 2 ? (
+            <div style={{ width: '100%', height: 420 }}>
+              <ResponsiveContainer>
+                <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 0, left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="label" tick={{ fill: '#8f8f9a', fontSize: 11 }} />
+                  <YAxis
+                    tick={{ fill: '#8f8f9a', fontSize: 11 }}
+                    tickFormatter={formatY}
+                    width={60}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#181727', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 12, maxHeight: 400, overflow: 'auto' }}
+                    labelStyle={{ color: '#A898FF', fontSize: 11, fontWeight: 600 }}
+                    formatter={(v, nameId) => {
+                      const id = String(nameId ?? '')
+                      const coord = data.coordinadores.find((c) => c.cobradorId === id)
+                      if (!coord) return [String(v ?? ''), id]
+                      const valor = metrica === 'colocacion' ? formatMoney(Number(v ?? 0)) : `${v}${metrica === 'cobranza' || metrica === 'score' ? '%' : ''}`
+                      return [valor, `${coord.nombre} · ${coord.sucursal}`]
+                    }}
+                  />
+                  {(['bottom', 'medio', 'top'] as const).map((tier) =>
+                    data.coordinadores
+                      .filter((c) => c.tier === tier)
+                      .map((c) => (
+                        <Line
+                          key={c.cobradorId}
+                          dataKey={c.cobradorId}
+                          type="monotone"
+                          stroke={COLORES_TIER[c.tier]}
+                          strokeWidth={c.tier === 'medio' ? 1.2 : 2.2}
+                          strokeOpacity={c.tier === 'medio' ? 0.35 : 1}
+                          dot={(props) => (
+                            <AvatarDot
+                              key={`dot-${c.cobradorId}-${props.index}`}
+                              cx={props.cx}
+                              cy={props.cy}
+                              coord={c}
+                              variante={
+                                c.tier === 'medio'
+                                  ? 'punto'
+                                  : props.index === chartData.length - 1
+                                    ? 'avatar'
+                                    : 'punto'
+                              }
+                              tier={c.tier}
+                            />
+                          )}
+                          activeDot={{ r: 5 }}
+                          name={c.cobradorId}
+                          connectNulls
+                        />
+                      )),
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <SingleWeekBarChart
+              data={data}
+              metrica={metrica}
+              formatY={formatY}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -431,4 +439,76 @@ function pctColor(pct: number): string {
   if (pct >= 85) return 'text-emerald-400'
   if (pct >= 60) return 'text-amber-400'
   return 'text-rose-400'
+}
+
+/**
+ * Gráfica de barras horizontales cuando solo hay 1 semana (no se puede
+ * trazar línea con un solo punto). Una barra por coord, ordenadas de
+ * mayor a menor según la métrica activa. Colores según tier.
+ */
+function SingleWeekBarChart({
+  data, metrica, formatY,
+}: {
+  data: RankingCoordinadores
+  metrica: Metrica
+  formatY: (v: number) => string
+}) {
+  // Punto único por coord con el valor de la única semana cargada.
+  const barData = data.coordinadores
+    .map((c) => {
+      const punto = c.serie[c.serie.length - 1]
+      const valor = metrica === 'cobranza'   ? punto?.cobranzaPct ?? 0
+                 : metrica === 'colocacion' ? punto?.colocacion  ?? 0
+                 : punto?.score ?? 0
+      return {
+        id:        c.cobradorId,
+        nombre:    c.nombre,
+        sucursal:  c.sucursal,
+        tier:      c.tier,
+        valor,
+      }
+    })
+    .sort((a, b) => b.valor - a.valor)
+
+  // Altura adaptativa: 32px por coord (mínimo 320, máximo 720).
+  const height = Math.min(720, Math.max(320, barData.length * 36))
+
+  return (
+    <div style={{ width: '100%', height }}>
+      <ResponsiveContainer>
+        <BarChart data={barData} layout="vertical" margin={{ top: 10, right: 50, bottom: 0, left: 10 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+          <XAxis
+            type="number"
+            tick={{ fill: '#8f8f9a', fontSize: 11 }}
+            tickFormatter={formatY}
+          />
+          <YAxis
+            type="category"
+            dataKey="nombre"
+            width={170}
+            tick={{ fill: '#8f8f9a', fontSize: 11 }}
+            interval={0}
+          />
+          <Tooltip
+            cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+            contentStyle={{ backgroundColor: '#181727', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 12 }}
+            labelStyle={{ color: '#A898FF', fontSize: 11, fontWeight: 600 }}
+            formatter={(v: unknown, _n, item) => {
+              const rowSucursal = (item?.payload as { sucursal?: string } | undefined)?.sucursal
+              const valor = metrica === 'colocacion'
+                ? formatMoney(Number(v ?? 0))
+                : `${v}${metrica === 'cobranza' || metrica === 'score' ? '%' : ''}`
+              return [valor, rowSucursal ?? '']
+            }}
+          />
+          <Bar dataKey="valor" radius={[0, 4, 4, 0]} barSize={20}>
+            {barData.map((row) => (
+              <Cell key={row.id} fill={COLORES_TIER[row.tier]} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
 }

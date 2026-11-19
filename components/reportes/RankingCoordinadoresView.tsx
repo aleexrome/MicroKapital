@@ -244,6 +244,7 @@ export function RankingCoordinadoresView({
               metrica={metrica}
               formatY={formatY}
               getTier={getTier}
+              orderedCoords={orderedCoords}
             />
           )}
         </CardContent>
@@ -508,29 +509,32 @@ function pctColor(pct: number): string {
  * mayor a menor según la métrica activa. Colores según tier.
  */
 function SingleWeekBarChart({
-  data, metrica, formatY, getTier,
+  data, metrica, formatY, getTier, orderedCoords,
 }: {
   data: RankingCoordinadores
   metrica: Metrica
   formatY: (v: number) => string
   getTier: (id: string) => 'top' | 'bottom' | 'medio'
+  // Orden del RANKING (por score en modo cobranza, o por valor absoluto
+  // en modo colocación). La gráfica usa este orden para que coincida
+  // visualmente con el podio — antes ordenaba por valor puro de la
+  // métrica y un coord al 100% con pactado chico quedaba arriba del
+  // podio aunque no fuera top del ranking.
+  orderedCoords: CoordinadorRanking[]
 }) {
-  // Punto único por coord con el valor de la única semana cargada.
-  const barData = data.coordinadores
-    .map((c) => {
-      const punto = c.serie[c.serie.length - 1]
-      const valor = metrica === 'cobranza'   ? punto?.cobranzaPct ?? 0
-                 : metrica === 'colocacion' ? punto?.colocacion  ?? 0
-                 : punto?.score ?? 0
-      return {
-        id:        c.cobradorId,
-        nombre:    c.nombre,
-        sucursal:  c.sucursal,
-        tier:      getTier(c.cobradorId),
-        valor,
-      }
-    })
-    .sort((a, b) => b.valor - a.valor)
+  const barData = orderedCoords.map((c) => {
+    const punto = c.serie[c.serie.length - 1]
+    const valor = metrica === 'cobranza'   ? punto?.cobranzaPct ?? 0
+               : metrica === 'colocacion' ? punto?.colocacion  ?? 0
+               : punto?.score ?? 0
+    return {
+      id:        c.cobradorId,
+      nombre:    c.nombre,
+      sucursal:  c.sucursal,
+      tier:      getTier(c.cobradorId),
+      valor,
+    }
+  })
 
   // Altura adaptativa: 32px por coord (mínimo 320, máximo 720).
   const height = Math.min(720, Math.max(320, barData.length * 36))

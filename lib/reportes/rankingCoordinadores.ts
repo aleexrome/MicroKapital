@@ -321,8 +321,8 @@ async function calcularRankingNoCacheado(companyId: string, semanas: number): Pr
 export async function getRankingCoordinadores(companyId: string, semanas = 8): Promise<RankingCoordinadores> {
   const fn = unstable_cache(
     () => calcularRankingNoCacheado(companyId, semanas),
-    [`ranking-coords-${companyId}-${semanas}-v4`],
-    { revalidate: 60 * 60, tags: [`ranking-coords-${companyId}`] },
+    [`ranking-coords-${companyId}-${semanas}-v5`],
+    { revalidate: 60 * 5, tags: [`ranking-coords-${companyId}`] },
   )
   return fn()
 }

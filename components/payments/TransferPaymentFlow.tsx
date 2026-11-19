@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Camera, Check, Clock, Copy, Loader2, RefreshCw, Upload } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { isImageFile } from '@/lib/is-image-file'
+import { compressImage } from '@/lib/image-compress'
 import { Button } from '@/components/ui/button'
 import { BankAccountCard } from './BankAccountCard'
 
@@ -211,8 +212,21 @@ export function TransferPaymentFlow({
     }
     setUploading(true)
     try {
+      // Comprimir en cliente antes de subir. Vercel Serverless bloquea
+      // bodies > 4.5MB y las fotos de iPhone pueden pesar 5-10MB. Sin
+      // esto la request es rechazada antes de llegar al endpoint y el
+      // usuario solo veía "No se pudo subir la foto".
+      let fileAEnviar: File
+      try {
+        fileAEnviar = await compressImage(file)
+      } catch (e) {
+        // Si la compresión falla (foto corrupta, formato raro), tratamos
+        // de subir el original — a veces sí cabe (p.e. screenshot < 1MB).
+        console.warn('[upload-foto] compresión falló, subiendo original', e)
+        fileAEnviar = file
+      }
       const fd = new FormData()
-      fd.append('foto', file)
+      fd.append('foto', fileAEnviar)
       const res = await fetch(`/api/transfer-codes/${codeInfo.id}/upload-foto`, {
         method: 'POST',
         body:   fd,

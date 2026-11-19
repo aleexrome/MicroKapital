@@ -61,23 +61,26 @@ export function RankingCoordinadoresView({
     ? `$${(v / 1000).toFixed(0)}k`
     : `${v}%`
 
-  // Tier dinámico según la métrica seleccionada — así el podio y los
-  // colores de la gráfica siempre reflejan la métrica que se está
-  // mirando. Antes se usaba el `tier` precomputado por score mezclado,
-  // lo que hacía que (p.ej.) en modo Cobranza % alguien al 100% podía
-  // aparecer en gris mientras otro al 90% aparecía rojo.
+  // Tier dinámico. Reglas para que el ranking premie contribución real
+  // y no solo eficiencia pura:
+  //   - Cobranza %   → top/bottom por SCORE mezclado (eficiencia + volumen).
+  //                    Si no, un coord al 100% con pactado chico queda top
+  //                    aunque en absoluto cobre $8k vs $200k de otro coord.
+  //   - Colocación $ → top/bottom por colocación absoluta (ya es volumen).
+  //   - Score        → top/bottom por score (idempotente).
+  // La gráfica sigue mostrando el valor de la métrica seleccionada;
+  // solo el ORDEN del top/bottom usa el criterio que premia contribución.
   const { tierByCoordId, orderedCoords } = useMemo(() => {
-    const valor = (c: CoordinadorRanking) => metrica === 'cobranza'   ? c.cobranzaPromedio
-                                           : metrica === 'colocacion' ? c.colocacionPromedio
-                                           : c.scorePromedio
+    const valorOrden = (c: CoordinadorRanking) => metrica === 'colocacion'
+      ? c.colocacionPromedio
+      : c.scorePromedio
     const sorted = [...data.coordinadores].sort((a, b) =>
-      valor(b) - valor(a) || a.nombre.localeCompare(b.nombre),
+      valorOrden(b) - valorOrden(a) || a.nombre.localeCompare(b.nombre),
     )
     const map = new Map<string, 'top' | 'bottom' | 'medio'>()
     sorted.forEach((c, i) => {
       const esBottom = i >= sorted.length - 3
       const esTop    = i < 3
-      // Si hay 6 o menos, para no dejar vacío el medio, respetamos top3 primero.
       map.set(c.cobradorId, esTop ? 'top' : esBottom ? 'bottom' : 'medio')
     })
     return { tierByCoordId: map, orderedCoords: sorted }
@@ -459,11 +462,14 @@ function PodioRow({
     ? (puesto === 1 ? '🥇' : puesto === 2 ? '🥈' : '🥉')
     : null
   const ringColor = tono === 'emerald' ? 'ring-emerald-500/60' : 'ring-rose-500/60'
-  // Valor principal mostrado = métrica activa, no siempre score prom.
+  // Valor principal = métrica activa. En modo Cobranza% el orden del
+  // ranking es por score (para premiar volumen), por eso el sub-label
+  // muestra el score entre paréntesis — así es claro por qué un coord
+  // al 100% puede NO estar primero (pactado chico = score bajo).
   const valor = metrica === 'cobranza'   ? `${c.cobranzaPromedio}%`
              : metrica === 'colocacion' ? formatMoney(c.colocacionPromedio)
              : String(c.scorePromedio)
-  const subLabel = metrica === 'cobranza'   ? 'cobranza %'
+  const subLabel = metrica === 'cobranza'   ? `cobranza % · score ${c.scorePromedio}`
                  : metrica === 'colocacion' ? '$ colocado prom.'
                  : 'score prom.'
   return (

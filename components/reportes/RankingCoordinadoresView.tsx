@@ -463,14 +463,15 @@ function PodioRow({
     ? (puesto === 1 ? '🥇' : puesto === 2 ? '🥈' : '🥉')
     : null
   const ringColor = tono === 'emerald' ? 'ring-emerald-500/60' : 'ring-rose-500/60'
-  // Valor principal = métrica activa. En modo Cobranza% el orden del
-  // ranking es por score (para premiar volumen), por eso el sub-label
-  // muestra el score entre paréntesis — así es claro por qué un coord
-  // al 100% puede NO estar primero (pactado chico = score bajo).
-  const valor = metrica === 'cobranza'   ? `${c.cobranzaPromedio}%`
+  // Valor principal del podio = el VALOR POR EL QUE SE ORDENA, para que
+  // los números sean monótonos (#1 ≥ #2 ≥ #3). En modo Cobranza% el
+  // orden es por score (no por el % puro), así que mostramos el score
+  // grande y el % como info secundaria. Si mostráramos el % grande
+  // confundiría: Diana #1 con 79% arriba de Guadalupe #3 con 91%.
+  const valor = metrica === 'cobranza'   ? String(c.scorePromedio)
              : metrica === 'colocacion' ? formatMoney(c.colocacionPromedio)
              : String(c.scorePromedio)
-  const subLabel = metrica === 'cobranza'   ? `cobranza % · score ${c.scorePromedio}`
+  const subLabel = metrica === 'cobranza'   ? `score · cobranza ${c.cobranzaPromedio}%`
                  : metrica === 'colocacion' ? '$ colocado prom.'
                  : 'score prom.'
   return (

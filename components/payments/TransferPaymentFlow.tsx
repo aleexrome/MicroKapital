@@ -83,7 +83,8 @@ export function TransferPaymentFlow({
   const [uploading, setUploading]         = useState(false)
   const [fotoUrl, setFotoUrl]             = useState<string | null>(null)
   const [referenciaBanco, setReferenciaBanco] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef   = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch de cuentas al montar — reusa el endpoint existente que ya
   // filtra por branch (el que usa el sitio para dropdowns de pago).
@@ -195,6 +196,17 @@ export function TransferPaymentFlow({
     // extensión del nombre para no rechazarlas.
     if (!isImageFile(file)) {
       toast({ title: 'Solo imágenes (JPG, PNG, WEBP, HEIC)', variant: 'destructive' })
+      return
+    }
+    // iOS 17+ con foto en iCloud no descargada local: el picker devuelve
+    // un File con size=0. Dar mensaje claro en vez de mandar un blob vacío
+    // al server (que respondería un error oscuro).
+    if (file.size === 0) {
+      toast({
+        title: 'La foto no se descargó completa',
+        description: 'Abre primero la foto en tu galería hasta que cargue (puede estar en iCloud) y vuelve a intentar. O toma la foto directo con la cámara.',
+        variant: 'destructive',
+      })
       return
     }
     setUploading(true)
@@ -359,10 +371,29 @@ export function TransferPaymentFlow({
           <Button onClick={onPickFile} disabled={uploading} className="w-full">
             {uploading ? <><Loader2 className="h-4 w-4 animate-spin" /> Subiendo...</> : <><Upload className="h-4 w-4" /> Seleccionar foto</>}
           </Button>
+          <Button
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={uploading}
+            variant="outline"
+            className="w-full"
+          >
+            📷 Tomar foto con la cámara
+          </Button>
+          <p className="text-[11px] text-muted-foreground text-center">
+            Si tu foto no sube, prueba con la cámara — evita problemas con fotos en iCloud sin descargar.
+          </p>
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            className="hidden"
+            onChange={onFileSelected}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
             className="hidden"
             onChange={onFileSelected}
           />

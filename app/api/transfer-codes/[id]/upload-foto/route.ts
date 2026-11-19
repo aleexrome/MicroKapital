@@ -59,13 +59,29 @@ export async function POST(
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: 'Falta el archivo "foto"' }, { status: 400 })
   }
+  // iOS 17+ con foto en iCloud no descargada: el picker devuelve File
+  // con size 0. Detectar y responder mensaje claro.
+  if (file.size === 0) {
+    console.warn('[upload-foto] archivo vacío', {
+      codeId: code.id, userId: session.user.id,
+      name: file.name, type: file.type, size: file.size,
+    })
+    return NextResponse.json(
+      { error: 'La foto llegó vacía (0 bytes). Suele pasar con fotos en iCloud sin descargar. Abre la foto primero en tu galería o toma una nueva con la cámara.' },
+      { status: 400 },
+    )
+  }
   // iOS Safari: fotos descargadas de WhatsApp / galería a veces vienen
   // con file.type = "" — isImageFile acepta también por extensión.
   if (!isImageFile(file)) {
+    console.warn('[upload-foto] formato rechazado', {
+      codeId: code.id, userId: session.user.id,
+      name: file.name, type: file.type, size: file.size,
+    })
     return NextResponse.json({ error: 'Solo se aceptan imágenes (JPG, PNG, WEBP, HEIC)' }, { status: 400 })
   }
   if (file.size > 10 * 1024 * 1024) {
-    return NextResponse.json({ error: 'La foto excede 10MB' }, { status: 400 })
+    return NextResponse.json({ error: `La foto pesa ${(file.size / 1024 / 1024).toFixed(1)}MB y el máximo es 10MB. Pídele a tu iPhone que la comprima antes de subir.` }, { status: 400 })
   }
 
   const buffer = Buffer.from(await file.arrayBuffer())

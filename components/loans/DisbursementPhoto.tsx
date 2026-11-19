@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { Camera, Loader2, MapPin, CheckCircle, Image, Eye } from 'lucide-react'
+import { compressImage } from '@/lib/image-compress'
 
 interface DisbursementPhotoProps {
   loanId: string
@@ -70,8 +71,11 @@ export function DisbursementPhoto({
     setUploading(true)
 
     try {
+      let fileFinal: File
+      try { fileFinal = await compressImage(selectedFile) }
+      catch { fileFinal = selectedFile }
       const formData = new FormData()
-      formData.append('foto', selectedFile)
+      formData.append('foto', fileFinal)
       if (location) {
         formData.append('lat', location.lat.toString())
         formData.append('lng', location.lng.toString())

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { Camera, Loader2, MapPin, X, CheckCircle, Image as ImageIcon } from 'lucide-react'
+import { compressImage } from '@/lib/image-compress'
 import exifr from 'exifr'
 
 interface CapturarFotoDesembolsoDialogProps {
@@ -150,8 +151,14 @@ export function CapturarFotoDesembolsoDialog({
       Math.abs(location.lng) <= 180
     setUploading(true)
     try {
+      // Comprimir en cliente para esquivar el límite de 4.5MB de Vercel.
+      // Las fotos de iPhone HEIC/JPG suelen pesar 3-8MB; sin compresión
+      // la request se rechaza con 413 silencioso.
+      let fileFinal: File
+      try { fileFinal = await compressImage(selectedFile) }
+      catch { fileFinal = selectedFile }
       const fd = new FormData()
-      fd.append('foto', selectedFile)
+      fd.append('foto', fileFinal)
       if (locOk && location) {
         fd.append('lat', location.lat.toString())
         fd.append('lng', location.lng.toString())

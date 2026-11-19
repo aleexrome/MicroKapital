@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { FileText, Upload, Trash2, Loader2, ExternalLink, FilePlus } from 'lucide-react'
 import type { LoanType } from '@prisma/client'
+import { compressImage } from '@/lib/image-compress'
+import { isImageFile } from '@/lib/is-image-file'
 
 interface LoanDocumentItem {
   id: string
@@ -75,8 +77,14 @@ export function LoanDocumentUpload({ loanId, tipo, readOnly = false, canObserve 
     if (!file) return
 
     setUploading(true)
+    // Comprimir si es imagen (no PDFs ni otros documentos) para esquivar
+    // el límite de 4.5MB de Vercel con fotos de iPhone.
+    let fileFinal: File = file
+    if (isImageFile(file)) {
+      try { fileFinal = await compressImage(file) } catch { /* original */ }
+    }
     const formData = new FormData()
-    formData.append('file', file)
+    formData.append('file', fileFinal)
     formData.append('tipo', selectedTipo)
     if (descripcion) formData.append('descripcion', descripcion)
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { Loader2, Upload, X, Trash2, Plus, Image as ImageIcon } from 'lucide-react'
+import { compressImage } from '@/lib/image-compress'
 
 // `accept` lo dejamos amplio para que en celulares aparezca cámara + galería
 // + archivos. La validación real de tipo la hace el backend (por extensión)
@@ -117,32 +118,10 @@ export function SubirContratoFirmadoDialog({
   // @react-pdf/renderer tarda ~1s por MB en el server; con imágenes grandes
   // se pasaba del timeout de Vercel y volvía 504. Al comprimir en el browser
   // la conversión a PDF ya no revienta aunque Vercel tenga timeout chico.
-  // HEIC no lo acepta Canvas → se envía original y lo maneja el backend.
-  async function compressImage(file: File): Promise<File> {
-    if (/\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type)) return file
-    try {
-      const bitmap = await createImageBitmap(file)
-      const MAX = 2000
-      const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height))
-      const w = Math.round(bitmap.width * scale)
-      const h = Math.round(bitmap.height * scale)
-      const canvas = document.createElement('canvas')
-      canvas.width = w
-      canvas.height = h
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return file
-      ctx.drawImage(bitmap, 0, 0, w, h)
-      bitmap.close?.()
-      const blob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, 'image/jpeg', 0.82)
-      )
-      if (!blob || blob.size >= file.size) return file  // no comprimió, mejor el original
-      const newName = file.name.replace(/\.(jpe?g|png|webp)$/i, '.jpg') || `${file.name}.jpg`
-      return new File([blob], newName, { type: 'image/jpeg', lastModified: Date.now() })
-    } catch {
-      return file  // fallback: subir el original
-    }
-  }
+  // Se usa el helper global `compressImage` (import arriba) que decodifica
+  // HEIC vía `new Image()` (Safari iOS lo soporta nativo) en vez de
+  // `createImageBitmap` que no admite HEIC. Antes los contratos en HEIC
+  // iban sin comprimir → excedían el límite de Vercel y fallaban.
 
   async function handleUpload() {
     if (files.length === 0) return

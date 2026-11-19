@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney } from '@/lib/utils'
@@ -18,7 +19,20 @@ const COLORES_TIER = {
   medio:  '#64748B',  // slate-500
 }
 
-export function RankingCoordinadoresView({ data }: { data: RankingCoordinadores }) {
+const PERIODOS: Array<{ semanas: number; label: string }> = [
+  { semanas: 1,  label: 'Esta semana'  },
+  { semanas: 4,  label: 'Últimas 4'    },
+  { semanas: 8,  label: 'Últimas 8'    },
+  { semanas: 12, label: 'Últimas 12'   },
+]
+
+export function RankingCoordinadoresView({
+  data,
+  semanasActual = 8,
+}: {
+  data: RankingCoordinadores
+  semanasActual?: number
+}) {
   const [metrica, setMetrica] = useState<Metrica>('cobranza')
 
   // Transformar datos a formato wide para Recharts:
@@ -59,13 +73,28 @@ export function RankingCoordinadoresView({ data }: { data: RankingCoordinadores 
             Ranking de coordinadores
           </h1>
           <p className="text-muted-foreground text-sm">
-            {data.empresa} · últimas {data.semanas.length} semanas MK · se actualiza una vez al día.
+            {data.empresa} · {data.semanas.length === 1 ? 'esta semana' : `últimas ${data.semanas.length} semanas`} MK · se actualiza una vez al día.
           </p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-border/50 bg-background/40 p-1 text-xs">
-          <MetricaBtn active={metrica === 'cobranza'}   onClick={() => setMetrica('cobranza')}>Cobranza %</MetricaBtn>
-          <MetricaBtn active={metrica === 'colocacion'} onClick={() => setMetrica('colocacion')}>Colocación $</MetricaBtn>
-          <MetricaBtn active={metrica === 'score'}      onClick={() => setMetrica('score')}>Score</MetricaBtn>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Toggle de periodo (acota/expande el rango de semanas) */}
+          <div className="flex items-center gap-1 rounded-lg border border-border/50 bg-background/40 p-1 text-xs">
+            {PERIODOS.map((p) => (
+              <Link
+                key={p.semanas}
+                href={`/reportes/ranking-coordinadores?semanas=${p.semanas}`}
+                scroll={false}
+                className={`px-3 py-1.5 rounded-md transition-colors ${semanasActual === p.semanas ? 'bg-primary-500/20 text-primary-200 font-medium' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                {p.label}
+              </Link>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 rounded-lg border border-border/50 bg-background/40 p-1 text-xs">
+            <MetricaBtn active={metrica === 'cobranza'}   onClick={() => setMetrica('cobranza')}>Cobranza %</MetricaBtn>
+            <MetricaBtn active={metrica === 'colocacion'} onClick={() => setMetrica('colocacion')}>Colocación $</MetricaBtn>
+            <MetricaBtn active={metrica === 'score'}      onClick={() => setMetrica('score')}>Score</MetricaBtn>
+          </div>
         </div>
       </div>
 

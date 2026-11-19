@@ -3,20 +3,31 @@ import { redirect } from 'next/navigation'
 import { getRankingCoordinadores } from '@/lib/reportes/rankingCoordinadores'
 import { RankingCoordinadoresView } from '@/components/reportes/RankingCoordinadoresView'
 
-// Caché 24h — el dato lo trae unstable_cache del lib, no necesita
-// force-dynamic. ISR al nivel de página también funcionaría pero el
-// cache del lib ya es scoped por companyId, mejor.
-export const revalidate = 3600  // Next revalida la página cada hora;
-                                 // el lib cachea el cómputo pesado 24h.
+// Caché por hora a nivel de página; el lib cachea el cómputo pesado
+// scoped por (companyId, semanas).
+export const revalidate = 3600
 
 const PERMITIDOS = ['SUPER_ADMIN', 'DIRECTOR_GENERAL', 'DIRECTOR_COMERCIAL', 'MESA_CONTROL', 'GERENTE_ZONAL']
 
-export default async function RankingCoordinadoresPage() {
+// Opciones válidas de periodo (semanas atrás a mostrar). Valores que
+// no estén aquí caen al default. Mantener el set pequeño ayuda a que
+// el cache se reuse — cada N distinto es un entry nuevo.
+const SEMANAS_VALIDAS = new Set([1, 4, 8, 12])
+const SEMANAS_DEFAULT = 8
+
+export default async function RankingCoordinadoresPage({
+  searchParams,
+}: {
+  searchParams?: { semanas?: string }
+}) {
   const session = await getSession()
   if (!session?.user) redirect('/login')
   if (!PERMITIDOS.includes(session.user.rol)) redirect('/reportes')
   if (!session.user.companyId) redirect('/dashboard')
 
-  const data = await getRankingCoordinadores(session.user.companyId, 8)
-  return <RankingCoordinadoresView data={data} />
+  const semanasParam = Number(searchParams?.semanas)
+  const semanas = SEMANAS_VALIDAS.has(semanasParam) ? semanasParam : SEMANAS_DEFAULT
+
+  const data = await getRankingCoordinadores(session.user.companyId, semanas)
+  return <RankingCoordinadoresView data={data} semanasActual={semanas} />
 }

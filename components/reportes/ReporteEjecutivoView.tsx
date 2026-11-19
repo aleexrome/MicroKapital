@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
-import { FileDown, Loader2, Building2, User, Users, TrendingUp, Wallet, AlertCircle, Target, Landmark } from 'lucide-react'
+import { FileDown, Loader2, Building2, User, Users, TrendingUp, Wallet, AlertCircle, Target, Landmark, Eye } from 'lucide-react'
 import { formatMoney } from '@/lib/utils'
 import type { ReporteEjecutivo, SucursalEjecutivo, CoordinadorEjecutivo, TotalesEmpresaEjecutivo } from '@/lib/reportes/ejecutivo'
 
@@ -219,29 +219,36 @@ function SucursalTotalesStrip({ sucursal }: { sucursal: SucursalEjecutivo }) {
   )
 }
 
-function DescargarPdfSucursalButton({ branchId, nombre }: { branchId: string; nombre: string }) {
+function PdfSucursalButtons({ branchId, nombre }: { branchId: string; nombre: string }) {
   const { toast } = useToast()
-  const [descargando, setDescargando] = useState(false)
+  const [modo, setModo] = useState<'idle' | 'descargar' | 'ver'>('idle')
+
+  async function obtenerBlobUrl(): Promise<string> {
+    const res = await fetch(`/api/reportes/ejecutivo/pdf?branchId=${encodeURIComponent(branchId)}`)
+    if (!res.ok) {
+      // En vez de res.json() directo (que en Safari iOS tira
+      // "The string did not match the expected pattern" si la respuesta
+      // es HTML — típico 504 Gateway Timeout de Vercel), leemos texto
+      // y parseamos defensivamente.
+      const raw = await res.text().catch(() => '')
+      let d: { error?: string } = {}
+      try { d = raw ? JSON.parse(raw) : {} } catch { /* HTML/no-json */ }
+      throw new Error(d.error ?? `Error ${res.status}. Intenta de nuevo.`)
+    }
+    const blob = await res.blob()
+    return URL.createObjectURL(blob)
+  }
+
+  const filenameSafe = () => {
+    const safe = nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-')
+    return `reporte-ejecutivo_${safe}.pdf`
+  }
 
   async function descargar() {
-    setDescargando(true)
+    setModo('descargar')
     try {
-      const res = await fetch(`/api/reportes/ejecutivo/pdf?branchId=${encodeURIComponent(branchId)}`)
-      if (!res.ok) {
-        // En vez de res.json() directo (que en Safari iOS tira
-        // "The string did not match the expected pattern" si la respuesta
-        // es HTML — típico 504 Gateway Timeout de Vercel), leemos texto
-        // y parseamos defensivamente.
-        const raw = await res.text().catch(() => '')
-        let d: { error?: string } = {}
-        try { d = raw ? JSON.parse(raw) : {} } catch { /* HTML/no-json */ }
-        throw new Error(d.error ?? `Error ${res.status}. Intenta de nuevo.`)
-      }
-      const blob = await res.blob()
-      const url  = URL.createObjectURL(blob)
-      const safe = nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-')
-      const filename = `reporte-ejecutivo_${safe}.pdf`
-
+      const url = await obtenerBlobUrl()
+      const filename = filenameSafe()
       // El browser necesita el <a> dentro del DOM y necesita tiempo para
       // iniciar la descarga antes de que revoquemos el blob URL. En algunos
       // browsers (Chrome Windows, Safari móvil), hacer click + revoke
@@ -253,23 +260,48 @@ function DescargarPdfSucursalButton({ branchId, nombre }: { branchId: string; no
       link.target      = '_blank'
       document.body.appendChild(link)
       link.click()
-      // Pequeño delay antes de limpiar: le damos tiempo al browser a procesar.
       setTimeout(() => {
         document.body.removeChild(link)
         URL.revokeObjectURL(url)
       }, 1000)
-
       toast({ title: '✅ PDF descargado', description: filename })
     } catch (e) {
       toast({ title: 'Error al generar el PDF', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
-    } finally { setDescargando(false) }
+    } finally { setModo('idle') }
   }
 
+  async function ver() {
+    setModo('ver')
+    try {
+      const url = await obtenerBlobUrl()
+      // Abrir en nueva pestaña sin descargar. Revocar el blob URL
+      // después de 60s para dejar tiempo a que el browser lo cargue.
+      const win = window.open(url, '_blank', 'noopener,noreferrer')
+      if (!win) {
+        toast({
+          title: 'No se pudo abrir el PDF',
+          description: 'El navegador bloqueó la ventana — permite popups o usa "Descargar PDF".',
+          variant: 'destructive',
+        })
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e) {
+      toast({ title: 'Error al generar el PDF', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' })
+    } finally { setModo('idle') }
+  }
+
+  const loading = modo !== 'idle'
   return (
-    <Button size="sm" variant="outline" onClick={descargar} disabled={descargando}>
-      {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-      Descargar PDF
-    </Button>
+    <div className="flex items-center gap-2 flex-wrap">
+      <Button size="sm" variant="outline" onClick={ver} disabled={loading}>
+        {modo === 'ver' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+        Ver
+      </Button>
+      <Button size="sm" variant="outline" onClick={descargar} disabled={loading}>
+        {modo === 'descargar' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+        Descargar PDF
+      </Button>
+    </div>
   )
 }
 
@@ -301,7 +333,7 @@ function SucursalCard({
         <CardTitle className="text-base flex items-center gap-2 flex-wrap">
           <Building2 className="h-4 w-4 text-primary-300" />
           {sucursal.nombre}
-          <DescargarPdfSucursalButton branchId={sucursal.branchId} nombre={sucursal.nombre} />
+          <PdfSucursalButtons branchId={sucursal.branchId} nombre={sucursal.nombre} />
         </CardTitle>
         <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
           {sucursal.concentradoraNombre && (

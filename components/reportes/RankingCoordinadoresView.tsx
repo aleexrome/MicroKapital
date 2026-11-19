@@ -61,8 +61,31 @@ export function RankingCoordinadoresView({
     ? `$${(v / 1000).toFixed(0)}k`
     : `${v}%`
 
-  const top3    = data.coordinadores.filter((c) => c.tier === 'top')
-  const bottom3 = data.coordinadores.filter((c) => c.tier === 'bottom')
+  // Tier dinámico según la métrica seleccionada — así el podio y los
+  // colores de la gráfica siempre reflejan la métrica que se está
+  // mirando. Antes se usaba el `tier` precomputado por score mezclado,
+  // lo que hacía que (p.ej.) en modo Cobranza % alguien al 100% podía
+  // aparecer en gris mientras otro al 90% aparecía rojo.
+  const { tierByCoordId, orderedCoords } = useMemo(() => {
+    const valor = (c: CoordinadorRanking) => metrica === 'cobranza'   ? c.cobranzaPromedio
+                                           : metrica === 'colocacion' ? c.colocacionPromedio
+                                           : c.scorePromedio
+    const sorted = [...data.coordinadores].sort((a, b) =>
+      valor(b) - valor(a) || a.nombre.localeCompare(b.nombre),
+    )
+    const map = new Map<string, 'top' | 'bottom' | 'medio'>()
+    sorted.forEach((c, i) => {
+      const esBottom = i >= sorted.length - 3
+      const esTop    = i < 3
+      // Si hay 6 o menos, para no dejar vacío el medio, respetamos top3 primero.
+      map.set(c.cobradorId, esTop ? 'top' : esBottom ? 'bottom' : 'medio')
+    })
+    return { tierByCoordId: map, orderedCoords: sorted }
+  }, [data.coordinadores, metrica])
+
+  const getTier = (id: string) => tierByCoordId.get(id) ?? 'medio'
+  const top3    = orderedCoords.slice(0, 3)
+  const bottom3 = orderedCoords.slice(-3).reverse()
 
   return (
     <div className="p-6 space-y-5 max-w-7xl mx-auto">
@@ -109,8 +132,8 @@ export function RankingCoordinadoresView({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {top3.map((c) => (
-              <PodioRow key={c.cobradorId} c={c} tono="emerald" />
+            {top3.map((c, i) => (
+              <PodioRow key={c.cobradorId} c={c} tono="emerald" puesto={i + 1} metrica={metrica} />
             ))}
             {top3.length === 0 && <p className="text-xs text-muted-foreground">Sin datos suficientes aún.</p>}
           </CardContent>
@@ -124,8 +147,13 @@ export function RankingCoordinadoresView({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {bottom3.map((c) => (
-              <PodioRow key={c.cobradorId} c={c} tono="rose" />
+            {bottom3.map((c, i) => (
+              <PodioRow
+                key={c.cobradorId} c={c} tono="rose"
+                // Puesto desde el final: último = total, penúltimo = total-1, etc.
+                puesto={orderedCoords.length - i}
+                metrica={metrica}
+              />
             ))}
             {bottom3.length === 0 && <p className="text-xs text-muted-foreground">Sin datos suficientes aún.</p>}
           </CardContent>
@@ -170,36 +198,39 @@ export function RankingCoordinadoresView({
                   />
                   {(['bottom', 'medio', 'top'] as const).map((tier) =>
                     data.coordinadores
-                      .filter((c) => c.tier === tier)
-                      .map((c) => (
-                        <Line
-                          key={c.cobradorId}
-                          dataKey={c.cobradorId}
-                          type="monotone"
-                          stroke={COLORES_TIER[c.tier]}
-                          strokeWidth={c.tier === 'medio' ? 1.2 : 2.2}
-                          strokeOpacity={c.tier === 'medio' ? 0.35 : 1}
-                          dot={(props) => (
-                            <AvatarDot
-                              key={`dot-${c.cobradorId}-${props.index}`}
-                              cx={props.cx}
-                              cy={props.cy}
-                              coord={c}
-                              variante={
-                                c.tier === 'medio'
-                                  ? 'punto'
-                                  : props.index === chartData.length - 1
-                                    ? 'avatar'
-                                    : 'punto'
-                              }
-                              tier={c.tier}
-                            />
-                          )}
-                          activeDot={{ r: 5 }}
-                          name={c.cobradorId}
-                          connectNulls
-                        />
-                      )),
+                      .filter((c) => getTier(c.cobradorId) === tier)
+                      .map((c) => {
+                        const t = getTier(c.cobradorId)
+                        return (
+                          <Line
+                            key={c.cobradorId}
+                            dataKey={c.cobradorId}
+                            type="monotone"
+                            stroke={COLORES_TIER[t]}
+                            strokeWidth={t === 'medio' ? 1.2 : 2.2}
+                            strokeOpacity={t === 'medio' ? 0.35 : 1}
+                            dot={(props) => (
+                              <AvatarDot
+                                key={`dot-${c.cobradorId}-${props.index}`}
+                                cx={props.cx}
+                                cy={props.cy}
+                                coord={c}
+                                variante={
+                                  t === 'medio'
+                                    ? 'punto'
+                                    : props.index === chartData.length - 1
+                                      ? 'avatar'
+                                      : 'punto'
+                                }
+                                tier={t}
+                              />
+                            )}
+                            activeDot={{ r: 5 }}
+                            name={c.cobradorId}
+                            connectNulls
+                          />
+                        )
+                      }),
                   )}
                 </LineChart>
               </ResponsiveContainer>
@@ -209,6 +240,7 @@ export function RankingCoordinadoresView({
               data={data}
               metrica={metrica}
               formatY={formatY}
+              getTier={getTier}
             />
           )}
         </CardContent>
@@ -219,10 +251,11 @@ export function RankingCoordinadoresView({
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Ranking actual ({data.coordinadores.length} coordinadores)</CardTitle>
           <p className="text-[11px] text-muted-foreground">
-            Ordenado por score global de las últimas 4 semanas. El score mezcla
-            eficiencia % (30% cobranza, 10% colocación) con volumen absoluto
-            relativo al grupo (40% $ cobrados, 20% $ colocados) — un coord con
-            100% pero pactado chico no rankea arriba.
+            Ordenado por la métrica seleccionada arriba. &quot;Colocación $&quot; es
+            el monto absoluto colocado (aporte a la meta general de ruta),
+            no cumplimiento de meta individual. El Score mezcla eficiencia
+            de cobranza con volumen absoluto relativo al grupo — un coord
+            con 100% pero pactado chico no rankea arriba.
             Top 3 en verde, bottom 3 en rojo.
           </p>
         </CardHeader>
@@ -241,19 +274,22 @@ export function RankingCoordinadoresView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/30">
-                {data.coordinadores.map((c) => (
+                {orderedCoords.map((c, i) => {
+                  const puesto = i + 1
+                  const t = getTier(c.cobradorId)
+                  return (
                   <tr
                     key={c.cobradorId}
                     className={
-                      c.tier === 'top'    ? 'bg-emerald-500/5' :
-                      c.tier === 'bottom' ? 'bg-rose-500/5'    : ''
+                      t === 'top'    ? 'bg-emerald-500/5' :
+                      t === 'bottom' ? 'bg-rose-500/5'    : ''
                     }
                   >
                     <td className="py-2 pr-4 font-bold tabular-nums">
-                      {c.puesto === 1 && '🥇 '}
-                      {c.puesto === 2 && '🥈 '}
-                      {c.puesto === 3 && '🥉 '}
-                      {c.puesto > 3 && c.puesto}
+                      {puesto === 1 && '🥇 '}
+                      {puesto === 2 && '🥈 '}
+                      {puesto === 3 && '🥉 '}
+                      {puesto > 3 && puesto}
                     </td>
                     <td className="py-2 pr-4 font-medium">
                       <div className="flex items-center gap-2">
@@ -271,7 +307,8 @@ export function RankingCoordinadoresView({
                       {c.scorePromedio}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -410,9 +447,25 @@ function MetricaBtn({ active, onClick, children }: { active: boolean; onClick: (
   )
 }
 
-function PodioRow({ c, tono }: { c: CoordinadorRanking; tono: 'emerald' | 'rose' }) {
-  const medalla = c.puesto === 1 ? '🥇' : c.puesto === 2 ? '🥈' : c.puesto === 3 ? '🥉' : null
+function PodioRow({
+  c, tono, puesto, metrica,
+}: {
+  c: CoordinadorRanking
+  tono: 'emerald' | 'rose'
+  puesto: number
+  metrica: Metrica
+}) {
+  const medalla = tono === 'emerald' && puesto <= 3
+    ? (puesto === 1 ? '🥇' : puesto === 2 ? '🥈' : '🥉')
+    : null
   const ringColor = tono === 'emerald' ? 'ring-emerald-500/60' : 'ring-rose-500/60'
+  // Valor principal mostrado = métrica activa, no siempre score prom.
+  const valor = metrica === 'cobranza'   ? `${c.cobranzaPromedio}%`
+             : metrica === 'colocacion' ? formatMoney(c.colocacionPromedio)
+             : String(c.scorePromedio)
+  const subLabel = metrica === 'cobranza'   ? 'cobranza %'
+                 : metrica === 'colocacion' ? '$ colocado prom.'
+                 : 'score prom.'
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-3 min-w-0">
@@ -423,13 +476,15 @@ function PodioRow({ c, tono }: { c: CoordinadorRanking; tono: 'emerald' | 'rose'
           )}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium truncate">{c.nombre}</p>
+          <p className="text-sm font-medium truncate">
+            <span className="text-muted-foreground mr-1">#{puesto}</span>{c.nombre}
+          </p>
           <p className="text-[11px] text-muted-foreground truncate">{c.sucursal}</p>
         </div>
       </div>
       <div className="text-right flex-shrink-0">
-        <p className={`text-base font-bold tabular-nums text-${tono}-300`}>{c.scorePromedio}</p>
-        <p className="text-[10px] text-muted-foreground">score prom.</p>
+        <p className={`text-base font-bold tabular-nums text-${tono}-300`}>{valor}</p>
+        <p className="text-[10px] text-muted-foreground">{subLabel}</p>
       </div>
     </div>
   )
@@ -447,11 +502,12 @@ function pctColor(pct: number): string {
  * mayor a menor según la métrica activa. Colores según tier.
  */
 function SingleWeekBarChart({
-  data, metrica, formatY,
+  data, metrica, formatY, getTier,
 }: {
   data: RankingCoordinadores
   metrica: Metrica
   formatY: (v: number) => string
+  getTier: (id: string) => 'top' | 'bottom' | 'medio'
 }) {
   // Punto único por coord con el valor de la única semana cargada.
   const barData = data.coordinadores
@@ -464,7 +520,7 @@ function SingleWeekBarChart({
         id:        c.cobradorId,
         nombre:    c.nombre,
         sucursal:  c.sucursal,
-        tier:      c.tier,
+        tier:      getTier(c.cobradorId),
         valor,
       }
     })

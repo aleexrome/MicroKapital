@@ -359,6 +359,19 @@ export default async function BancaPage({
     return weekRanges.find((w) => dayAsUtc >= w.sat && dayAsUtc <= w.friday) ?? null
   }
 
+  // Para BranchExtraFund / BranchWithdrawal: el campo `fecha` es
+  // `@db.Date` (día sin hora). Postgres lo devuelve como medianoche UTC
+  // (`2026-11-14T00:00:00Z`), y toMxYMD lo convierte al día CDMX anterior
+  // (`2026-11-13`) por el shift de 6h — tirando el adicional a la semana
+  // anterior aunque DG lo haya creado "para esta semana". Como el campo
+  // guarda un día conceptual (no un instante), usamos el YMD UTC crudo
+  // sin pasar por CDMX, y así cae en la semana correcta.
+  function findWeekByDbDate(t: Date) {
+    const ymd = t.toISOString().slice(0, 10)
+    const dayAsUtc = new Date(`${ymd}T12:00:00.000Z`)
+    return weekRanges.find((w) => dayAsUtc >= w.sat && dayAsUtc <= w.friday) ?? null
+  }
+
   // Nombre que se muestra para cada sub-sucursal virtual. Si es una
   // branch no partida, el nombre es el real.
   const branchNameMap = new Map<string, string>()
@@ -514,7 +527,9 @@ export default async function BancaPage({
   // Aportes adicionales de Dirección — se suman al saldo bancable.
   for (const a of adicionales) {
     const fecha = new Date(a.fecha)
-    const w = findWeek(fecha)
+    // `fecha` es @db.Date: usar findWeekByDbDate para no restarle 6h de
+    // CDMX y mandar el adicional a la semana anterior.
+    const w = findWeekByDbDate(fecha)
     if (!w) continue
 
     // Adicional: usa el subBranchTag guardado (lo eligió el DG al crear).
@@ -536,7 +551,8 @@ export default async function BancaPage({
   // Retiros de Dirección — se restan del saldo bancable.
   for (const r of retiros) {
     const fecha = new Date(r.fecha)
-    const w = findWeek(fecha)
+    // `fecha` es @db.Date: mismo fix que para adicionales.
+    const w = findWeekByDbDate(fecha)
     if (!w) continue
 
     // Retiro: igual que adicional — usa subBranchTag o cae al default.

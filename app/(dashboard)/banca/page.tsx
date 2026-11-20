@@ -215,7 +215,17 @@ export default async function BancaPage({
         monto: true,
         metodoPago: true,
         fechaHora: true,
-        cobrador: { select: { id: true, nombre: true } },
+        cobrador: {
+          select: {
+            id: true, nombre: true,
+            // branch actual del cobrador: la sucursal donde físicamente
+            // está entregando el dinero. Es la que importa para /banca
+            // (reporte de dinero físico), NO la del loan — el loan puede
+            // haberse reasignado a otra sucursal después, pero el efectivo
+            // real entró en la caja del cobrador.
+            branch: { select: { id: true, nombre: true } },
+          },
+        },
         client:   { select: { id: true, nombreCompleto: true, heredadoDeId: true } },
         loan: { select: {
           cobradorId: true,
@@ -435,7 +445,17 @@ export default async function BancaPage({
     const w = findWeek(fecha)
     if (!w) continue
 
-    const branch = p.loan.branch
+    // /banca es reporte de dinero FÍSICO. Lo que importa es DÓNDE entró
+    // el efectivo = la sucursal del cobrador que lo recibió. Antes
+    // usábamos `p.loan.branch` pero eso da falsos cuando el loan se
+    // reasigna a otra sucursal DESPUÉS del pago (ej. cliente que se
+    // mueve de Tenancingo I a II, pero el pago anterior quedó colgado
+    // de Julio que sigue en Tenancingo I). El dinero físico lo entregó
+    // Julio en Tenancingo I; que aparezca ahí.
+    //
+    // Fallback: si por alguna razón el cobrador no tiene branch (edge
+    // case de usuarios heredados), usamos el branch del loan.
+    const branch = p.cobrador.branch ?? p.loan.branch
     // División virtual: si la sucursal real está partida, el cobrador del
     // LOAN (dueño del préstamo) + heredadoDeId del cliente definen la
     // sub-sucursal. Si no está partida, se usa el id real.

@@ -339,9 +339,16 @@ export async function POST(
         },
       })
 
-      // 4. ¿Loan liquidado?
+      // 4. ¿Loan liquidado? "Cerrado" = PAID, ADVANCE o FINANCIADO (los
+      // últimos los absorbe la renovación anticipada). Antes el filtro
+      // 'not PAID' dejaba loans fantasma en ACTIVE cuando ya tenían
+      // schedules FINANCIADO.
       const restantes = await tx.paymentSchedule.count({
-        where: { loanId: loan.id, id: { not: sched.id }, estado: { not: 'PAID' } },
+        where: {
+          loanId: loan.id,
+          id: { not: sched.id },
+          estado: { notIn: ['PAID', 'ADVANCE', 'FINANCIADO'] },
+        },
       })
       if (restantes === 0) {
         await tx.loan.update({ where: { id: loan.id }, data: { estado: 'LIQUIDATED' } })

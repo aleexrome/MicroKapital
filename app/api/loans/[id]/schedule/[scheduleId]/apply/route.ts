@@ -195,12 +195,16 @@ export async function POST(
       },
     })
 
-    // 3. Si todos los pagos del crédito quedan PAID → liquidar el crédito
+    // 3. Si todos los pagos del crédito quedan cerrados → liquidar el crédito.
+    // "Cerrado" = PAID, ADVANCE o FINANCIADO (los últimos son los que la
+    // renovación anticipada absorbe). Antes solo se contaban los NOT 'PAID'
+    // como pendientes, lo que dejaba loans fantasma en ACTIVE cuando ya
+    // tenían schedules FINANCIADO.
     const pendientes = await tx.paymentSchedule.count({
       where: {
         loanId: params.id,
         id:     { not: schedule.id },
-        estado: { not: 'PAID' },
+        estado: { notIn: ['PAID', 'ADVANCE', 'FINANCIADO'] },
       },
     })
 

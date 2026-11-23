@@ -169,8 +169,15 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // 3. ¿Todos los schedules pagados? → liquidar préstamo
-    const pendingSchedules = loan.schedule.filter((s) => s.id !== schedule.id)
+    // 3. ¿Todos los schedules cerrados? → liquidar préstamo.
+    // "Cerrado" = PAID, ADVANCE o FINANCIADO (los últimos los absorbe la
+    // renovación anticipada).
+    const pendingSchedules = loan.schedule.filter(
+      (s) => s.id !== schedule.id
+          && s.estado !== 'PAID'
+          && s.estado !== 'ADVANCE'
+          && s.estado !== 'FINANCIADO',
+    )
     if (pendingSchedules.length === 0 && nuevoEstado === 'PAID') {
       await tx.loan.update({
         where: { id: loan.id },

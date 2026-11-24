@@ -1,3 +1,7 @@
+// Nunca cachear — "Pactados del día" debe reflejar los pagos que se
+// acaban de capturar en segundos, no esperar a que venza la ISR.
+export const dynamic = 'force-dynamic'
+
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { scopedLoanWhere } from '@/lib/access'

@@ -1,4 +1,11 @@
-export const dynamic = 'force-dynamic'
+// Nunca cachear — el dashboard debe reflejar el estado real de la empresa
+// al segundo (cobrado hoy, pagos vencidos, créditos activos). `force-dynamic`
+// solo por sí solo deja que Next cachee los `fetch` internos y que Vercel
+// use edge cache; `revalidate = 0` + `fetchCache = 'force-no-store'`
+// garantizan que CADA request vaya fresh a la DB.
+export const dynamic     = 'force-dynamic'
+export const revalidate  = 0
+export const fetchCache  = 'force-no-store'
 
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'

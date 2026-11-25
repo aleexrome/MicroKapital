@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatMoney } from '@/lib/utils'
@@ -175,28 +175,7 @@ export function TiempoRealView({ initialData }: { initialData: ReporteTiempoReal
             <p className="text-[11px] text-muted-foreground">Saldo registrado en cada corte horario de hoy.</p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
-                  <tr>
-                    <th className="text-left py-2 pr-4">Hora</th>
-                    <th className="text-right py-2 px-4">Saldo de mora</th>
-                    <th className="text-right py-2 pl-4">Variación</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/30">
-                  {chartData.map((row, i) => (
-                    <tr key={i}>
-                      <td className="py-2 pr-4 font-medium">{row.hora}</td>
-                      <td className="py-2 px-4 text-right tabular-nums">{formatMoney(row.mora)}</td>
-                      <td className={`py-2 pl-4 text-right tabular-nums ${i === 0 ? 'text-muted-foreground' : row.variacion < 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {i === 0 ? '—' : formatVariacion(row.variacion)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <EvolucionTable chartData={chartData} snapshots={data.snapshots} />
 
             {chartData.length >= 2 ? (
               <div style={{ width: '100%', height: 280 }}>
@@ -341,6 +320,146 @@ export function TiempoRealView({ initialData }: { initialData: ReporteTiempoReal
           </CardContent>
         </Card>
       )}
+    </div>
+  )
+}
+
+interface PagoEntrante {
+  id: string
+  fechaHora: string
+  monto: number
+  metodoPago: string
+  statusTransferencia: string | null
+  cliente: string
+  cobrador: string
+  sucursal: string
+  tipo: string
+}
+
+/**
+ * Tabla de evolución horaria. Cada fila es expandible y al abrirla
+ * hace fetch al endpoint /api/reportes/tiempo-real/pagos con el rango
+ * entre el corte actual y el anterior, mostrando los pagos que
+ * movieron la mora en ese intervalo.
+ */
+function EvolucionTable({
+  chartData, snapshots,
+}: {
+  chartData: Array<{ hora: string; mora: number; variacion: number }>
+  snapshots: Array<{ capturadoEn: string }>
+}) {
+  const [expanded,   setExpanded]   = useState<number | null>(null)
+  const [cache,      setCache]      = useState<Record<number, PagoEntrante[] | 'loading' | 'error'>>({})
+
+  async function toggle(i: number) {
+    if (expanded === i) { setExpanded(null); return }
+    setExpanded(i)
+    // No cargar el primer renglón (no hay "rango anterior").
+    if (i === 0) return
+    if (cache[i]) return
+    const desde = snapshots[i - 1].capturadoEn
+    const hasta = snapshots[i].capturadoEn
+    setCache((prev) => ({ ...prev, [i]: 'loading' }))
+    try {
+      const url = `/api/reportes/tiempo-real/pagos?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`
+      const res = await fetch(url, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`Error ${res.status}`)
+      const body = await res.json() as { pagos: PagoEntrante[] }
+      setCache((prev) => ({ ...prev, [i]: body.pagos }))
+    } catch {
+      setCache((prev) => ({ ...prev, [i]: 'error' }))
+    }
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
+          <tr>
+            <th className="text-left py-2 pr-4 w-8"></th>
+            <th className="text-left py-2 pr-4">Hora</th>
+            <th className="text-right py-2 px-4">Saldo de mora</th>
+            <th className="text-right py-2 pl-4">Variación</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border/30">
+          {chartData.map((row, i) => (
+            <Fragment key={i}>
+              <tr
+                className={`cursor-pointer hover:bg-background/40 transition-colors ${expanded === i ? 'bg-background/40' : ''}`}
+                onClick={() => toggle(i)}
+              >
+                <td className="py-2 pr-4 text-muted-foreground text-center">
+                  {i === 0 ? '—' : (expanded === i ? '▼' : '▶')}
+                </td>
+                <td className="py-2 pr-4 font-medium">{row.hora}</td>
+                <td className="py-2 px-4 text-right tabular-nums">{formatMoney(row.mora)}</td>
+                <td className={`py-2 pl-4 text-right tabular-nums ${i === 0 ? 'text-muted-foreground' : row.variacion < 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {i === 0 ? '—' : formatVariacion(row.variacion)}
+                </td>
+              </tr>
+              {expanded === i && i > 0 && (
+                <tr>
+                  <td colSpan={4} className="py-2 px-4 bg-background/20">
+                    <PagosEnIntervalo entry={cache[i]} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function PagosEnIntervalo({ entry }: { entry: PagoEntrante[] | 'loading' | 'error' | undefined }) {
+  if (!entry || entry === 'loading') {
+    return <p className="text-xs text-muted-foreground">Cargando pagos del intervalo…</p>
+  }
+  if (entry === 'error') {
+    return <p className="text-xs text-rose-400">No se pudieron cargar los pagos. Reintenta.</p>
+  }
+  if (entry.length === 0) {
+    return <p className="text-xs text-muted-foreground">No entraron pagos en este intervalo. La mora bajó por otro motivo (p.ej. recalculo o cancelación).</p>
+  }
+  const total = entry.reduce((s, p) => s + p.monto, 0)
+  const pendientes = entry.filter((p) => p.statusTransferencia === 'PENDIENTE').length
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] text-muted-foreground">
+        <strong className="text-foreground">{entry.length}</strong> pago{entry.length === 1 ? '' : 's'} — total {formatMoney(total)}
+        {pendientes > 0 && <span className="ml-2 text-amber-400">({pendientes} transferencia{pendientes === 1 ? '' : 's'} en validación)</span>}
+      </p>
+      <table className="w-full text-xs">
+        <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <tr>
+            <th className="text-left py-1 pr-3">Hora</th>
+            <th className="text-left py-1 pr-3">Cliente</th>
+            <th className="text-left py-1 pr-3">Cobrador</th>
+            <th className="text-left py-1 pr-3">Sucursal</th>
+            <th className="text-right py-1 pr-3">Método</th>
+            <th className="text-right py-1">Monto</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border/20">
+          {entry.map((p) => (
+            <tr key={p.id}>
+              <td className="py-1 pr-3 text-muted-foreground tabular-nums">
+                {new Date(p.fechaHora).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: false })}
+              </td>
+              <td className="py-1 pr-3 truncate max-w-[200px]">{p.cliente}</td>
+              <td className="py-1 pr-3 truncate max-w-[180px]">{p.cobrador}</td>
+              <td className="py-1 pr-3 text-muted-foreground truncate max-w-[120px]">{p.sucursal}</td>
+              <td className="py-1 pr-3 text-right text-muted-foreground">
+                {p.metodoPago}
+                {p.statusTransferencia === 'PENDIENTE' && <span className="ml-1 text-amber-400">(pend.)</span>}
+              </td>
+              <td className="py-1 text-right tabular-nums font-semibold">{formatMoney(p.monto)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

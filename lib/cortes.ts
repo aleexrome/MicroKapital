@@ -1408,13 +1408,34 @@ export async function netoBancaConcentradoraSemana(
     }
   }
 
+  // Los pagos se contabilizan por la sucursal del COBRADOR (no la del
+  // loan), igual que hace /banca. El dinero físico entró a la caja del
+  // cobrador — si el loan está en otra sucursal (cliente migrado, grupo
+  // compartido) el neto debe quedarse con quien recibió el efectivo, no
+  // con quien figura en el loan. Antes se filtraba por loan.branchId y
+  // la concentradora del loan "pedía" cash que nunca tocó: el usuario
+  // reportaba que el corte del día le pedía más dinero del que /banca
+  // mostraba.
+  //
+  // Fallback a loan.branchId para cobradores sin branch (usuarios
+  // heredados) — mismo criterio que banca `p.cobrador.branch ?? p.loan.branch`.
+  const branchFilterPagos = {
+    OR: [
+      { cobrador: { branchId: { in: branchIds } } },
+      { AND: [
+        { cobrador: { branchId: null } },
+        { loan: { branchId: { in: branchIds } } },
+      ] },
+    ],
+  }
   const [pagosCashCard, pagosTransfer, desembolsos, adicionales, retiros] = await Promise.all([
     prisma.payment.aggregate({
       where: {
         canceledAt: null,
         fechaHora: { gte: desde, lte: hasta },
         metodoPago: { in: ['CASH', 'CARD'] },
-        loan: { branchId: { in: branchIds }, AND: [loanNotDeletedWhere] },
+        loan: { AND: [loanNotDeletedWhere] },
+        ...branchFilterPagos,
       },
       _sum: { monto: true },
     }),
@@ -1423,7 +1444,8 @@ export async function netoBancaConcentradoraSemana(
         canceledAt: null,
         fechaHora: { gte: desde, lte: hasta },
         metodoPago: 'TRANSFER',
-        loan: { branchId: { in: branchIds }, AND: [loanNotDeletedWhere] },
+        loan: { AND: [loanNotDeletedWhere] },
+        ...branchFilterPagos,
       },
       _sum: { monto: true },
     }),
